@@ -28,10 +28,19 @@
   notes are files, and there is no server and no shared database anywhere
   in this design.
 
-  BUILD STAMP: 2026-10-19-SSN-V141
-  Version: 1.4.1
+  BUILD STAMP: 2026-10-19-SSN-V142
+  Version: 1.4.2
 
   Revision history:
+    v1.4.2 2026-10-19 The publisher Google client ID is baked into the app.
+                      No user is ever asked for a client ID again: the
+                      Google sign in gate no longer has a client ID field
+                      at all, and every Google sign in (notes storage,
+                      silent renewal, attachments) takes the ID from one
+                      helper that uses the built in publisher ID unless
+                      an advanced override was saved in the Attachments
+                      settings dialog (kept for testing and for forks).
+                      Build stamp 2026-10-19-SSN-V142.
     v1.4.1 2026-10-19 Google Drive sign in only. The Drive backend no longer
                       asks for or creates an app password vault. A device
                       key replaces the password derived session key for
@@ -41,7 +50,6 @@
                       and removed, and the sidebar Lock action becomes
                       Sign out for Drive users. The GitHub backend keeps
                       its app password vault exactly as before.
-                      Build stamp 2026-10-19-SSN-V141.
     v1.4  2026-10-19  Google Drive becomes a full storage backend. New users
                       can store notes and attachments in Google Drive with
                       one Google sign in and never create a GitHub account.
@@ -894,16 +902,15 @@ body.dark .ss-att-provider{color:#EAF3EC;}
       <div class="hint">Creates a private repository with the folder layout SnakeScale needs, a default notebook called Personal, and one welcome note.</div>
     </div>
     <!-- v1.4.1: this connect gate is the Google sign in screen for Drive
-         users. There is no app password before or after it. The client ID
-         field is the publisher test build field described in the attachment
-         setup guide; end users of a finished build only click sign in. -->
+         users. There is no app password before or after it.
+         v1.4.2: there is no client ID field here anymore either. The
+         publisher Google client ID ships inside the app (a public
+         identifier, see PUBLISHER_GOOGLE_CLIENT_ID in the script), so
+         the only thing a user ever does on this screen is click the
+         sign in button. -->
     <div id="googleConnectPanel" class="provider-card hidden">
       <h3>Sign in with Google</h3>
       <div class="provider-status">Google sign in is the only sign in for Google Drive storage. Notes and attachments use the same sign in. Google sign ins expire after about an hour; signing in again takes one click.</div>
-      <div class="field">
-        <label for="googleBackendClientId">Google client ID (publisher ID, test build only)</label>
-        <input type="text" id="googleBackendClientId" placeholder="Paste the publisher Google client ID" autocomplete="off">
-      </div>
       <button id="googleBackendConnectBtn" class="btn primary block" type="button">Sign in with Google</button>
       <div class="hint">Your notes go in a folder named SnakeScale Notes in your own Google Drive. Attachments keep using the separate SnakeScale Notes Attachments folder.</div>
     </div>
@@ -1188,12 +1195,16 @@ body.dark .ss-att-provider{color:#EAF3EC;}
      v1.2: Attachments settings dialog
      Attachments live in the user's own Google Drive or pCloud account, not
      in GitHub. Signing in uses OAuth: the user clicks a sign in button and
-     approves access on the provider's own site. The two client ID fields
-     below are NOT something end users ever fill in with a developer app of
-     their own: they exist only so this v1.2 test build can receive the
-     publisher client IDs that Chris, the app owner, creates once (see
-     ATTACHMENT_PROVIDERS_SETUP.md). A later build bakes those public
-     client IDs in, and then the fields go away and only sign in remains.
+     approves access on the provider's own site. The client ID fields below
+     are NOT something end users ever fill in with a developer app of
+     their own: the publisher client IDs belong to Chris, the app owner,
+     who registers one app with each provider, once, for free (see
+     ATTACHMENT_PROVIDERS_SETUP.md). v1.4.2 update: the Google publisher
+     client ID is baked into the app (PUBLISHER_GOOGLE_CLIENT_ID), so the
+     Google field below is only an advanced override for testing and for
+     forks, and Google sign in never depends on it being filled in. The
+     pCloud ID is not baked in yet because the publisher pCloud app is
+     still pending, so its field still works the test build way.
      ========================================================================== -->
 <div id="attachModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="attachModalTitle">
   <div class="modal-card">
@@ -1214,11 +1225,11 @@ body.dark .ss-att-provider{color:#EAF3EC;}
       <h3><span class="status-dot" id="googleDot"></span>Google Drive</h3>
       <div class="provider-status" id="googleStatus">Not signed in.</div>
       <div class="field">
-        <label for="googleClientId">Google OAuth client ID (publisher ID, test build only)</label>
-        <input type="text" id="googleClientId" placeholder="Paste the publisher Google client ID" autocomplete="off">
+        <label for="googleClientId">Google client ID (built in; change only for testing)</label>
+        <input type="text" id="googleClientId" placeholder="Built in publisher Google client ID" autocomplete="off">
       </div>
       <button class="btn small" id="googleConnectBtn" type="button">Sign in with Google</button>
-      <div class="provider-hint hidden" id="googleHint">This test build needs the publisher Google client ID before sign in can work. The app owner creates it once in Google Cloud (free) and shares it for pasting here. End users of the finished app will never register a developer app or see this field; they will only click Sign in with Google. Setup steps are in ATTACHMENT_PROVIDERS_SETUP.md.</div>
+      <div class="provider-hint" id="googleHint">SnakeScale ships with the publisher Google client ID built in, so sign in works with nothing to fill in here. This field is an advanced override for testing, and for forks of SnakeScale that registered their own Google OAuth client. Clearing it returns to the built in ID. End users never register a developer app.</div>
     </div>
 
     <div class="provider-card" id="pcloudCard">
@@ -1247,8 +1258,8 @@ body.dark .ss-att-provider{color:#EAF3EC;}
 "use strict";
 
 /* ============================================================================
-   SnakeScale Notes v1.4.1: application script
-   BUILD STAMP: 2026-10-19-SSN-V141
+   SnakeScale Notes v1.4.2: application script
+   BUILD STAMP: 2026-10-19-SSN-V142
 
    How this script is organized:
      1. Constants and global state
@@ -1279,8 +1290,8 @@ body.dark .ss-att-provider{color:#EAF3EC;}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-19-SSN-V141";
-const APP_VERSION = "1.4.1";
+const APP_BUILD = "2026-10-19-SSN-V142";
+const APP_VERSION = "1.4.2";
 const API_BASE = "https://api.github.com";
 const API_VERSION_HEADER = "2022-11-28";
 /* v1.4: the two storage backends. "github" is the original repository
@@ -1319,6 +1330,21 @@ const SS_PCLOUD_OAUTH = "snakescale.pcloud.oauth";
 const ATTACH_ROOT_NAME = "SnakeScale Notes Attachments";
 const ATTACH_MAX_BYTES = 100 * 1024 * 1024; /* 100 MB per file cap */
 const GOOGLE_DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file";
+/* v1.4.2: the publisher Google OAuth client ID, baked into the app.
+   This is the publisher's public OAuth client identifier for browser
+   sign in. It is NOT a secret, and it is NOT the client secret: Google
+   expects browser apps to ship this value inside their code, and Google
+   locks its use to the authorized JavaScript origins registered in the
+   publisher's Google Cloud project (for SnakeScale, the GitHub Pages
+   origin), so anyone who views this value gains no access to anything
+   with it. Forks of SnakeScale must register their own OAuth client in
+   Google Cloud and replace this value, or use the advanced override
+   field in the Attachments settings dialog. Every Google sign in in
+   this app resolves its client ID through effectiveGoogleClientId(),
+   which prefers a saved override and otherwise returns this constant,
+   so no end user is ever asked for a client ID. */
+const PUBLISHER_GOOGLE_CLIENT_ID =
+  "548143299601-n4i6nh3kc0j889ddq44jcmn163okbr1v.apps.googleusercontent.com";
 
 /* The in-memory app state. The plaintext token lives ONLY in state.token
    while the app is unlocked; locking the app sets it back to null. */
@@ -3065,11 +3091,10 @@ function showGoogleConnectScreen(message) {
     "same sign in also covers attachments.";
   document.getElementById("repoActions").classList.add("hidden");
   document.getElementById("repoLockBtn").textContent = "Sign out";
+  /* v1.4.2: the panel is just text plus the sign in button now. The
+     publisher client ID is built into the app, so there is no field
+     here to fill in or to prefill. */
   document.getElementById("googleConnectPanel").classList.remove("hidden");
-  const input = document.getElementById("googleBackendClientId");
-  if (document.activeElement !== input) {
-    input.value = state.attach.googleClientId || "";
-  }
   showScreen("repo");
 }
 
@@ -4474,8 +4499,11 @@ function wireToolbar() {
    user's provider password. The client IDs that make those buttons work
    belong to the PUBLISHER (Chris, the app owner), who registers one app
    with each provider, once, for free. End users never register anything.
-   In this v1.2 test build the two publisher IDs are pasted into the
-   Attachments settings dialog; a later build bakes the public IDs in.
+   v1.4.2: the Google publisher ID is baked into the app (see
+   PUBLISHER_GOOGLE_CLIENT_ID and effectiveGoogleClientId below), so the
+   Google field in the Attachments dialog is only an advanced override.
+   The pCloud publisher ID is still pasted into the dialog because that
+   app registration is still pending.
 
    Token safety: provider OAuth tokens are encrypted with AES-GCM under
    state.sessionKey, and localStorage holds only ciphertext. For the
@@ -4624,39 +4652,31 @@ function loadGisScript() {
   return gisScriptPromise;
 }
 
+/* v1.4.2: the one place that decides which Google client ID a sign in
+   uses. A value saved in settings (the advanced override in the
+   Attachments settings dialog, kept for testing and for forks that
+   registered their own Google OAuth client) wins when it is non empty
+   after trimming. Otherwise the publisher ID baked into the app is
+   used. Either way a client ID is always available, so no sign in flow
+   ever has to ask the user for one. */
+function effectiveGoogleClientId() {
+  const override = (state.attach.googleClientId || "").trim();
+  return override || PUBLISHER_GOOGLE_CLIENT_ID;
+}
+
 async function googleConnect(options) {
-  const silent = !!(options && options.silent);
-  /* The same publisher client ID can be entered in three places over the
-     life of the app: the v1.4 storage connect gate, the Attachments
-     dialog, or saved settings from either one. Prefer the field on the
-     screen the user is actually looking at, then the saved value. */
-  const backendInput = document.getElementById("googleBackendClientId");
-  const dialogInput = document.getElementById("googleClientId");
-  const dialogVisible = !document.getElementById("attachModal")
-    .classList.contains("hidden");
-  let clientId = state.attach.googleClientId || "";
-  if (backendInput && backendInput.value.trim()) {
-    clientId = backendInput.value.trim();
-  }
-  if (dialogVisible && dialogInput && dialogInput.value.trim()) {
-    clientId = dialogInput.value.trim();
-  }
-  state.attach.googleClientId = clientId;
-  if (backendInput) { backendInput.value = clientId; }
-  if (dialogInput) { dialogInput.value = clientId; }
-  saveSettings();
-  if (!clientId) {
-    if (silent) {
-      const missing = new Error("The publisher Google client ID is not set on this device.");
-      missing.code = "GOOGLE_CLIENT_ID_MISSING";
-      throw missing;
-    }
-    document.getElementById("googleHint").classList.remove("hidden");
-    const panelVisible = !document.getElementById("googleConnectPanel")
-      .classList.contains("hidden");
-    (panelVisible ? backendInput : dialogInput).focus();
-    throw new Error("Paste the publisher Google client ID first. It comes from a one time setup by the app owner (see ATTACHMENT_PROVIDERS_SETUP.md). End users never register a developer app.");
-  }
+  /* The options argument (googleTrySilentSignIn passes {silent: true})
+     is accepted for the caller's bookkeeping; the token request itself
+     is the same either way, an empty prompt that lets Google decide
+     whether an interaction is needed.
+     v1.4.2: every GIS token client in the app is created here (the
+     notes backend sign in, the silent renewal, and the attachments
+     provider all funnel through googleConnect), and the client ID
+     always comes from effectiveGoogleClientId(). No code reads a
+     client ID field directly anymore: the sign in gate has no field at
+     all, and the Attachments dialog field only feeds the settings
+     override that the helper consults. */
+  const clientId = effectiveGoogleClientId();
   /* A Drive backend user may reach sign in right after signing out, when
      the old device key was wiped with everything else. Recreate the local
      encryption key before any token is stored. GitHub users already have
@@ -4694,9 +4714,9 @@ async function googleConnect(options) {
 /* v1.4.1: one silent renewal attempt for a returning Drive user. GIS is
    asked for a token with an empty prompt, which means "issue one only if
    Google can do it without showing an interaction." Every failure mode
-   (no client ID, script blocked, interaction required, network trouble)
-   simply returns false. The caller then shows the sign in gate with no
-   error toast; a toast belongs only to a manual sign in click. */
+   (script blocked, interaction required, network trouble) simply
+   returns false. The caller then shows the sign in gate with no error
+   toast; a toast belongs only to a manual sign in click. */
 async function googleTrySilentSignIn() {
   try {
     await googleConnect({ silent: true });
@@ -5892,7 +5912,10 @@ async function uploadOneAttachment(note, providerName, driver, file) {
    and a green status dot when signed in, the status line says so in
    words, and the button flips between Sign in and Sign out.          */
 function openAttachSettings(message) {
-  document.getElementById("googleClientId").value = state.attach.googleClientId || "";
+  /* v1.4.2: the Google field shows the effective client ID, which is
+     the built in publisher ID unless an override was saved, so what the
+     user sees is always the ID sign in will actually use. */
+  document.getElementById("googleClientId").value = effectiveGoogleClientId();
   document.getElementById("pcloudClientId").value = state.attach.pcloudClientId || "";
   document.getElementById("attachDefaultProvider").value =
     state.attach.defaultProvider || "none";
@@ -6077,12 +6100,13 @@ function wireEvents() {
       document.getElementById("repoError").textContent = err.message;
     });
   });
-  /* The Google sign in gate button. The typed publisher client ID is
-     saved first (googleConnect also reconciles the Attachments dialog
-     field), then any pending pCloud return is finalized under the device
-     key (v1.4.1: Google users have no unlock step where this used to
-     happen), then the normal connect flow runs: first run seeding for a
-     brand new Drive root, or a normal load. */
+  /* The Google sign in gate button. v1.4.2: there is no client ID field
+     on this screen anymore; googleConnect resolves the built in
+     publisher ID (or a saved advanced override) itself. On success any
+     pending pCloud return is finalized under the device key (v1.4.1:
+     Google users have no unlock step where this used to happen), then
+     the normal connect flow runs: first run seeding for a brand new
+     Drive root, or a normal load. */
   document.getElementById("googleBackendConnectBtn").addEventListener("click", async function () {
     const errEl = document.getElementById("repoError");
     errEl.textContent = "";
@@ -6090,9 +6114,6 @@ function wireEvents() {
     btn.disabled = true;
     btn.textContent = "Signing in...";
     try {
-      state.attach.googleClientId =
-        document.getElementById("googleBackendClientId").value.trim();
-      saveSettings();
       await providers.google.connect();
       await finalizePendingPcloud();
       await connectAndLoad();
