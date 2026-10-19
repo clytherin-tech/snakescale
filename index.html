@@ -24,10 +24,22 @@
   belongs to the user. Notebooks are folders, notes are files, and there is
   no server and no shared database anywhere in this design.
 
-  BUILD STAMP: 2026-10-19-SSN-V131
-  Version: 1.3.1
+  BUILD STAMP: 2026-10-19-SSN-V132
+  Version: 1.3.2
 
   Revision history:
+    v1.3.2 2026-10-19 Link popup rework. The Open button is gone: the
+                      address shown in the link popup is itself clickable
+                      and opens the link through the same checked path as
+                      Ctrl+click. In its place is an Edit button that
+                      swaps the popup to a small inline form (link text,
+                      link address, Save, Cancel) so a link can be
+                      retargeted or relabeled in place. A bare address
+                      such as example.com is completed to https:// on
+                      save, and the saved address must pass the same
+                      http, https, mailto rule as opening; an invalid
+                      address keeps the form open with the typed text
+                      intact. Build stamp 2026-10-19-SSN-V132.
     v1.3.1 2026-10-19 Link opening. The note body is editable, so a plain
                       click on a link used to only place the caret and a
                       link could never be followed from inside a note.
@@ -38,7 +50,7 @@
                       http, https, and mailto links can be opened; anything
                       else is refused with a message. The popup lives
                       outside the note body element, so it can never be
-                      saved into a note. Build stamp 2026-10-19-SSN-V131.
+                      saved into a note.
     v1.3  2026-10-19  Formatting toolbar rebuild. The one row of text
                       buttons is now a grouped bar modeled on a modern
                       editor toolbar: an Insert menu (attach, link,
@@ -469,28 +481,52 @@ body.dark .tag-chip{color:var(--accent);}
    get a pointer cursor as the affordance that they can be opened (plain
    click shows the link popup below, Ctrl or Cmd click opens directly). */
 #noteBody a{cursor:pointer;}
-/* v1.3.1 link popup: a small floating card shown near a clicked link.
+/* Link popup: a small floating card shown near a clicked link.
    It is position:fixed and lives OUTSIDE #noteBody in the DOM (a sibling
    in .editor-inner), so it can never be saved into a note's HTML. The
    script sets its left/top from the clicked link's on screen position
-   and clamps it into the viewport. */
+   and clamps it into the viewport.
+   v1.3.1 introduced the popup with an address and an Open button.
+   v1.3.2 removed the Open button: the address itself is now the
+   clickable way to open the link, and an Edit button swaps the card to
+   a small inline edit form (rules below). */
 #linkPopup{
-  position:fixed;z-index:60;display:flex;align-items:center;gap:8px;
+  position:fixed;z-index:60;
   max-width:min(420px,92vw);padding:7px 8px 7px 12px;
   background:var(--surface);border:1px solid var(--border);
   border-radius:var(--radius-card);box-shadow:0 10px 28px rgba(6,32,22,.28);
 }
+/* The normal view is one row: clickable address, Edit, close. */
+#linkPopupView{display:flex;align-items:center;gap:8px;}
 #linkPopupUrl{
   font-size:13px;font-weight:600;color:var(--primary);
+  text-decoration:underline;cursor:pointer;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px;
 }
+#linkPopupUrl:hover{color:var(--secondary);}
 body.dark #linkPopupUrl{color:#9FD4B2;}
-#linkPopupOpen{white-space:nowrap;}
+#linkPopupEdit{white-space:nowrap;}
 #linkPopupClose{
   border:none;background:none;color:var(--muted);font-size:17px;line-height:1;
   width:30px;height:30px;border-radius:8px;cursor:pointer;flex:none;
 }
 #linkPopupClose:hover{background:var(--soft);color:var(--text);}
+/* v1.3.2 link edit form: replaces the normal view inside the same card
+   while editing. The fields follow the app's standard input styling.
+   Being part of the popup, the form is still outside #noteBody and can
+   never be saved into a note. */
+#linkEditForm{display:flex;flex-direction:column;gap:8px;width:min(320px,84vw);}
+.link-edit-field label{display:block;font-weight:600;font-size:12.5px;margin-bottom:3px;}
+.link-edit-field input{
+  width:100%;padding:8px 10px;border:1px solid var(--border);
+  border-radius:var(--radius-button);background:var(--surface);
+  transition:border-color var(--motion),box-shadow var(--motion);
+}
+.link-edit-field input:focus{
+  border-color:var(--secondary);outline:none;
+  box-shadow:0 0 0 3px rgba(87,167,115,.22);
+}
+.link-edit-actions{display:flex;gap:8px;justify-content:flex-end;}
 /* v1.3.1: the one line link hint in the editor footer, beside the save
    state. It wraps away on narrow screens so the footer never crowds. */
 .editor-hint{font-size:12.5px;color:var(--muted);}
@@ -981,22 +1017,41 @@ body.dark .ss-att-provider{color:#EAF3EC;}
                checklists and formatting intact in v1.0. -->
           <div id="noteBody" contenteditable="true" aria-label="Note body"></div>
 
-          <!-- v1.3.1 link popup. IMPORTANT: this element is a SIBLING of
-               #noteBody, never a child, and collectEditor() only reads
-               #noteBody's innerHTML, so the popup can never be saved into
-               a note. It is shown when a link in the body is clicked and
-               carries the address plus an Open button (the touch screen
-               way to follow a link). Hidden by default. -->
+          <!-- Link popup (v1.3.1, reworked in v1.3.2). IMPORTANT: this
+               element is a SIBLING of #noteBody, never a child, and
+               collectEditor() only reads #noteBody's innerHTML, so the
+               popup can never be saved into a note. It is shown when a
+               link in the body is clicked and always opens in its normal
+               view: the address itself is the clickable way to open the
+               link (the touch screen way to follow one), and the Edit
+               button swaps the card to a small form for changing that
+               link's text or address in place. Hidden by default. -->
           <div id="linkPopup" class="hidden" role="dialog" aria-label="Link options">
-            <span id="linkPopupUrl"></span>
-            <button class="btn small" id="linkPopupOpen" type="button">Open</button>
-            <button id="linkPopupClose" type="button" aria-label="Close link popup">&times;</button>
+            <div id="linkPopupView">
+              <a id="linkPopupUrl" href="#" title="Open this link"></a>
+              <button class="btn small" id="linkPopupEdit" type="button">Edit</button>
+              <button id="linkPopupClose" type="button" aria-label="Close link popup">&times;</button>
+            </div>
+            <div id="linkEditForm" class="hidden">
+              <div class="link-edit-field">
+                <label for="linkEditText">Text</label>
+                <input type="text" id="linkEditText" autocomplete="off">
+              </div>
+              <div class="link-edit-field">
+                <label for="linkEditUrl">Link address</label>
+                <input type="text" id="linkEditUrl" autocomplete="off" spellcheck="false">
+              </div>
+              <div class="link-edit-actions">
+                <button class="btn small" id="linkEditCancel" type="button">Cancel</button>
+                <button class="btn small accent" id="linkEditSave" type="button">Save</button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
       <div class="editor-foot">
         <span id="saveState">No changes</span>
-        <span class="editor-hint">Links: Ctrl+click (Cmd+click on Mac) opens a link, or click it for options.</span>
+        <span class="editor-hint">Links: Ctrl+click (Cmd+click on Mac) opens a link, or click it to open or edit it.</span>
         <div class="editor-actions">
           <button class="btn small" id="editorBackBtn" type="button">Back to list</button>
           <button class="btn small danger" id="trashBtn" type="button">Move to Trash</button>
@@ -1071,8 +1126,8 @@ body.dark .ss-att-provider{color:#EAF3EC;}
 "use strict";
 
 /* ============================================================================
-   SnakeScale Notes v1.3.1: application script
-   BUILD STAMP: 2026-10-19-SSN-V131
+   SnakeScale Notes v1.3.2: application script
+   BUILD STAMP: 2026-10-19-SSN-V132
 
    How this script is organized:
      1. Constants and global state
@@ -1101,8 +1156,8 @@ body.dark .ss-att-provider{color:#EAF3EC;}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-19-SSN-V131";
-const APP_VERSION = "1.3.1";
+const APP_BUILD = "2026-10-19-SSN-V132";
+const APP_VERSION = "1.3.2";
 const API_BASE = "https://api.github.com";
 const API_VERSION_HEADER = "2022-11-28";
 
@@ -2885,19 +2940,26 @@ function collectEditor(note) {
 }
 
 /* --------------------------------------------------------------------------
-   v1.3.1: opening links from inside a note
+   Opening and editing links from inside a note (v1.3.1, v1.3.2)
    The note body is contenteditable, so the browser treats a plain click
    on a link as "place the caret for editing" and never follows it. This
    block gives links real behavior without disturbing editing:
      - Ctrl+click (Cmd+click on a Mac) opens the link in a new tab.
      - A plain click still places the caret exactly as before, and ALSO
-       shows the floating link popup (address plus an Open button), which
-       is how touch screens, with no Ctrl key, open links.
-   Safety: only http, https, and mailto links may open. Anything else
-   (javascript:, data:, a malformed string) is refused with a toast. The
-   popup element lives outside #noteBody, and collectEditor only reads
-   #noteBody's innerHTML, so the popup can never be saved into a note,
-   and using it never marks the note dirty.
+       shows the floating link popup, which is how touch screens, with
+       no Ctrl key, open and edit links.
+   v1.3.2 popup behavior: the popup shows the address as a clickable
+   link (clicking it opens the page through the same checked path as
+   Ctrl+click) plus an Edit button. Edit swaps the popup to a small
+   inline form (link text, link address, Save, Cancel) so the clicked
+   link can be retargeted or relabeled in place; a bare address like
+   example.com is completed to https://example.com on save.
+   Safety: only http, https, and mailto links may open, and the same
+   rule validates a saved edit. Anything else (javascript:, data:, a
+   malformed string) is refused with a toast. The popup element lives
+   outside #noteBody, and collectEditor only reads #noteBody's
+   innerHTML, so the popup can never be saved into a note, and using it
+   never marks the note dirty; only a successful link edit Save does.
    -------------------------------------------------------------------------- */
 
 /* Pure protocol check, kept separate and side effect free so it can be
@@ -2933,27 +2995,45 @@ function openNoteLink(rawUrl) {
 }
 
 /* The href of the link the popup currently refers to. Kept in a variable
-   rather than read back from the DOM so the Open button always uses the
-   exact href of the link that was clicked. */
+   rather than read back from the DOM so the popup's clickable address
+   always opens the exact href of the link that was clicked. */
 let linkPopupHref = "";
+
+/* v1.3.2: the anchor element the popup currently refers to. The edit
+   form needs the element itself (to read and rewrite its text and href
+   in place), not just the address string. Cleared whenever the popup
+   hides, so a stale element can never be edited by accident. */
+let linkPopupAnchor = null;
 
 function hideLinkPopup() {
   const popup = document.getElementById("linkPopup");
   if (popup) { popup.classList.add("hidden"); }
   linkPopupHref = "";
+  linkPopupAnchor = null;
+  /* v1.3.2: the popup always reopens in its normal view, never in the
+     middle of an edit, so hiding always resets the mode too. */
+  setLinkPopupMode(false);
 }
 
-/* Show the popup just under the clicked link (above it when there is no
-   room below), clamped so it always stays inside the viewport. The
-   popup is unhidden first so its real size can be measured. */
-function showLinkPopup(anchor) {
+/* v1.3.2: switch the popup between its normal view (clickable address,
+   Edit button, close button) and its edit form (text field, address
+   field, Save, Cancel). Exactly one of the two is visible at a time. */
+function setLinkPopupMode(editing) {
+  const view = document.getElementById("linkPopupView");
+  const form = document.getElementById("linkEditForm");
+  if (view) { view.classList.toggle("hidden", editing); }
+  if (form) { form.classList.toggle("hidden", !editing); }
+}
+
+/* Position the popup just under the given link (above it when there is
+   no room below), clamped so it always stays inside the viewport. The
+   caller unhides the popup and sets its mode first, so the size
+   measured here is the size of what is actually on screen. Used both
+   when the popup opens and when it swaps between view and edit, since
+   the edit form is taller and wider than the normal view. */
+function positionLinkPopup(anchor) {
   const popup = document.getElementById("linkPopup");
   if (!popup || !anchor) { return; }
-  /* anchor.href is the browser resolved absolute URL, which is both
-     what the popup should display and what Open will open. */
-  linkPopupHref = anchor.href || anchor.getAttribute("href") || "";
-  document.getElementById("linkPopupUrl").textContent = linkPopupHref;
-  popup.classList.remove("hidden");
   const rect = anchor.getBoundingClientRect();
   const width = popup.offsetWidth;
   const height = popup.offsetHeight;
@@ -2965,6 +3045,85 @@ function showLinkPopup(anchor) {
   }
   popup.style.left = left + "px";
   popup.style.top = top + "px";
+}
+
+/* Show the popup for a clicked link, always in its normal view. */
+function showLinkPopup(anchor) {
+  const popup = document.getElementById("linkPopup");
+  if (!popup || !anchor) { return; }
+  /* anchor.href is the browser resolved absolute URL, which is both
+     what the popup should display and what clicking it will open. */
+  linkPopupHref = anchor.href || anchor.getAttribute("href") || "";
+  linkPopupAnchor = anchor;
+  const urlEl = document.getElementById("linkPopupUrl");
+  urlEl.textContent = linkPopupHref;
+  /* The displayed address is a real link element; its href mirrors the
+     address, but its click is intercepted and routed through
+     openNoteLink, so the protocol safety check always applies and the
+     app window itself never navigates. */
+  urlEl.setAttribute("href", linkPopupHref);
+  setLinkPopupMode(false);
+  popup.classList.remove("hidden");
+  positionLinkPopup(anchor);
+}
+
+/* v1.3.2: complete an address typed into the link edit form. A value
+   that already carries a scheme (https:, mailto:, but also anything
+   else with a scheme, valid or not) is left exactly as typed, so the
+   validator below judges what the user actually meant. A bare domain
+   or path with no scheme (example.com, www.example.com/page) gets
+   https:// in front. Anything else (spaces, a single word) is returned
+   unchanged and will fail validation, which is the honest outcome.
+   Kept pure and side effect free so it can be unit tested on its own,
+   together with linkOpenTarget. */
+function normalizeLinkInput(rawUrl) {
+  const value = String(rawUrl == null ? "" : rawUrl).trim();
+  if (!value) { return ""; }
+  if (/^[A-Za-z][A-Za-z0-9+.-]*:/.test(value)) { return value; }
+  if (!/\s/.test(value) && value.indexOf(".") !== -1) {
+    return "https://" + value;
+  }
+  return value;
+}
+
+/* v1.3.2: switch the popup to its edit form for the link it refers to.
+   Both fields are prefilled from the clicked link: the visible text,
+   and the current address. The form opening never marks the note dirty;
+   only a successful Save does. */
+function startLinkEdit() {
+  if (!linkPopupAnchor) { return; }
+  document.getElementById("linkEditText").value =
+    linkPopupAnchor.textContent || "";
+  document.getElementById("linkEditUrl").value = linkPopupHref;
+  setLinkPopupMode(true);
+  positionLinkPopup(linkPopupAnchor);
+  document.getElementById("linkEditUrl").focus();
+}
+
+/* v1.3.2: apply the edit form to the clicked link. The typed address is
+   normalized (a bare domain gains https://) and then judged by the SAME
+   protocol rule as link opening. An invalid address keeps the form open
+   with the typed text untouched, so nothing the user typed is lost.
+   On a valid save the anchor's href is rewritten; its text is replaced
+   only when the field actually differs, so an address only edit leaves
+   any nested formatting inside the link exactly as it was. */
+function saveLinkEdit() {
+  const anchor = linkPopupAnchor;
+  if (!anchor) { hideLinkPopup(); return; }
+  const normalized =
+    normalizeLinkInput(document.getElementById("linkEditUrl").value);
+  if (!linkOpenTarget(normalized)) {
+    toast("That is not a valid web or email link.", true);
+    return;
+  }
+  anchor.setAttribute("href", normalized);
+  const newText = document.getElementById("linkEditText").value;
+  if (newText !== (anchor.textContent || "")) {
+    anchor.textContent = newText;
+  }
+  markDirty();
+  hideLinkPopup();
+  toast("Link updated.");
 }
 
 const autosave = debounce(async function () {
@@ -4787,13 +4946,34 @@ function wireEvents() {
     }
   });
 
-  /* v1.3.1 popup buttons. Open uses the href captured when the popup was
-     shown, then closes the popup. Both buttons live outside #noteBody,
-     so these clicks can never edit the note or mark it dirty. */
-  document.getElementById("linkPopupOpen").addEventListener("click", function () {
+  /* Link popup controls (v1.3.1, reworked in v1.3.2). All of them live
+     outside #noteBody, so these clicks can never edit the note or mark
+     it dirty by themselves; only a successful edit Save marks dirty.
+     v1.3.2: the address itself is the open control. Its default anchor
+     navigation is prevented and the click is routed through
+     openNoteLink with the href captured when the popup was shown, so
+     the protocol safety check applies exactly as it does to Ctrl+click,
+     and the popup closes first, just as the old Open button did. */
+  document.getElementById("linkPopupUrl").addEventListener("click", function (ev) {
+    ev.preventDefault();
     const href = linkPopupHref;
     hideLinkPopup();
     if (href) { openNoteLink(href); }
+  });
+  /* Edit swaps the popup to its inline edit form for the clicked link. */
+  document.getElementById("linkPopupEdit").addEventListener("click", function () {
+    startLinkEdit();
+  });
+  /* Save applies the form (normalizing and validating the address);
+     saveLinkEdit itself keeps the form open on an invalid address. */
+  document.getElementById("linkEditSave").addEventListener("click", function () {
+    saveLinkEdit();
+  });
+  /* Cancel throws the form away and returns to the normal view without
+     changing the link, then repositions since the card shrinks back. */
+  document.getElementById("linkEditCancel").addEventListener("click", function () {
+    setLinkPopupMode(false);
+    if (linkPopupAnchor) { positionLinkPopup(linkPopupAnchor); }
   });
   document.getElementById("linkPopupClose").addEventListener("click", function () {
     hideLinkPopup();
