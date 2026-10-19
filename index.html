@@ -28,10 +28,36 @@
   notes are files, and there is no server and no shared database anywhere
   in this design.
 
-  BUILD STAMP: 2026-10-19-SSN-V171
-  Version: 1.7.1
+  BUILD STAMP: 2026-10-19-SSN-V172
+  Version: 1.7.2
 
   Revision history:
+    v1.7.2 2026-10-19 Free image sizing, carried on the image's block.
+                      Two problems from live testing of v1.7.1: an
+                      image could not be made wider than the note
+                      column (the grip drag clamped to the column and
+                      the stylesheets capped image and block at the
+                      column width), and shrinking an image did not
+                      reliably shrink its selection frame, because the
+                      chosen width lived on the <img> while the frame
+                      anchors to the block around it, and the block's
+                      fit-content width plus the image's max-width
+                      formed a circular sizing relationship browsers
+                      resolve inconsistently. The size now lives on
+                      the block itself: the image always fills its
+                      block exactly, the grip drag sets the block's
+                      width with no column clamp (a generous sanity
+                      ceiling only), and a block with a chosen size
+                      carries no width cap, so images may be wider
+                      than the column and the editor pane scrolls
+                      sideways for them. Notes saved by v1.6 or v1.7
+                      carried the width on the image; the decoration
+                      pass moves such a width onto the block the next
+                      time the note opens, and the note saves forward
+                      in the new form. The image menu gains an
+                      Original preset (the image's natural width)
+                      beside the column share presets.
+                      Build stamp 2026-10-19-SSN-V172.
     v1.7.1 2026-10-19 The image selection frame hugs the image. In
                       v1.7.0 the four corner grips, the selection
                       outline, and the three dot menu button anchored
@@ -45,7 +71,6 @@
                       so the block's corners are the image's corners
                       at any width and all of the selection furniture
                       lands on the image. Nothing else changed.
-                      Build stamp 2026-10-19-SSN-V171.
     v1.7.0 2026-10-19 Undoable attachment deletion, inline images, and
                       image grips with a three dot menu. Removing an
                       attachment, from the Remove button, the image
@@ -620,7 +645,11 @@ body.dark .tag-chip{color:var(--accent);}
 
 /* ----- right pane: editor ----- */
 #editorpane{flex:1;display:flex;flex-direction:column;overflow:hidden;background:var(--surface);}
-.editor-scroll{overflow-y:auto;flex:1;padding:26px 30px 40px;}
+/* v1.7.2: overflow-x is named explicitly so an image sized wider
+   than the reading column scrolls horizontally inside this pane
+   instead of breaking the layout or sliding under the sidebar;
+   vertical behavior is exactly as before. */
+.editor-scroll{overflow-y:auto;overflow-x:auto;flex:1;padding:26px 30px 40px;}
 /* A single centered reading column keeps long notes comfortable on wide
    monitors while preserving the editor behavior and field order. */
 .editor-inner{width:100%;max-width:860px;margin:0 auto;}
@@ -965,13 +994,27 @@ body.dark .ss-att-provider{color:#EAF3EC;}
    A full width image still spans the column and its grips sit at
    the column edge, which is correct: the image itself is that
    wide. The image inside keeps display:block from the base image
-   rule, so there is no inline gap under it inside the block. */
+   rule, so there is no inline gap under it inside the block.
+   v1.7.2: the chosen size lives on this block, never on the image.
+   An unsized block keeps the rule below (fit-content, capped at
+   the column, so a huge photo still lands at column width). Once
+   a size is chosen, the decoration pass sets the block's inline
+   max-width to none, so the block may be narrower OR wider than
+   the column, freely; the editor pane scrolls sideways for the
+   wide ones. The image itself is width:100% of the block, so it
+   exactly fills its block at any size, and the selection frame
+   anchored to the block always matches the image's real edges.
+   In v1.7.0 and v1.7.1 the width lived on the <img> instead: the
+   block's fit-content width and the image's own max-width formed
+   a circular sizing relationship, so a shrunken image did not
+   reliably shrink its block, and the grips and outline stayed
+   behind at the old size. */
 #noteBody .ss-attachment.ss-att-image{
   display:inline-block;width:fit-content;max-width:100%;
   padding:0;border:none;background:transparent;border-radius:0;
 }
 #noteBody .ss-attachment.ss-att-image img.ss-att-img{
-  margin-bottom:0;border-radius:4px;
+  width:100%;margin-bottom:0;border-radius:4px;
 }
 
 /* ---------- v1.2 attachments: settings modal ---------- */
@@ -1535,6 +1578,7 @@ body.dark .ss-att-provider{color:#EAF3EC;}
             <button class="att-menu-item" type="button" data-action="small">Small (25%)</button>
             <button class="att-menu-item" type="button" data-action="medium">Medium (50%)</button>
             <button class="att-menu-item" type="button" data-action="large">Large (100%)</button>
+            <button class="att-menu-item" type="button" data-action="original">Original size</button>
             <div class="att-menu-sep"></div>
             <button class="att-menu-item danger" type="button" data-action="remove">Remove</button>
           </div>
@@ -1628,8 +1672,8 @@ body.dark .ss-att-provider{color:#EAF3EC;}
 "use strict";
 
 /* ============================================================================
-   SnakeScale Notes v1.7.1: application script
-   BUILD STAMP: 2026-10-19-SSN-V171
+   SnakeScale Notes v1.7.2: application script
+   BUILD STAMP: 2026-10-19-SSN-V172
 
    How this script is organized:
      1. Constants and global state
@@ -1660,8 +1704,8 @@ body.dark .ss-att-provider{color:#EAF3EC;}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-19-SSN-V171";
-const APP_VERSION = "1.7.1";
+const APP_BUILD = "2026-10-19-SSN-V172";
+const APP_VERSION = "1.7.2";
 const API_BASE = "https://api.github.com";
 const API_VERSION_HEADER = "2022-11-28";
 /* v1.4: the two storage backends. "github" is the original repository
@@ -4673,7 +4717,14 @@ function setMobileView(which) {
    ever reaches the saved file. The ONE piece of live state that does
    persist is a resized image's width (see savedImageWidthOf): it is
    carried onto the shell as its style, so the saved placeholder itself
-   remembers how wide its image should render. */
+   remembers how wide its image should render.
+   v1.7.2: that width is read from the placeholder (the block) itself,
+   never from the <img>: since v1.7.2 the block carries the size and
+   the image merely fills it, so there is exactly one place the size
+   can live in the live DOM, and this shell copy is it. (Notes saved
+   by v1.6 or v1.7 carried the width on the block's style in the file
+   too; only their live DOM put it on the image, and the decoration
+   pass migrates that form the next time such a note is edited.) */
 function canonicalizeAttachmentPlaceholders(html) {
   const holder = document.createElement("div");
   holder.innerHTML = html || "";
@@ -4690,17 +4741,20 @@ function canonicalizeAttachmentPlaceholders(html) {
   return holder.innerHTML;
 }
 
-/* v1.6: the width a resized image should keep, read from wherever the
-   live placeholder currently carries it: the hydrated <img> while the
-   note is open (the resize handle writes the width there), or the
-   placeholder's own style when the shell came straight from a saved
-   note and hydration has not run yet. Only a plain pixel width is
-   honored; anything else is dropped rather than persisted. */
+/* v1.6, reworked in v1.7.2: the width a resized image should keep,
+   read from the placeholder block's own style. Since v1.7.2 the
+   block carries the chosen size and the <img> inside it is always
+   width:100% of the block, so the block's style is the one and
+   only place a size can live; any width found on an <img> is a
+   leftover of the v1.6/v1.7 live DOM and is deliberately NOT read
+   here (the decoration pass migrates it onto the block before a
+   save can happen, and canonicalization rebuilds the shell from
+   scratch, so an image width could never be carried even if one
+   survived). Only a plain pixel width is honored; anything else
+   is dropped rather than persisted. */
 function savedImageWidthOf(el) {
-  const img = el.querySelector("img.ss-att-img");
-  const fromImg = img && img.style ? img.style.width : "";
-  const raw = fromImg || (el.style ? el.style.width : "") || "";
-  return /^\d+(\.\d+)?px$/.test(raw) ? raw : "";
+  const raw = el.style ? el.style.width : "";
+  return /^\d+(\.\d+)?px$/.test(raw || "") ? raw : "";
 }
 
 function collectEditor(note) {
@@ -6683,12 +6737,71 @@ function isImageAttachment(att) {
    be selected, moved, or resized until the note was reopened. The
    saved placeholder is untouched by this: canonicalization still
    rebuilds the plain shell, and this pass reapplies the runtime
-   shape from the record every time. */
+   shape from the record every time.
+   v1.7.2: for image records the pass also normalizes the chosen
+   size onto the block itself (normalizeImageFigureSize), which is
+   what makes this the single place every placeholder's sizing is
+   settled, however the block was built. */
+/* v1.7.2: a plain pixel width: the only form a chosen image size
+   ever takes, in a saved note and in the live DOM alike. Anything
+   else (a percentage, auto, a calc) is not a chosen size and is
+   ignored rather than carried around. Shared by the decoration
+   pass below and by canonicalization's width reader. */
+function imagePixelWidth(raw) {
+  return /^\d+(\.\d+)?px$/.test(raw || "") ? raw : "";
+}
+
+/* v1.7.2: normalize one image block's size onto the block itself.
+   The block (the figure) is where a chosen size lives; the <img>
+   inside is width:100% of the block by CSS, so it always fills the
+   block exactly and the selection frame anchored to the block is
+   always the image's real frame. Three cases:
+     - The block already carries a pixel width (the saved form
+       since v1.6): that IS the size. Any width still sitting on
+       the <img> is a stale leftover and is removed.
+     - The block carries no width but the <img> does: that is a
+       live DOM built by v1.6 or v1.7 (their resize wrote to the
+       image; it happens when a block is restored from captured
+       HTML, for one). The width migrates onto the block and comes
+       off the image, so the note saves forward in the new form.
+     - Neither carries a width: the block is unsized and keeps the
+       stylesheet's fit-content, column capped presentation.
+   A sized block also gets an inline max-width of none: the
+   stylesheet caps image blocks at the column width, and a chosen
+   size, narrower or wider than the column, must not be capped.
+   The override is applied here at runtime, like the ss-att-image
+   class, so stored notes need no other change. */
+function normalizeImageFigureSize(el) {
+  const img = el.querySelector("img.ss-att-img");
+  let width = imagePixelWidth(el.style ? el.style.width : "");
+  if (!width && img && img.style) {
+    width = imagePixelWidth(img.style.width);
+    if (width) { el.style.width = width; }
+  }
+  if (img && img.style) { img.style.removeProperty("width"); }
+  if (width) { el.style.maxWidth = "none"; }
+}
+
+/* v1.7.2: give an image block a chosen size, in pixels: the width
+   lands on the block, and the block's inline max-width is lifted
+   so the stylesheet's column cap cannot fight the choice. Grip
+   drags and the image menu's size presets both land here, so
+   there is exactly one way a size is ever applied. */
+function applyImageFigureWidth(el, px) {
+  el.style.width = Math.round(px) + "px";
+  el.style.maxWidth = "none";
+}
+
 function decorateAttachmentPlaceholder(note, el, att) {
   if (!el) { return; }
   el.setAttribute("contenteditable", "false");
   if (att && att.id) { el.setAttribute("data-attachment-id", att.id); }
-  if (isImageAttachment(att)) { el.classList.add("ss-att-image"); }
+  if (isImageAttachment(att)) {
+    el.classList.add("ss-att-image");
+    /* v1.7.2: the block carries the image's size; normalize
+       wherever a previous version left it (see above). */
+    normalizeImageFigureSize(el);
+  }
   else { el.classList.remove("ss-att-image"); }
   if (note && !note.trashed && !note.archived) {
     el.setAttribute("draggable", "true");
@@ -6711,11 +6824,15 @@ async function hydrateAttachments(note) {
 async function hydrateOneAttachment(note, el) {
   const attId = el.getAttribute("data-attachment-id");
   const att = (note.attachments || []).find(function (a) { return a.id === attId; });
-  /* v1.6: a resized image's saved width rides on the placeholder's own
-     style (see savedImageWidthOf). Read it before anything rebuilds
-     the block, and reapply it to the hydrated <img> below so the
-     image comes back at the width the user chose. */
-  const savedWidth = el.style && el.style.width ? el.style.width : "";
+  /* v1.7.2: there is deliberately no width handling here. A resized
+     image's chosen width rides on the block's own style (it has
+     since v1.6 in the saved file), the decoration call just below
+     normalizes it (and lifts the block's column cap), and clearing
+     innerHTML never touches the block's own attributes, so the
+     size simply stays where it belongs while the block's contents
+     are rebuilt. Before v1.7.2 this function copied the width onto
+     the hydrated <img>; that second home for the size is exactly
+     what made the selection frame stop tracking the image. */
   /* v1.7: every placeholder passes through the one decoration
      function, so an element built by the upload flow, an element
      rebuilt here, and an element decorated at render all carry the
@@ -6771,9 +6888,8 @@ async function hydrateOneAttachment(note, el) {
         /* The block owns dragging; a natively draggable image inside
            it would start the browser's own image drag instead. */
         img.setAttribute("draggable", "false");
-        /* v1.6: swapping in the blob URL must not lose a saved resize
-           width; reapply it to the fresh <img>. */
-        if (savedWidth) { img.style.width = savedWidth; }
+        /* v1.7.2: no width is set on the fresh <img>: CSS makes it
+           fill the block, and the block carries the chosen size. */
         el.innerHTML = "";
         el.appendChild(img);
       } catch (err) {
@@ -7124,20 +7240,35 @@ function closeAttMenu() {
   attMenuEl = null;
 }
 
+/* v1.7.2: the sanity ceiling for a grip drag, in pixels. Sizing is
+   free (an image may be narrower or wider than the note column;
+   that freedom is the point of the v1.7.2 rework), so there is no
+   column clamp anymore. This ceiling only stops a wild pointer
+   excursion from producing an absurd stored width. */
+const ATTACHMENT_RESIZE_MAX_PX = 6000;
+
 /* The resize width rule, kept pure and side effect free so it can be
    unit tested on its own: east side grips (ne, se) add the pointer's
    horizontal travel to the starting width, west side grips (nw, sw)
-   subtract it, and the result is clamped so the image can neither
-   vanish nor exceed the editor column. Only the width is ever set,
-   so the aspect ratio is preserved by the image's automatic height. */
-function resizedImageWidth(startWidth, dx, corner, maxWidth) {
+   subtract it, and the result is clamped between the 40px floor and
+   the ATTACHMENT_RESIZE_MAX_PX ceiling. Only the block's width is
+   ever set, so the aspect ratio is preserved by the image's
+   automatic height. (Before v1.7.2 the caller passed the editor
+   column width as a fourth argument, and the result could never
+   exceed the column.) */
+function resizedImageWidth(startWidth, dx, corner) {
   const signed = (corner === "ne" || corner === "se") ? dx : -dx;
   const next = Math.round(startWidth + signed);
-  return Math.max(40, Math.min(maxWidth, next));
+  return Math.max(40, Math.min(ATTACHMENT_RESIZE_MAX_PX, next));
 }
 
-/* Dragging any grip resizes the image live. The note is marked dirty
-   once, on release, not on every pointer move. */
+/* Dragging any grip resizes the image live, through the BLOCK's
+   width (applyImageFigureWidth): since v1.7.2 the block carries
+   the size and the image fills it, so the selection frame, which
+   anchors to the block, tracks the image exactly at every moment
+   of the drag, growing past the column or shrinking inside it.
+   The note is marked dirty once, on release, not on every
+   pointer move. */
 function startAttachmentResize(ev, corner) {
   ev.preventDefault();
   ev.stopPropagation();
@@ -7145,13 +7276,16 @@ function startAttachmentResize(ev, corner) {
   if (!el) { return; }
   const img = el.querySelector("img.ss-att-img");
   if (!img) { return; }
-  const bodyEl = document.getElementById("noteBody");
   const startX = ev.clientX;
-  const startWidth = img.getBoundingClientRect().width || 200;
-  const maxWidth = bodyEl && bodyEl.clientWidth ? bodyEl.clientWidth : startWidth;
+  /* The block's rendered width is the size being dragged: for a
+     sized block it is the chosen width; for an unsized one it is
+     the image's natural rendered width, which the first move then
+     turns into a chosen size on the block. */
+  const startWidth = el.getBoundingClientRect().width ||
+    (el.style && el.style.width ? parseFloat(el.style.width) : 0) || 200;
   function onMove(e2) {
-    img.style.width =
-      resizedImageWidth(startWidth, e2.clientX - startX, corner, maxWidth) + "px";
+    applyImageFigureWidth(el,
+      resizedImageWidth(startWidth, e2.clientX - startX, corner));
   }
   function onUp() {
     document.removeEventListener("pointermove", onMove);
@@ -7194,12 +7328,14 @@ async function openAttachment(att) {
 }
 
 /* One click in the shared image menu. Size presets set the image
-   width as a share of the editor column width; the width lands on
-   the <img> style exactly like a grip drag, so canonicalization
-   carries it into the saved note the same way. Remove routes
-   through the undoable deletion engine (see the attachments
-   section below) and drops the selection, since the block is
-   leaving the note. */
+   width as a share of the editor column width, computed to pixels
+   at click time; since v1.7.2 the width lands on the block through
+   applyImageFigureWidth, exactly like a grip drag, so
+   canonicalization carries it into the saved note the same way.
+   The Original preset (v1.7.2) sets the block to the image's
+   natural width instead. Remove routes through the undoable
+   deletion engine (see the attachments section below) and drops
+   the selection, since the block is leaving the note. */
 function runAttMenuAction(action) {
   const note = attMenuNote;
   const att = attMenuAtt;
@@ -7216,11 +7352,26 @@ function runAttMenuAction(action) {
   }
   if (action === "small" || action === "medium" || action === "large") {
     if (!el) { return; }
-    const img = el.querySelector("img.ss-att-img");
     const bodyEl = document.getElementById("noteBody");
-    if (!img || !bodyEl || !bodyEl.clientWidth) { return; }
+    if (!bodyEl || !bodyEl.clientWidth) { return; }
     const pct = action === "small" ? 25 : (action === "medium" ? 50 : 100);
-    img.style.width = Math.round(bodyEl.clientWidth * pct / 100) + "px";
+    applyImageFigureWidth(el, Math.round(bodyEl.clientWidth * pct / 100));
+    markDirty();
+    return;
+  }
+  if (action === "original") {
+    if (!el) { return; }
+    const img = el.querySelector("img.ss-att-img");
+    /* The image's natural width, the size it was uploaded at. When
+       the browser cannot report one (the image failed to load, for
+       instance), fall back to the width currently on screen, which
+       simply makes the current size the chosen one. */
+    const natural = img && img.naturalWidth ? img.naturalWidth : 0;
+    const current = el.getBoundingClientRect().width ||
+      (el.style && el.style.width ? parseFloat(el.style.width) : 0);
+    const width = natural || current;
+    if (!width) { return; }
+    applyImageFigureWidth(el, width);
     markDirty();
     return;
   }
