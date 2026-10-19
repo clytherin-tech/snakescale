@@ -22,21 +22,22 @@ Live app: https://clytherin-tech.github.io/snakescale/
 - A full formatting toolbar (new in v1.3): an Insert menu (attachments, links, checklists, dividers, date and time), text styles (headings 1 to 3, quote, code block), font family and font size pickers, text and highlight color palettes with custom colors, strikethrough, text alignment, indent and outdent, and remove formatting. Fonts, sizes, and colors are saved as inline CSS styles in the note body, never as font tags, so formatted notes render the same on every device
 - Attachments and inline images (new in v1.2): files are stored in your own Google Drive or pCloud account, in a folder named SnakeScale Notes Attachments, and your notes keep only a small reference to each file. You pick the provider in the app, sign in with OAuth (Sign in with Google or Sign in with pCloud), and attach from the Insert menu, by drag and drop, or by pasting an image. When Google Drive is also your notes storage, the same single Google sign in covers notes and attachments. Publisher setup for the sign in buttons is a one time job for the app owner: see [ATTACHMENT_PROVIDERS_SETUP.md](ATTACHMENT_PROVIDERS_SETUP.md). End users never register a developer app.
 - Pinned notes, trash with restore, and delete forever
-- Encrypted local vault: your app password encrypts the local vault in your browser (PBKDF2 plus AES-GCM). A GitHub token, and any provider OAuth tokens, are stored only as ciphertext, never in plain text
+- Local encryption that matches the backend: GitHub storage uses an app password vault in your browser (PBKDF2 plus AES-GCM), and its token and provider OAuth tokens are stored only as ciphertext. Google Drive storage has no app password; a random device key encrypts provider tokens and the local note cache on that device. That device key is not a login and does not protect against someone using your unlocked browser profile
 - Offline reading and editing from the local cache, with queued changes synced when you reconnect
 - Conflict safety on both storage backends: if a note changed somewhere else, saving creates a conflict copy instead of overwriting it
 - Light and dark themes in the Deep Forest palette
 
 ## How to use it
 
-Choose one storage option at setup. The choice is stored with the vault on that device.
+Choose one storage option at setup. The choice is stored on that device.
 
 ### Option A: Google Drive (recommended)
 
 1. Open the live app link above.
-2. On the setup screen, choose Google Drive and set an app password. The password protects the app on this device; it is not your Google password.
-3. Click Sign in with Google and approve access. SnakeScale creates a folder named SnakeScale Notes in your Drive for your notes. Attachments use the separate SnakeScale Notes Attachments folder, with the same sign in.
-4. Start writing. On other browsers, repeat the setup and sign in with the same Google account.
+2. On the setup screen, choose Google Drive and continue. There is no SnakeScale app password for Drive storage.
+3. Click Sign in with Google and approve access. Google sign in is the only sign in. SnakeScale creates a folder named SnakeScale Notes in your Drive for your notes. Attachments use the separate SnakeScale Notes Attachments folder, with the same sign in.
+4. Start writing. On later visits SnakeScale first tries a silent Google sign in renewal; if that is not available, it shows the Sign in with Google screen. Use Sign out in the sidebar to clear this device's local copies, provider sign ins, and device key while leaving the Drive notes untouched.
+5. On other browsers, repeat the setup and sign in with the same Google account.
 
 ### Option B: GitHub (advanced, with version history)
 
@@ -60,7 +61,8 @@ Both backends use exactly the same layout and the same note file format. Only th
 
 - With Google Drive storage, note sync talks to Google Drive from your browser, and Google's sign in script is loaded from Google only at the moment you click Sign in with Google. SnakeScale can only see the Drive files it created (the drive.file permission), not your whole Drive.
 - With GitHub storage, note sync talks only to api.github.com from your browser.
-- If you use attachments, the app also talks to the storage provider you signed in to (Google or pCloud). Provider tokens are stored in your browser encrypted with the same app password as the vault, never in plain text.
+- If you use attachments, the app also talks to the storage provider you signed in to (Google or pCloud). With GitHub storage, provider tokens are stored in your browser encrypted with the same app password as the vault, never in plain text. With Google Drive storage, they are encrypted with the random device key described above.
+- Local copies on a Google Drive device are encrypted with that device key, but the key lives on the same device. It scrambles local copies against casual snooping; it is not a login and it does not protect against someone using your unlocked browser profile. Sign out clears those local copies.
 - Anyone with your GitHub token has the access that token grants, so use a token you can revoke, and lock the app when you step away.
 - SnakeScale Notes is not affiliated with Evernote Corporation.
 
@@ -70,4 +72,4 @@ AGPL-3.0. See the LICENSE file. Anyone can use, study, and share this code, and 
 
 ## Current status
 
-Version 1.4, build stamp 2026-10-19-SSN-V14. New in this release: Google Drive works as a complete storage backend for notes, not just attachments, so new users can start with one Google sign in and no GitHub account. GitHub storage is unchanged for existing users and remains the default for vaults created before v1.4. Known limits: the storage backend cannot be changed after setup without resetting the vault on that device, and there is no migration tool yet, so moving notes between Google Drive and GitHub is not supported in this release; Google sign ins expire after about an hour and need a one click sign in again (the browser token flow gives no refresh token), and edits made while a Google sign in is expired are kept in the sync queue rather than lost; the formatting toolbar builds on the browser's built in editing commands, whose exact behavior varies a little between browsers; the pCloud browser download path follows pCloud's published API but is untested against a live account until the publisher test in the setup guide is run; attachments need an internet connection, with a 100 MB per file cap; and there is still no service worker, so it is not installable as a full PWA. That is planned for a later release.
+Version 1.4.1, build stamp 2026-10-19-SSN-V141. New in this release: Google Drive storage is sign in only, with no SnakeScale app password. A device key replaces the old password derived key for local encryption, returning Drive users get a silent renewal attempt before the Google sign in screen, old v1.4 Google marker vaults are ignored and removed, and the sidebar Lock button becomes Sign out for Drive users. GitHub storage, including its app password vault, is unchanged for existing users and remains the default for vaults created before v1.4. Known limits: the storage backend cannot be changed after setup without resetting SnakeScale on that device, and there is no migration tool yet, so moving notes between Google Drive and GitHub is not supported in this release; Google sign ins expire after about an hour (the browser token flow gives no refresh token), silent renewal depends on the user's Google session and browser cookie behavior, and when it is not available the sign in screen appears for a one click sign in; edits made while a Google sign in is expired are kept in the sync queue rather than lost; the Google device key does not protect against someone using an unlocked browser profile; the formatting toolbar builds on the browser's built in editing commands, whose exact behavior varies a little between browsers; the pCloud browser download path follows pCloud's published API but is untested against a live account until the publisher test in the setup guide is run; attachments need an internet connection, with a 100 MB per file cap; and there is still no service worker, so it is not installable as a full PWA. That is planned for a later release.

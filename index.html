@@ -19,16 +19,29 @@
   Data model in one paragraph: every user chooses their own storage. A
   Google Drive user signs in with Google and notes are stored as Markdown
   files with a small front matter block inside a SnakeScale Notes folder in
-  that user's Drive. A GitHub user connects a private repository with a
-  personal access token. In both cases the app password encrypts the local
-  vault in the browser (WebCrypto, PBKDF2 plus AES-GCM), notebooks are
-  folders, notes are files, and there is no server and no shared database
-  anywhere in this design.
+  that user's Drive. Google sign in is that user's only sign in: there is
+  no SnakeScale app password for the Drive backend. A random device key,
+  kept only on that device, encrypts local provider tokens and the local
+  note cache. A GitHub user connects a private repository with a personal
+  access token protected by the original app password vault in the browser
+  (WebCrypto, PBKDF2 plus AES-GCM). In both backends notebooks are folders,
+  notes are files, and there is no server and no shared database anywhere
+  in this design.
 
-  BUILD STAMP: 2026-10-19-SSN-V14
-  Version: 1.4
+  BUILD STAMP: 2026-10-19-SSN-V141
+  Version: 1.4.1
 
   Revision history:
+    v1.4.1 2026-10-19 Google Drive sign in only. The Drive backend no longer
+                      asks for or creates an app password vault. A device
+                      key replaces the password derived session key for
+                      local encryption, returning Drive users go through a
+                      Google sign in gate (with a silent renewal attempt
+                      first), legacy v1.4 Google marker vaults are ignored
+                      and removed, and the sidebar Lock action becomes
+                      Sign out for Drive users. The GitHub backend keeps
+                      its app password vault exactly as before.
+                      Build stamp 2026-10-19-SSN-V141.
     v1.4  2026-10-19  Google Drive becomes a full storage backend. New users
                       can store notes and attachments in Google Drive with
                       one Google sign in and never create a GitHub account.
@@ -36,7 +49,6 @@
                       for existing vaults. A shared storage layer gives both
                       backends the same file layout, conflict copy rule,
                       offline queue, notebooks, trash, and note format.
-                      Build stamp 2026-10-19-SSN-V14.
     v1.3.4 2026-10-19 Toolbar cleanup. The standalone Attach button is
                       removed from the toolbar: attaching lives in the
                       Insert menu now, whose "Attach file or image" item
@@ -748,10 +760,11 @@ body.dark .ss-att-provider{color:#EAF3EC;}
 
 <!-- ==========================================================================
      SCREEN: first time setup
-     Shown only when no vault exists in localStorage. The user pastes a
-     GitHub personal access token and picks an app password. The token is
-     encrypted with the password (see the vault section in the script) and
-     only the encrypted blob is saved. The plaintext token is never stored.
+     Shown when this device still needs a storage setup. A GitHub user
+     pastes a personal access token and picks an app password; the token is
+     encrypted with that password and only the encrypted blob is saved. A
+     Google Drive user sees no password fields and continues to Google sign
+     in. No Google vault is ever created.
      ========================================================================== -->
 <div id="setupScreen" class="gate hidden">
   <div class="gate-card">
@@ -762,8 +775,8 @@ body.dark .ss-att-provider{color:#EAF3EC;}
     <h1>Set up SnakeScale Notes</h1>
     <p>
       SnakeScale has no server and no account of its own. First choose where
-      your notes will live. You can change this choice only by resetting the
-      vault on this device; there is no migration tool yet.
+      your notes will live. You can change this choice only by resetting
+      SnakeScale on this device; there is no migration tool yet.
     </p>
 
     <!-- v1.4: storage is the first setup decision. These are real buttons
@@ -782,10 +795,11 @@ body.dark .ss-att-provider{color:#EAF3EC;}
 
     <div id="setupGoogleHelp">
       <p>
-        With Google Drive, you only choose an app password below. That
-        password protects the local vault and the encrypted Google sign in
-        token on this device. After setup, one prominent Sign in with Google
-        step connects Drive and creates your first notebook and welcome note.
+        With Google Drive, Sign in with Google is the only sign in. There is
+        no SnakeScale app password. Continue to the Google sign in step and
+        approve access; SnakeScale then connects Drive and creates your first
+        notebook and welcome note. Local copies on this device are encrypted
+        with a device key, which is not a login.
       </p>
     </div>
     <div id="setupGithubHelp" class="hidden">
@@ -813,15 +827,17 @@ body.dark .ss-att-provider{color:#EAF3EC;}
           <div class="hint">If this repository does not exist yet, SnakeScale will offer to create it as a private repository in the next step.</div>
         </div>
       </div>
-      <div class="field">
-        <label for="setupPassword">App password</label>
-        <input id="setupPassword" type="password" autocomplete="new-password">
+      <div id="setupPasswordFields" class="hidden">
+        <div class="field">
+          <label for="setupPassword">App password</label>
+          <input id="setupPassword" type="password" autocomplete="new-password">
+        </div>
+        <div class="field">
+          <label for="setupPassword2">App password again</label>
+          <input id="setupPassword2" type="password" autocomplete="new-password">
+        </div>
       </div>
-      <div class="field">
-        <label for="setupPassword2">App password again</label>
-        <input id="setupPassword2" type="password" autocomplete="new-password">
-      </div>
-      <button class="btn primary block" id="setupSubmitBtn" type="submit">Set app password and continue</button>
+      <button class="btn primary block" id="setupSubmitBtn" type="submit">Continue to Google sign in</button>
       <div id="setupError" class="error-text"></div>
     </form>
   </div>
@@ -877,13 +893,13 @@ body.dark .ss-att-provider{color:#EAF3EC;}
       <button id="createRepoBtn" class="btn accent block" type="button">Create the data repository (private)</button>
       <div class="hint">Creates a private repository with the folder layout SnakeScale needs, a default notebook called Personal, and one welcome note.</div>
     </div>
-    <!-- v1.4: the same connect gate becomes the Google sign in step for
-         Drive users. The client ID field is the publisher test build field
-         described in the attachment setup guide; end users of a finished
-         build only click the sign in button. -->
+    <!-- v1.4.1: this connect gate is the Google sign in screen for Drive
+         users. There is no app password before or after it. The client ID
+         field is the publisher test build field described in the attachment
+         setup guide; end users of a finished build only click sign in. -->
     <div id="googleConnectPanel" class="provider-card hidden">
-      <h3>Google Drive storage</h3>
-      <div class="provider-status">Notes and attachments will use the same Google sign in. Google sign ins expire after about an hour; signing in again takes one click.</div>
+      <h3>Sign in with Google</h3>
+      <div class="provider-status">Google sign in is the only sign in for Google Drive storage. Notes and attachments use the same sign in. Google sign ins expire after about an hour; signing in again takes one click.</div>
       <div class="field">
         <label for="googleBackendClientId">Google client ID (publisher ID, test build only)</label>
         <input type="text" id="googleBackendClientId" placeholder="Paste the publisher Google client ID" autocomplete="off">
@@ -1231,8 +1247,8 @@ body.dark .ss-att-provider{color:#EAF3EC;}
 "use strict";
 
 /* ============================================================================
-   SnakeScale Notes v1.4: application script
-   BUILD STAMP: 2026-10-19-SSN-V14
+   SnakeScale Notes v1.4.1: application script
+   BUILD STAMP: 2026-10-19-SSN-V141
 
    How this script is organized:
      1. Constants and global state
@@ -1263,8 +1279,8 @@ body.dark .ss-att-provider{color:#EAF3EC;}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-19-SSN-V14";
-const APP_VERSION = "1.4";
+const APP_BUILD = "2026-10-19-SSN-V141";
+const APP_VERSION = "1.4.1";
 const API_BASE = "https://api.github.com";
 const API_VERSION_HEADER = "2022-11-28";
 /* v1.4: the two storage backends. "github" is the original repository
@@ -1274,17 +1290,26 @@ const BACKEND_GOOGLE = "google";
 /* The Drive folder that holds the complete notes layout. This is separate
    from ATTACH_ROOT_NAME below, which remains the attachments folder. */
 const NOTES_ROOT_NAME = "SnakeScale Notes";
-/* A Google backend vault does not contain a GitHub token. It contains this
-   fixed, non-secret marker instead, purely so the same app password vault
-   can prove that the password is correct and can protect the session key.
-   The marker grants no access to anything and is never sent to Google. */
+/* v1.4 wrote this fixed, non-secret marker into a password vault for
+   Google backend users. v1.4.1 never creates that vault. The constant is
+   kept only so the legacy lock fallback can recognize an old marker if a
+   settings record is missing; normal Google routing ignores and removes
+   the old vault before showing the Google sign in gate. The marker grants
+   no access to anything and is never sent to Google. */
 const GOOGLE_BACKEND_VAULT_MARKER = "snakescale-notes-backend:google-drive:v1";
 
-/* localStorage keys. The vault holds ONLY the encrypted token blob. */
+/* localStorage keys. The GitHub vault holds ONLY its encrypted token blob.
+   The device key is a separate Google backend record described below. */
 const LS_VAULT = "snakescale.vault.v1";
 const LS_CACHE = "snakescale.cache.v1";
 const LS_QUEUE = "snakescale.queue.v1";
 const LS_SETTINGS = "snakescale.settings.v1";
+/* v1.4.1: the Google backend device key. This random AES-GCM key is kept
+   on this device so it can encrypt provider tokens and the Google note
+   cache at rest across reloads. It is not a credential and it is not a
+   login: anyone using the unlocked browser profile can still use the app,
+   so the key only scrambles local copies against casual snooping. */
+const LS_DEVICE_KEY = "snakescale.deviceKey.v1";
 /* v1.2: provider OAuth tokens, AES-GCM encrypted under the same vault
    key as the GitHub token (see section 11). Only ciphertext lives here. */
 const LS_PROVIDERS = "snakescale.providerTokens.v1";
@@ -1301,9 +1326,10 @@ const state = {
   backend: BACKEND_GOOGLE,  // v1.4: fresh setup recommendation; loadSettings
                             // forces "github" for any stored pre-v1.4 settings
   backendExplicit: false,   // true only when stored settings name a backend
-  token: null,              // GitHub token, or the non-secret Google backend
-                            // vault marker; memory only, never stored plainly
-  sessionKey: null,         // v1.2: vault CryptoKey, memory only, set at unlock
+  token: null,              // GitHub token; memory only, never stored plainly.
+                            // Google users have no app token or app password.
+  sessionKey: null,         // Encryption CryptoKey in memory: derived from the
+                            // GitHub app password, or the Google device key
   providerTokens: { google: null, pcloud: null }, // v1.2: plaintext provider tokens, memory only
   pendingPcloud: null,      // v1.2: pCloud OAuth return captured before unlock, memory only
   objectUrls: [],           // v1.2: blob URLs created for the open note, revoked on switch/lock
@@ -1328,7 +1354,10 @@ const state = {
   selectedId: null,         // id of the note open in the editor
   search: "",               // current search text, lowercased
   syncing: false,           // true while a sync or save is in flight
-  online: navigator.onLine  // browser online flag, kept current by events
+  online: navigator.onLine, // browser online flag, kept current by events
+  cacheGeneration: 0,       // v1.4.1: invalidates an in-flight encrypted
+                            // Google cache write when the user signs out
+  cacheWritePromise: null   // v1.4.1: latest encrypted Google cache write
 };
 
 /* The note object shape used everywhere in this app:
@@ -1661,6 +1690,67 @@ function vaultWipe() {
   localStorage.removeItem(LS_VAULT);
 }
 
+/* --------------------------------------------------------------------------
+   v1.4.1 device key: Google backend only
+   Google users have no app password, so there is no password from which to
+   derive the session encryption key. Instead, setup creates one random
+   AES-GCM key for this device. Its raw bytes live in localStorage beside
+   the data it encrypts. Read that sentence carefully: this key is NOT a
+   login and does NOT protect notes from someone using the unlocked
+   browser profile. It only keeps provider tokens and the local Google
+   note cache scrambled at rest, so a casual look at local storage does not
+   reveal readable tokens or note text. Google sign in remains the actual
+   sign in and the actual access control for the Drive files.
+   -------------------------------------------------------------------------- */
+function deviceKeyExists() {
+  return !!localStorage.getItem(LS_DEVICE_KEY);
+}
+
+async function createDeviceKey() {
+  const key = await crypto.subtle.generateKey(
+    { name: "AES-GCM", length: 256 },
+    true,
+    ["encrypt", "decrypt"]
+  );
+  const raw = await crypto.subtle.exportKey("raw", key);
+  localStorage.setItem(LS_DEVICE_KEY, bytesToBase64(new Uint8Array(raw)));
+  state.sessionKey = key;
+  return key;
+}
+
+async function loadDeviceKey() {
+  const raw = localStorage.getItem(LS_DEVICE_KEY);
+  if (!raw) { return false; }
+  try {
+    const key = await crypto.subtle.importKey(
+      "raw",
+      base64ToBytes(raw),
+      { name: "AES-GCM" },
+      false,
+      ["encrypt", "decrypt"]
+    );
+    state.sessionKey = key;
+    return true;
+  } catch (e) {
+    /* A damaged device key cannot decrypt anything written under it.
+       Remove it and let the caller create a fresh key; the user will
+       simply sign in to the providers again. */
+    localStorage.removeItem(LS_DEVICE_KEY);
+    state.sessionKey = null;
+    return false;
+  }
+}
+
+async function loadOrCreateDeviceKey() {
+  if (state.sessionKey) { return state.sessionKey; }
+  if (await loadDeviceKey()) { return state.sessionKey; }
+  return createDeviceKey();
+}
+
+function wipeDeviceKey() {
+  localStorage.removeItem(LS_DEVICE_KEY);
+}
+
 /* Lock the app: drop the in-memory token and username, go back to the lock
    screen (or to setup if the vault itself was wiped). Cached notes stay in
    localStorage so the app can reopen quickly after the next unlock, but
@@ -1679,6 +1769,82 @@ function lockApp() {
   /* v1.3.1: locking closes any open link popup. */
   hideLinkPopup();
   showScreen(vaultExists() ? "lock" : "setup");
+}
+
+/* v1.4.1: Google backend sign out. This is deliberately different from
+   GitHub locking. Signing out drops the Google access token, revokes it
+   when the Google library is already loaded, and clears this device's
+   encrypted provider token store, note cache, offline queue, legacy
+   marker vault, and device key. Settings stay, so the gate still knows
+   that this device uses Google Drive and still has the publisher client
+   ID. The notes themselves stay in the user's Google Drive. */
+async function signOutGoogle() {
+  if (state.backend !== BACKEND_GOOGLE) {
+    lockApp();
+    return;
+  }
+  const ok = confirm(
+    "Sign out of SnakeScale on this device? Your notes stay safe in " +
+    "Google Drive. Local copies on this device will be cleared, including " +
+    "any edits still waiting to sync, so sync first if the sync pill is " +
+    "not green.");
+  if (!ok) { return; }
+
+  let googleToken = state.providerTokens.google || null;
+  if (!googleToken) {
+    try { googleToken = await getProviderToken("google"); }
+    catch (e) { googleToken = null; }
+  }
+
+  /* Stop any encrypted cache write already in flight from recreating the
+     cache after the wipe below. */
+  state.cacheGeneration++;
+  if (state.cacheWritePromise) {
+    try { await state.cacheWritePromise; } catch (e) { /* already handled */ }
+    state.cacheWritePromise = null;
+  }
+
+  if (googleToken && window.google && window.google.accounts &&
+      window.google.accounts.oauth2) {
+    try { window.google.accounts.oauth2.revoke(googleToken, function () {}); }
+    catch (e) { /* Revoke is best effort; the local token is dropped below. */ }
+  }
+
+  state.token = null;
+  state.username = null;
+  state.sessionKey = null;
+  state.providerTokens = { google: null, pcloud: null };
+  state.pendingPcloud = null;
+  state.repoExists = false;
+  state.notebooks = [];
+  state.notes = [];
+  state.trash = [];
+  state.index = null;
+  state.selectedId = null;
+  state.attach.googleExpiresAt = 0;
+  state.attach.googleFolderId = null;
+  revokeAttachmentUrls();
+  hideLinkPopup();
+
+  localStorage.removeItem(LS_PROVIDERS);
+  localStorage.removeItem(LS_CACHE);
+  localStorage.removeItem(LS_QUEUE);
+  vaultWipe();
+  wipeDeviceKey();
+  saveSettings();
+  showGoogleConnectScreen(
+    "You are signed out on this device. Sign in with Google to load your " +
+    "notes from Google Drive again.");
+}
+
+/* One handler for the button GitHub calls Lock and Google calls Sign out.
+   GitHub goes through the original lockApp unchanged. */
+function lockOrSignOut() {
+  if (state.backend === BACKEND_GOOGLE) {
+    signOutGoogle().catch(function (err) { toast(err.message, true); });
+  } else {
+    lockApp();
+  }
 }
 
 /* --------------------------------------------------------------------------
@@ -1749,10 +1915,11 @@ function saveSettings() {
   }));
 }
 
-/* v1.4: setup screen storage cards. Selecting a card updates the form
-   immediately: GitHub token fields and instructions exist only for the
-   GitHub choice, while Drive users see the password-only explanation.
-   The submit label names the credential that will actually be protected. */
+/* Setup screen storage cards. Selecting a card updates the form
+   immediately: GitHub token and app password fields exist only for the
+   GitHub choice, while Drive users see the sign in only explanation and
+   no password fields at all. The submit label names the next step that
+   will actually happen for the selected backend. */
 function setSetupBackend(backend) {
   state.backend = normalizeBackend(backend);
   const isGoogle = state.backend === BACKEND_GOOGLE;
@@ -1770,47 +1937,118 @@ function setSetupBackend(backend) {
   document.getElementById("setupGoogleHelp").classList.toggle("hidden", !isGoogle);
   document.getElementById("setupGithubHelp").classList.toggle("hidden", isGoogle);
   document.getElementById("setupGithubFields").classList.toggle("hidden", isGoogle);
+  document.getElementById("setupPasswordFields").classList.toggle("hidden", isGoogle);
   document.getElementById("setupSubmitBtn").textContent = isGoogle
-    ? "Set app password and continue"
+    ? "Continue to Google sign in"
     : "Encrypt token and continue";
 }
 
+/* One cache snapshot shape for both storage paths below. GitHub keeps the
+   original plain JSON cache. Google encrypts this same snapshot under the
+   device key before it reaches localStorage. */
+function cacheSnapshot() {
+  return {
+    backend: state.backend,
+    username: state.username,
+    repo: state.repo,
+    notebooks: state.notebooks,
+    notes: state.notes,
+    trash: state.trash,
+    index: state.index,
+    savedAt: new Date().toISOString()
+  };
+}
+
+function applyCacheSnapshot(c) {
+  state.username = c.username || null;
+  /* Settings, already loaded before the cache, are authoritative for
+     the backend. The cached value is only a last resort for a device
+     whose settings record has disappeared. */
+  if (c.backend && !localStorage.getItem(LS_SETTINGS)) {
+    state.backend = normalizeBackend(c.backend);
+  }
+  if (c.repo) { state.repo = c.repo; }
+  state.notebooks = c.notebooks || [];
+  state.notes = c.notes || [];
+  state.trash = c.trash || [];
+  state.index = c.index || null;
+  return true;
+}
+
+/* v1.4.1: encrypt one Google cache snapshot with AES-GCM under the device
+   key. The generation check is the sign out guard: if the user signs out
+   while this asynchronous write is in flight, the write is abandoned
+   instead of recreating a cache that sign out just cleared. */
+async function storeEncryptedCache(snapshot, key, generation) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const cipher = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv: iv },
+    key,
+    new TextEncoder().encode(JSON.stringify(snapshot))
+  );
+  if (generation !== state.cacheGeneration ||
+      state.backend !== BACKEND_GOOGLE || state.sessionKey !== key) {
+    return;
+  }
+  localStorage.setItem(LS_CACHE, JSON.stringify({
+    v: 2,
+    backend: BACKEND_GOOGLE,
+    encrypted: "AES-GCM",
+    iv: bytesToBase64(iv),
+    data: bytesToBase64(new Uint8Array(cipher))
+  }));
+}
+
 function saveCache() {
+  const snapshot = cacheSnapshot();
+  if (state.backend === BACKEND_GOOGLE && state.sessionKey) {
+    const key = state.sessionKey;
+    const generation = state.cacheGeneration;
+    state.cacheWritePromise = storeEncryptedCache(snapshot, key, generation)
+      .catch(function (e) {
+        /* The Drive store is the source of truth, so a cache failure is
+           not fatal; reads still work after the next successful sync. */
+      });
+    return;
+  }
   try {
-    localStorage.setItem(LS_CACHE, JSON.stringify({
-      backend: state.backend,
-      username: state.username,
-      repo: state.repo,
-      notebooks: state.notebooks,
-      notes: state.notes,
-      trash: state.trash,
-      index: state.index,
-      savedAt: new Date().toISOString()
-    }));
+    localStorage.setItem(LS_CACHE, JSON.stringify(snapshot));
   } catch (e) {
-    /* localStorage can fill up with very large note sets. The repo is the
-       source of truth, so a cache failure is not fatal; reads still work
-       after the next successful sync. */
+    /* localStorage can fill up with very large note sets. The remote
+       store is the source of truth, so a cache failure is not fatal;
+       reads still work after the next successful sync. */
   }
 }
 
 function loadCache() {
   try {
     const c = JSON.parse(localStorage.getItem(LS_CACHE) || "null");
-    if (!c) { return false; }
-    state.username = c.username || null;
-    /* Settings, already loaded before the cache, are authoritative for
-       the backend. The cached value is only a last resort for a device
-       whose settings record has disappeared. */
-    if (c.backend && !localStorage.getItem(LS_SETTINGS)) {
-      state.backend = normalizeBackend(c.backend);
-    }
-    if (c.repo) { state.repo = c.repo; }
-    state.notebooks = c.notebooks || [];
-    state.notes = c.notes || [];
-    state.trash = c.trash || [];
-    state.index = c.index || null;
-    return true;
+    if (!c || c.encrypted) { return false; }
+    return applyCacheSnapshot(c);
+  } catch (e) {
+    return false;
+  }
+}
+
+/* Google cache reads are asynchronous in v1.4.1 because WebCrypto
+   decryption is asynchronous. A v1.4 plaintext Google cache is accepted
+   once through loadCache and is rewritten encrypted on the next save. */
+async function loadCacheForBackend() {
+  if (state.backend !== BACKEND_GOOGLE || !state.sessionKey) {
+    return loadCache();
+  }
+  let c = null;
+  try { c = JSON.parse(localStorage.getItem(LS_CACHE) || "null"); }
+  catch (e) { return false; }
+  if (!c) { return false; }
+  if (!c.encrypted) { return applyCacheSnapshot(c); }
+  try {
+    const plain = await crypto.subtle.decrypt(
+      { name: "AES-GCM", iv: base64ToBytes(c.iv) },
+      state.sessionKey,
+      base64ToBytes(c.data)
+    );
+    return applyCacheSnapshot(JSON.parse(new TextDecoder().decode(plain)));
   } catch (e) {
     return false;
   }
@@ -2811,19 +3049,22 @@ async function seedInitialStore() {
   return welcome;
 }
 
-/* The Google branch of the connect gate. This screen is prominent after
-   setup and after any unlock where the hourly Google token is no longer
-   live. It is not a settings corner: connecting storage is the step the
-   user must complete before notes can load. */
+/* The Google sign in gate. This is the Drive backend's sign in screen:
+   it appears after setup, on a returning visit when no live token or
+   silent renewal is available, and after sign out. There is no unlock
+   step before or after it. It is not a settings corner: signing in is the
+   step the user must complete before notes can load. */
 function showGoogleConnectScreen(message) {
   const repoError = document.getElementById("repoError");
   repoError.textContent = "";
   document.getElementById("connectScreenTitle").textContent =
-    "Connect Google Drive";
+    "Sign in with Google";
   document.getElementById("repoScreenText").textContent = message ||
-    "Sign in with Google to connect the SnakeScale Notes folder in your " +
-    "Google Drive. The same sign in also covers attachments.";
+    "Sign in with Google to load the SnakeScale Notes folder in your " +
+    "Google Drive. This is the only sign in for Drive storage, and the " +
+    "same sign in also covers attachments.";
   document.getElementById("repoActions").classList.add("hidden");
+  document.getElementById("repoLockBtn").textContent = "Sign out";
   document.getElementById("googleConnectPanel").classList.remove("hidden");
   const input = document.getElementById("googleBackendClientId");
   if (document.activeElement !== input) {
@@ -2882,7 +3123,7 @@ async function connectGoogleAndLoad() {
         "one click. Your notes and any queued edits are still safe.");
       return;
     }
-    if (loadCache()) {
+    if (await loadCacheForBackend()) {
       state.repoExists = true;
       showScreen("app");
       renderAll();
@@ -2899,7 +3140,7 @@ async function connectGoogleAndLoad() {
 
 /* --------------------------------------------------------------------------
    Connect flow
-   After unlock, dispatch by the stored backend. GitHub verifies the token
+   After sign in or unlock, dispatch by the stored backend. GitHub verifies the token
    with GET /user, shows the username, then looks for the data repo. A 404
    opens the repo screen with the one click create button. Any other
    failure shows a toast and falls back to the local cache so the user can
@@ -2912,6 +3153,7 @@ async function connectAndLoad() {
   }
   document.getElementById("connectScreenTitle").textContent =
     "Connect your data repository";
+  document.getElementById("repoLockBtn").textContent = "Lock app";
   document.getElementById("googleConnectPanel").classList.add("hidden");
   const repoText = document.getElementById("repoScreenText");
   const repoError = document.getElementById("repoError");
@@ -3006,18 +3248,15 @@ function showScreen(name) {
   document.getElementById("app").classList.toggle("hidden", name !== "app");
   if (name === "setup") { setSetupBackend(state.backend); }
   if (name === "lock") {
-    const isGoogle = state.backend === BACKEND_GOOGLE;
-    document.getElementById("lockIntro").textContent = isGoogle
-      ? "Type your app password to unlock SnakeScale Notes on this device. " +
-        "If your Google sign in has expired, you will sign in with Google again next."
-      : "Type your app password to decrypt your GitHub token on this device.";
-    document.getElementById("lockResetHint").textContent = isGoogle
-      ? "Forgot the password? The encrypted vault cannot be recovered without it. " +
-        "Use the reset button below to clear the vault on this device and set up again. " +
-        "Your notes in Google Drive are not affected."
-      : "Forgot the password? The encrypted token cannot be recovered without it. " +
-        "Use the reset button below to clear the vault on this device and set up " +
-        "again with a new token. Your notes in GitHub are not affected.";
+    /* v1.4.1: the lock screen belongs to the GitHub password vault only.
+       Google routing never sends a Drive user here, so this wording no
+       longer needs a Google variant. */
+    document.getElementById("lockIntro").textContent =
+      "Type your app password to decrypt your GitHub token on this device.";
+    document.getElementById("lockResetHint").textContent =
+      "Forgot the password? The encrypted token cannot be recovered without it. " +
+      "Use the reset button below to clear the vault on this device and set up " +
+      "again with a new token. Your notes in GitHub are not affected.";
   }
   if (name === "app" && !document.body.classList.contains("view-list") &&
       !document.body.classList.contains("view-nav") &&
@@ -3177,6 +3416,9 @@ function renderSidebar() {
   }
   document.getElementById("themeBtn").textContent =
     document.body.classList.contains("dark") ? "Light mode" : "Dark mode";
+  /* v1.4.1: one button, two honest labels. GitHub locks its password
+     vault; Google signs out because Google sign in is its only sign in. */
+  document.getElementById("lockBtn").textContent = isGoogle ? "Sign out" : "Lock";
 }
 
 /* The filtered, sorted note set for the middle pane.
@@ -4236,12 +4478,14 @@ function wireToolbar() {
    Attachments settings dialog; a later build bakes the public IDs in.
 
    Token safety: provider OAuth tokens are encrypted with AES-GCM under
-   the SAME key as the GitHub vault (the key derived from the app
-   password at unlock and kept only in memory as state.sessionKey).
-   localStorage holds only ciphertext. Google's browser token flow hands
-   out short lived access tokens (about an hour) and NO refresh token, so
-   expiry is tracked and the user simply signs in again. Locking the app
-   drops the key and every plaintext token from memory.
+   state.sessionKey, and localStorage holds only ciphertext. For the
+   GitHub backend that key is derived from the app password at unlock.
+   For the Google backend it is the random device key described in
+   section 4, which is not a login and does not lock the browser profile.
+   Google's browser token flow hands out short lived access tokens (about
+   an hour) and NO refresh token, so expiry is tracked and the user simply
+   signs in again. GitHub locking, or Google signing out, drops every
+   plaintext token from memory.
    -------------------------------------------------------------------------- */
 
 /* ----- provider token vault (encrypted under the session vault key) -- */
@@ -4252,7 +4496,7 @@ function loadProviderTokenBlob() {
 
 async function storeProviderToken(provider, token) {
   if (!state.sessionKey) {
-    throw new Error("Unlock SnakeScale with your app password before signing in to a storage provider.");
+    throw new Error("SnakeScale is not ready to save a provider sign in on this device yet.");
   }
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const cipher = await crypto.subtle.encrypt(
@@ -4380,7 +4624,8 @@ function loadGisScript() {
   return gisScriptPromise;
 }
 
-async function googleConnect() {
+async function googleConnect(options) {
+  const silent = !!(options && options.silent);
   /* The same publisher client ID can be entered in three places over the
      life of the app: the v1.4 storage connect gate, the Attachments
      dialog, or saved settings from either one. Prefer the field on the
@@ -4401,11 +4646,23 @@ async function googleConnect() {
   if (dialogInput) { dialogInput.value = clientId; }
   saveSettings();
   if (!clientId) {
+    if (silent) {
+      const missing = new Error("The publisher Google client ID is not set on this device.");
+      missing.code = "GOOGLE_CLIENT_ID_MISSING";
+      throw missing;
+    }
     document.getElementById("googleHint").classList.remove("hidden");
     const panelVisible = !document.getElementById("googleConnectPanel")
       .classList.contains("hidden");
     (panelVisible ? backendInput : dialogInput).focus();
     throw new Error("Paste the publisher Google client ID first. It comes from a one time setup by the app owner (see ATTACHMENT_PROVIDERS_SETUP.md). End users never register a developer app.");
+  }
+  /* A Drive backend user may reach sign in right after signing out, when
+     the old device key was wiped with everything else. Recreate the local
+     encryption key before any token is stored. GitHub users already have
+     their password derived key and never take this branch. */
+  if (state.backend === BACKEND_GOOGLE && !state.sessionKey) {
+    await loadOrCreateDeviceKey();
   }
   await loadGisScript();
   const resp = await new Promise(function (resolve, reject) {
@@ -4432,6 +4689,21 @@ async function googleConnect() {
   /* Prove the token works and prepare the folder right away, so a bad
      grant fails here with a clear message instead of at first upload. */
   await googleEnsureRootFolder();
+}
+
+/* v1.4.1: one silent renewal attempt for a returning Drive user. GIS is
+   asked for a token with an empty prompt, which means "issue one only if
+   Google can do it without showing an interaction." Every failure mode
+   (no client ID, script blocked, interaction required, network trouble)
+   simply returns false. The caller then shows the sign in gate with no
+   error toast; a toast belongs only to a manual sign in click. */
+async function googleTrySilentSignIn() {
+  try {
+    await googleConnect({ silent: true });
+    return true;
+  } catch (e) {
+    return false;
+  }
 }
 
 async function googleDisconnect() {
@@ -5005,7 +5277,8 @@ function pcloudConnect() {
    browser back with a token in the URL fragment, capture it into memory,
    verify the anti forgery state value, and scrub the fragment from the
    address bar and history. The token is only written to storage later,
-   by finalizePendingPcloud, once the vault key exists (after unlock). */
+   by finalizePendingPcloud, once an encryption key exists (after GitHub
+   unlock, GitHub setup, or Google sign in under the device key). */
 function capturePcloudReturn() {
   if (!window.location.hash ||
       window.location.hash.indexOf("access_token=") < 0) { return; }
@@ -5030,9 +5303,9 @@ function capturePcloudReturn() {
   };
 }
 
-/* After setup or unlock, the session vault key exists, so the pending
-   pCloud token can finally be encrypted and stored. Called from the
-   setup and lock submit handlers. */
+/* After GitHub setup or unlock, or after a Google sign in, the session
+   encryption key exists, so the pending pCloud token can finally be
+   encrypted and stored. Called from those three completion paths. */
 async function finalizePendingPcloud() {
   const pending = state.pendingPcloud;
   if (!pending) { return; }
@@ -5681,34 +5954,50 @@ function wireEvents() {
     setSetupBackend(BACKEND_GITHUB);
   });
 
-  /* Setup form: validate the selected backend's fields, encrypt the vault,
-     store settings, then connect through the matching backend flow. */
+  /* Setup form. The Google branch comes FIRST and returns before any
+     GitHub field is read: a Drive user has no token, no repository name,
+     and (since v1.4.1) no app password, so this path must never touch
+     those inputs. It creates the device key, saves the backend choice,
+     and hands the user to the Google sign in gate, where the sign in
+     itself finishes setup. The GitHub branch below is the original
+     v1.0 setup flow, unchanged. */
   document.getElementById("setupForm").addEventListener("submit", async function (ev) {
     ev.preventDefault();
     const errEl = document.getElementById("setupError");
     errEl.textContent = "";
-    const isGoogle = state.backend === BACKEND_GOOGLE;
+    if (state.backend === BACKEND_GOOGLE) {
+      try {
+        state.token = null;
+        state.repoExists = false;
+        /* A fresh Google setup gets a fresh device key. Any old marker
+           vault from v1.4 is removed rather than carried forward: no
+           vault is ever created for a Google user from here on. */
+        vaultWipe();
+        await createDeviceKey();
+        saveSettings();
+        /* If this setup follows a pCloud sign in redirect, the device
+           key now exists, so the pending token can be encrypted. */
+        await finalizePendingPcloud();
+        showGoogleConnectScreen(
+          "One step left: sign in with Google. SnakeScale will create " +
+          "the SnakeScale Notes folder in your Drive and your first " +
+          "notebook and welcome note.");
+      } catch (err) {
+        errEl.textContent = "Setup failed: " + err.message;
+      }
+      return;
+    }
     const token = document.getElementById("setupToken").value.trim();
     const repo = document.getElementById("setupRepo").value.trim() || "snakescale-notes-data";
     const pw = document.getElementById("setupPassword").value;
     const pw2 = document.getElementById("setupPassword2").value;
-    if (!isGoogle && !token) { errEl.textContent = "Paste your GitHub token first."; return; }
+    if (!token) { errEl.textContent = "Paste your GitHub token first."; return; }
     if (pw.length < 6) { errEl.textContent = "Use an app password of at least 6 characters."; return; }
     if (pw !== pw2) { errEl.textContent = "The two passwords do not match."; return; }
     try {
-      if (isGoogle) {
-        /* Google users have no GitHub token to encrypt. The vault stores
-           the fixed non-secret backend marker instead, which gives the
-           password something real to verify and produces the session key
-           that encrypts the Google OAuth token. */
-        await vaultCreate(GOOGLE_BACKEND_VAULT_MARKER, pw);
-        state.token = GOOGLE_BACKEND_VAULT_MARKER;
-        state.repoExists = false;
-      } else {
-        await vaultCreate(token, pw);
-        state.token = token;
-        state.repo = repo;
-      }
+      await vaultCreate(token, pw);
+      state.token = token;
+      state.repo = repo;
       saveSettings();
       document.getElementById("repoNameInput").value = repo;
       /* v1.2: if this setup follows a pCloud sign in redirect, the vault
@@ -5738,7 +6027,21 @@ function wireEvents() {
         state.backend = state.token === GOOGLE_BACKEND_VAULT_MARKER
           ? BACKEND_GOOGLE : BACKEND_GITHUB;
       }
-      loadCache();
+      if (state.backend === BACKEND_GOOGLE) {
+        /* v1.4.1 legacy transition: this password prompt existed only
+           because the settings record was missing and the marker could
+           not be identified before unlock. The password is not kept as
+           part of the Google flow: drop the marker vault, replace the
+           password derived key with the device key, and continue to the
+           Google gate from here. */
+        vaultWipe();
+        state.token = null;
+        state.sessionKey = null;
+        await loadOrCreateDeviceKey();
+        await loadCacheForBackend();
+      } else {
+        loadCache();
+      }
       /* v1.2: complete any pCloud sign in that redirected back here. */
       await finalizePendingPcloud();
       await connectAndLoad();
@@ -5750,15 +6053,18 @@ function wireEvents() {
   document.getElementById("resetVaultBtn").addEventListener("click", function () {
     const isGoogle = state.backend === BACKEND_GOOGLE;
     const ok = confirm(isGoogle
-      ? "Clear the encrypted vault on this device? You will set up again with a new app password and sign in with Google again. Notes in Google Drive are not affected."
+      ? "Clear the old Google setup on this device? You will set up again and sign in with Google again. There is no app password for Google Drive storage. Notes in Google Drive are not affected."
       : "Clear the encrypted vault on this device? You will set up again with a token and a new password. Notes in GitHub are not affected.");
     if (ok) {
       vaultWipe();
+      state.cacheGeneration++;
+      state.cacheWritePromise = null;
       localStorage.removeItem(LS_CACHE);
       localStorage.removeItem(LS_QUEUE);
-      /* v1.2: encrypted provider tokens belong to the wiped vault (they
-         are unreadable without its password), so they go too. */
+      /* Encrypted provider tokens and the Google device key belong to
+         the setup being cleared, so they go too. */
       localStorage.removeItem(LS_PROVIDERS);
+      wipeDeviceKey();
       state.sessionKey = null;
       state.providerTokens = { google: null, pcloud: null };
       showScreen("setup");
@@ -5771,10 +6077,12 @@ function wireEvents() {
       document.getElementById("repoError").textContent = err.message;
     });
   });
-  /* v1.4: the prominent Google sign in on the connect gate. The typed
-     publisher client ID is saved first (googleConnect also reconciles
-     the Attachments dialog field), then the normal connect flow runs:
-     first run seeding for a brand new Drive root, or a normal load. */
+  /* The Google sign in gate button. The typed publisher client ID is
+     saved first (googleConnect also reconciles the Attachments dialog
+     field), then any pending pCloud return is finalized under the device
+     key (v1.4.1: Google users have no unlock step where this used to
+     happen), then the normal connect flow runs: first run seeding for a
+     brand new Drive root, or a normal load. */
   document.getElementById("googleBackendConnectBtn").addEventListener("click", async function () {
     const errEl = document.getElementById("repoError");
     errEl.textContent = "";
@@ -5786,6 +6094,7 @@ function wireEvents() {
         document.getElementById("googleBackendClientId").value.trim();
       saveSettings();
       await providers.google.connect();
+      await finalizePendingPcloud();
       await connectAndLoad();
     } catch (err) {
       errEl.textContent = err.message;
@@ -5797,7 +6106,7 @@ function wireEvents() {
   document.getElementById("repoRetryBtn").addEventListener("click", function () {
     connectAndLoad().catch(function (err) { toast(err.message, true); });
   });
-  document.getElementById("repoLockBtn").addEventListener("click", lockApp);
+  document.getElementById("repoLockBtn").addEventListener("click", lockOrSignOut);
 
   /* Sidebar: view switching. */
   document.getElementById("navAll").addEventListener("click", function () {
@@ -5857,7 +6166,7 @@ function wireEvents() {
     saveSettings();
     renderSidebar();
   });
-  document.getElementById("lockBtn").addEventListener("click", lockApp);
+  document.getElementById("lockBtn").addEventListener("click", lockOrSignOut);
 
   /* Mobile bar. */
   document.getElementById("mobileNavBtn").addEventListener("click", function () { setMobileView("nav"); });
@@ -6166,29 +6475,110 @@ function wireEvents() {
 }
 
 /* --------------------------------------------------------------------------
+   Boot routing (v1.4.1)
+   initialScreenFor is a pure decision function: it reads nothing and
+   changes nothing, so it can be tested on its own. Its rules are the
+   whole sign in model in one place:
+     Google backend: a live token already in this session goes straight
+       to the app. A returning device (device key present) goes to the
+       Google sign in gate. A legacy v1.4 marker vault ALSO goes to the
+       gate, never to a password prompt. No vault and no device key means
+       a first run and goes to setup.
+     GitHub backend (and any unset backend, which normalizes to GitHub):
+       a vault goes to the lock screen, no vault goes to setup.
+   -------------------------------------------------------------------------- */
+function initialScreenFor(input) {
+  const backend = normalizeBackend(input && input.backend);
+  if (backend === BACKEND_GOOGLE) {
+    if (input && input.hasLiveToken) { return "app"; }
+    if (input && (input.hasDeviceKey || input.hasVault)) {
+      return "googleGate";
+    }
+    return "setup";
+  }
+  return input && input.hasVault ? "lock" : "setup";
+}
+
+/* Prepare the Google gate for a returning Drive user: remove any legacy
+   v1.4 marker vault (Drive users never unlock a vault again), load or
+   create the device key, then try to enter without bothering the user:
+   first a token that is still live, then one silent GIS renewal. Only
+   when both fail does the gate itself appear, and it appears quietly:
+   no error toast is raised for a background renewal that did not work. */
+async function prepareGoogleGate() {
+  try {
+    vaultWipe();
+    await loadOrCreateDeviceKey();
+  } catch (e) {
+    showGoogleConnectScreen();
+    document.getElementById("repoError").textContent =
+      "This device could not prepare its local encryption key: " + e.message;
+    return;
+  }
+  let status = null;
+  try { status = await providers.google.getStatus(); }
+  catch (e) { status = null; }
+  if (status && status.connected) {
+    await finalizePendingPcloud();
+    await connectAndLoad();
+    return;
+  }
+  if (await googleTrySilentSignIn()) {
+    await finalizePendingPcloud();
+    await connectAndLoad();
+    return;
+  }
+  showGoogleConnectScreen();
+}
+
+/* --------------------------------------------------------------------------
    Boot
    Order matters: logos first (they appear on every screen), then saved
-   settings (theme and repo name), then event wiring, then the right
-   starting screen: setup when there is no vault, lock when there is one.
-   The note cache is loaded only after a successful unlock, never before,
-   so a locked app shows nothing of the user's notes.
+   settings (theme and storage choice), then event wiring, then the
+   starting route from initialScreenFor. GitHub follows the original
+   rule: setup when there is no vault, lock when there is one, and its
+   note cache is loaded only after a successful unlock. Google has no
+   lock screen at all: returning users go through prepareGoogleGate.
    -------------------------------------------------------------------------- */
-function boot() {
+async function boot() {
   /* v1.2: a pCloud OAuth redirect may have landed here with a token in
      the URL fragment. Capture and scrub it before anything renders. */
   capturePcloudReturn();
   injectLogos();
   loadSettings();
   wireEvents();
-  if (vaultExists()) {
-    showScreen("lock");
-    document.getElementById("lockPassword").focus();
-  } else {
-    showScreen("setup");
-  }
   /* Small diagnostic hook: the build stamp is searchable in the file, and
      also visible in the console for support. */
   console.log("SnakeScale Notes v" + APP_VERSION + " build " + APP_BUILD);
+
+  const hasVault = vaultExists();
+  /* Stored settings that name a backend are authoritative. With no
+     explicit backend, an existing vault is treated as a GitHub vault
+     (the pre-v1.4 default), never guessed to be Google from its mere
+     presence; a device with no vault at all keeps the fresh setup
+     recommendation already in state.backend. */
+  const routingBackend = state.backendExplicit
+    ? state.backend
+    : (hasVault ? undefined : state.backend);
+  const start = initialScreenFor({
+    backend: routingBackend,
+    hasVault: hasVault,
+    hasDeviceKey: deviceKeyExists(),
+    hasLiveToken: !!state.providerTokens.google
+  });
+  if (start === "googleGate") {
+    await prepareGoogleGate();
+    return;
+  }
+  if (start === "app") {
+    showScreen("app");
+    await connectAndLoad();
+    return;
+  }
+  showScreen(start);
+  if (start === "lock") {
+    document.getElementById("lockPassword").focus();
+  }
 }
 
 document.addEventListener("DOMContentLoaded", boot);
