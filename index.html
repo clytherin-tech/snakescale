@@ -1,0 +1,2495 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0B3D2E">
+<meta name="description" content="SnakeScale Notes: a free, open source notes app. Your notes live in your own private GitHub repository.">
+<title>SnakeScale Notes</title>
+<!--
+  ============================================================================
+  SnakeScale Notes
+  ============================================================================
+  A free, open source, Evernote like notes app that runs entirely in the
+  browser as ONE self contained HTML file. There are no external scripts, no
+  web fonts, and no CDN dependencies, so this file works offline (after the
+  first load) and from any static host, including GitHub Pages.
+
+  Data model in one paragraph: every user connects their own GitHub account
+  with a personal access token. The token is encrypted in the browser with a
+  password the user chooses (WebCrypto, PBKDF2 plus AES-GCM) and only the
+  encrypted blob is stored in localStorage. Notes are stored as Markdown
+  files with a small front matter block in a private GitHub repository that
+  belongs to the user. Notebooks are folders, notes are files, and there is
+  no server and no shared database anywhere in this design.
+
+  BUILD STAMP: 2026-10-18-SSN-V10
+  Version: 1.0
+
+  Revision history:
+    v1.0  2026-10-18  First MVP release. Setup and lock vault, GitHub repo
+                      connect and create flow, notebooks, rich text notes
+                      stored as .md files with front matter, tags, pinned
+                      notes, local search, trash with restore, offline cache
+                      with an edit queue, conflict copies instead of silent
+                      overwrites, light and dark themes, mobile one pane
+                      layout. Build stamp 2026-10-18-SSN-V10.
+
+  License: AGPL-3.0. Copyright (c) 2026 Chris Gingerich and contributors.
+  ============================================================================
+-->
+<style>
+/* ==========================================================================
+   SnakeScale Notes: stylesheet
+   Palette: Deep Forest (fixed brand palette, do not drift from these hexes)
+     sidebar        #0B3D2E
+     primary        #14532D
+     hover/secondary#2E7D4F
+     accent         #57A773
+     soft surface   #DCE8DC
+     background     #F7F8F3
+     text           #10231A
+     dark bg        #0A1F18
+     dark surface   #14342A
+   ========================================================================== */
+:root{
+  --sidebar:#0B3D2E;
+  --primary:#14532D;
+  --secondary:#2E7D4F;
+  --accent:#57A773;
+  --soft:#DCE8DC;
+  --bg:#F7F8F3;
+  --text:#10231A;
+  --surface:#FFFFFF;
+  --border:#C9D6C9;
+  --muted:#5A6E5F;
+  --danger:#B3382E;
+  --shadow:0 2px 10px rgba(11,61,46,.12);
+}
+body.dark{
+  --bg:#0A1F18;
+  --surface:#14342A;
+  --text:#E4EFE6;
+  --border:#2A5240;
+  --muted:#9DB8A6;
+  --soft:#14342A;
+  --shadow:0 2px 10px rgba(0,0,0,.4);
+}
+*{box-sizing:border-box;}
+html,body{height:100%;}
+body{
+  margin:0;
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  background:var(--bg);
+  color:var(--text);
+  font-size:15px;
+  line-height:1.45;
+}
+button{font:inherit;cursor:pointer;}
+input,select,textarea{font:inherit;color:var(--text);}
+.hidden{display:none !important;}
+
+/* ---------- generic buttons and fields ---------- */
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:6px;
+  border:1px solid var(--border);background:var(--surface);color:var(--text);
+  border-radius:8px;padding:8px 14px;font-weight:600;
+}
+.btn:hover{border-color:var(--secondary);}
+.btn.primary{background:var(--primary);border-color:var(--primary);color:#fff;}
+.btn.primary:hover{background:var(--secondary);}
+.btn.accent{background:var(--accent);border-color:var(--accent);color:#0B3D2E;}
+.btn.accent:hover{filter:brightness(1.07);}
+.btn.danger{background:var(--danger);border-color:var(--danger);color:#fff;}
+.btn.small{padding:5px 10px;font-size:13px;border-radius:7px;}
+.btn.block{width:100%;}
+.field{margin-bottom:14px;}
+.field label{display:block;font-weight:600;margin-bottom:5px;font-size:13px;}
+.field input,.field select{
+  width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;
+  background:var(--surface);
+}
+.hint{font-size:12.5px;color:var(--muted);margin-top:5px;}
+.error-text{color:var(--danger);font-size:13.5px;min-height:18px;margin-top:8px;font-weight:600;}
+
+/* ---------- full screen gates (setup, lock, repo connect) ---------- */
+.gate{
+  min-height:100%;display:flex;align-items:flex-start;justify-content:center;
+  padding:34px 16px;background:var(--bg);
+}
+.gate-card{
+  width:100%;max-width:520px;background:var(--surface);border:1px solid var(--border);
+  border-radius:14px;box-shadow:var(--shadow);padding:26px 26px 20px;
+}
+.gate-brand{display:flex;align-items:center;gap:12px;margin-bottom:6px;}
+.gate-brand .wordmark{font-size:24px;font-weight:800;color:var(--primary);}
+body.dark .gate-brand .wordmark{color:var(--accent);}
+.gate-card h1{font-size:20px;margin:10px 0 6px;}
+.gate-card p{margin:6px 0;}
+.gate-card code{background:var(--soft);padding:1px 5px;border-radius:4px;font-size:12.5px;}
+.gate-card ol{padding-left:20px;margin:8px 0;}
+.gate-card li{margin:4px 0;}
+
+/* ---------- app frame: three panes ---------- */
+#app{display:flex;height:100vh;height:100dvh;overflow:hidden;}
+
+/* ----- left sidebar ----- */
+#sidebar{
+  width:264px;flex:0 0 264px;background:var(--sidebar);color:#EAF3EC;
+  display:flex;flex-direction:column;overflow-y:auto;
+}
+.sidebar-head{display:flex;align-items:center;gap:10px;padding:16px 16px 8px;}
+.sidebar-head .wordmark{font-size:19px;font-weight:800;color:#fff;letter-spacing:.2px;}
+.sidebar-head .wordmark span{color:var(--accent);}
+#newNoteBtn{margin:10px 14px 6px;}
+.sidebar-search{padding:4px 14px 8px;}
+.sidebar-search input{
+  width:100%;padding:8px 10px;border-radius:8px;border:1px solid #2A5240;
+  background:#0A2E21;color:#EAF3EC;
+}
+.sidebar-search input::placeholder{color:#9DB8A6;}
+.nav-section{padding:8px 8px 2px;}
+.nav-label{
+  font-size:11px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;
+  color:#9DB8A6;padding:8px 8px 4px;display:flex;justify-content:space-between;align-items:center;
+}
+.nav-label button{
+  background:none;border:none;color:var(--accent);font-size:16px;font-weight:700;
+  line-height:1;padding:0 2px;
+}
+.nav-item{
+  display:flex;align-items:center;gap:8px;width:100%;text-align:left;
+  background:none;border:none;color:#EAF3EC;padding:7px 10px;border-radius:7px;
+  font-size:14px;
+}
+.nav-item:hover{background:#14532D;}
+.nav-item.active{background:var(--secondary);color:#fff;font-weight:700;}
+.nav-item .count{margin-left:auto;font-size:12px;color:#BFD6C4;}
+.nav-item.active .count{color:#EAF3EC;}
+.nav-item .row-actions{display:none;gap:2px;}
+.nav-item:hover .row-actions{display:inline-flex;}
+.nav-item .row-actions button{
+  background:none;border:none;color:#BFD6C4;font-size:12px;padding:2px 4px;
+}
+.nav-item .row-actions button:hover{color:#fff;}
+.tag-chip-nav{font-size:13.5px;}
+.sidebar-foot{
+  margin-top:auto;padding:12px 14px;border-top:1px solid #1D4A38;font-size:13px;
+}
+.sidebar-foot .user-line{font-weight:700;color:#fff;word-break:break-all;}
+.sidebar-foot .repo-line{color:#BFD6C4;word-break:break-all;margin-bottom:8px;}
+.foot-buttons{display:flex;flex-wrap:wrap;gap:6px;}
+.foot-buttons .btn{background:#0A2E21;border-color:#2A5240;color:#EAF3EC;}
+.foot-buttons .btn:hover{border-color:var(--accent);}
+
+/* sync status pill */
+.sync-pill{
+  display:inline-block;padding:3px 10px;border-radius:999px;font-size:12px;
+  font-weight:700;background:#0A2E21;color:#BFD6C4;border:1px solid #2A5240;
+  margin-bottom:8px;
+}
+.sync-pill.ok{color:#BEE3C8;border-color:var(--secondary);}
+.sync-pill.busy{color:#FFE1A8;border-color:#8A6D2F;}
+.sync-pill.bad{color:#FFC4BC;border-color:var(--danger);}
+
+/* ----- middle pane: note list ----- */
+#listpane{
+  width:340px;flex:0 0 340px;border-right:1px solid var(--border);
+  background:var(--bg);display:flex;flex-direction:column;overflow:hidden;
+}
+.list-head{padding:14px 14px 8px;border-bottom:1px solid var(--border);}
+.list-head h2{margin:0 0 4px;font-size:18px;color:var(--primary);}
+body.dark .list-head h2{color:var(--accent);}
+.list-head .sub{font-size:12.5px;color:var(--muted);}
+#noteList{overflow-y:auto;flex:1;padding:8px;}
+.note-card{
+  background:var(--surface);border:1px solid var(--border);border-radius:10px;
+  padding:10px 12px;margin-bottom:8px;cursor:pointer;box-shadow:none;
+}
+.note-card:hover{border-color:var(--secondary);}
+.note-card.active{border-color:var(--primary);box-shadow:var(--shadow);}
+.note-card .card-title{font-weight:700;font-size:14.5px;margin-bottom:2px;
+  display:flex;gap:6px;align-items:flex-start;}
+.note-card .pin-mark{color:var(--secondary);font-size:12px;}
+.note-card .card-date{font-size:12px;color:var(--muted);}
+.note-card .card-snippet{
+  font-size:13px;color:var(--muted);margin-top:3px;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
+}
+.chip-row{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px;}
+.tag-chip{
+  font-size:11.5px;background:var(--soft);color:var(--primary);border-radius:999px;
+  padding:2px 8px;font-weight:600;
+}
+body.dark .tag-chip{color:var(--accent);}
+.empty-state{padding:26px 16px;text-align:center;color:var(--muted);font-size:14px;}
+.empty-state .big{font-size:16px;font-weight:700;color:var(--text);margin-bottom:6px;}
+
+/* ----- right pane: editor ----- */
+#editorpane{flex:1;display:flex;flex-direction:column;overflow:hidden;background:var(--surface);}
+.editor-scroll{overflow-y:auto;flex:1;padding:18px 22px 30px;}
+.editor-inner{max-width:820px;margin:0 auto;}
+#noteTitle{
+  width:100%;border:none;outline:none;background:transparent;
+  font-size:26px;font-weight:800;color:var(--text);padding:4px 0 8px;
+}
+.meta-row{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;margin-bottom:10px;}
+.meta-row .meta-field{flex:1 1 180px;}
+.meta-row label{display:block;font-size:12px;font-weight:700;color:var(--muted);margin-bottom:3px;}
+.meta-row input,.meta-row select{
+  width:100%;padding:8px;border:1px solid var(--border);border-radius:8px;background:var(--surface);
+}
+.pin-toggle{display:flex;align-items:center;gap:6px;font-size:13.5px;font-weight:600;padding-bottom:9px;}
+.toolbar{
+  display:flex;flex-wrap:wrap;gap:4px;padding:8px 0;border-top:1px solid var(--border);
+  border-bottom:1px solid var(--border);margin-bottom:12px;position:sticky;top:0;
+  background:var(--surface);z-index:3;
+}
+.toolbar button{
+  background:var(--bg);border:1px solid var(--border);border-radius:6px;
+  min-width:34px;padding:5px 8px;font-size:13.5px;font-weight:600;
+}
+.toolbar button:hover{border-color:var(--secondary);background:var(--soft);}
+#noteBody{
+  outline:none;min-height:300px;font-size:15.5px;line-height:1.6;padding:4px 2px;
+}
+#noteBody:empty::before{content:"Start writing...";color:var(--muted);}
+#noteBody h1{font-size:23px;margin:14px 0 6px;}
+#noteBody h2{font-size:19px;margin:12px 0 5px;}
+#noteBody ul,#noteBody ol{padding-left:24px;}
+#noteBody li.done{color:var(--muted);text-decoration:line-through;}
+#noteBody li.done input[type="checkbox"]{accent-color:var(--secondary);}
+.editor-foot{
+  display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;
+  padding:10px 22px;border-top:1px solid var(--border);background:var(--surface);
+}
+#saveState{font-size:13px;color:var(--muted);font-weight:600;}
+.editor-actions{display:flex;gap:6px;flex-wrap:wrap;}
+.no-note{padding:50px 24px;text-align:center;color:var(--muted);}
+.no-note .big{font-size:19px;font-weight:800;color:var(--text);margin-bottom:8px;}
+
+/* conflict banner */
+#conflictBanner{
+  background:#FFF3D6;border-bottom:1px solid #E3C878;color:#5C4300;
+  padding:10px 16px;font-size:14px;font-weight:600;
+}
+body.dark #conflictBanner{background:#3A2F10;color:#FFE1A8;}
+
+/* mobile top bar (only shown on small screens) */
+#mobileBar{display:none;}
+
+/* toasts */
+#toastBox{position:fixed;right:14px;bottom:14px;z-index:60;display:flex;flex-direction:column;gap:8px;max-width:min(92vw,380px);}
+.toast{
+  background:var(--sidebar);color:#EAF3EC;border-radius:10px;padding:10px 14px;
+  box-shadow:var(--shadow);font-size:14px;border-left:4px solid var(--accent);
+}
+.toast.error{border-left-color:var(--danger);}
+
+/* ---------- responsive: one pane at a time under 900px ---------- */
+@media (max-width:900px){
+  #app{flex-direction:column;}
+  #mobileBar{
+    display:flex;gap:6px;align-items:center;padding:8px 10px;
+    background:var(--sidebar);color:#fff;flex:0 0 auto;
+  }
+  #mobileBar .btn{background:#0A2E21;border-color:#2A5240;color:#EAF3EC;padding:6px 10px;font-size:13px;}
+  #mobileBar .brand-mini{font-weight:800;margin-right:auto;}
+  #mobileBar .brand-mini span{color:var(--accent);}
+  #sidebar,#listpane,#editorpane{width:100%;flex:1 1 auto;display:none;min-height:0;}
+  body.view-nav #sidebar{display:flex;}
+  body.view-list #listpane{display:flex;}
+  body.view-editor #editorpane{display:flex;}
+  .editor-scroll{padding:14px 14px 24px;}
+  .editor-foot{padding:10px 14px;}
+}
+</style>
+</head>
+<body>
+
+<!-- ==========================================================================
+     SCREEN: first time setup
+     Shown only when no vault exists in localStorage. The user pastes a
+     GitHub personal access token and picks an app password. The token is
+     encrypted with the password (see the vault section in the script) and
+     only the encrypted blob is saved. The plaintext token is never stored.
+     ========================================================================== -->
+<div id="setupScreen" class="gate hidden">
+  <div class="gate-card">
+    <div class="gate-brand">
+      <span class="logo-slot"></span>
+      <span class="wordmark">SnakeScale</span>
+    </div>
+    <h1>Set up SnakeScale Notes</h1>
+    <p>
+      Your notes will live in a <strong>private GitHub repository that you
+      own</strong>. SnakeScale has no server and no account of its own. You
+      connect it with a GitHub personal access token, and that token is stored
+      in this browser only, encrypted with a password you choose here.
+    </p>
+    <ol>
+      <li>On GitHub, open Settings, then Developer settings, then Personal access tokens.</li>
+      <li>Create a token with the <code>repo</code> scope (classic token), or a fine grained token with Contents read and write access on your notes data repository.</li>
+      <li>Paste the token below and choose an app password. You will type that password each time you unlock the app on this device.</li>
+    </ol>
+    <form id="setupForm" autocomplete="off">
+      <div class="field">
+        <label for="setupToken">GitHub personal access token</label>
+        <input id="setupToken" type="password" placeholder="ghp_... or github_pat_..." autocomplete="off">
+      </div>
+      <div class="field">
+        <label for="setupRepo">Data repository name</label>
+        <input id="setupRepo" type="text" value="snakescale-notes-data" autocomplete="off">
+        <div class="hint">If this repository does not exist yet, SnakeScale will offer to create it as a private repository in the next step.</div>
+      </div>
+      <div class="field">
+        <label for="setupPassword">App password</label>
+        <input id="setupPassword" type="password" autocomplete="new-password">
+      </div>
+      <div class="field">
+        <label for="setupPassword2">App password again</label>
+        <input id="setupPassword2" type="password" autocomplete="new-password">
+      </div>
+      <button class="btn primary block" type="submit">Encrypt token and continue</button>
+      <div id="setupError" class="error-text"></div>
+    </form>
+  </div>
+</div>
+
+<!-- ==========================================================================
+     SCREEN: lock / unlock
+     Shown on later visits when a vault exists but the app is locked. The
+     password re-derives the encryption key and decrypts the token in memory.
+     A wrong password fails the AES-GCM integrity check and shows an error.
+     ========================================================================== -->
+<div id="lockScreen" class="gate hidden">
+  <div class="gate-card">
+    <div class="gate-brand">
+      <span class="logo-slot"></span>
+      <span class="wordmark">SnakeScale</span>
+    </div>
+    <h1>Unlock SnakeScale Notes</h1>
+    <p>Type your app password to decrypt your GitHub token on this device.</p>
+    <form id="lockForm" autocomplete="off">
+      <div class="field">
+        <label for="lockPassword">App password</label>
+        <input id="lockPassword" type="password" autocomplete="current-password">
+      </div>
+      <button class="btn primary block" type="submit">Unlock</button>
+      <div id="lockError" class="error-text"></div>
+    </form>
+    <p class="hint">
+      Forgot the password? The encrypted token cannot be recovered without it.
+      Use the reset button below to clear the vault on this device and set up
+      again with a new token. Your notes in GitHub are not affected.
+    </p>
+    <button id="resetVaultBtn" class="btn danger small" type="button">Reset vault on this device</button>
+  </div>
+</div>
+
+<!-- ==========================================================================
+     SCREEN: repository connect
+     Shown after unlock when the data repository cannot be found. Offers a
+     one click create (private repository, auto_init true) and then builds the
+     initial folder structure, the default Personal notebook, and one welcome
+     note. This only happens on first connect.
+     ========================================================================== -->
+<div id="repoScreen" class="gate hidden">
+  <div class="gate-card">
+    <div class="gate-brand">
+      <span class="logo-slot"></span>
+      <span class="wordmark">SnakeScale</span>
+    </div>
+    <h1>Connect your data repository</h1>
+    <p id="repoScreenText">Checking your GitHub account...</p>
+    <div id="repoActions" class="hidden">
+      <button id="createRepoBtn" class="btn accent block" type="button">Create the data repository (private)</button>
+      <div class="hint">Creates a private repository with the folder layout SnakeScale needs, a default notebook called Personal, and one welcome note.</div>
+    </div>
+    <div id="repoError" class="error-text"></div>
+    <div style="margin-top:14px;display:flex;gap:6px;">
+      <button id="repoRetryBtn" class="btn small" type="button">Check again</button>
+      <button id="repoLockBtn" class="btn small" type="button">Lock app</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==========================================================================
+     SCREEN: the app itself, three panes
+     Left: dark sidebar. Middle: note list. Right: editor.
+     On screens under 900px wide, CSS shows one pane at a time and the
+     mobile bar switches between them (see body.view-nav / view-list /
+     view-editor classes).
+     ========================================================================== -->
+<div id="app" class="hidden">
+
+  <!-- Mobile top bar: brand plus pane switcher, small screens only. -->
+  <div id="mobileBar">
+    <span class="brand-mini">Snake<span>Scale</span></span>
+    <button class="btn" id="mobileNavBtn" type="button">Notebooks</button>
+    <button class="btn" id="mobileListBtn" type="button">Notes</button>
+    <button class="btn" id="mobileNewBtn" type="button">New</button>
+  </div>
+
+  <!-- LEFT PANE: sidebar -->
+  <aside id="sidebar">
+    <div class="sidebar-head">
+      <span class="logo-slot"></span>
+      <span class="wordmark">Snake<span>Scale</span></span>
+    </div>
+
+    <button id="newNoteBtn" class="btn accent block" type="button">+ New Note</button>
+
+    <!-- Search lives in the sidebar so it is in the same place on desktop
+         and mobile. It filters the note list locally (title, body, tags). -->
+    <div class="sidebar-search">
+      <input id="searchInput" type="search" placeholder="Search notes..." aria-label="Search notes">
+    </div>
+
+    <div class="nav-section">
+      <button class="nav-item" id="navAll" type="button">All Notes <span class="count" id="countAll"></span></button>
+      <button class="nav-item" id="navPinned" type="button">Pinned <span class="count" id="countPinned"></span></button>
+      <button class="nav-item" id="navTrash" type="button">Trash <span class="count" id="countTrash"></span></button>
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-label">Notebooks <button id="addNotebookBtn" type="button" title="Add notebook">+</button></div>
+      <div id="notebookNav"></div>
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-label">Tags</div>
+      <div id="tagNav"></div>
+    </div>
+
+    <div class="sidebar-foot">
+      <div class="sync-pill" id="syncPill">Not synced yet</div>
+      <div class="user-line" id="footUser">Not connected</div>
+      <div class="repo-line" id="footRepo"></div>
+      <div class="field" style="margin-bottom:8px;">
+        <label for="repoNameInput" style="color:#BFD6C4;">Data repository</label>
+        <input id="repoNameInput" type="text" style="background:#0A2E21;color:#EAF3EC;border-color:#2A5240;">
+        <div class="hint" style="color:#9DB8A6;">Change and press Save, then the app reconnects to that repository.</div>
+      </div>
+      <div class="foot-buttons">
+        <button class="btn small" id="saveRepoBtn" type="button">Save repo</button>
+        <button class="btn small" id="syncNowBtn" type="button">Sync now</button>
+        <button class="btn small" id="themeBtn" type="button">Dark mode</button>
+        <button class="btn small" id="lockBtn" type="button">Lock</button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- MIDDLE PANE: note list -->
+  <section id="listpane">
+    <div class="list-head">
+      <h2 id="listTitle">All Notes</h2>
+      <div class="sub" id="listSub"></div>
+    </div>
+    <div id="noteList"></div>
+  </section>
+
+  <!-- RIGHT PANE: editor -->
+  <main id="editorpane">
+    <div id="conflictBanner" class="hidden"></div>
+
+    <!-- Shown when no note is selected. -->
+    <div id="noNote" class="no-note">
+      <div class="big">No note selected</div>
+      <p>Pick a note from the list, or press New Note to start writing.</p>
+      <p>Everything you write is saved to your own private GitHub repository as plain Markdown files, so your notes are never locked inside this app.</p>
+    </div>
+
+    <!-- The editor itself. -->
+    <div id="editorWrap" class="hidden" style="display:flex;flex-direction:column;flex:1;min-height:0;">
+      <div class="editor-scroll">
+        <div class="editor-inner">
+          <input id="noteTitle" type="text" placeholder="Untitled note" aria-label="Note title">
+          <div class="meta-row">
+            <div class="meta-field">
+              <label for="noteNotebook">Notebook</label>
+              <select id="noteNotebook"></select>
+            </div>
+            <div class="meta-field">
+              <label for="noteTags">Tags (comma separated)</label>
+              <input id="noteTags" type="text" placeholder="ideas, work, personal">
+            </div>
+            <label class="pin-toggle">
+              <input type="checkbox" id="notePinned"> Pinned
+            </label>
+          </div>
+
+          <!-- Formatting toolbar. Every button calls document.execCommand on
+               the contenteditable body. Checklist inserts a list whose items
+               carry a real checkbox input. -->
+          <div class="toolbar" id="toolbar">
+            <button type="button" data-cmd="bold" title="Bold"><b>B</b></button>
+            <button type="button" data-cmd="italic" title="Italic"><i>I</i></button>
+            <button type="button" data-cmd="underline" title="Underline"><u>U</u></button>
+            <button type="button" data-cmd="h1" title="Heading 1">H1</button>
+            <button type="button" data-cmd="h2" title="Heading 2">H2</button>
+            <button type="button" data-cmd="ul" title="Bullet list">Bullets</button>
+            <button type="button" data-cmd="ol" title="Numbered list">1. List</button>
+            <button type="button" data-cmd="checklist" title="Checklist">Checklist</button>
+            <button type="button" data-cmd="clear" title="Clear formatting">Clear</button>
+          </div>
+
+          <!-- Rich text body. The note body is stored as HTML inside the
+               .md file (documented in the script header), which keeps
+               checklists and formatting intact in v1.0. -->
+          <div id="noteBody" contenteditable="true" aria-label="Note body"></div>
+        </div>
+      </div>
+      <div class="editor-foot">
+        <span id="saveState">No changes</span>
+        <div class="editor-actions">
+          <button class="btn small" id="editorBackBtn" type="button">Back to list</button>
+          <button class="btn small danger" id="trashBtn" type="button">Move to Trash</button>
+          <button class="btn small hidden" id="restoreBtn" type="button">Restore</button>
+          <button class="btn small danger hidden" id="deleteForeverBtn" type="button">Delete Forever</button>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- Toasts land here (bottom right). -->
+<div id="toastBox" aria-live="polite"></div>
+
+<script>
+"use strict";
+
+/* ============================================================================
+   SnakeScale Notes v1.0: application script
+   BUILD STAMP: 2026-10-18-SSN-V10
+
+   How this script is organized:
+     1. Constants and global state
+     2. Small utilities (escaping, base64 with UTF-8 safety, ids, slugs)
+     3. The logo (inline SVG, injected into every .logo-slot)
+     4. The vault (token encryption with WebCrypto: PBKDF2 plus AES-GCM)
+     5. Local cache and the offline edit queue (localStorage)
+     6. The GitHub API wrapper
+     7. Note file format: front matter parse and serialize
+     8. Sync engine: load everything, save with conflict protection,
+        notebooks, trash, and the index.json rebuild
+     9. Rendering: sidebar, tags, note list, editor
+    10. Editor behavior: toolbar, checklists, autosave
+    11. Screen flow and event wiring, then boot
+
+   Note body storage note (v1.0 decision): the editor is rich text, so the
+   body of each .md file is stored as HTML below the front matter block. The
+   file is still a plain text .md file in the user's own repository, the
+   front matter is plain key and value lines, and the HTML body keeps
+   checklists and formatting intact. A future version can add a Markdown
+   export without changing the storage layout.
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   1. Constants and global state
+   -------------------------------------------------------------------------- */
+const APP_BUILD = "2026-10-18-SSN-V10";
+const APP_VERSION = "1.0";
+const API_BASE = "https://api.github.com";
+const API_VERSION_HEADER = "2022-11-28";
+
+/* localStorage keys. The vault holds ONLY the encrypted token blob. */
+const LS_VAULT = "snakescale.vault.v1";
+const LS_CACHE = "snakescale.cache.v1";
+const LS_QUEUE = "snakescale.queue.v1";
+const LS_SETTINGS = "snakescale.settings.v1";
+
+/* The in-memory app state. The plaintext token lives ONLY in state.token
+   while the app is unlocked; locking the app sets it back to null. */
+const state = {
+  token: null,              // plaintext GitHub token, memory only, never stored
+  username: null,           // GitHub login of the token owner
+  repo: "snakescale-notes-data", // data repository name (owner is username)
+  repoExists: false,        // true after the repo has been found or created
+  notebooks: [],            // [{slug, name, created}]
+  notes: [],                // note objects, see parseNoteFile for the shape
+  trash: [],                // note objects with trashed = true
+  index: null,              // parsed index.json contents, or null
+  view: { kind: "all", value: null }, // all | pinned | trash | notebook | tag
+  selectedId: null,         // id of the note open in the editor
+  search: "",               // current search text, lowercased
+  syncing: false,           // true while a sync or save is in flight
+  online: navigator.onLine  // browser online flag, kept current by events
+};
+
+/* The note object shape used everywhere in this app:
+   {
+     id:        string,   timestamp plus random suffix, also the file name
+     title:     string,
+     notebook:  string,   notebook slug (folder name in the repo)
+     tags:      [string],
+     created:   ISO string,
+     updated:   ISO string,
+     pinned:    boolean,
+     body:      string,   HTML body
+     sha:       string|null,  GitHub blob sha of the file as last loaded
+     trashed:   boolean,
+     trashedFrom: string|null  notebook slug the note was trashed from
+   }
+   The repo path is derived, never stored on the object:
+     live note:  notebooks/<slug>/<id>.md
+     trashed:    trash/<id>.md
+*/
+
+/* --------------------------------------------------------------------------
+   2. Small utilities
+   -------------------------------------------------------------------------- */
+
+/* Escape user text before it is placed into any HTML string. List rendering
+   mostly builds DOM nodes with textContent, and this helper covers the few
+   places where an HTML string is assembled (tag chips inside cards are
+   built with DOM APIs too, so this is defense in depth). */
+function escapeHtml(value) {
+  return String(value == null ? "" : value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+/* Strip HTML tags to plain text, for snippets and for search. Uses the
+   browser parser so entities are decoded correctly. */
+function htmlToText(html) {
+  const div = document.createElement("div");
+  div.innerHTML = html || "";
+  return (div.textContent || "").replace(/\s+/g, " ").trim();
+}
+
+/* UTF-8 safe base64 encode. GitHub wants base64 of the raw file bytes, and
+   note bodies can contain any Unicode, so encode through TextEncoder first
+   instead of calling btoa on the string directly (btoa throws on non Latin1
+   characters). */
+function base64EncodeUtf8(text) {
+  const bytes = new TextEncoder().encode(text);
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+}
+
+/* UTF-8 safe base64 decode, the mirror of base64EncodeUtf8. GitHub returns
+   file contents base64 encoded, sometimes with line breaks, so strip all
+   whitespace before decoding. */
+function base64DecodeUtf8(base64) {
+  const clean = String(base64 || "").replace(/\s/g, "");
+  const binary = atob(clean);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return new TextDecoder().decode(bytes);
+}
+
+/* Base64 for raw byte arrays, used by the vault for salt, iv, ciphertext. */
+function bytesToBase64(bytes) {
+  let binary = "";
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary);
+}
+function base64ToBytes(base64) {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
+
+/* A note id: current time in base 36 plus a short random suffix. Stable,
+   sortable enough, and unique enough for a personal notes repo. */
+function newNoteId() {
+  const rand = Math.random().toString(36).slice(2, 8);
+  return Date.now().toString(36) + "-" + rand;
+}
+
+/* Turn a notebook display name into a folder safe slug. */
+function slugify(name) {
+  const slug = String(name || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60);
+  return slug || "notebook";
+}
+
+/* Make sure a slug is not already used by another notebook. */
+function uniqueSlug(base, ignoreSlug) {
+  let slug = base;
+  let n = 2;
+  while (state.notebooks.some(function (nb) { return nb.slug === slug && nb.slug !== ignoreSlug; })) {
+    slug = base + "-" + n;
+    n++;
+  }
+  return slug;
+}
+
+/* Debounce helper for autosave and search input. */
+function debounce(fn, ms) {
+  let timer = null;
+  return function () {
+    const args = arguments;
+    const self = this;
+    clearTimeout(timer);
+    timer = setTimeout(function () { fn.apply(self, args); }, ms);
+  };
+}
+
+/* Pretty date for note cards: today shows a time, older shows a date. */
+function formatDate(iso) {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) { return ""; }
+  const now = new Date();
+  const sameDay = d.toDateString() === now.toDateString();
+  if (sameDay) {
+    return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  }
+  return d.toLocaleDateString([], { year: "numeric", month: "short", day: "numeric" });
+}
+
+/* Toast messages. Every API error ends up here as readable text. */
+function toast(message, isError) {
+  const box = document.getElementById("toastBox");
+  const el = document.createElement("div");
+  el.className = "toast" + (isError ? " error" : "");
+  el.textContent = message;
+  box.appendChild(el);
+  setTimeout(function () {
+    if (el.parentNode) { el.parentNode.removeChild(el); }
+  }, isError ? 7000 : 4200);
+}
+
+/* The sync status pill in the sidebar footer. Allowed states per spec:
+   Synced, Offline, Syncing, Conflict saved, plus a starting state. */
+function setSyncPill(kind, text) {
+  const pill = document.getElementById("syncPill");
+  if (!pill) { return; }
+  pill.textContent = text;
+  pill.className = "sync-pill" + (kind ? " " + kind : "");
+}
+function refreshSyncPill() {
+  const queued = loadQueue().length;
+  if (!state.online) {
+    setSyncPill("bad", "Offline" + (queued ? " (" + queued + " queued)" : ""));
+  } else if (state.syncing) {
+    setSyncPill("busy", "Syncing...");
+  } else if (queued) {
+    setSyncPill("busy", queued + " change(s) queued");
+  } else {
+    setSyncPill("ok", "Synced");
+  }
+}
+
+/* --------------------------------------------------------------------------
+   3. The logo: inline SVG
+   A bold letter S built from rounded square tiles with folded bottom right
+   corners (folded like note pages). The gradient runs from the accent green
+   at the top right down to the darkest sidebar green at the bottom left.
+   One <defs> block is injected once; each slot reuses the gradient by id.
+   -------------------------------------------------------------------------- */
+const LOGO_GRADIENT_DEFS =
+  '<svg width="0" height="0" style="position:absolute" aria-hidden="true">' +
+  '<defs><linearGradient id="ssGrad" x1="1" y1="0" x2="0" y2="1">' +
+  '<stop offset="0" stop-color="#57A773"/>' +
+  '<stop offset="0.38" stop-color="#2E7D4F"/>' +
+  '<stop offset="0.72" stop-color="#14532D"/>' +
+  '<stop offset="1" stop-color="#0B3D2E"/>' +
+  '</linearGradient></defs></svg>';
+
+/* One tile: a rounded square path with a folded corner triangle at the
+   bottom right. x, y are the tile top left; s is the tile size. */
+function logoTile(x, y, s) {
+  const r = s * 0.22;        // corner radius
+  const f = s * 0.30;        // fold size
+  const x2 = x + s, y2 = y + s;
+  return '<path fill="url(#ssGrad)" d="M' + (x + r) + ' ' + y +
+    ' H' + (x2 - r) + ' Q' + x2 + ' ' + y + ' ' + x2 + ' ' + (y + r) +
+    ' V' + (y2 - f) + ' L' + (x2 - f) + ' ' + y2 +
+    ' H' + (x + r) + ' Q' + x + ' ' + y2 + ' ' + x + ' ' + (y2 - r) +
+    ' V' + (y + r) + ' Q' + x + ' ' + y + ' ' + (x + r) + ' ' + y + ' Z"/>' +
+    '<path fill="rgba(255,255,255,0.28)" d="M' + (x2 - f) + ' ' + y2 +
+    ' L' + x2 + ' ' + (y2 - f) + ' L' + (x2 - f) + ' ' + (y2 - f) + ' Z"/>';
+}
+
+/* The S is nine tiles on a loose 3 by 4 grid:
+   top row full, then left, then middle row, then right, then bottom row,
+   which reads as a bold blocky S at small sizes. */
+function logoSvg(size) {
+  const t = 26, gap = 4, step = t + gap;
+  const tiles = [
+    [0, 0], [1, 0], [2, 0],
+    [0, 1],
+    [0, 2], [1, 2], [2, 2],
+                    [2, 3],
+    [0, 4], [1, 4], [2, 4]
+  ];
+  let parts = "";
+  tiles.forEach(function (pos) {
+    parts += logoTile(pos[0] * step, pos[1] * step, t);
+  });
+  const w = 3 * step - gap, h = 5 * step - gap;
+  return '<svg width="' + size + '" height="' + Math.round(size * h / w) +
+    '" viewBox="0 0 ' + w + ' ' + h + '" role="img" aria-label="SnakeScale logo">' +
+    parts + '</svg>';
+}
+
+function injectLogos() {
+  document.body.insertAdjacentHTML("afterbegin", LOGO_GRADIENT_DEFS);
+  document.querySelectorAll(".logo-slot").forEach(function (slot) {
+    slot.innerHTML = logoSvg(30);
+  });
+}
+
+/* --------------------------------------------------------------------------
+   4. The vault: token encryption with WebCrypto
+   Pattern mirrored from Chris's Project Manager app: the secret (here the
+   GitHub token) is encrypted under a key derived from the user's app
+   password with PBKDF2 (SHA-256, 210000 iterations, random 16 byte salt),
+   using AES-GCM 256 with a random 12 byte iv. localStorage keeps only
+   {salt, iv, ciphertext} as base64. The plaintext token is NEVER stored.
+   AES-GCM is authenticated, so a wrong password fails decryption cleanly,
+   which is exactly how the lock screen detects a bad password.
+   -------------------------------------------------------------------------- */
+const PBKDF2_ITERATIONS = 210000;
+
+async function deriveKeyFromPassword(password, saltBytes) {
+  const baseKey = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(password),
+    "PBKDF2",
+    false,
+    ["deriveKey"]
+  );
+  return crypto.subtle.deriveKey(
+    { name: "PBKDF2", salt: saltBytes, iterations: PBKDF2_ITERATIONS, hash: "SHA-256" },
+    baseKey,
+    { name: "AES-GCM", length: 256 },
+    false,
+    ["encrypt", "decrypt"]
+  );
+}
+
+/* Encrypt the token and save the vault blob. Returns nothing; throws on
+   any crypto failure so the setup screen can show the error. */
+async function vaultCreate(token, password) {
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const key = await deriveKeyFromPassword(password, salt);
+  const cipher = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv: iv },
+    key,
+    new TextEncoder().encode(token)
+  );
+  const blob = {
+    v: 1,
+    salt: bytesToBase64(salt),
+    iv: bytesToBase64(iv),
+    data: bytesToBase64(new Uint8Array(cipher))
+  };
+  localStorage.setItem(LS_VAULT, JSON.stringify(blob));
+}
+
+function vaultExists() {
+  return !!localStorage.getItem(LS_VAULT);
+}
+
+/* Decrypt the token with the given password. Throws when the password is
+   wrong (AES-GCM integrity check) or the stored blob is damaged. */
+async function vaultUnlock(password) {
+  const raw = localStorage.getItem(LS_VAULT);
+  if (!raw) { throw new Error("No vault found on this device."); }
+  const blob = JSON.parse(raw);
+  const salt = base64ToBytes(blob.salt);
+  const iv = base64ToBytes(blob.iv);
+  const key = await deriveKeyFromPassword(password, salt);
+  const plain = await crypto.subtle.decrypt(
+    { name: "AES-GCM", iv: iv },
+    key,
+    base64ToBytes(blob.data)
+  );
+  return new TextDecoder().decode(plain);
+}
+
+function vaultWipe() {
+  localStorage.removeItem(LS_VAULT);
+}
+
+/* Lock the app: drop the in-memory token and username, go back to the lock
+   screen (or to setup if the vault itself was wiped). Cached notes stay in
+   localStorage so the app can reopen quickly after the next unlock, but
+   they are only rendered after a successful unlock. */
+function lockApp() {
+  state.token = null;
+  state.username = null;
+  showScreen(vaultExists() ? "lock" : "setup");
+}
+
+/* --------------------------------------------------------------------------
+   5. Settings, local cache, and the offline edit queue
+   Settings are not secret (repo name, theme), so they live in plain JSON.
+   The cache mirrors notebooks, notes, and trash so the app opens and reads
+   fully offline. The queue holds file operations made while offline (or
+   while a save failed) and is flushed on reconnect or Sync now.
+   -------------------------------------------------------------------------- */
+function loadSettings() {
+  try {
+    const s = JSON.parse(localStorage.getItem(LS_SETTINGS) || "{}");
+    if (s.repo) { state.repo = s.repo; }
+    if (s.dark) { document.body.classList.add("dark"); }
+  } catch (e) { /* damaged settings are ignored, defaults apply */ }
+}
+function saveSettings() {
+  localStorage.setItem(LS_SETTINGS, JSON.stringify({
+    repo: state.repo,
+    dark: document.body.classList.contains("dark")
+  }));
+}
+
+function saveCache() {
+  try {
+    localStorage.setItem(LS_CACHE, JSON.stringify({
+      username: state.username,
+      repo: state.repo,
+      notebooks: state.notebooks,
+      notes: state.notes,
+      trash: state.trash,
+      index: state.index,
+      savedAt: new Date().toISOString()
+    }));
+  } catch (e) {
+    /* localStorage can fill up with very large note sets. The repo is the
+       source of truth, so a cache failure is not fatal; reads still work
+       after the next successful sync. */
+  }
+}
+
+function loadCache() {
+  try {
+    const c = JSON.parse(localStorage.getItem(LS_CACHE) || "null");
+    if (!c) { return false; }
+    state.username = c.username || null;
+    if (c.repo) { state.repo = c.repo; }
+    state.notebooks = c.notebooks || [];
+    state.notes = c.notes || [];
+    state.trash = c.trash || [];
+    state.index = c.index || null;
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+/* Queue entries are complete file operations, so a flush needs no editor
+   state: {kind:"put", path, content, noteId} writes a file;
+   {kind:"delete", path, noteId} deletes one (its sha is looked up fresh at
+   flush time). Note bodies ride along as full file text. */
+function loadQueue() {
+  try {
+    return JSON.parse(localStorage.getItem(LS_QUEUE) || "[]");
+  } catch (e) {
+    return [];
+  }
+}
+function saveQueue(queue) {
+  localStorage.setItem(LS_QUEUE, JSON.stringify(queue));
+  refreshSyncPill();
+}
+function queueOp(op) {
+  const queue = loadQueue();
+  queue.push(op);
+  saveQueue(queue);
+}
+
+/* --------------------------------------------------------------------------
+   6. GitHub API wrapper
+   Every request uses the same headers the spec requires: Bearer token,
+   the github+json accept header, and the pinned API version header.
+   Errors are thrown as Error objects whose message is the GitHub message,
+   so callers can show readable toasts. A 404 is flagged on err.status so
+   the connect flow can tell "repo missing" apart from real failures.
+   -------------------------------------------------------------------------- */
+async function gh(path, options) {
+  options = options || {};
+  const headers = {
+    "Authorization": "Bearer " + state.token,
+    "Accept": "application/vnd.github+json",
+    "X-GitHub-Api-Version": API_VERSION_HEADER
+  };
+  if (options.body) { headers["Content-Type"] = "application/json"; }
+  let res;
+  try {
+    res = await fetch(API_BASE + path, {
+      method: options.method || "GET",
+      headers: headers,
+      body: options.body ? JSON.stringify(options.body) : undefined
+    });
+  } catch (networkErr) {
+    const err = new Error("Network error. You appear to be offline.");
+    err.offline = true;
+    throw err;
+  }
+  if (res.status === 204) { return null; }
+  let data = null;
+  const text = await res.text();
+  if (text) {
+    try { data = JSON.parse(text); } catch (e) { data = null; }
+  }
+  if (!res.ok) {
+    const msg = (data && data.message) ? data.message : ("GitHub error " + res.status);
+    const err = new Error(msg);
+    err.status = res.status;
+    throw err;
+  }
+  return data;
+}
+
+function repoPath(p) {
+  return "/repos/" + encodeURIComponent(state.username) + "/" +
+    encodeURIComponent(state.repo) + "/contents/" + p;
+}
+
+/* GET one file. Returns {content, sha} or null when the file is missing. */
+async function ghGetFile(path) {
+  try {
+    const data = await gh(repoPath(path.split("/").map(encodeURIComponent).join("/")));
+    if (!data || data.type !== "file") { return null; }
+    return { content: base64DecodeUtf8(data.content || ""), sha: data.sha };
+  } catch (err) {
+    if (err.status === 404) { return null; }
+    throw err;
+  }
+}
+
+/* GET a directory listing. Returns an array of entries, or null when the
+   folder does not exist yet (a fresh repo has no notebooks/ folder). */
+async function ghListDir(path) {
+  try {
+    const data = await gh(repoPath(path.split("/").map(encodeURIComponent).join("/")));
+    return Array.isArray(data) ? data : [];
+  } catch (err) {
+    if (err.status === 404) { return null; }
+    throw err;
+  }
+}
+
+/* Create or update one file. Pass the current sha when updating; omit it
+   for a brand new file. Returns the new sha. Status 409 or 422 from GitHub
+   here almost always means the sha was stale, which the caller treats as
+   a conflict (keep both copies). */
+async function ghPutFile(path, textContent, sha, message) {
+  const body = {
+    message: message || ("Update " + path),
+    content: base64EncodeUtf8(textContent)
+  };
+  if (sha) { body.sha = sha; }
+  const data = await gh(repoPath(path.split("/").map(encodeURIComponent).join("/")), {
+    method: "PUT",
+    body: body
+  });
+  return data && data.content ? data.content.sha : null;
+}
+
+/* Delete one file by path and sha. */
+async function ghDeleteFile(path, sha, message) {
+  await gh(repoPath(path.split("/").map(encodeURIComponent).join("/")), {
+    method: "DELETE",
+    body: { message: message || ("Delete " + path), sha: sha }
+  });
+}
+
+/* --------------------------------------------------------------------------
+   7. Note file format
+   Each note is one .md file. Layout:
+     ---
+     id: <noteId>
+     title: <title, single line>
+     notebook: <slug>
+     tags: tag one, tag two
+     created: <ISO timestamp>
+     updated: <ISO timestamp>
+     pinned: true or false
+     trashedFrom: <slug>          (only on files inside trash/)
+     ---
+
+     <HTML body>
+   The delimiter is a line of exactly three hyphens. Values never contain
+   newlines (titles are flattened on save), which keeps parsing trivial and
+   the files friendly to open in any other Markdown tool.
+   -------------------------------------------------------------------------- */
+function notePath(note) {
+  if (note.trashed) { return "trash/" + note.id + ".md"; }
+  return "notebooks/" + note.notebook + "/" + note.id + ".md";
+}
+
+function serializeNote(note) {
+  const lines = [];
+  lines.push("---");
+  lines.push("id: " + note.id);
+  lines.push("title: " + String(note.title || "").replace(/\s*\n\s*/g, " "));
+  lines.push("notebook: " + (note.notebook || ""));
+  lines.push("tags: " + (note.tags || []).join(", "));
+  lines.push("created: " + (note.created || ""));
+  lines.push("updated: " + (note.updated || ""));
+  lines.push("pinned: " + (note.pinned ? "true" : "false"));
+  if (note.trashed) {
+    lines.push("trashedFrom: " + (note.trashedFrom || note.notebook || ""));
+  }
+  lines.push("---");
+  lines.push("");
+  lines.push(note.body || "");
+  return lines.join("\n");
+}
+
+/* Parse one file back into a note object. The fallback title comes from
+   the file name for hand written files with no front matter at all, so a
+   user can drop a plain .md file into a notebook folder and it still
+   shows up in the app. */
+function parseNoteFile(text, sha, fallbackId, trashed) {
+  const note = {
+    id: fallbackId,
+    title: "Untitled note",
+    notebook: "",
+    tags: [],
+    created: new Date().toISOString(),
+    updated: new Date().toISOString(),
+    pinned: false,
+    body: "",
+    sha: sha || null,
+    trashed: !!trashed,
+    trashedFrom: null
+  };
+  const raw = String(text || "");
+  const match = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?/);
+  if (match) {
+    const meta = {};
+    match[1].split(/\r?\n/).forEach(function (line) {
+      const idx = line.indexOf(":");
+      if (idx > 0) {
+        meta[line.slice(0, idx).trim()] = line.slice(idx + 1).trim();
+      }
+    });
+    if (meta.id) { note.id = meta.id; }
+    if (meta.title) { note.title = meta.title; }
+    if (meta.notebook) { note.notebook = meta.notebook; }
+    if (meta.tags) {
+      note.tags = meta.tags.split(",").map(function (t) { return t.trim(); })
+        .filter(function (t) { return t.length > 0; });
+    }
+    if (meta.created) { note.created = meta.created; }
+    if (meta.updated) { note.updated = meta.updated; }
+    note.pinned = meta.pinned === "true";
+    if (meta.trashedFrom) { note.trashedFrom = meta.trashedFrom; }
+    note.body = raw.slice(match[0].length).replace(/^\s*\n/, "");
+  } else {
+    note.body = raw;
+    const firstLine = htmlToText(raw).slice(0, 60);
+    if (firstLine) { note.title = firstLine; }
+  }
+  if (note.trashed && !note.trashedFrom) {
+    note.trashedFrom = note.notebook || "personal";
+  }
+  if (!note.notebook && note.trashedFrom) { note.notebook = note.trashedFrom; }
+  return note;
+}
+
+/* --------------------------------------------------------------------------
+   8. Sync engine
+   -------------------------------------------------------------------------- */
+
+/* Save index.json from current state. Best effort: notes are the source
+   of truth and the index can always be rebuilt from the folders, so an
+   index save failure is logged to a toast but never blocks note saving. */
+async function saveIndex() {
+  const index = {
+    version: 1,
+    notebooks: state.notebooks,
+    updated: new Date().toISOString()
+  };
+  state.index = index;
+  try {
+    const existing = await ghGetFile("index.json");
+    await ghPutFile("index.json", JSON.stringify(index, null, 2),
+      existing ? existing.sha : null, "Update index");
+  } catch (err) {
+    /* offline or conflicted index: it will be rebuilt on the next load */
+  }
+  saveCache();
+}
+
+/* Rebuild the whole index from folder listings. Used on load when
+   index.json is missing, per spec. */
+function buildIndexFromFolders(folderSlugs) {
+  const known = {};
+  state.notebooks.forEach(function (nb) { known[nb.slug] = nb; });
+  const rebuilt = folderSlugs.map(function (slug) {
+    if (known[slug]) { return known[slug]; }
+    return {
+      slug: slug,
+      name: slug.replace(/-/g, " ").replace(/\b\w/g, function (c) { return c.toUpperCase(); }),
+      created: new Date().toISOString()
+    };
+  });
+  return { version: 1, notebooks: rebuilt, updated: new Date().toISOString() };
+}
+
+/* Load everything from the repo: index (or rebuild it), every notebook
+   folder, every note file, and the trash folder. Results replace state and
+   refresh the cache. Throws on hard failures so the caller can fall back
+   to the cache and say so. */
+async function loadAllFromRepo() {
+  const indexFile = await ghGetFile("index.json");
+  let index = null;
+  if (indexFile) {
+    try { index = JSON.parse(indexFile.content); } catch (e) { index = null; }
+  }
+  const folders = await ghListDir("notebooks");
+  const folderSlugs = (folders || [])
+    .filter(function (e) { return e.type === "dir"; })
+    .map(function (e) { return e.name; });
+
+  if (!index || !Array.isArray(index.notebooks)) {
+    index = buildIndexFromFolders(folderSlugs);
+    state.notebooks = index.notebooks;
+    state.index = index;
+    /* Persist the rebuilt index so the next load is a single GET. */
+    try {
+      await ghPutFile("index.json", JSON.stringify(index, null, 2),
+        indexFile ? indexFile.sha : null, "Rebuild index");
+    } catch (err) { /* best effort, see saveIndex */ }
+  } else {
+    state.notebooks = index.notebooks;
+    state.index = index;
+    /* A notebook folder with no index entry still gets listed, so notes
+       are never hidden by a stale index. */
+    folderSlugs.forEach(function (slug) {
+      if (!state.notebooks.some(function (nb) { return nb.slug === slug; })) {
+        state.notebooks.push(buildIndexFromFolders([slug]).notebooks[0]);
+      }
+    });
+  }
+
+  const notes = [];
+  for (const nb of state.notebooks) {
+    const entries = await ghListDir("notebooks/" + nb.slug);
+    for (const entry of (entries || [])) {
+      if (entry.type !== "file" || !/\.md$/i.test(entry.name)) { continue; }
+      const file = await ghGetFile("notebooks/" + nb.slug + "/" + entry.name);
+      if (!file) { continue; }
+      const fallbackId = entry.name.replace(/\.md$/i, "");
+      const note = parseNoteFile(file.content, file.sha, fallbackId, false);
+      if (!note.notebook) { note.notebook = nb.slug; }
+      notes.push(note);
+    }
+  }
+
+  const trash = [];
+  const trashEntries = await ghListDir("trash");
+  for (const entry of (trashEntries || [])) {
+    if (entry.type !== "file" || !/\.md$/i.test(entry.name)) { continue; }
+    const file = await ghGetFile("trash/" + entry.name);
+    if (!file) { continue; }
+    const fallbackId = entry.name.replace(/\.md$/i, "");
+    trash.push(parseNoteFile(file.content, file.sha, fallbackId, true));
+  }
+
+  state.notes = notes;
+  state.trash = trash;
+  saveCache();
+}
+
+/* Full sync: flush queued offline edits first, then reload from the repo,
+   then re-render. Used by Sync now and automatically after unlock. */
+async function syncNow(showToast) {
+  if (!state.token || !state.repoExists) { return; }
+  if (state.syncing) { return; }
+  state.syncing = true;
+  refreshSyncPill();
+  try {
+    await flushQueue();
+    await loadAllFromRepo();
+    renderAll();
+    refreshSyncPill();
+    if (showToast) { toast("Synced with GitHub."); }
+  } catch (err) {
+    refreshSyncPill();
+    toast("Sync failed: " + err.message, true);
+  } finally {
+    state.syncing = false;
+    refreshSyncPill();
+  }
+}
+
+/* Save one note to the repo, with the critical conflict rule:
+   BEFORE writing, fetch the file fresh and compare its sha with the sha
+   the editor loaded. If they differ, someone (or another device) changed
+   the note first. The local version is then saved as a NEW note titled
+   "<title> (conflict copy)" in the same notebook, the original is left
+   untouched, and a banner tells the user what happened. A 409 or 422 from
+   the PUT is handled the same way. Nothing is ever silently overwritten.
+   When offline, the write is queued instead and the note keeps a dirty
+   marker in the cache. */
+async function saveNoteToRepo(note, options) {
+  options = options || {};
+  note.updated = new Date().toISOString();
+  const path = notePath(note);
+  const text = serializeNote(note);
+
+  if (!state.online) {
+    queueOp({ kind: "put", path: path, content: text, noteId: note.id });
+    saveCache();
+    return { queued: true };
+  }
+
+  try {
+    let shaToUse = note.sha || null;
+    if (shaToUse && !options.skipConflictCheck) {
+      const fresh = await ghGetFile(path);
+      if (fresh && fresh.sha !== shaToUse) {
+        return await saveConflictCopy(note, path);
+      }
+      if (!fresh) { shaToUse = null; }
+    }
+    const newSha = await ghPutFile(path, text, shaToUse,
+      (shaToUse ? "Update note " : "Create note ") + note.id);
+    note.sha = newSha;
+    saveCache();
+    return { saved: true };
+  } catch (err) {
+    if (err.status === 409 || err.status === 422) {
+      return await saveConflictCopy(note, path);
+    }
+    if (err.offline || !state.online) {
+      queueOp({ kind: "put", path: path, content: text, noteId: note.id });
+      saveCache();
+      return { queued: true };
+    }
+    throw err;
+  }
+}
+
+/* The conflict copy path of the rule above: write the local version as a
+   brand new note file with a new id, register it in state, tell the user
+   with the banner and a toast, and return a conflict result so the editor
+   can show "Conflict saved" in the sync pill. */
+async function saveConflictCopy(note, originalPath) {
+  const copy = {
+    id: newNoteId(),
+    title: (note.title || "Untitled note") + " (conflict copy)",
+    notebook: note.notebook,
+    tags: note.tags.slice(),
+    created: new Date().toISOString(),
+    updated: new Date().toISOString(),
+    pinned: false,
+    body: note.body,
+    sha: null,
+    trashed: false,
+    trashedFrom: null
+  };
+  const copyPath = "notebooks/" + copy.notebook + "/" + copy.id + ".md";
+  copy.sha = await ghPutFile(copyPath, serializeNote(copy), null,
+    "Save conflict copy of " + note.id);
+  state.notes.push(copy);
+  saveCache();
+  renderAll();
+  showConflictBanner(
+    "This note changed somewhere else before your edit saved, so your version " +
+    "was kept as a separate note: \"" + copy.title + "\". Nothing was overwritten."
+  );
+  setSyncPill("bad", "Conflict saved");
+  toast("Conflict: your version was saved as \"" + copy.title + "\".", true);
+  return { conflict: true, copy: copy };
+}
+
+function showConflictBanner(text) {
+  const banner = document.getElementById("conflictBanner");
+  banner.textContent = text;
+  banner.classList.remove("hidden");
+  clearTimeout(showConflictBanner._timer);
+  showConflictBanner._timer = setTimeout(function () {
+    banner.classList.add("hidden");
+  }, 12000);
+}
+
+/* Flush the offline queue, oldest first. A queued put re-checks the file
+   sha at flush time: if the file moved on while we were offline, the
+   queued content becomes a conflict copy file instead of overwriting,
+   keeping the same never-overwrite rule for offline edits. Failures stop
+   the flush and keep the rest of the queue for the next attempt. */
+async function flushQueue() {
+  let queue = loadQueue();
+  if (!queue.length || !state.online) { return; }
+  const remaining = [];
+  let failed = false;
+  for (const op of queue) {
+    if (failed) { remaining.push(op); continue; }
+    try {
+      if (op.kind === "put") {
+        const existing = await ghGetFile(op.path);
+        const localNote = findNoteById(op.noteId);
+        const loadedSha = localNote ? localNote.sha : null;
+        if (existing && loadedSha && existing.sha !== loadedSha &&
+            !op.path.startsWith("trash/")) {
+          /* The repo version changed while offline. Keep both copies. */
+          const parsed = parseNoteFile(op.content, null, op.noteId, false);
+          parsed.id = newNoteId();
+          parsed.title = (parsed.title || "Untitled note") + " (conflict copy)";
+          parsed.sha = await ghPutFile(
+            "notebooks/" + parsed.notebook + "/" + parsed.id + ".md",
+            serializeNote(parsed), null, "Save queued conflict copy");
+          state.notes.push(parsed);
+          showConflictBanner("A note edited offline changed on GitHub too. " +
+            "Your offline version was kept as \"" + parsed.title + "\".");
+          setSyncPill("bad", "Conflict saved");
+        } else {
+          const newSha = await ghPutFile(op.path, op.content,
+            existing ? existing.sha : null, "Sync queued change");
+          if (localNote && notePath(localNote) === op.path) {
+            localNote.sha = newSha;
+          }
+        }
+      } else if (op.kind === "delete") {
+        const existing = await ghGetFile(op.path);
+        if (existing) {
+          await ghDeleteFile(op.path, existing.sha, "Sync queued delete");
+        }
+      }
+    } catch (err) {
+      failed = true;
+      remaining.push(op);
+    }
+  }
+  saveQueue(remaining);
+  saveCache();
+}
+
+/* Look a note up in the live list or the trash list. */
+function findNoteById(id) {
+  return state.notes.find(function (n) { return n.id === id; }) ||
+    state.trash.find(function (n) { return n.id === id; }) || null;
+}
+
+/* --------------------------------------------------------------------------
+   Notebook operations
+   GitHub has no real folders, so a notebook exists as soon as a file sits
+   under notebooks/<slug>/. Creating a notebook writes a .gitkeep file and
+   updates index.json. Renaming moves every note file to the new folder.
+   Deleting a notebook moves its notes to Trash (never destroys them),
+   after a confirm in the UI layer.
+   -------------------------------------------------------------------------- */
+async function createNotebook(name) {
+  const slug = uniqueSlug(slugify(name), null);
+  const nb = { slug: slug, name: String(name).trim(), created: new Date().toISOString() };
+  state.notebooks.push(nb);
+  if (state.online && state.repoExists) {
+    try {
+      await ghPutFile("notebooks/" + slug + "/.gitkeep", "", null,
+        "Create notebook " + slug);
+      await saveIndex();
+    } catch (err) {
+      toast("Notebook saved locally; GitHub write failed: " + err.message, true);
+    }
+  } else {
+    queueOp({ kind: "put", path: "notebooks/" + slug + "/.gitkeep", content: "", noteId: null });
+  }
+  saveCache();
+  renderAll();
+  return nb;
+}
+
+async function renameNotebook(slug, newName) {
+  const nb = state.notebooks.find(function (n) { return n.slug === slug; });
+  if (!nb) { return; }
+  const newSlug = uniqueSlug(slugify(newName), slug);
+  nb.name = String(newName).trim();
+  if (newSlug === slug) {
+    if (state.online && state.repoExists) { await saveIndex(); }
+    saveCache();
+    renderAll();
+    return;
+  }
+  /* Move every note file to the new folder, then remove the old files. */
+  const moving = state.notes.filter(function (n) { return n.notebook === slug; });
+  for (const note of moving) {
+    const oldPath = notePath(note);
+    note.notebook = newSlug;
+    if (state.online && state.repoExists) {
+      try {
+        note.sha = await ghPutFile(notePath(note), serializeNote(note), null,
+          "Move note to renamed notebook");
+        const oldFile = await ghGetFile(oldPath);
+        if (oldFile) { await ghDeleteFile(oldPath, oldFile.sha, "Remove old note location"); }
+      } catch (err) {
+        toast("Rename partly failed for one note: " + err.message, true);
+      }
+    } else {
+      queueOp({ kind: "put", path: notePath(note), content: serializeNote(note), noteId: note.id });
+      queueOp({ kind: "delete", path: oldPath, noteId: note.id });
+      note.sha = null;
+    }
+  }
+  nb.slug = newSlug;
+  if (state.view.kind === "notebook" && state.view.value === slug) {
+    state.view.value = newSlug;
+  }
+  if (state.online && state.repoExists) { await saveIndex(); }
+  saveCache();
+  renderAll();
+}
+
+async function deleteNotebook(slug) {
+  const doomed = state.notes.filter(function (n) { return n.notebook === slug; });
+  for (const note of doomed) {
+    await moveNoteToTrash(note, true);
+  }
+  state.notebooks = state.notebooks.filter(function (n) { return n.slug !== slug; });
+  if (state.online && state.repoExists) {
+    try {
+      const keep = await ghGetFile("notebooks/" + slug + "/.gitkeep");
+      if (keep) {
+        await ghDeleteFile("notebooks/" + slug + "/.gitkeep", keep.sha,
+          "Delete notebook " + slug);
+      }
+      await saveIndex();
+    } catch (err) {
+      toast("Notebook removed locally; a GitHub cleanup step failed: " + err.message, true);
+    }
+  }
+  if (state.view.kind === "notebook" && state.view.value === slug) {
+    state.view = { kind: "all", value: null };
+  }
+  saveCache();
+  renderAll();
+}
+
+/* --------------------------------------------------------------------------
+   Note operations: create, trash, restore, delete forever
+   Moving a note between the notebooks tree and trash/ is a write to the
+   new path plus a delete of the old path. Offline, both halves are queued.
+   -------------------------------------------------------------------------- */
+function makeNote(notebookSlug, title, body) {
+  const now = new Date().toISOString();
+  return {
+    id: newNoteId(),
+    title: title || "Untitled note",
+    notebook: notebookSlug,
+    tags: [],
+    created: now,
+    updated: now,
+    pinned: false,
+    body: body || "",
+    sha: null,
+    trashed: false,
+    trashedFrom: null
+  };
+}
+
+async function createNoteInRepo(notebookSlug) {
+  if (!state.notebooks.length) {
+    await createNotebook("Personal");
+    notebookSlug = state.notebooks[0].slug;
+  }
+  const note = makeNote(notebookSlug || state.notebooks[0].slug);
+  state.notes.unshift(note);
+  try {
+    await saveNoteToRepo(note, { skipConflictCheck: true });
+  } catch (err) {
+    toast("Note created locally; save failed: " + err.message, true);
+  }
+  saveCache();
+  renderAll();
+  openNote(note.id);
+  return note;
+}
+
+/* Move a note to Trash. quiet=true is used by deleteNotebook, which moves
+   many notes at once and renders once at the end. */
+async function moveNoteToTrash(note, quiet) {
+  const oldPath = notePath(note);
+  note.trashed = true;
+  note.trashedFrom = note.notebook;
+  note.pinned = false;
+  note.updated = new Date().toISOString();
+  const newPath = notePath(note);
+  state.notes = state.notes.filter(function (n) { return n.id !== note.id; });
+  state.trash.unshift(note);
+  if (state.online && state.repoExists) {
+    try {
+      note.sha = await ghPutFile(newPath, serializeNote(note), null, "Move note to trash");
+      const oldFile = await ghGetFile(oldPath);
+      if (oldFile) { await ghDeleteFile(oldPath, oldFile.sha, "Remove note from notebook"); }
+    } catch (err) {
+      toast("Trash move failed on GitHub: " + err.message, true);
+    }
+  } else {
+    queueOp({ kind: "put", path: newPath, content: serializeNote(note), noteId: note.id });
+    queueOp({ kind: "delete", path: oldPath, noteId: note.id });
+    note.sha = null;
+  }
+  if (state.selectedId === note.id) { state.selectedId = null; }
+  saveCache();
+  if (!quiet) { renderAll(); }
+}
+
+async function restoreNote(note) {
+  const oldPath = notePath(note);
+  let target = note.trashedFrom || note.notebook || "personal";
+  if (!state.notebooks.some(function (nb) { return nb.slug === target; })) {
+    /* The notebook it came from is gone. Put it in the first notebook
+       that exists, creating Personal if there are none at all. */
+    if (!state.notebooks.length) { await createNotebook("Personal"); }
+    target = state.notebooks[0].slug;
+  }
+  note.trashed = false;
+  note.trashedFrom = null;
+  note.notebook = target;
+  note.updated = new Date().toISOString();
+  const newPath = notePath(note);
+  state.trash = state.trash.filter(function (n) { return n.id !== note.id; });
+  state.notes.unshift(note);
+  if (state.online && state.repoExists) {
+    try {
+      note.sha = await ghPutFile(newPath, serializeNote(note), null, "Restore note from trash");
+      const oldFile = await ghGetFile(oldPath);
+      if (oldFile) { await ghDeleteFile(oldPath, oldFile.sha, "Remove note from trash"); }
+    } catch (err) {
+      toast("Restore failed on GitHub: " + err.message, true);
+    }
+  } else {
+    queueOp({ kind: "put", path: newPath, content: serializeNote(note), noteId: note.id });
+    queueOp({ kind: "delete", path: oldPath, noteId: note.id });
+    note.sha = null;
+  }
+  saveCache();
+  renderAll();
+}
+
+async function deleteNoteForever(note) {
+  const path = notePath(note);
+  state.trash = state.trash.filter(function (n) { return n.id !== note.id; });
+  if (state.selectedId === note.id) { state.selectedId = null; }
+  if (state.online && state.repoExists) {
+    try {
+      const file = note.sha ? { sha: note.sha } : await ghGetFile(path);
+      if (file && file.sha) {
+        await ghDeleteFile(path, file.sha, "Delete note forever");
+      }
+    } catch (err) {
+      toast("Delete failed on GitHub: " + err.message, true);
+    }
+  } else {
+    queueOp({ kind: "delete", path: path, noteId: note.id });
+  }
+  saveCache();
+  renderAll();
+}
+
+/* --------------------------------------------------------------------------
+   Connect flow
+   After unlock: verify the token with GET /user, show the username, then
+   look for the data repo. A 404 opens the repo screen with the one click
+   create button. Any other failure shows a toast and falls back to the
+   local cache so the user can still read their notes.
+   -------------------------------------------------------------------------- */
+async function connectAndLoad() {
+  const repoText = document.getElementById("repoScreenText");
+  const repoError = document.getElementById("repoError");
+  repoError.textContent = "";
+  try {
+    const user = await gh("/user");
+    state.username = user.login;
+  } catch (err) {
+    if (loadCache() && state.username) {
+      state.repoExists = true;
+      showScreen("app");
+      renderAll();
+      toast("Could not reach GitHub (" + err.message + "). Showing your cached notes.", true);
+      refreshSyncPill();
+      return;
+    }
+    showScreen("repo");
+    repoText.textContent = "GitHub did not accept the token.";
+    repoError.textContent = err.message +
+      " Check that the token has the repo scope, then try again.";
+    document.getElementById("repoActions").classList.add("hidden");
+    return;
+  }
+
+  document.getElementById("footUser").textContent = "@" + state.username;
+  document.getElementById("footRepo").textContent = state.repo;
+
+  let repoInfo = null;
+  try {
+    repoInfo = await gh("/repos/" + encodeURIComponent(state.username) + "/" +
+      encodeURIComponent(state.repo));
+  } catch (err) {
+    if (err.status !== 404) {
+      repoError.textContent = err.message;
+    }
+  }
+  if (!repoInfo) {
+    state.repoExists = false;
+    showScreen("repo");
+    repoText.innerHTML = "Signed in as <strong>" + escapeHtml(state.username) +
+      "</strong>. The data repository <strong>" + escapeHtml(state.repo) +
+      "</strong> does not exist in your account yet.";
+    document.getElementById("repoActions").classList.remove("hidden");
+    return;
+  }
+  state.repoExists = true;
+  showScreen("app");
+  await syncNow(false);
+}
+
+/* Create the data repo and the first structure. Runs only on first
+   connect, from the repo screen button. Creates the private repo with
+   auto_init (so it has an initial commit and the contents API works
+   immediately), then the notebooks and trash folders, the default Personal
+   notebook, index.json, and exactly one welcome note. */
+async function createRepoAndSeed() {
+  const repoError = document.getElementById("repoError");
+  repoError.textContent = "";
+  const btn = document.getElementById("createRepoBtn");
+  btn.disabled = true;
+  btn.textContent = "Creating...";
+  try {
+    await gh("/user/repos", {
+      method: "POST",
+      body: {
+        name: state.repo,
+        description: "SnakeScale Notes data. Notes stored as Markdown files.",
+        private: true,
+        auto_init: true
+      }
+    });
+    state.repoExists = true;
+
+    const personal = { slug: "personal", name: "Personal", created: new Date().toISOString() };
+    state.notebooks = [personal];
+    await ghPutFile("notebooks/personal/.gitkeep", "", null, "Create notebooks folder");
+    await ghPutFile("trash/.gitkeep", "", null, "Create trash folder");
+
+    const welcome = makeNote("personal", "Welcome to SnakeScale Notes",
+      "<p>Welcome to <b>SnakeScale Notes</b>. This note lives in your own " +
+      "private GitHub repository, as a plain Markdown file, and so do all " +
+      "of your other notes.</p>" +
+      "<p>A few things to try:</p>" +
+      "<ul><li>Make a notebook with the + button next to Notebooks.</li>" +
+      "<li>Add tags to a note, then use the Tags list to filter.</li>" +
+      "<li>Pin this note and it stays at the top of the list.</li>" +
+      "<li>Use the Checklist button in the toolbar for to do lists.</li></ul>" +
+      "<p>Delete this note whenever you are ready. It goes to Trash first, " +
+      "and only disappears for good when you choose Delete Forever.</p>");
+    welcome.sha = await ghPutFile(notePath(welcome), serializeNote(welcome),
+      null, "Create welcome note");
+    state.notes = [welcome];
+    state.trash = [];
+    await saveIndex();
+    saveCache();
+
+    showScreen("app");
+    document.getElementById("footUser").textContent = "@" + state.username;
+    document.getElementById("footRepo").textContent = state.repo;
+    renderAll();
+    openNote(welcome.id);
+    toast("Repository created. Welcome to SnakeScale Notes.");
+  } catch (err) {
+    repoError.textContent = "Create failed: " + err.message;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Create the data repository (private)";
+  }
+}
+
+/* --------------------------------------------------------------------------
+   9. Rendering
+   All user text is placed with textContent or through escapeHtml. Note
+   titles, tags, and notebook names are never injected as raw HTML. The one
+   intentional exception is the note BODY in the editor: it is the user's
+   own rich text HTML, loaded into the contenteditable element by design.
+   -------------------------------------------------------------------------- */
+function showScreen(name) {
+  document.getElementById("setupScreen").classList.toggle("hidden", name !== "setup");
+  document.getElementById("lockScreen").classList.toggle("hidden", name !== "lock");
+  document.getElementById("repoScreen").classList.toggle("hidden", name !== "repo");
+  document.getElementById("app").classList.toggle("hidden", name !== "app");
+  if (name === "app" && !document.body.classList.contains("view-list") &&
+      !document.body.classList.contains("view-nav") &&
+      !document.body.classList.contains("view-editor")) {
+    document.body.classList.add("view-list");
+  }
+}
+
+function renderAll() {
+  renderSidebar();
+  renderNoteList();
+  renderEditor();
+  refreshSyncPill();
+}
+
+/* Count helpers for the sidebar badges. */
+function notebookCount(slug) {
+  return state.notes.filter(function (n) { return n.notebook === slug; }).length;
+}
+function allTagsWithCounts() {
+  const map = {};
+  state.notes.forEach(function (n) {
+    n.tags.forEach(function (t) { map[t] = (map[t] || 0) + 1; });
+  });
+  return Object.keys(map).sort().map(function (t) { return { tag: t, count: map[t] }; });
+}
+
+function renderSidebar() {
+  document.getElementById("countAll").textContent = state.notes.length || "";
+  document.getElementById("countPinned").textContent =
+    state.notes.filter(function (n) { return n.pinned; }).length || "";
+  document.getElementById("countTrash").textContent = state.trash.length || "";
+
+  document.getElementById("navAll").classList.toggle("active",
+    state.view.kind === "all");
+  document.getElementById("navPinned").classList.toggle("active",
+    state.view.kind === "pinned");
+  document.getElementById("navTrash").classList.toggle("active",
+    state.view.kind === "trash");
+
+  /* Notebook rows, with rename and delete on hover. Delete is confirmed
+     in the click handler and moves the notes to Trash, never destroys. */
+  const nav = document.getElementById("notebookNav");
+  nav.innerHTML = "";
+  if (!state.notebooks.length) {
+    const empty = document.createElement("div");
+    empty.className = "hint";
+    empty.style.padding = "4px 10px";
+    empty.textContent = "No notebooks yet. Use + to add one.";
+    nav.appendChild(empty);
+  }
+  state.notebooks.forEach(function (nb) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "nav-item" +
+      ((state.view.kind === "notebook" && state.view.value === nb.slug) ? " active" : "");
+    const nameSpan = document.createElement("span");
+    nameSpan.textContent = nb.name;
+    btn.appendChild(nameSpan);
+    const actions = document.createElement("span");
+    actions.className = "row-actions";
+    const renameBtn = document.createElement("button");
+    renameBtn.type = "button";
+    renameBtn.textContent = "Rename";
+    renameBtn.addEventListener("click", function (ev) {
+      ev.stopPropagation();
+      const next = prompt("Rename notebook", nb.name);
+      if (next && next.trim() && next.trim() !== nb.name) {
+        renameNotebook(nb.slug, next.trim()).catch(function (err) {
+          toast("Rename failed: " + err.message, true);
+        });
+      }
+    });
+    const deleteBtn = document.createElement("button");
+    deleteBtn.type = "button";
+    deleteBtn.textContent = "Delete";
+    deleteBtn.addEventListener("click", function (ev) {
+      ev.stopPropagation();
+      const count = notebookCount(nb.slug);
+      const ok = confirm("Delete the notebook \"" + nb.name + "\"? Its " +
+        count + " note(s) will be moved to Trash, not deleted.");
+      if (ok) {
+        deleteNotebook(nb.slug).catch(function (err) {
+          toast("Delete failed: " + err.message, true);
+        });
+      }
+    });
+    actions.appendChild(renameBtn);
+    actions.appendChild(deleteBtn);
+    btn.appendChild(actions);
+    const countSpan = document.createElement("span");
+    countSpan.className = "count";
+    countSpan.textContent = notebookCount(nb.slug) || "";
+    btn.appendChild(countSpan);
+    btn.addEventListener("click", function () {
+      state.view = { kind: "notebook", value: nb.slug };
+      renderAll();
+      setMobileView("list");
+    });
+    nav.appendChild(btn);
+  });
+
+  /* Tag rows. Clicking toggles the tag filter. */
+  const tagNav = document.getElementById("tagNav");
+  tagNav.innerHTML = "";
+  const tags = allTagsWithCounts();
+  if (!tags.length) {
+    const empty = document.createElement("div");
+    empty.className = "hint";
+    empty.style.padding = "4px 10px";
+    empty.textContent = "No tags yet. Add tags in the editor.";
+    tagNav.appendChild(empty);
+  }
+  tags.forEach(function (entry) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "nav-item tag-chip-nav" +
+      ((state.view.kind === "tag" && state.view.value === entry.tag) ? " active" : "");
+    const label = document.createElement("span");
+    label.textContent = "# " + entry.tag;
+    btn.appendChild(label);
+    const countSpan = document.createElement("span");
+    countSpan.className = "count";
+    countSpan.textContent = entry.count;
+    btn.appendChild(countSpan);
+    btn.addEventListener("click", function () {
+      if (state.view.kind === "tag" && state.view.value === entry.tag) {
+        state.view = { kind: "all", value: null };
+      } else {
+        state.view = { kind: "tag", value: entry.tag };
+      }
+      renderAll();
+      setMobileView("list");
+    });
+    tagNav.appendChild(btn);
+  });
+
+  const repoInput = document.getElementById("repoNameInput");
+  if (document.activeElement !== repoInput) { repoInput.value = state.repo; }
+  document.getElementById("themeBtn").textContent =
+    document.body.classList.contains("dark") ? "Light mode" : "Dark mode";
+}
+
+/* The filtered, sorted note set for the middle pane.
+   Sort rule: pinned first, then updated newest first. In Trash there is
+   no pinning, so it is just newest first. Search matches title, body
+   text, and tags, all locally against the cache. */
+function visibleNotes() {
+  let list;
+  if (state.view.kind === "trash") {
+    list = state.trash.slice();
+  } else {
+    list = state.notes.slice();
+    if (state.view.kind === "pinned") {
+      list = list.filter(function (n) { return n.pinned; });
+    } else if (state.view.kind === "notebook") {
+      list = list.filter(function (n) { return n.notebook === state.view.value; });
+    } else if (state.view.kind === "tag") {
+      list = list.filter(function (n) { return n.tags.indexOf(state.view.value) >= 0; });
+    }
+  }
+  if (state.search) {
+    const q = state.search;
+    list = list.filter(function (n) {
+      return n.title.toLowerCase().indexOf(q) >= 0 ||
+        htmlToText(n.body).toLowerCase().indexOf(q) >= 0 ||
+        n.tags.some(function (t) { return t.toLowerCase().indexOf(q) >= 0; });
+    });
+  }
+  list.sort(function (a, b) {
+    if (!!b.pinned !== !!a.pinned) { return b.pinned ? 1 : -1; }
+    return new Date(b.updated) - new Date(a.updated);
+  });
+  return list;
+}
+
+function viewTitle() {
+  if (state.view.kind === "pinned") { return "Pinned"; }
+  if (state.view.kind === "trash") { return "Trash"; }
+  if (state.view.kind === "notebook") {
+    const nb = state.notebooks.find(function (n) { return n.slug === state.view.value; });
+    return nb ? nb.name : "Notebook";
+  }
+  if (state.view.kind === "tag") { return "Tag: " + state.view.value; }
+  return "All Notes";
+}
+
+function renderNoteList() {
+  const listEl = document.getElementById("noteList");
+  const list = visibleNotes();
+  document.getElementById("listTitle").textContent = viewTitle();
+  document.getElementById("listSub").textContent =
+    list.length + (list.length === 1 ? " note" : " notes") +
+    (state.search ? " matching \"" + state.search + "\"" : "");
+  listEl.innerHTML = "";
+
+  if (!state.repoExists && !list.length) {
+    listEl.innerHTML = "";
+    const empty = document.createElement("div");
+    empty.className = "empty-state";
+    empty.innerHTML = "<div class=\"big\">No repository connected yet</div>" +
+      "Finish connecting your GitHub data repository and your notes will appear here.";
+    listEl.appendChild(empty);
+    return;
+  }
+  if (!list.length) {
+    const empty = document.createElement("div");
+    empty.className = "empty-state";
+    if (state.view.kind === "trash") {
+      empty.innerHTML = "<div class=\"big\">Trash is empty</div>Notes you move to Trash will wait here until you restore them or delete them forever.";
+    } else if (state.search) {
+      empty.innerHTML = "<div class=\"big\">No matches</div>No notes match that search in this view.";
+    } else {
+      empty.innerHTML = "<div class=\"big\">No notes here yet</div>Press New Note to write your first one.";
+    }
+    listEl.appendChild(empty);
+    return;
+  }
+
+  list.forEach(function (note) {
+    const card = document.createElement("div");
+    card.className = "note-card" + (note.id === state.selectedId ? " active" : "");
+    const titleRow = document.createElement("div");
+    titleRow.className = "card-title";
+    if (note.pinned && !note.trashed) {
+      const pin = document.createElement("span");
+      pin.className = "pin-mark";
+      pin.textContent = "PINNED";
+      titleRow.appendChild(pin);
+    }
+    const titleText = document.createElement("span");
+    titleText.textContent = note.title || "Untitled note";
+    titleRow.appendChild(titleText);
+    card.appendChild(titleRow);
+
+    const date = document.createElement("div");
+    date.className = "card-date";
+    date.textContent = formatDate(note.updated);
+    card.appendChild(date);
+
+    const snippetText = htmlToText(note.body).slice(0, 140);
+    if (snippetText) {
+      const snip = document.createElement("div");
+      snip.className = "card-snippet";
+      snip.textContent = snippetText;
+      card.appendChild(snip);
+    }
+    if (note.tags.length) {
+      const row = document.createElement("div");
+      row.className = "chip-row";
+      note.tags.forEach(function (t) {
+        const chip = document.createElement("span");
+        chip.className = "tag-chip";
+        chip.textContent = t;
+        row.appendChild(chip);
+      });
+      card.appendChild(row);
+    }
+    card.addEventListener("click", function () { openNote(note.id); });
+    listEl.appendChild(card);
+  });
+}
+
+/* Open one note in the editor. On mobile this also switches the visible
+   pane to the editor. */
+function openNote(id) {
+  state.selectedId = id;
+  renderNoteList();
+  renderEditor();
+  setMobileView("editor");
+}
+
+function currentNote() {
+  if (!state.selectedId) { return null; }
+  return findNoteById(state.selectedId);
+}
+
+function renderEditor() {
+  const note = currentNote();
+  const noNote = document.getElementById("noNote");
+  const wrap = document.getElementById("editorWrap");
+  if (!note) {
+    noNote.classList.remove("hidden");
+    wrap.classList.add("hidden");
+    return;
+  }
+  noNote.classList.add("hidden");
+  wrap.classList.remove("hidden");
+
+  /* Only refill the fields when a different note is being opened, so a
+     re-render during typing never moves the cursor or clobbers input. */
+  if (renderEditor._forId !== note.id) {
+    renderEditor._forId = note.id;
+    document.getElementById("noteTitle").value = note.title || "";
+    document.getElementById("noteTags").value = note.tags.join(", ");
+    document.getElementById("notePinned").checked = !!note.pinned;
+    document.getElementById("noteBody").innerHTML = note.body || "";
+    setSaveState(note.trashed ? "In Trash" : "Saved");
+  }
+
+  /* Notebook picker options follow the notebook list. */
+  const picker = document.getElementById("noteNotebook");
+  const wanted = note.trashed ? (note.trashedFrom || note.notebook) : note.notebook;
+  if (picker.getAttribute("data-for") !== String(state.notebooks.length) + ":" + wanted) {
+    picker.setAttribute("data-for", String(state.notebooks.length) + ":" + wanted);
+    picker.innerHTML = "";
+    state.notebooks.forEach(function (nb) {
+      const opt = document.createElement("option");
+      opt.value = nb.slug;
+      opt.textContent = nb.name;
+      picker.appendChild(opt);
+    });
+    picker.value = wanted;
+  }
+
+  /* Trash mode swaps the action buttons and locks editing. */
+  const inTrash = !!note.trashed;
+  document.getElementById("trashBtn").classList.toggle("hidden", inTrash);
+  document.getElementById("restoreBtn").classList.toggle("hidden", !inTrash);
+  document.getElementById("deleteForeverBtn").classList.toggle("hidden", !inTrash);
+  document.getElementById("noteBody").contentEditable = inTrash ? "false" : "true";
+  document.getElementById("noteTitle").disabled = inTrash;
+  document.getElementById("noteTags").disabled = inTrash;
+  document.getElementById("notePinned").disabled = inTrash;
+  picker.disabled = inTrash;
+}
+renderEditor._forId = null;
+
+function setSaveState(text) {
+  document.getElementById("saveState").textContent = text;
+}
+
+/* Mobile pane switching. Desktop CSS ignores these classes. */
+function setMobileView(which) {
+  if (window.innerWidth > 900) { return; }
+  document.body.classList.remove("view-nav", "view-list", "view-editor");
+  document.body.classList.add("view-" + which);
+}
+
+/* --------------------------------------------------------------------------
+   10. Editor behavior
+   The editor reads and writes the note object through collectEditor(),
+   which pulls title, notebook, tags, pin, and body HTML out of the form.
+   Autosave is debounced at about 800 ms after the last edit. If the note
+   moved notebooks, the file is written to the new folder and the old file
+   is removed. Save results update the saved state text and, for lists,
+   only the sidebar and list panes re-render, never the editor itself, so
+   typing is never interrupted.
+   -------------------------------------------------------------------------- */
+function collectEditor(note) {
+  note.title = document.getElementById("noteTitle").value.trim() || "Untitled note";
+  const pickerValue = document.getElementById("noteNotebook").value;
+  if (pickerValue) { note.notebook = pickerValue; }
+  note.tags = document.getElementById("noteTags").value
+    .split(",")
+    .map(function (t) { return t.trim(); })
+    .filter(function (t) { return t.length > 0; });
+  note.pinned = document.getElementById("notePinned").checked;
+  note.body = document.getElementById("noteBody").innerHTML;
+  return note;
+}
+
+const autosave = debounce(async function () {
+  const note = currentNote();
+  if (!note || note.trashed) { return; }
+  const previousPath = notePath(note);
+  const previousNotebook = note.notebook;
+  collectEditor(note);
+  const moved = notePath(note) !== previousPath;
+  setSaveState("Saving...");
+  try {
+    const result = await saveNoteToRepo(note);
+    if (moved && state.online && state.repoExists) {
+      const oldFile = await ghGetFile(previousPath);
+      if (oldFile) {
+        await ghDeleteFile(previousPath, oldFile.sha, "Remove note from previous notebook");
+      }
+    }
+    if (moved && (!state.online || !state.repoExists)) {
+      queueOp({ kind: "delete", path: previousPath, noteId: note.id });
+    }
+    if (result && result.queued) {
+      setSaveState("Offline: changes queued");
+    } else if (result && result.conflict) {
+      setSaveState("Conflict saved as a copy");
+      state.selectedId = result.copy.id;
+      renderEditor._forId = null;
+    } else {
+      setSaveState("Saved " + new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }));
+    }
+  } catch (err) {
+    setSaveState("Save failed");
+    toast("Save failed: " + err.message, true);
+  }
+  /* Refresh counts, ordering, and this note card without touching the
+     editor pane. */
+  renderSidebar();
+  renderNoteList();
+  void previousNotebook;
+}, 800);
+
+function markDirty() {
+  const note = currentNote();
+  if (!note || note.trashed) { return; }
+  setSaveState("Unsaved changes...");
+  autosave();
+}
+
+/* Toolbar commands. execCommand is deprecated but universally supported
+   for contenteditable in current browsers, and it keeps v1.0 dependency
+   free. The checklist command inserts a <ul> whose items start with a
+   checkbox input; clicking a checkbox toggles the done style on its <li>
+   (handled in the body click listener below). */
+function runToolbarCommand(cmd) {
+  const body = document.getElementById("noteBody");
+  body.focus();
+  if (cmd === "bold" || cmd === "italic" || cmd === "underline") {
+    document.execCommand(cmd, false, null);
+  } else if (cmd === "h1") {
+    document.execCommand("formatBlock", false, "H1");
+  } else if (cmd === "h2") {
+    document.execCommand("formatBlock", false, "H2");
+  } else if (cmd === "ul") {
+    document.execCommand("insertUnorderedList", false, null);
+  } else if (cmd === "ol") {
+    document.execCommand("insertOrderedList", false, null);
+  } else if (cmd === "checklist") {
+    document.execCommand("insertHTML", false,
+      "<ul><li><input type=\"checkbox\"> New item</li></ul><p></p>");
+  } else if (cmd === "clear") {
+    document.execCommand("removeFormat", false, null);
+    document.execCommand("formatBlock", false, "P");
+  }
+  markDirty();
+}
+
+/* --------------------------------------------------------------------------
+   11. Screen flow and event wiring
+   -------------------------------------------------------------------------- */
+function wireEvents() {
+  /* Setup form: validate, encrypt, store settings, then connect. */
+  document.getElementById("setupForm").addEventListener("submit", async function (ev) {
+    ev.preventDefault();
+    const errEl = document.getElementById("setupError");
+    errEl.textContent = "";
+    const token = document.getElementById("setupToken").value.trim();
+    const repo = document.getElementById("setupRepo").value.trim() || "snakescale-notes-data";
+    const pw = document.getElementById("setupPassword").value;
+    const pw2 = document.getElementById("setupPassword2").value;
+    if (!token) { errEl.textContent = "Paste your GitHub token first."; return; }
+    if (pw.length < 6) { errEl.textContent = "Use an app password of at least 6 characters."; return; }
+    if (pw !== pw2) { errEl.textContent = "The two passwords do not match."; return; }
+    try {
+      await vaultCreate(token, pw);
+      state.token = token;
+      state.repo = repo;
+      saveSettings();
+      document.getElementById("repoNameInput").value = repo;
+      await connectAndLoad();
+    } catch (err) {
+      errEl.textContent = "Setup failed: " + err.message;
+    }
+  });
+
+  /* Lock form: decrypt, then connect. A wrong password throws from
+     vaultUnlock and is reported here without clearing anything. */
+  document.getElementById("lockForm").addEventListener("submit", async function (ev) {
+    ev.preventDefault();
+    const errEl = document.getElementById("lockError");
+    errEl.textContent = "";
+    const pw = document.getElementById("lockPassword").value;
+    try {
+      state.token = await vaultUnlock(pw);
+      loadSettings();
+      loadCache();
+      await connectAndLoad();
+    } catch (err) {
+      errEl.textContent = "That password did not unlock the vault. Try again.";
+    }
+  });
+
+  document.getElementById("resetVaultBtn").addEventListener("click", function () {
+    const ok = confirm("Clear the encrypted vault on this device? You will set up again with a token and a new password. Notes in GitHub are not affected.");
+    if (ok) {
+      vaultWipe();
+      localStorage.removeItem(LS_CACHE);
+      localStorage.removeItem(LS_QUEUE);
+      showScreen("setup");
+    }
+  });
+
+  /* Repo screen buttons. */
+  document.getElementById("createRepoBtn").addEventListener("click", function () {
+    createRepoAndSeed().catch(function (err) {
+      document.getElementById("repoError").textContent = err.message;
+    });
+  });
+  document.getElementById("repoRetryBtn").addEventListener("click", function () {
+    connectAndLoad().catch(function (err) { toast(err.message, true); });
+  });
+  document.getElementById("repoLockBtn").addEventListener("click", lockApp);
+
+  /* Sidebar: view switching. */
+  document.getElementById("navAll").addEventListener("click", function () {
+    state.view = { kind: "all", value: null };
+    renderAll();
+    setMobileView("list");
+  });
+  document.getElementById("navPinned").addEventListener("click", function () {
+    state.view = { kind: "pinned", value: null };
+    renderAll();
+    setMobileView("list");
+  });
+  document.getElementById("navTrash").addEventListener("click", function () {
+    state.view = { kind: "trash", value: null };
+    renderAll();
+    setMobileView("list");
+  });
+
+  document.getElementById("addNotebookBtn").addEventListener("click", function () {
+    const name = prompt("New notebook name");
+    if (name && name.trim()) {
+      createNotebook(name.trim()).catch(function (err) {
+        toast("Could not create notebook: " + err.message, true);
+      });
+    }
+  });
+
+  document.getElementById("newNoteBtn").addEventListener("click", function () {
+    const slug = state.view.kind === "notebook" ? state.view.value :
+      (state.notebooks.length ? state.notebooks[0].slug : null);
+    createNoteInRepo(slug).catch(function (err) {
+      toast("Could not create the note: " + err.message, true);
+    });
+  });
+
+  /* Search filters locally as the user types. */
+  document.getElementById("searchInput").addEventListener("input",
+    debounce(function (ev) {
+      state.search = ev.target.value.trim().toLowerCase();
+      renderNoteList();
+    }, 150));
+
+  /* Sidebar footer: repo rename, sync, theme, lock. */
+  document.getElementById("saveRepoBtn").addEventListener("click", async function () {
+    const next = document.getElementById("repoNameInput").value.trim();
+    if (!next || next === state.repo) { return; }
+    state.repo = next;
+    state.repoExists = false;
+    saveSettings();
+    await connectAndLoad();
+  });
+  document.getElementById("syncNowBtn").addEventListener("click", function () {
+    syncNow(true);
+  });
+  document.getElementById("themeBtn").addEventListener("click", function () {
+    document.body.classList.toggle("dark");
+    saveSettings();
+    renderSidebar();
+  });
+  document.getElementById("lockBtn").addEventListener("click", lockApp);
+
+  /* Mobile bar. */
+  document.getElementById("mobileNavBtn").addEventListener("click", function () { setMobileView("nav"); });
+  document.getElementById("mobileListBtn").addEventListener("click", function () { setMobileView("list"); });
+  document.getElementById("mobileNewBtn").addEventListener("click", function () {
+    document.getElementById("newNoteBtn").click();
+  });
+  document.getElementById("editorBackBtn").addEventListener("click", function () { setMobileView("list"); });
+
+  /* Editor inputs: any change marks the note dirty and autosaves. */
+  ["noteTitle", "noteTags", "noteNotebook", "notePinned"].forEach(function (id) {
+    document.getElementById(id).addEventListener("input", markDirty);
+    document.getElementById(id).addEventListener("change", markDirty);
+  });
+  document.getElementById("noteBody").addEventListener("input", markDirty);
+
+  /* Checklist toggling: a click on a checkbox inside the body flips the
+     done style on its list item and saves. The change event from the
+     checkbox also bubbles as an input event in most browsers, so the
+     dirty marking here is a belt and suspenders second call. */
+  document.getElementById("noteBody").addEventListener("click", function (ev) {
+    const target = ev.target;
+    if (target && target.tagName === "INPUT" && target.type === "checkbox") {
+      const li = target.closest("li");
+      if (li) {
+        li.classList.toggle("done", target.checked);
+        markDirty();
+      }
+    }
+  });
+
+  /* Toolbar buttons. mousedown is prevented so the text selection in the
+     editor is not lost before execCommand runs. */
+  document.querySelectorAll("#toolbar button").forEach(function (btn) {
+    btn.addEventListener("mousedown", function (ev) { ev.preventDefault(); });
+    btn.addEventListener("click", function () {
+      runToolbarCommand(btn.getAttribute("data-cmd"));
+    });
+  });
+
+  /* Trash actions. */
+  document.getElementById("trashBtn").addEventListener("click", function () {
+    const note = currentNote();
+    if (note) {
+      moveNoteToTrash(note, false).then(function () {
+        toast("Moved to Trash.");
+      }).catch(function (err) { toast(err.message, true); });
+    }
+  });
+  document.getElementById("restoreBtn").addEventListener("click", function () {
+    const note = currentNote();
+    if (note) {
+      restoreNote(note).then(function () {
+        toast("Note restored.");
+        state.view = { kind: "notebook", value: note.notebook };
+        renderAll();
+        openNote(note.id);
+      }).catch(function (err) { toast(err.message, true); });
+    }
+  });
+  document.getElementById("deleteForeverBtn").addEventListener("click", function () {
+    const note = currentNote();
+    if (!note) { return; }
+    const ok = confirm("Delete \"" + (note.title || "Untitled note") +
+      "\" forever? This removes the file from your GitHub repository and cannot be undone from inside the app.");
+    if (ok) {
+      deleteNoteForever(note).then(function () {
+        toast("Deleted forever.");
+      }).catch(function (err) { toast(err.message, true); });
+    }
+  });
+
+  /* Online and offline events drive the sync pill and auto flush the
+     queue when the browser comes back online. */
+  window.addEventListener("online", function () {
+    state.online = true;
+    refreshSyncPill();
+    if (state.token && state.repoExists) { syncNow(false); }
+  });
+  window.addEventListener("offline", function () {
+    state.online = false;
+    refreshSyncPill();
+  });
+}
+
+/* --------------------------------------------------------------------------
+   Boot
+   Order matters: logos first (they appear on every screen), then saved
+   settings (theme and repo name), then event wiring, then the right
+   starting screen: setup when there is no vault, lock when there is one.
+   The note cache is loaded only after a successful unlock, never before,
+   so a locked app shows nothing of the user's notes.
+   -------------------------------------------------------------------------- */
+function boot() {
+  injectLogos();
+  loadSettings();
+  wireEvents();
+  if (vaultExists()) {
+    showScreen("lock");
+    document.getElementById("lockPassword").focus();
+  } else {
+    showScreen("setup");
+  }
+  /* Small diagnostic hook: the build stamp is searchable in the file, and
+     also visible in the console for support. */
+  console.log("SnakeScale Notes v" + APP_VERSION + " build " + APP_BUILD);
+}
+
+document.addEventListener("DOMContentLoaded", boot);
+</script>
+</body>
+</html>
