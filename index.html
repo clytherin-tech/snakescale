@@ -28,10 +28,24 @@
   notes are files, and there is no server and no shared database anywhere
   in this design.
 
-  BUILD STAMP: 2026-10-19-SSN-V170
-  Version: 1.7.0
+  BUILD STAMP: 2026-10-19-SSN-V171
+  Version: 1.7.1
 
   Revision history:
+    v1.7.1 2026-10-19 The image selection frame hugs the image. In
+                      v1.7.0 the four corner grips, the selection
+                      outline, and the three dot menu button anchored
+                      to the corners of the image's block, and that
+                      block still spanned the full note column, so
+                      for any image narrower than the column the
+                      grips sat out at the column edges instead of
+                      on the image. Image blocks now shrink wrap the
+                      image itself (an inline-block block with a
+                      fit-content width, capped at the column width),
+                      so the block's corners are the image's corners
+                      at any width and all of the selection furniture
+                      lands on the image. Nothing else changed.
+                      Build stamp 2026-10-19-SSN-V171.
     v1.7.0 2026-10-19 Undoable attachment deletion, inline images, and
                       image grips with a three dot menu. Removing an
                       attachment, from the Remove button, the image
@@ -56,7 +70,6 @@
                       away: insertion, hydration, and rendering now
                       share one decoration pass, so a block has the
                       same shape and behavior in all three moments.
-                      Build stamp 2026-10-19-SSN-V170.
     v1.6.0 2026-10-19 Loading screen, inline PDF previews, movable and
                       resizable attachments, checklist fixes, and a
                       sidebar version label. A branded loading overlay
@@ -940,8 +953,21 @@ body.dark .ss-att-provider{color:#EAF3EC;}
    and (because hydration appends no name bar for images) nothing
    around it but the note. File attachments keep the card look from
    the base .ss-attachment rule above. The only frame an image ever
-   shows is the selection outline while it is selected. */
+   shows is the selection outline while it is selected.
+   v1.7.1: the block also shrink wraps the image (inline-block with a
+   fit-content width, capped at the column width). In v1.7.0 the
+   block kept the base rule's full column block width, so the
+   selection outline, the four corner grips, and the three dot
+   button, all of which anchor to the block's corners, sat at the
+   edges of the whole note column for any image narrower than the
+   column. Now the block's corners ARE the image's corners at any
+   image width, so the selection furniture hugs the image itself.
+   A full width image still spans the column and its grips sit at
+   the column edge, which is correct: the image itself is that
+   wide. The image inside keeps display:block from the base image
+   rule, so there is no inline gap under it inside the block. */
 #noteBody .ss-attachment.ss-att-image{
+  display:inline-block;width:fit-content;max-width:100%;
   padding:0;border:none;background:transparent;border-radius:0;
 }
 #noteBody .ss-attachment.ss-att-image img.ss-att-img{
@@ -1602,8 +1628,8 @@ body.dark .ss-att-provider{color:#EAF3EC;}
 "use strict";
 
 /* ============================================================================
-   SnakeScale Notes v1.7.0: application script
-   BUILD STAMP: 2026-10-19-SSN-V170
+   SnakeScale Notes v1.7.1: application script
+   BUILD STAMP: 2026-10-19-SSN-V171
 
    How this script is organized:
      1. Constants and global state
@@ -1634,8 +1660,8 @@ body.dark .ss-att-provider{color:#EAF3EC;}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-19-SSN-V170";
-const APP_VERSION = "1.7.0";
+const APP_BUILD = "2026-10-19-SSN-V171";
+const APP_VERSION = "1.7.1";
 const API_BASE = "https://api.github.com";
 const API_VERSION_HEADER = "2022-11-28";
 /* v1.4: the two storage backends. "github" is the original repository
