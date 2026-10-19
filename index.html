@@ -24,15 +24,22 @@
   belongs to the user. Notebooks are folders, notes are files, and there is
   no server and no shared database anywhere in this design.
 
-  BUILD STAMP: 2026-10-19-SSN-V133
-  Version: 1.3.3
+  BUILD STAMP: 2026-10-19-SSN-V134
+  Version: 1.3.4
 
   Revision history:
+    v1.3.4 2026-10-19 Toolbar cleanup. The standalone Attach button is
+                      removed from the toolbar: attaching lives in the
+                      Insert menu now, whose "Attach file or image" item
+                      calls the same startAttachFlow() entry point with
+                      the same guards and caret capture the button used.
+                      The bullet list, numbered list, and checklist
+                      buttons show line icons instead of text labels.
+                      Build stamp 2026-10-19-SSN-V134.
     v1.3.3 2026-10-19 Compact toolbar buttons. CSS only: the formatting
                       buttons, selects, menus, color controls, and
                       swatches use smaller box sizes while their icons
-                      and text stay the same size. Build stamp
-                      2026-10-19-SSN-V133.
+                      and text stay the same size.
     v1.3.2 2026-10-19 Link popup rework. The Open button is gone: the
                       address shown in the link popup is itself clickable
                       and opens the link through the same checked path as
@@ -412,6 +419,10 @@ body.dark .tag-chip{color:var(--accent);}
     color var(--motion);
 }
 .toolbar button:hover{border-color:var(--secondary);background:var(--soft);}
+/* v1.3.4: the three list buttons carry inline SVG icons instead of
+   text labels. Block display keeps each icon centered in the compact
+   button instead of sitting on the text baseline. */
+.toolbar button svg{display:block;margin:0 auto;}
 /* v1.3 toolbar groups: Insert, style and fonts, colors and emphasis,
    lists, then Attach and More. Groups wrap as units and are separated
    by a thin divider, in light and dark mode alike (all colors come from
@@ -551,9 +562,6 @@ body.dark #linkPopupUrl{color:#9FD4B2;}
   padding:10px 16px;font-size:14px;font-weight:600;
 }
 body.dark #conflictBanner{background:#3A2F10;color:#FFE1A8;}
-
-/* v1.3: the Attach button sits in its own toolbar group (see .tb-group
-   above); the v1.2 separator hack for it is gone. */
 
 /* ---------- v1.3 note body: styles for the new block formats ----------
    Quote, code block, heading 3, and dividers can now be created from
@@ -916,7 +924,7 @@ body.dark .ss-att-provider{color:#EAF3EC;}
                modeled on a modern editor bar: an Insert menu, a text
                style dropdown, font family and size pickers, text and
                highlight color palettes, emphasis buttons, list buttons,
-               the Attach button, and a More menu for alignment, indent,
+               and a More menu for alignment, indent,
                and remove formatting. Every control preserves the editor
                selection: the range is saved as the user edits and again
                when a control is touched, then restored before the
@@ -986,15 +994,21 @@ body.dark .ss-att-provider{color:#EAF3EC;}
                 </div>
               </span>
             </div>
-            <!-- Group 4: lists -->
+            <!-- Group 4: lists. v1.3.4: the three list buttons show
+                 line icons instead of text labels. The icons are inline
+                 SVG drawn in currentColor, so they follow the theme in
+                 light and dark mode; the title tooltips and aria-labels
+                 keep the names available. -->
             <div class="tb-group">
-              <button type="button" data-cmd="ul" title="Bullet list">Bullets</button>
-              <button type="button" data-cmd="ol" title="Numbered list">1. List</button>
-              <button type="button" data-cmd="checklist" title="Checklist">Checklist</button>
+              <button type="button" data-cmd="ul" title="Bullet list" aria-label="Bullet list"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="3" cy="3.5" r="1.4" fill="currentColor" stroke="none"/><circle cx="3" cy="8" r="1.4" fill="currentColor" stroke="none"/><circle cx="3" cy="12.5" r="1.4" fill="currentColor" stroke="none"/><path d="M6.5 3.5h7M6.5 8h7M6.5 12.5h7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" fill="none"/></svg></button>
+              <button type="button" data-cmd="ol" title="Numbered list" aria-label="Numbered list"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false"><text x="2.6" y="5.2" text-anchor="middle" font-size="5" font-weight="700" fill="currentColor" stroke="none">1</text><text x="2.6" y="9.7" text-anchor="middle" font-size="5" font-weight="700" fill="currentColor" stroke="none">2</text><text x="2.6" y="14.2" text-anchor="middle" font-size="5" font-weight="700" fill="currentColor" stroke="none">3</text><path d="M6.5 3.5h7M6.5 8h7M6.5 12.5h7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" fill="none"/></svg></button>
+              <button type="button" data-cmd="checklist" title="Checklist" aria-label="Checklist"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false"><rect x="1.3" y="1.8" width="3.4" height="3.4" rx="0.8" fill="none" stroke="currentColor" stroke-width="1.1"/><path d="M2.1 3.6l0.8 0.8 1.1-1.7" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round"/><rect x="1.3" y="6.3" width="3.4" height="3.4" rx="0.8" fill="none" stroke="currentColor" stroke-width="1.1"/><path d="M2.1 8.1l0.8 0.8 1.1-1.7" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round"/><rect x="1.3" y="10.8" width="3.4" height="3.4" rx="0.8" fill="none" stroke="currentColor" stroke-width="1.1"/><path d="M2.1 12.6l0.8 0.8 1.1-1.7" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round"/><path d="M6.5 3.5h7M6.5 8h7M6.5 12.5h7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" fill="none"/></svg></button>
             </div>
-            <!-- Group 5: Attach and the More menu -->
+            <!-- Group 5: the More menu. v1.3.4: the standalone Attach
+                 button that used to sit here is gone; attaching lives
+                 in the Insert menu (Group 1), whose "Attach file or
+                 image" item calls startAttachFlow(). -->
             <div class="tb-group">
-              <button type="button" id="attachBtn" class="attach-btn" title="Attach files or images (stored in your Google Drive or pCloud)">Attach</button>
               <span class="tb-menu-wrap">
                 <button type="button" id="moreBtn" title="More formatting options" aria-haspopup="true">More &#9662;</button>
                 <div class="tb-menu right hidden" id="moreMenu" role="menu">
@@ -1131,8 +1145,8 @@ body.dark .ss-att-provider{color:#EAF3EC;}
 "use strict";
 
 /* ============================================================================
-   SnakeScale Notes v1.3.3: application script
-   BUILD STAMP: 2026-10-19-SSN-V133
+   SnakeScale Notes v1.3.4: application script
+   BUILD STAMP: 2026-10-19-SSN-V134
 
    How this script is organized:
      1. Constants and global state
@@ -1161,8 +1175,8 @@ body.dark .ss-att-provider{color:#EAF3EC;}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-19-SSN-V133";
-const APP_VERSION = "1.3.3";
+const APP_BUILD = "2026-10-19-SSN-V134";
+const APP_VERSION = "1.3.4";
 const API_BASE = "https://api.github.com";
 const API_VERSION_HEADER = "2022-11-28";
 
@@ -3514,10 +3528,11 @@ function keepMenuInViewport(menu) {
 function runInsertAction(kind) {
   closeToolbarMenus();
   if (kind === "attach") {
-    /* The Attach button's own handler performs the note, trash, and
-       offline checks and captures the caret, exactly as a direct click
-       does, so the menu simply clicks it. */
-    document.getElementById("attachBtn").click();
+    /* startAttachFlow() is the single attach entry point: it performs
+       the note, trash, and offline checks and captures the caret before
+       opening the picker. (v1.3.4: the old toolbar Attach button is
+       gone; this menu item is the way in.) */
+    startAttachFlow();
     return;
   }
   restoreFormatSelection();
@@ -4564,8 +4579,9 @@ async function deleteAttachmentsBestEffort(note) {
 }
 
 /* ----- upload flow -------------------------------------------------------
-   Files arrive from the Attach button's picker, from drag and drop onto
-   the editor, or from pasting an image. Uploads run one at a time, in
+   Files arrive from the file picker (opened by startAttachFlow from
+   the Insert menu), from drag and drop onto the editor, or from
+   pasting an image. Uploads run one at a time, in
    order, with the progress panel showing the active file. A temporary
    placeholder marks the spot in the note while bytes are moving; on
    success it is finalized (hydrated), on failure it is removed.      */
@@ -4619,6 +4635,36 @@ function insertPlaceholderAtCaret(el) {
   const p = document.createElement("p");
   p.appendChild(document.createElement("br"));
   el.after(p);
+}
+
+/* ----- attach entry point ------------------------------------------------
+   v1.3.4: startAttachFlow() is the single entry point for attaching
+   files with the picker. The Insert menu's "Attach file or image"
+   item calls it. Before v1.3.4 a standalone Attach button in the
+   toolbar ran this same code as its click handler; the button was
+   removed as redundant, and the checks, messages, and order below are
+   unchanged from that handler: a note must be open, it must not be in
+   Trash, and the app must be online, because the file is uploaded to
+   the user's storage provider. The caret is captured before the
+   picker opens, because the picker steals focus, and the placeholder
+   lands where the caret was. The picker's change handler (wired in
+   wireEvents) feeds the chosen files to handleIncomingFiles.        */
+function startAttachFlow() {
+  const note = currentNote();
+  if (!note) {
+    toast("Open a note first, then attach files to it.", true);
+    return;
+  }
+  if (note.trashed) {
+    toast("Attachments cannot be added while a note is in Trash. Restore it first.", true);
+    return;
+  }
+  if (!state.online) {
+    toast("Attachments need an internet connection: the file is uploaded to your storage provider. You appear to be offline.", true);
+    return;
+  }
+  captureCaret();
+  document.getElementById("attachFileInput").click();
 }
 
 async function handleIncomingFiles(fileList) {
@@ -5010,8 +5056,9 @@ function wireEvents() {
   /* Toolbar buttons. mousedown is prevented so the text selection in the
      editor is not lost before execCommand runs. */
   document.querySelectorAll("#toolbar button").forEach(function (btn) {
-    /* v1.2: the Attach button shares the toolbar but is not a formatting
-       command; it is wired separately below. */
+    /* Only plain data-cmd buttons are formatting commands. The menu,
+       select, and color buttons are not commands; they are wired
+       separately (wireToolbar, just below). */
     if (!btn.getAttribute("data-cmd")) { return; }
     btn.addEventListener("mousedown", function (ev) { ev.preventDefault(); });
     btn.addEventListener("click", function () {
@@ -5024,25 +5071,10 @@ function wireEvents() {
      data-cmd command buttons). */
   wireToolbar();
 
-  /* v1.2 Attach button and its hidden file picker. The caret is captured
-     before the picker opens, because the picker steals focus. */
-  document.getElementById("attachBtn").addEventListener("click", function () {
-    const note = currentNote();
-    if (!note) {
-      toast("Open a note first, then attach files to it.", true);
-      return;
-    }
-    if (note.trashed) {
-      toast("Attachments cannot be added while a note is in Trash. Restore it first.", true);
-      return;
-    }
-    if (!state.online) {
-      toast("Attachments need an internet connection: the file is uploaded to your storage provider. You appear to be offline.", true);
-      return;
-    }
-    captureCaret();
-    document.getElementById("attachFileInput").click();
-  });
+  /* v1.2 hidden file picker, opened by startAttachFlow() from the
+     Insert menu. This change handler feeds the picked files to the
+     upload flow. (v1.3.4: the toolbar Attach button that used to be
+     wired here is gone; startAttachFlow is the only way in.) */
   document.getElementById("attachFileInput").addEventListener("change", function (ev) {
     /* Copy first: clearing the input also empties its live FileList. */
     const files = Array.prototype.slice.call(ev.target.files || []);
