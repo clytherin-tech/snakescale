@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#0B3D2E">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2064%20108'%3E%3Cdefs%3E%3ClinearGradient%20id='g'%20x1='1'%20y1='0'%20x2='0'%20y2='1'%3E%3Cstop%20offset='0'%20stop-color='%2357A773'/%3E%3Cstop%20offset='.38'%20stop-color='%232E7D4F'/%3E%3Cstop%20offset='1'%20stop-color='%2314532D'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect%20x='0'%20y='0'%20width='20'%20height='20'%20rx='5'%20fill='url(%23g)'/%3E%3Crect%20x='22'%20y='0'%20width='20'%20height='20'%20rx='5'%20fill='url(%23g)'/%3E%3Crect%20x='44'%20y='0'%20width='20'%20height='20'%20rx='5'%20fill='url(%23g)'/%3E%3Crect%20x='0'%20y='22'%20width='20'%20height='20'%20rx='5'%20fill='url(%23g)'/%3E%3Crect%20x='0'%20y='44'%20width='20'%20height='20'%20rx='5'%20fill='url(%23g)'/%3E%3Crect%20x='22'%20y='44'%20width='20'%20height='20'%20rx='5'%20fill='url(%23g)'/%3E%3Crect%20x='44'%20y='44'%20width='20'%20height='20'%20rx='5'%20fill='url(%23g)'/%3E%3Crect%20x='44'%20y='66'%20width='20'%20height='20'%20rx='5'%20fill='url(%23g)'/%3E%3Crect%20x='0'%20y='88'%20width='20'%20height='20'%20rx='5'%20fill='url(%23g)'/%3E%3Crect%20x='22'%20y='88'%20width='20'%20height='20'%20rx='5'%20fill='url(%23g)'/%3E%3Crect%20x='44'%20y='88'%20width='20'%20height='20'%20rx='5'%20fill='url(%23g)'/%3E%3Cpath%20d='M13%2020%20L20%2013%20L13%2013%20Z'%20fill='%23FFFFFF'%20fill-opacity='.28'/%3E%3Cpath%20d='M35%2020%20L42%2013%20L35%2013%20Z'%20fill='%23FFFFFF'%20fill-opacity='.28'/%3E%3Cpath%20d='M57%2020%20L64%2013%20L57%2013%20Z'%20fill='%23FFFFFF'%20fill-opacity='.28'/%3E%3Cpath%20d='M13%2042%20L20%2035%20L13%2035%20Z'%20fill='%23FFFFFF'%20fill-opacity='.28'/%3E%3Cpath%20d='M13%2064%20L20%2057%20L13%2057%20Z'%20fill='%23FFFFFF'%20fill-opacity='.28'/%3E%3Cpath%20d='M35%2064%20L42%2057%20L35%2057%20Z'%20fill='%23FFFFFF'%20fill-opacity='.28'/%3E%3Cpath%20d='M57%2064%20L64%2057%20L57%2057%20Z'%20fill='%23FFFFFF'%20fill-opacity='.28'/%3E%3Cpath%20d='M57%2086%20L64%2079%20L57%2079%20Z'%20fill='%23FFFFFF'%20fill-opacity='.28'/%3E%3Cpath%20d='M13%20108%20L20%20101%20L13%20101%20Z'%20fill='%23FFFFFF'%20fill-opacity='.28'/%3E%3Cpath%20d='M35%20108%20L42%20101%20L35%20101%20Z'%20fill='%23FFFFFF'%20fill-opacity='.28'/%3E%3Cpath%20d='M57%20108%20L64%20101%20L57%20101%20Z'%20fill='%23FFFFFF'%20fill-opacity='.28'/%3E%3C/svg%3E">
-<meta name="description" content="SnakeScale Notes: a free, open source notes app. Your notes live in your own private GitHub repository.">
+<meta name="description" content="SnakeScale Notes: a free, open source notes app. Your notes live in your own Google Drive or private GitHub repository.">
 <title>SnakeScale Notes</title>
 <!--
   ============================================================================
@@ -16,18 +16,27 @@
   web fonts, and no CDN dependencies, so this file works offline (after the
   first load) and from any static host, including GitHub Pages.
 
-  Data model in one paragraph: every user connects their own GitHub account
-  with a personal access token. The token is encrypted in the browser with a
-  password the user chooses (WebCrypto, PBKDF2 plus AES-GCM) and only the
-  encrypted blob is stored in localStorage. Notes are stored as Markdown
-  files with a small front matter block in a private GitHub repository that
-  belongs to the user. Notebooks are folders, notes are files, and there is
-  no server and no shared database anywhere in this design.
+  Data model in one paragraph: every user chooses their own storage. A
+  Google Drive user signs in with Google and notes are stored as Markdown
+  files with a small front matter block inside a SnakeScale Notes folder in
+  that user's Drive. A GitHub user connects a private repository with a
+  personal access token. In both cases the app password encrypts the local
+  vault in the browser (WebCrypto, PBKDF2 plus AES-GCM), notebooks are
+  folders, notes are files, and there is no server and no shared database
+  anywhere in this design.
 
-  BUILD STAMP: 2026-10-19-SSN-V134
-  Version: 1.3.4
+  BUILD STAMP: 2026-10-19-SSN-V14
+  Version: 1.4
 
   Revision history:
+    v1.4  2026-10-19  Google Drive becomes a full storage backend. New users
+                      can store notes and attachments in Google Drive with
+                      one Google sign in and never create a GitHub account.
+                      GitHub remains fully supported and remains the default
+                      for existing vaults. A shared storage layer gives both
+                      backends the same file layout, conflict copy rule,
+                      offline queue, notebooks, trash, and note format.
+                      Build stamp 2026-10-19-SSN-V14.
     v1.3.4 2026-10-19 Toolbar cleanup. The standalone Attach button is
                       removed from the toolbar: attaching lives in the
                       Insert menu now, whose "Attach file or image" item
@@ -35,7 +44,6 @@
                       the same guards and caret capture the button used.
                       The bullet list, numbered list, and checklist
                       buttons show line icons instead of text labels.
-                      Build stamp 2026-10-19-SSN-V134.
     v1.3.3 2026-10-19 Compact toolbar buttons. CSS only: the formatting
                       buttons, selects, menus, color controls, and
                       swatches use smaller box sizes while their icons
@@ -240,6 +248,38 @@ body.dark .gate-brand .wordmark{color:#EAF3EC;}
 .gate-card code{background:var(--surface);padding:1px 5px;border-radius:4px;font-size:12.5px;}
 .gate-card ol{padding-left:20px;margin:8px 0;}
 .gate-card li{margin:4px 0;}
+
+/* v1.4 setup storage choice. The selected card is deliberately obvious:
+   a filled surface, a strong accent edge, a ring, and a Selected badge
+   all change together, so the active backend is never only remembered. */
+.storage-choice-grid{
+  display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:14px 0;
+}
+.storage-choice{
+  width:100%;text-align:left;background:var(--surface);color:var(--text);
+  border:1px solid var(--border);border-radius:var(--radius-card);
+  padding:13px;box-shadow:inset 3px 0 0 transparent;
+  transition:border-color var(--motion),box-shadow var(--motion),
+    background-color var(--motion);
+}
+.storage-choice:hover{border-color:var(--secondary);}
+.storage-choice.selected{
+  border-color:var(--accent);background:var(--bg);
+  box-shadow:inset 4px 0 0 var(--accent),0 0 0 2px rgba(87,167,115,.28);
+}
+.storage-choice-title{
+  display:flex;align-items:center;justify-content:space-between;gap:8px;
+  font-size:15px;font-weight:800;margin-bottom:5px;
+}
+.storage-choice-badge{
+  flex:0 0 auto;font-size:10.5px;font-weight:800;letter-spacing:.4px;
+  text-transform:uppercase;color:var(--muted);
+}
+.storage-choice.selected .storage-choice-badge{color:var(--secondary);}
+.storage-choice p{font-size:13px;color:var(--muted);margin:0;}
+@media (max-width:560px){
+  .storage-choice-grid{grid-template-columns:1fr;}
+}
 
 /* ---------- app frame: three panes ---------- */
 #app{display:flex;height:100vh;height:100dvh;overflow:hidden;}
@@ -721,25 +761,57 @@ body.dark .ss-att-provider{color:#EAF3EC;}
     </div>
     <h1>Set up SnakeScale Notes</h1>
     <p>
-      Your notes will live in a <strong>private GitHub repository that you
-      own</strong>. SnakeScale has no server and no account of its own. You
-      connect it with a GitHub personal access token, and that token is stored
-      in this browser only, encrypted with a password you choose here.
+      SnakeScale has no server and no account of its own. First choose where
+      your notes will live. You can change this choice only by resetting the
+      vault on this device; there is no migration tool yet.
     </p>
-    <ol>
-      <li>On GitHub, open Settings, then Developer settings, then Personal access tokens.</li>
-      <li>Create a token with the <code>repo</code> scope (classic token), or a fine grained token with Contents read and write access on your notes data repository.</li>
-      <li>Paste the token below and choose an app password. You will type that password each time you unlock the app on this device.</li>
-    </ol>
+
+    <!-- v1.4: storage is the first setup decision. These are real buttons
+         with aria-pressed state, and the selected card gets the obvious
+         selected treatment from the stylesheet. -->
+    <div class="storage-choice-grid" role="group" aria-label="Choose where your notes live">
+      <button class="storage-choice selected" id="setupBackendGoogle" type="button" aria-pressed="true">
+        <span class="storage-choice-title">Google Drive <span class="storage-choice-badge" data-choice-badge>Selected</span></span>
+        <p>Recommended. Sign in with Google and store notes and attachments in your own Drive. No GitHub account is needed.</p>
+      </button>
+      <button class="storage-choice" id="setupBackendGithub" type="button" aria-pressed="false">
+        <span class="storage-choice-title">GitHub <span class="storage-choice-badge" data-choice-badge>Advanced</span></span>
+        <p>For power users who want a private repository and full Git version history. Requires a GitHub account and token.</p>
+      </button>
+    </div>
+
+    <div id="setupGoogleHelp">
+      <p>
+        With Google Drive, you only choose an app password below. That
+        password protects the local vault and the encrypted Google sign in
+        token on this device. After setup, one prominent Sign in with Google
+        step connects Drive and creates your first notebook and welcome note.
+      </p>
+    </div>
+    <div id="setupGithubHelp" class="hidden">
+      <p>
+        Your notes will live in a <strong>private GitHub repository that you
+        own</strong>. The token is stored in this browser only, encrypted with
+        the app password you choose here.
+      </p>
+      <ol>
+        <li>On GitHub, open Settings, then Developer settings, then Personal access tokens.</li>
+        <li>Create a token with the <code>repo</code> scope (classic token), or a fine grained token with Contents read and write access on your notes data repository.</li>
+        <li>Paste the token below and choose an app password. You will type that password each time you unlock the app on this device.</li>
+      </ol>
+    </div>
+
     <form id="setupForm" autocomplete="off">
-      <div class="field">
-        <label for="setupToken">GitHub personal access token</label>
-        <input id="setupToken" type="password" placeholder="ghp_... or github_pat_..." autocomplete="off">
-      </div>
-      <div class="field">
-        <label for="setupRepo">Data repository name</label>
-        <input id="setupRepo" type="text" value="snakescale-notes-data" autocomplete="off">
-        <div class="hint">If this repository does not exist yet, SnakeScale will offer to create it as a private repository in the next step.</div>
+      <div id="setupGithubFields" class="hidden">
+        <div class="field">
+          <label for="setupToken">GitHub personal access token</label>
+          <input id="setupToken" type="password" placeholder="ghp_... or github_pat_..." autocomplete="off">
+        </div>
+        <div class="field">
+          <label for="setupRepo">Data repository name</label>
+          <input id="setupRepo" type="text" value="snakescale-notes-data" autocomplete="off">
+          <div class="hint">If this repository does not exist yet, SnakeScale will offer to create it as a private repository in the next step.</div>
+        </div>
       </div>
       <div class="field">
         <label for="setupPassword">App password</label>
@@ -749,7 +821,7 @@ body.dark .ss-att-provider{color:#EAF3EC;}
         <label for="setupPassword2">App password again</label>
         <input id="setupPassword2" type="password" autocomplete="new-password">
       </div>
-      <button class="btn primary block" type="submit">Encrypt token and continue</button>
+      <button class="btn primary block" id="setupSubmitBtn" type="submit">Set app password and continue</button>
       <div id="setupError" class="error-text"></div>
     </form>
   </div>
@@ -768,7 +840,7 @@ body.dark .ss-att-provider{color:#EAF3EC;}
       <span class="wordmark">SnakeScale Notes</span>
     </div>
     <h1>Unlock SnakeScale Notes</h1>
-    <p>Type your app password to decrypt your GitHub token on this device.</p>
+    <p id="lockIntro">Type your app password to decrypt your GitHub token on this device.</p>
     <form id="lockForm" autocomplete="off">
       <div class="field">
         <label for="lockPassword">App password</label>
@@ -777,10 +849,10 @@ body.dark .ss-att-provider{color:#EAF3EC;}
       <button class="btn primary block" type="submit">Unlock</button>
       <div id="lockError" class="error-text"></div>
     </form>
-    <p class="hint">
-      Forgot the password? The encrypted token cannot be recovered without it.
+    <p class="hint" id="lockResetHint">
+      Forgot the password? The encrypted vault cannot be recovered without it.
       Use the reset button below to clear the vault on this device and set up
-      again with a new token. Your notes in GitHub are not affected.
+      again. Your notes in GitHub are not affected.
     </p>
     <button id="resetVaultBtn" class="btn danger small" type="button">Reset vault on this device</button>
   </div>
@@ -799,11 +871,25 @@ body.dark .ss-att-provider{color:#EAF3EC;}
       <span class="logo-slot"></span>
       <span class="wordmark">SnakeScale Notes</span>
     </div>
-    <h1>Connect your data repository</h1>
+    <h1 id="connectScreenTitle">Connect your data repository</h1>
     <p id="repoScreenText">Checking your GitHub account...</p>
     <div id="repoActions" class="hidden">
       <button id="createRepoBtn" class="btn accent block" type="button">Create the data repository (private)</button>
       <div class="hint">Creates a private repository with the folder layout SnakeScale needs, a default notebook called Personal, and one welcome note.</div>
+    </div>
+    <!-- v1.4: the same connect gate becomes the Google sign in step for
+         Drive users. The client ID field is the publisher test build field
+         described in the attachment setup guide; end users of a finished
+         build only click the sign in button. -->
+    <div id="googleConnectPanel" class="provider-card hidden">
+      <h3>Google Drive storage</h3>
+      <div class="provider-status">Notes and attachments will use the same Google sign in. Google sign ins expire after about an hour; signing in again takes one click.</div>
+      <div class="field">
+        <label for="googleBackendClientId">Google client ID (publisher ID, test build only)</label>
+        <input type="text" id="googleBackendClientId" placeholder="Paste the publisher Google client ID" autocomplete="off">
+      </div>
+      <button id="googleBackendConnectBtn" class="btn primary block" type="button">Sign in with Google</button>
+      <div class="hint">Your notes go in a folder named SnakeScale Notes in your own Google Drive. Attachments keep using the separate SnakeScale Notes Attachments folder.</div>
     </div>
     <div id="repoError" class="error-text"></div>
     <div style="margin-top:14px;display:flex;gap:6px;">
@@ -866,7 +952,7 @@ body.dark .ss-att-provider{color:#EAF3EC;}
       <div class="sync-pill" id="syncPill" data-state="idle"><span class="sync-dot" aria-hidden="true"></span><span class="sync-label">Not synced yet</span></div>
       <div class="user-line" id="footUser">Not connected</div>
       <div class="repo-line" id="footRepo"></div>
-      <div class="field" style="margin-bottom:8px;">
+      <div class="field" id="storageSettingsField" style="margin-bottom:8px;">
         <label for="repoNameInput" style="color:#BFD6C4;">Data repository</label>
         <input id="repoNameInput" type="text" style="background:#0A2E21;color:#EAF3EC;border-color:#2A5240;">
         <div class="hint" style="color:#9DB8A6;">Change and press Save, then the app reconnects to that repository.</div>
@@ -898,7 +984,7 @@ body.dark .ss-att-provider{color:#EAF3EC;}
     <div id="noNote" class="no-note">
       <div class="big">No note selected</div>
       <p>Pick a note from the list, or press New Note to start writing.</p>
-      <p>Everything you write is saved to your own private GitHub repository as plain Markdown files, so your notes are never locked inside this app.</p>
+      <p id="noNoteStorageLine">Everything you write is saved to your own private GitHub repository as plain Markdown files, so your notes are never locked inside this app.</p>
     </div>
 
     <!-- The editor itself. -->
@@ -1096,7 +1182,7 @@ body.dark .ss-att-provider{color:#EAF3EC;}
 <div id="attachModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="attachModalTitle">
   <div class="modal-card">
     <h2 id="attachModalTitle">Attachments</h2>
-    <p class="modal-sub">Images and files are stored in your own cloud account, in a folder named <strong>SnakeScale Notes Attachments</strong>. Your notes in GitHub only keep a small reference to each file. You sign in with OAuth on the provider's own site; SnakeScale never sees your Google or pCloud password.</p>
+    <p class="modal-sub">Images and files are stored in your own cloud account, in a folder named <strong>SnakeScale Notes Attachments</strong>. Your note files only keep a small reference to each attachment. You sign in with OAuth on the provider's own site; SnakeScale never sees your Google or pCloud password.</p>
     <div id="attachModalMsg" class="modal-msg hidden"></div>
 
     <div class="field">
@@ -1145,8 +1231,8 @@ body.dark .ss-att-provider{color:#EAF3EC;}
 "use strict";
 
 /* ============================================================================
-   SnakeScale Notes v1.3.4: application script
-   BUILD STAMP: 2026-10-19-SSN-V134
+   SnakeScale Notes v1.4: application script
+   BUILD STAMP: 2026-10-19-SSN-V14
 
    How this script is organized:
      1. Constants and global state
@@ -1154,7 +1240,9 @@ body.dark .ss-att-provider{color:#EAF3EC;}
      3. The logo (inline SVG, injected into every .logo-slot)
      4. The vault (token encryption with WebCrypto: PBKDF2 plus AES-GCM)
      5. Local cache and the offline edit queue (localStorage)
-     6. The GitHub API wrapper
+     6. Storage backends: the GitHub driver, the backend neutral store
+        dispatch layer, and (with the Google code in section 11) the
+        Google Drive notes driver
      7. Note file format: front matter parse and serialize
      8. Sync engine: load everything, save with conflict protection,
         notebooks, trash, and the index.json rebuild
@@ -1175,10 +1263,22 @@ body.dark .ss-att-provider{color:#EAF3EC;}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-19-SSN-V134";
-const APP_VERSION = "1.3.4";
+const APP_BUILD = "2026-10-19-SSN-V14";
+const APP_VERSION = "1.4";
 const API_BASE = "https://api.github.com";
 const API_VERSION_HEADER = "2022-11-28";
+/* v1.4: the two storage backends. "github" is the original repository
+   backend. "google" stores the same note files in Google Drive. */
+const BACKEND_GITHUB = "github";
+const BACKEND_GOOGLE = "google";
+/* The Drive folder that holds the complete notes layout. This is separate
+   from ATTACH_ROOT_NAME below, which remains the attachments folder. */
+const NOTES_ROOT_NAME = "SnakeScale Notes";
+/* A Google backend vault does not contain a GitHub token. It contains this
+   fixed, non-secret marker instead, purely so the same app password vault
+   can prove that the password is correct and can protect the session key.
+   The marker grants no access to anything and is never sent to Google. */
+const GOOGLE_BACKEND_VAULT_MARKER = "snakescale-notes-backend:google-drive:v1";
 
 /* localStorage keys. The vault holds ONLY the encrypted token blob. */
 const LS_VAULT = "snakescale.vault.v1";
@@ -1198,7 +1298,11 @@ const GOOGLE_DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file";
 /* The in-memory app state. The plaintext token lives ONLY in state.token
    while the app is unlocked; locking the app sets it back to null. */
 const state = {
-  token: null,              // plaintext GitHub token, memory only, never stored
+  backend: BACKEND_GOOGLE,  // v1.4: fresh setup recommendation; loadSettings
+                            // forces "github" for any stored pre-v1.4 settings
+  backendExplicit: false,   // true only when stored settings name a backend
+  token: null,              // GitHub token, or the non-secret Google backend
+                            // vault marker; memory only, never stored plainly
   sessionKey: null,         // v1.2: vault CryptoKey, memory only, set at unlock
   providerTokens: { google: null, pcloud: null }, // v1.2: plaintext provider tokens, memory only
   pendingPcloud: null,      // v1.2: pCloud OAuth return captured before unlock, memory only
@@ -1213,9 +1317,9 @@ const state = {
     pcloudUserId: "",
     googleExpiresAt: 0
   },
-  username: null,           // GitHub login of the token owner
+  username: null,           // GitHub login of the token owner (GitHub only)
   repo: "snakescale-notes-data", // data repository name (owner is username)
-  repoExists: false,        // true after the repo has been found or created
+  repoExists: false,        // true after the selected storage store is ready
   notebooks: [],            // [{slug, name, created}]
   notes: [],                // note objects, see parseNoteFile for the shape
   trash: [],                // note objects with trashed = true
@@ -1240,7 +1344,8 @@ const state = {
      attachments: [object],  v1.2 metadata: {id, provider, fileId, name,
                     storageName, mime, size, created}; binaries live with
                     the provider, never in GitHub
-     sha:       string|null,  GitHub blob sha of the file as last loaded
+     sha:       string|null,  storage sync token of the file as last loaded
+                    (a GitHub blob sha, or a Google Drive revision token)
      trashed:   boolean,
      trashedFrom: string|null  notebook slug the note was trashed from
    }
@@ -1583,32 +1688,97 @@ function lockApp() {
    fully offline. The queue holds file operations made while offline (or
    while a save failed) and is flushed on reconnect or Sync now.
    -------------------------------------------------------------------------- */
+/* v1.4: normalize a stored backend value. Only the exact string "google"
+   selects Drive. Everything else, including a missing value in settings
+   written before v1.4, selects GitHub. That one rule is what guarantees
+   that every existing vault keeps its original behavior after upgrade. */
+function normalizeBackend(value) {
+  return value === BACKEND_GOOGLE ? BACKEND_GOOGLE : BACKEND_GITHUB;
+}
+
+/* Human readable storage name for status messages. GitHub messages keep
+   their established wording by using this helper with the same label. */
+function storageDisplayName() {
+  return state.backend === BACKEND_GOOGLE ? "Google Drive" : "GitHub";
+}
+
 function loadSettings() {
+  const raw = localStorage.getItem(LS_SETTINGS);
+  let s = {};
+  let hasStoredSettings = false;
   try {
-    const s = JSON.parse(localStorage.getItem(LS_SETTINGS) || "{}");
-    if (s.repo) { state.repo = s.repo; }
-    if (s.dark) { document.body.classList.add("dark"); }
-    /* v1.2: attachment config rides along in the same settings object.
-       None of it is secret: client IDs are public identifiers, folder IDs
-       and expiry times are bookkeeping. Tokens are NEVER stored here. */
-    if (s.attach) {
-      Object.keys(state.attach).forEach(function (k) {
-        if (s.attach[k] !== undefined) { state.attach[k] = s.attach[k]; }
-      });
+    if (raw) {
+      s = JSON.parse(raw) || {};
+      hasStoredSettings = true;
     }
-  } catch (e) { /* damaged settings are ignored, defaults apply */ }
+  } catch (e) {
+    /* A damaged settings record is still an existing installation record.
+       Fall back to GitHub, the pre-v1.4 behavior, rather than silently
+       pointing the app at an empty Drive store. */
+    hasStoredSettings = !!raw;
+    s = {};
+  }
+  if (hasStoredSettings) {
+    /* Stored settings from before v1.4 have no backend field. The
+       normalize rule above turns that absence into "github". */
+    state.backendExplicit = s.backend !== undefined;
+    state.backend = normalizeBackend(s.backend);
+  } else {
+    state.backendExplicit = false;
+    /* No settings at all means a fresh device. Setup recommends Google,
+       and setSetupBackend presents it as the selected card. */
+    state.backend = BACKEND_GOOGLE;
+  }
+  if (s.repo) { state.repo = s.repo; }
+  if (s.dark) { document.body.classList.add("dark"); }
+  /* v1.2: attachment config rides along in the same settings object.
+     None of it is secret: client IDs are public identifiers, folder IDs
+     and expiry times are bookkeeping. Tokens are NEVER stored here. */
+  if (s.attach) {
+    Object.keys(state.attach).forEach(function (k) {
+      if (s.attach[k] !== undefined) { state.attach[k] = s.attach[k]; }
+    });
+  }
 }
 function saveSettings() {
   localStorage.setItem(LS_SETTINGS, JSON.stringify({
+    backend: state.backend,
     repo: state.repo,
     dark: document.body.classList.contains("dark"),
     attach: state.attach
   }));
 }
 
+/* v1.4: setup screen storage cards. Selecting a card updates the form
+   immediately: GitHub token fields and instructions exist only for the
+   GitHub choice, while Drive users see the password-only explanation.
+   The submit label names the credential that will actually be protected. */
+function setSetupBackend(backend) {
+  state.backend = normalizeBackend(backend);
+  const isGoogle = state.backend === BACKEND_GOOGLE;
+  const googleCard = document.getElementById("setupBackendGoogle");
+  const githubCard = document.getElementById("setupBackendGithub");
+  if (!googleCard || !githubCard) { return; }
+  googleCard.classList.toggle("selected", isGoogle);
+  githubCard.classList.toggle("selected", !isGoogle);
+  googleCard.setAttribute("aria-pressed", isGoogle ? "true" : "false");
+  githubCard.setAttribute("aria-pressed", !isGoogle ? "true" : "false");
+  googleCard.querySelector("[data-choice-badge]").textContent =
+    isGoogle ? "Selected" : "Recommended";
+  githubCard.querySelector("[data-choice-badge]").textContent =
+    !isGoogle ? "Selected" : "Advanced";
+  document.getElementById("setupGoogleHelp").classList.toggle("hidden", !isGoogle);
+  document.getElementById("setupGithubHelp").classList.toggle("hidden", isGoogle);
+  document.getElementById("setupGithubFields").classList.toggle("hidden", isGoogle);
+  document.getElementById("setupSubmitBtn").textContent = isGoogle
+    ? "Set app password and continue"
+    : "Encrypt token and continue";
+}
+
 function saveCache() {
   try {
     localStorage.setItem(LS_CACHE, JSON.stringify({
+      backend: state.backend,
       username: state.username,
       repo: state.repo,
       notebooks: state.notebooks,
@@ -1629,6 +1799,12 @@ function loadCache() {
     const c = JSON.parse(localStorage.getItem(LS_CACHE) || "null");
     if (!c) { return false; }
     state.username = c.username || null;
+    /* Settings, already loaded before the cache, are authoritative for
+       the backend. The cached value is only a last resort for a device
+       whose settings record has disappeared. */
+    if (c.backend && !localStorage.getItem(LS_SETTINGS)) {
+      state.backend = normalizeBackend(c.backend);
+    }
     if (c.repo) { state.repo = c.repo; }
     state.notebooks = c.notebooks || [];
     state.notes = c.notes || [];
@@ -1756,6 +1932,137 @@ async function ghDeleteFile(path, sha, message) {
     method: "DELETE",
     body: { message: message || ("Delete " + path), sha: sha }
   });
+}
+
+/* GitHub account and repository operations used by the connect flow.
+   These helpers keep every direct GitHub request inside this driver
+   section. The sync engine below talks only to the neutral store layer. */
+async function githubCurrentUser() {
+  return gh("/user");
+}
+
+async function githubGetDataRepo() {
+  return gh("/repos/" + encodeURIComponent(state.username) + "/" +
+    encodeURIComponent(state.repo));
+}
+
+async function githubCreateDataRepo() {
+  return gh("/user/repos", {
+    method: "POST",
+    body: {
+      name: state.repo,
+      description: "SnakeScale Notes data. Notes stored as Markdown files.",
+      private: true,
+      auto_init: true
+    }
+  });
+}
+
+/* --------------------------------------------------------------------------
+   6B. Backend neutral storage dispatch (new in v1.4)
+   The sync engine was written against four file operations. v1.4 keeps
+   exactly that surface, but gives every operation a backend neutral
+   result shape:
+
+     storeGetFile(path)
+       resolves to {text, token} or null. The token is the optimistic
+       concurrency marker: a GitHub blob sha, or a Google Drive head
+       revision marker.
+     storeListDir(path)
+       resolves to [{name, path, isDir}] or null when the folder does
+       not exist.
+     storePutFile(path, text, expectedToken, message)
+       creates or replaces one text file and returns the new token. The
+       optional message is GitHub's commit message; Drive ignores it.
+       When expectedToken is not null and the remote file's current
+       token differs, the write is refused with StoreConflict and no
+       bytes are changed.
+     storeDeleteFile(path, token, message)
+       deletes one file. The optional message is again GitHub only.
+
+   The note object's existing sha field stores this token on either
+   backend. That keeps the established data structures and conflict code
+   unchanged while making the token's meaning backend neutral.
+   -------------------------------------------------------------------------- */
+class StoreConflict extends Error {
+  constructor(path) {
+    super("The file changed in storage before this write could save: " + path);
+    this.name = "StoreConflict";
+    this.code = "STORE_CONFLICT";
+    this.isStoreConflict = true;
+    this.path = path;
+  }
+}
+
+function isStoreConflict(err) {
+  return !!(err && (err.isStoreConflict || err.code === "STORE_CONFLICT" ||
+    err.name === "StoreConflict"));
+}
+
+/* Split a store path into clean segments. This helper is deliberately
+   pure so it can be tested outside the browser. */
+function splitStorePath(path) {
+  return String(path || "").split("/").filter(function (part) {
+    return part.length > 0;
+  });
+}
+
+async function githubStoreGetFile(path) {
+  const file = await ghGetFile(path);
+  return file ? { text: file.content, token: file.sha } : null;
+}
+
+async function githubStoreListDir(path) {
+  const entries = await ghListDir(path);
+  if (!entries) { return null; }
+  return entries.map(function (entry) {
+    return {
+      name: entry.name,
+      path: entry.path || path + "/" + entry.name,
+      isDir: entry.type === "dir"
+    };
+  });
+}
+
+async function githubStorePutFile(path, text, expectedToken, message) {
+  try {
+    return await ghPutFile(path, text, expectedToken || null, message);
+  } catch (err) {
+    /* GitHub reports a stale sha as 409 or 422. Translate both into the
+       one backend neutral conflict signal the sync engine understands. */
+    if (err.status === 409 || err.status === 422) {
+      throw new StoreConflict(path);
+    }
+    throw err;
+  }
+}
+
+async function githubStoreDeleteFile(path, token, message) {
+  await ghDeleteFile(path, token, message);
+}
+
+async function storeGetFile(path) {
+  return state.backend === BACKEND_GOOGLE
+    ? driveStoreGetFile(path)
+    : githubStoreGetFile(path);
+}
+
+async function storeListDir(path) {
+  return state.backend === BACKEND_GOOGLE
+    ? driveStoreListDir(path)
+    : githubStoreListDir(path);
+}
+
+async function storePutFile(path, text, expectedToken, message) {
+  return state.backend === BACKEND_GOOGLE
+    ? driveStorePutFile(path, text, expectedToken || null)
+    : githubStorePutFile(path, text, expectedToken || null, message);
+}
+
+async function storeDeleteFile(path, token, message) {
+  return state.backend === BACKEND_GOOGLE
+    ? driveStoreDeleteFile(path, token || null)
+    : githubStoreDeleteFile(path, token, message);
 }
 
 /* --------------------------------------------------------------------------
@@ -1931,9 +2238,9 @@ async function saveIndex() {
   };
   state.index = index;
   try {
-    const existing = await ghGetFile("index.json");
-    await ghPutFile("index.json", JSON.stringify(index, null, 2),
-      existing ? existing.sha : null, "Update index");
+    const existing = await storeGetFile("index.json");
+    await storePutFile("index.json", JSON.stringify(index, null, 2),
+      existing ? existing.token : null, "Update index");
   } catch (err) {
     /* offline or conflicted index: it will be rebuilt on the next load */
   }
@@ -1962,14 +2269,14 @@ function buildIndexFromFolders(folderSlugs) {
    to the cache and say so. */
 async function loadAllFromRepo() {
   attachmentParseWarnings = 0;   /* v1.2: reset the malformed metadata count */
-  const indexFile = await ghGetFile("index.json");
+  const indexFile = await storeGetFile("index.json");
   let index = null;
   if (indexFile) {
-    try { index = JSON.parse(indexFile.content); } catch (e) { index = null; }
+    try { index = JSON.parse(indexFile.text); } catch (e) { index = null; }
   }
-  const folders = await ghListDir("notebooks");
+  const folders = await storeListDir("notebooks");
   const folderSlugs = (folders || [])
-    .filter(function (e) { return e.type === "dir"; })
+    .filter(function (e) { return e.isDir; })
     .map(function (e) { return e.name; });
 
   if (!index || !Array.isArray(index.notebooks)) {
@@ -1978,8 +2285,8 @@ async function loadAllFromRepo() {
     state.index = index;
     /* Persist the rebuilt index so the next load is a single GET. */
     try {
-      await ghPutFile("index.json", JSON.stringify(index, null, 2),
-        indexFile ? indexFile.sha : null, "Rebuild index");
+      await storePutFile("index.json", JSON.stringify(index, null, 2),
+        indexFile ? indexFile.token : null, "Rebuild index");
     } catch (err) { /* best effort, see saveIndex */ }
   } else {
     state.notebooks = index.notebooks;
@@ -1995,26 +2302,26 @@ async function loadAllFromRepo() {
 
   const notes = [];
   for (const nb of state.notebooks) {
-    const entries = await ghListDir("notebooks/" + nb.slug);
+    const entries = await storeListDir("notebooks/" + nb.slug);
     for (const entry of (entries || [])) {
-      if (entry.type !== "file" || !/\.md$/i.test(entry.name)) { continue; }
-      const file = await ghGetFile("notebooks/" + nb.slug + "/" + entry.name);
+      if (entry.isDir || !/\.md$/i.test(entry.name)) { continue; }
+      const file = await storeGetFile("notebooks/" + nb.slug + "/" + entry.name);
       if (!file) { continue; }
       const fallbackId = entry.name.replace(/\.md$/i, "");
-      const note = parseNoteFile(file.content, file.sha, fallbackId, false);
+      const note = parseNoteFile(file.text, file.token, fallbackId, false);
       if (!note.notebook) { note.notebook = nb.slug; }
       notes.push(note);
     }
   }
 
   const trash = [];
-  const trashEntries = await ghListDir("trash");
+  const trashEntries = await storeListDir("trash");
   for (const entry of (trashEntries || [])) {
-    if (entry.type !== "file" || !/\.md$/i.test(entry.name)) { continue; }
-    const file = await ghGetFile("trash/" + entry.name);
+    if (entry.isDir || !/\.md$/i.test(entry.name)) { continue; }
+    const file = await storeGetFile("trash/" + entry.name);
     if (!file) { continue; }
     const fallbackId = entry.name.replace(/\.md$/i, "");
-    trash.push(parseNoteFile(file.content, file.sha, fallbackId, true));
+    trash.push(parseNoteFile(file.text, file.token, fallbackId, true));
   }
 
   state.notes = notes;
@@ -2043,7 +2350,7 @@ async function syncNow(showToast) {
     await loadAllFromRepo();
     renderAll();
     refreshSyncPill();
-    if (showToast) { toast("Synced with GitHub."); }
+    if (showToast) { toast("Synced with " + storageDisplayName() + "."); }
   } catch (err) {
     refreshSyncPill();
     toast("Sync failed: " + err.message, true);
@@ -2077,20 +2384,31 @@ async function saveNoteToRepo(note, options) {
   try {
     let shaToUse = note.sha || null;
     if (shaToUse && !options.skipConflictCheck) {
-      const fresh = await ghGetFile(path);
-      if (fresh && fresh.sha !== shaToUse) {
+      const fresh = await storeGetFile(path);
+      if (fresh && fresh.token !== shaToUse) {
         return await saveConflictCopy(note, path);
       }
       if (!fresh) { shaToUse = null; }
     }
-    const newSha = await ghPutFile(path, text, shaToUse,
+    const newSha = await storePutFile(path, text, shaToUse,
       (shaToUse ? "Update note " : "Create note ") + note.id);
     note.sha = newSha;
     saveCache();
     return { saved: true };
   } catch (err) {
-    if (err.status === 409 || err.status === 422) {
+    if (isStoreConflict(err) || err.status === 409 || err.status === 422) {
       return await saveConflictCopy(note, path);
+    }
+    if (err.needsGoogleReconnect) {
+      /* v1.4: an expired Google sign in must never lose an edit. The
+         complete note text joins the same offline queue used for network
+         outages, and flushQueue retries it after the next sign in. */
+      queueOp({ kind: "put", path: path, content: text, noteId: note.id });
+      saveCache();
+      toast("Your Google sign in expired. This edit was saved in the sync " +
+        "queue. Sign in with Google again; it takes one click, then use " +
+        "Sync now if it does not sync on its own.", true);
+      return { queued: true, googleReconnect: true };
     }
     if (err.offline || !state.online) {
       queueOp({ kind: "put", path: path, content: text, noteId: note.id });
@@ -2121,7 +2439,7 @@ async function saveConflictCopy(note, originalPath) {
     trashedFrom: null
   };
   const copyPath = "notebooks/" + copy.notebook + "/" + copy.id + ".md";
-  copy.sha = await ghPutFile(copyPath, serializeNote(copy), null,
+  copy.sha = await storePutFile(copyPath, serializeNote(copy), null,
     "Save conflict copy of " + note.id);
   state.notes.push(copy);
   saveCache();
@@ -2159,33 +2477,34 @@ async function flushQueue() {
     if (failed) { remaining.push(op); continue; }
     try {
       if (op.kind === "put") {
-        const existing = await ghGetFile(op.path);
+        const existing = await storeGetFile(op.path);
         const localNote = findNoteById(op.noteId);
         const loadedSha = localNote ? localNote.sha : null;
-        if (existing && loadedSha && existing.sha !== loadedSha &&
+        if (existing && loadedSha && existing.token !== loadedSha &&
             !op.path.startsWith("trash/")) {
           /* The repo version changed while offline. Keep both copies. */
           const parsed = parseNoteFile(op.content, null, op.noteId, false);
           parsed.id = newNoteId();
           parsed.title = (parsed.title || "Untitled note") + " (conflict copy)";
-          parsed.sha = await ghPutFile(
+          parsed.sha = await storePutFile(
             "notebooks/" + parsed.notebook + "/" + parsed.id + ".md",
             serializeNote(parsed), null, "Save queued conflict copy");
           state.notes.push(parsed);
-          showConflictBanner("A note edited offline changed on GitHub too. " +
-            "Your offline version was kept as \"" + parsed.title + "\".");
+          showConflictBanner("A note edited offline changed on " +
+            storageDisplayName() + " too. Your offline version was kept as \"" +
+            parsed.title + "\".");
           setSyncPill("bad", "Conflict saved");
         } else {
-          const newSha = await ghPutFile(op.path, op.content,
-            existing ? existing.sha : null, "Sync queued change");
+          const newSha = await storePutFile(op.path, op.content,
+            existing ? existing.token : null, "Sync queued change");
           if (localNote && notePath(localNote) === op.path) {
             localNote.sha = newSha;
           }
         }
       } else if (op.kind === "delete") {
-        const existing = await ghGetFile(op.path);
+        const existing = await storeGetFile(op.path);
         if (existing) {
-          await ghDeleteFile(op.path, existing.sha, "Sync queued delete");
+          await storeDeleteFile(op.path, existing.token, "Sync queued delete");
         }
       }
     } catch (err) {
@@ -2217,11 +2536,12 @@ async function createNotebook(name) {
   state.notebooks.push(nb);
   if (state.online && state.repoExists) {
     try {
-      await ghPutFile("notebooks/" + slug + "/.gitkeep", "", null,
+      await storePutFile("notebooks/" + slug + "/.gitkeep", "", null,
         "Create notebook " + slug);
       await saveIndex();
     } catch (err) {
-      toast("Notebook saved locally; GitHub write failed: " + err.message, true);
+      toast("Notebook saved locally; " + storageDisplayName() +
+        " write failed: " + err.message, true);
     }
   } else {
     queueOp({ kind: "put", path: "notebooks/" + slug + "/.gitkeep", content: "", noteId: null });
@@ -2249,10 +2569,10 @@ async function renameNotebook(slug, newName) {
     note.notebook = newSlug;
     if (state.online && state.repoExists) {
       try {
-        note.sha = await ghPutFile(notePath(note), serializeNote(note), null,
+        note.sha = await storePutFile(notePath(note), serializeNote(note), null,
           "Move note to renamed notebook");
-        const oldFile = await ghGetFile(oldPath);
-        if (oldFile) { await ghDeleteFile(oldPath, oldFile.sha, "Remove old note location"); }
+        const oldFile = await storeGetFile(oldPath);
+        if (oldFile) { await storeDeleteFile(oldPath, oldFile.token, "Remove old note location"); }
       } catch (err) {
         toast("Rename partly failed for one note: " + err.message, true);
       }
@@ -2261,6 +2581,27 @@ async function renameNotebook(slug, newName) {
       queueOp({ kind: "delete", path: oldPath, noteId: note.id });
       note.sha = null;
     }
+  }
+  /* Move the folder marker too. A notebook created in the app carries a
+     .gitkeep; leaving it behind would keep the old folder alive in store
+     listings (a real folder on Drive, a path folder on GitHub) and the
+     old notebook would reappear on the next load. The new marker also
+     materializes the renamed folder when the notebook has no notes. */
+  if (state.online && state.repoExists) {
+    try {
+      await storePutFile("notebooks/" + newSlug + "/.gitkeep", "", null,
+        "Create renamed notebook folder");
+      const oldKeep = await storeGetFile("notebooks/" + slug + "/.gitkeep");
+      if (oldKeep) {
+        await storeDeleteFile("notebooks/" + slug + "/.gitkeep", oldKeep.token,
+          "Remove old notebook folder marker");
+      }
+    } catch (err) {
+      toast("Rename partly failed for the notebook folder marker: " + err.message, true);
+    }
+  } else {
+    queueOp({ kind: "put", path: "notebooks/" + newSlug + "/.gitkeep", content: "", noteId: null });
+    queueOp({ kind: "delete", path: "notebooks/" + slug + "/.gitkeep", noteId: null });
   }
   nb.slug = newSlug;
   if (state.view.kind === "notebook" && state.view.value === slug) {
@@ -2279,14 +2620,15 @@ async function deleteNotebook(slug) {
   state.notebooks = state.notebooks.filter(function (n) { return n.slug !== slug; });
   if (state.online && state.repoExists) {
     try {
-      const keep = await ghGetFile("notebooks/" + slug + "/.gitkeep");
+      const keep = await storeGetFile("notebooks/" + slug + "/.gitkeep");
       if (keep) {
-        await ghDeleteFile("notebooks/" + slug + "/.gitkeep", keep.sha,
+        await storeDeleteFile("notebooks/" + slug + "/.gitkeep", keep.token,
           "Delete notebook " + slug);
       }
       await saveIndex();
     } catch (err) {
-      toast("Notebook removed locally; a GitHub cleanup step failed: " + err.message, true);
+      toast("Notebook removed locally; a " + storageDisplayName() +
+        " cleanup step failed: " + err.message, true);
     }
   }
   if (state.view.kind === "notebook" && state.view.value === slug) {
@@ -2350,11 +2692,11 @@ async function moveNoteToTrash(note, quiet) {
   state.trash.unshift(note);
   if (state.online && state.repoExists) {
     try {
-      note.sha = await ghPutFile(newPath, serializeNote(note), null, "Move note to trash");
-      const oldFile = await ghGetFile(oldPath);
-      if (oldFile) { await ghDeleteFile(oldPath, oldFile.sha, "Remove note from notebook"); }
+      note.sha = await storePutFile(newPath, serializeNote(note), null, "Move note to trash");
+      const oldFile = await storeGetFile(oldPath);
+      if (oldFile) { await storeDeleteFile(oldPath, oldFile.token, "Remove note from notebook"); }
     } catch (err) {
-      toast("Trash move failed on GitHub: " + err.message, true);
+      toast("Trash move failed on " + storageDisplayName() + ": " + err.message, true);
     }
   } else {
     queueOp({ kind: "put", path: newPath, content: serializeNote(note), noteId: note.id });
@@ -2384,11 +2726,11 @@ async function restoreNote(note) {
   state.notes.unshift(note);
   if (state.online && state.repoExists) {
     try {
-      note.sha = await ghPutFile(newPath, serializeNote(note), null, "Restore note from trash");
-      const oldFile = await ghGetFile(oldPath);
-      if (oldFile) { await ghDeleteFile(oldPath, oldFile.sha, "Remove note from trash"); }
+      note.sha = await storePutFile(newPath, serializeNote(note), null, "Restore note from trash");
+      const oldFile = await storeGetFile(oldPath);
+      if (oldFile) { await storeDeleteFile(oldPath, oldFile.token, "Remove note from trash"); }
     } catch (err) {
-      toast("Restore failed on GitHub: " + err.message, true);
+      toast("Restore failed on " + storageDisplayName() + ": " + err.message, true);
     }
   } else {
     queueOp({ kind: "put", path: newPath, content: serializeNote(note), noteId: note.id });
@@ -2405,12 +2747,12 @@ async function deleteNoteForever(note) {
   if (state.selectedId === note.id) { state.selectedId = null; }
   if (state.online && state.repoExists) {
     try {
-      const file = note.sha ? { sha: note.sha } : await ghGetFile(path);
-      if (file && file.sha) {
-        await ghDeleteFile(path, file.sha, "Delete note forever");
+      const file = note.sha ? { token: note.sha } : await storeGetFile(path);
+      if (file && file.token) {
+        await storeDeleteFile(path, file.token, "Delete note forever");
       }
     } catch (err) {
-      toast("Delete failed on GitHub: " + err.message, true);
+      toast("Delete failed on " + storageDisplayName() + ": " + err.message, true);
     }
   } else {
     queueOp({ kind: "delete", path: path, noteId: note.id });
@@ -2419,19 +2761,163 @@ async function deleteNoteForever(note) {
   renderAll();
 }
 
+/* Build the first store through the neutral store layer: the Personal
+   notebook, the trash folder, index.json, and exactly one welcome note.
+   GitHub calls this after creating the private repository. Google Drive
+   calls it only when the SnakeScale Notes root folder was just created,
+   so returning Drive users never get a second welcome note. */
+async function seedInitialStore() {
+  const personal = {
+    slug: "personal",
+    name: "Personal",
+    created: new Date().toISOString()
+  };
+  state.notebooks = [personal];
+  state.notes = [];
+  state.trash = [];
+
+  await storePutFile("notebooks/personal/.gitkeep", "", null,
+    "Create notebooks folder");
+  await storePutFile("trash/.gitkeep", "", null, "Create trash folder");
+
+  const isGoogle = state.backend === BACKEND_GOOGLE;
+  const welcomeBody = isGoogle
+    ? "<p>Welcome to <b>SnakeScale Notes</b>. This note lives in your own " +
+      "Google Drive, in the SnakeScale Notes folder, as a plain Markdown " +
+      "file, and so do all of your other notes.</p>" +
+      "<p>A few things to try:</p>" +
+      "<ul><li>Make a notebook with the + button next to Notebooks.</li>" +
+      "<li>Add tags to a note, then use the Tags list to filter.</li>" +
+      "<li>Pin this note and it stays at the top of the list.</li>" +
+      "<li>Use the Checklist button in the toolbar for to do lists.</li></ul>" +
+      "<p>Delete this note whenever you are ready. It goes to Trash first, " +
+      "and only disappears for good when you choose Delete Forever.</p>"
+    : "<p>Welcome to <b>SnakeScale Notes</b>. This note lives in your own " +
+      "private GitHub repository, as a plain Markdown file, and so do all " +
+      "of your other notes.</p>" +
+      "<p>A few things to try:</p>" +
+      "<ul><li>Make a notebook with the + button next to Notebooks.</li>" +
+      "<li>Add tags to a note, then use the Tags list to filter.</li>" +
+      "<li>Pin this note and it stays at the top of the list.</li>" +
+      "<li>Use the Checklist button in the toolbar for to do lists.</li></ul>" +
+      "<p>Delete this note whenever you are ready. It goes to Trash first, " +
+      "and only disappears for good when you choose Delete Forever.</p>";
+  const welcome = makeNote("personal", "Welcome to SnakeScale Notes", welcomeBody);
+  welcome.sha = await storePutFile(notePath(welcome), serializeNote(welcome),
+    null, "Create welcome note");
+  state.notes = [welcome];
+  await saveIndex();
+  saveCache();
+  return welcome;
+}
+
+/* The Google branch of the connect gate. This screen is prominent after
+   setup and after any unlock where the hourly Google token is no longer
+   live. It is not a settings corner: connecting storage is the step the
+   user must complete before notes can load. */
+function showGoogleConnectScreen(message) {
+  const repoError = document.getElementById("repoError");
+  repoError.textContent = "";
+  document.getElementById("connectScreenTitle").textContent =
+    "Connect Google Drive";
+  document.getElementById("repoScreenText").textContent = message ||
+    "Sign in with Google to connect the SnakeScale Notes folder in your " +
+    "Google Drive. The same sign in also covers attachments.";
+  document.getElementById("repoActions").classList.add("hidden");
+  document.getElementById("googleConnectPanel").classList.remove("hidden");
+  const input = document.getElementById("googleBackendClientId");
+  if (document.activeElement !== input) {
+    input.value = state.attach.googleClientId || "";
+  }
+  showScreen("repo");
+}
+
+async function connectGoogleAndLoad() {
+  const repoError = document.getElementById("repoError");
+  repoError.textContent = "";
+  document.getElementById("googleConnectPanel").classList.add("hidden");
+
+  const status = await providers.google.getStatus();
+  if (!status.connected) {
+    state.repoExists = false;
+    showGoogleConnectScreen(status.reason === "expired"
+      ? "Your Google sign in expired. Sign in with Google again; it takes " +
+        "one click. Your notes and any queued edits are still safe."
+      : "Sign in with Google to connect the SnakeScale Notes folder in " +
+        "your Google Drive. The same sign in also covers attachments.");
+    return;
+  }
+
+  /* A Drive notes user has already chosen Google as the attachment
+     destination by choosing this backend, unless they deliberately picked
+     another default in the Attachments dialog. Fill only the untouched
+     "none" value; never override a real choice. */
+  if (!state.attach.defaultProvider || state.attach.defaultProvider === "none") {
+    state.attach.defaultProvider = "google";
+    saveSettings();
+  }
+
+  state.username = "Google Drive";
+  try {
+    await driveEnsureNotesRoot();
+    const rootWasCreated = driveCache.rootCreated;
+    state.repoExists = true;
+    let welcome = null;
+    if (rootWasCreated) {
+      welcome = await seedInitialStore();
+      driveCache.rootCreated = false;
+      state.selectedId = welcome.id;
+    }
+    showScreen("app");
+    await syncNow(false);
+    if (welcome) {
+      openNote(welcome.id);
+      toast("Google Drive connected. Welcome to SnakeScale Notes.");
+    }
+  } catch (err) {
+    if (err.needsGoogleReconnect) {
+      state.repoExists = false;
+      showGoogleConnectScreen(
+        "Your Google sign in expired. Sign in with Google again; it takes " +
+        "one click. Your notes and any queued edits are still safe.");
+      return;
+    }
+    if (loadCache()) {
+      state.repoExists = true;
+      showScreen("app");
+      renderAll();
+      toast("Could not reach Google Drive (" + err.message +
+        "). Showing your cached notes.", true);
+      refreshSyncPill();
+      return;
+    }
+    state.repoExists = false;
+    showGoogleConnectScreen();
+    repoError.textContent = err.message;
+  }
+}
+
 /* --------------------------------------------------------------------------
    Connect flow
-   After unlock: verify the token with GET /user, show the username, then
-   look for the data repo. A 404 opens the repo screen with the one click
-   create button. Any other failure shows a toast and falls back to the
-   local cache so the user can still read their notes.
+   After unlock, dispatch by the stored backend. GitHub verifies the token
+   with GET /user, shows the username, then looks for the data repo. A 404
+   opens the repo screen with the one click create button. Any other
+   failure shows a toast and falls back to the local cache so the user can
+   still read their notes. Google Drive has its own branch above.
    -------------------------------------------------------------------------- */
 async function connectAndLoad() {
+  if (state.backend === BACKEND_GOOGLE) {
+    await connectGoogleAndLoad();
+    return;
+  }
+  document.getElementById("connectScreenTitle").textContent =
+    "Connect your data repository";
+  document.getElementById("googleConnectPanel").classList.add("hidden");
   const repoText = document.getElementById("repoScreenText");
   const repoError = document.getElementById("repoError");
   repoError.textContent = "";
   try {
-    const user = await gh("/user");
+    const user = await githubCurrentUser();
     state.username = user.login;
   } catch (err) {
     if (loadCache() && state.username) {
@@ -2455,8 +2941,7 @@ async function connectAndLoad() {
 
   let repoInfo = null;
   try {
-    repoInfo = await gh("/repos/" + encodeURIComponent(state.username) + "/" +
-      encodeURIComponent(state.repo));
+    repoInfo = await githubGetDataRepo();
   } catch (err) {
     if (err.status !== 404) {
       repoError.textContent = err.message;
@@ -2488,39 +2973,10 @@ async function createRepoAndSeed() {
   btn.disabled = true;
   btn.textContent = "Creating...";
   try {
-    await gh("/user/repos", {
-      method: "POST",
-      body: {
-        name: state.repo,
-        description: "SnakeScale Notes data. Notes stored as Markdown files.",
-        private: true,
-        auto_init: true
-      }
-    });
+    await githubCreateDataRepo();
     state.repoExists = true;
 
-    const personal = { slug: "personal", name: "Personal", created: new Date().toISOString() };
-    state.notebooks = [personal];
-    await ghPutFile("notebooks/personal/.gitkeep", "", null, "Create notebooks folder");
-    await ghPutFile("trash/.gitkeep", "", null, "Create trash folder");
-
-    const welcome = makeNote("personal", "Welcome to SnakeScale Notes",
-      "<p>Welcome to <b>SnakeScale Notes</b>. This note lives in your own " +
-      "private GitHub repository, as a plain Markdown file, and so do all " +
-      "of your other notes.</p>" +
-      "<p>A few things to try:</p>" +
-      "<ul><li>Make a notebook with the + button next to Notebooks.</li>" +
-      "<li>Add tags to a note, then use the Tags list to filter.</li>" +
-      "<li>Pin this note and it stays at the top of the list.</li>" +
-      "<li>Use the Checklist button in the toolbar for to do lists.</li></ul>" +
-      "<p>Delete this note whenever you are ready. It goes to Trash first, " +
-      "and only disappears for good when you choose Delete Forever.</p>");
-    welcome.sha = await ghPutFile(notePath(welcome), serializeNote(welcome),
-      null, "Create welcome note");
-    state.notes = [welcome];
-    state.trash = [];
-    await saveIndex();
-    saveCache();
+    const welcome = await seedInitialStore();
 
     showScreen("app");
     document.getElementById("footUser").textContent = "@" + state.username;
@@ -2548,6 +3004,21 @@ function showScreen(name) {
   document.getElementById("lockScreen").classList.toggle("hidden", name !== "lock");
   document.getElementById("repoScreen").classList.toggle("hidden", name !== "repo");
   document.getElementById("app").classList.toggle("hidden", name !== "app");
+  if (name === "setup") { setSetupBackend(state.backend); }
+  if (name === "lock") {
+    const isGoogle = state.backend === BACKEND_GOOGLE;
+    document.getElementById("lockIntro").textContent = isGoogle
+      ? "Type your app password to unlock SnakeScale Notes on this device. " +
+        "If your Google sign in has expired, you will sign in with Google again next."
+      : "Type your app password to decrypt your GitHub token on this device.";
+    document.getElementById("lockResetHint").textContent = isGoogle
+      ? "Forgot the password? The encrypted vault cannot be recovered without it. " +
+        "Use the reset button below to clear the vault on this device and set up again. " +
+        "Your notes in Google Drive are not affected."
+      : "Forgot the password? The encrypted token cannot be recovered without it. " +
+        "Use the reset button below to clear the vault on this device and set up " +
+        "again with a new token. Your notes in GitHub are not affected.";
+  }
   if (name === "app" && !document.body.classList.contains("view-list") &&
       !document.body.classList.contains("view-nav") &&
       !document.body.classList.contains("view-editor")) {
@@ -2686,6 +3157,24 @@ function renderSidebar() {
 
   const repoInput = document.getElementById("repoNameInput");
   if (document.activeElement !== repoInput) { repoInput.value = state.repo; }
+  /* v1.4: the sidebar storage section follows the selected backend. The
+     GitHub repository rename controls are hidden for Drive users, whose
+     footer states the actual storage location in words instead. */
+  const isGoogle = state.backend === BACKEND_GOOGLE;
+  document.getElementById("storageSettingsField").classList.toggle("hidden", isGoogle);
+  document.getElementById("saveRepoBtn").classList.toggle("hidden", isGoogle);
+  document.getElementById("footUser").textContent = isGoogle
+    ? "Google Drive"
+    : (state.username ? "@" + state.username : "Not connected");
+  document.getElementById("footRepo").textContent = isGoogle
+    ? "Notes live in the SnakeScale Notes folder in your Google Drive"
+    : state.repo;
+  const noNoteStorageLine = document.getElementById("noNoteStorageLine");
+  if (noNoteStorageLine) {
+    noNoteStorageLine.textContent = isGoogle
+      ? "Everything you write is saved to the SnakeScale Notes folder in your own Google Drive as plain Markdown files, so your notes are never locked inside this app."
+      : "Everything you write is saved to your own private GitHub repository as plain Markdown files, so your notes are never locked inside this app.";
+  }
   document.getElementById("themeBtn").textContent =
     document.body.classList.contains("dark") ? "Light mode" : "Dark mode";
 }
@@ -2752,8 +3241,9 @@ function renderNoteList() {
     listEl.innerHTML = "";
     const empty = document.createElement("div");
     empty.className = "empty-state";
-    empty.innerHTML = "<div class=\"big\">No repository connected yet</div>" +
-      "Finish connecting your GitHub data repository and your notes will appear here.";
+    empty.innerHTML = "<div class=\"big\">No storage connected yet</div>" +
+      "Finish connecting your " + storageDisplayName() +
+      " storage and your notes will appear here.";
     listEl.appendChild(empty);
     return;
   }
@@ -3156,9 +3646,9 @@ const autosave = debounce(async function () {
   try {
     const result = await saveNoteToRepo(note);
     if (moved && state.online && state.repoExists) {
-      const oldFile = await ghGetFile(previousPath);
+      const oldFile = await storeGetFile(previousPath);
       if (oldFile) {
-        await ghDeleteFile(previousPath, oldFile.sha, "Remove note from previous notebook");
+        await storeDeleteFile(previousPath, oldFile.token, "Remove note from previous notebook");
       }
     }
     if (moved && (!state.online || !state.repoExists)) {
@@ -3807,6 +4297,34 @@ function clearProviderToken(provider) {
   state.providerTokens[provider] = null;
 }
 
+/* v1.4: THE single Google token source. The attachments driver and the
+   Google Drive notes driver both call this helper; neither reads the
+   provider token store directly. It returns a live token, or throws an
+   error marked needsGoogleReconnect so storage callers can preserve the
+   pending work in the offline queue and ask for a one click sign in. */
+async function getGoogleAccessToken() {
+  const status = await googleGetStatus();
+  if (status.connected) {
+    const token = await getProviderToken("google");
+    if (token) { return token; }
+  }
+  const err = new Error(status.reason === "expired"
+    ? "Your Google sign in expired. Sign in with Google again; it takes one click."
+    : "Sign in with Google first.");
+  err.code = status.reason === "expired"
+    ? "GOOGLE_TOKEN_EXPIRED" : "GOOGLE_SIGN_IN_REQUIRED";
+  err.needsGoogleReconnect = true;
+  throw err;
+}
+
+function googleReconnectError(message) {
+  const err = new Error(message ||
+    "Your Google sign in expired. Sign in with Google again; it takes one click.");
+  err.code = "GOOGLE_TOKEN_EXPIRED";
+  err.needsGoogleReconnect = true;
+  return err;
+}
+
 /* ----- small attachment utilities -------------------------------------- */
 function humanSize(bytes) {
   const n = Number(bytes) || 0;
@@ -3863,12 +4381,30 @@ function loadGisScript() {
 }
 
 async function googleConnect() {
-  const clientId = (document.getElementById("googleClientId").value || "").trim();
+  /* The same publisher client ID can be entered in three places over the
+     life of the app: the v1.4 storage connect gate, the Attachments
+     dialog, or saved settings from either one. Prefer the field on the
+     screen the user is actually looking at, then the saved value. */
+  const backendInput = document.getElementById("googleBackendClientId");
+  const dialogInput = document.getElementById("googleClientId");
+  const dialogVisible = !document.getElementById("attachModal")
+    .classList.contains("hidden");
+  let clientId = state.attach.googleClientId || "";
+  if (backendInput && backendInput.value.trim()) {
+    clientId = backendInput.value.trim();
+  }
+  if (dialogVisible && dialogInput && dialogInput.value.trim()) {
+    clientId = dialogInput.value.trim();
+  }
   state.attach.googleClientId = clientId;
+  if (backendInput) { backendInput.value = clientId; }
+  if (dialogInput) { dialogInput.value = clientId; }
   saveSettings();
   if (!clientId) {
     document.getElementById("googleHint").classList.remove("hidden");
-    document.getElementById("googleClientId").focus();
+    const panelVisible = !document.getElementById("googleConnectPanel")
+      .classList.contains("hidden");
+    (panelVisible ? backendInput : dialogInput).focus();
     throw new Error("Paste the publisher Google client ID first. It comes from a one time setup by the app owner (see ATTACHMENT_PROVIDERS_SETUP.md). End users never register a developer app.");
   }
   await loadGisScript();
@@ -3890,6 +4426,7 @@ async function googleConnect() {
   state.attach.googleExpiresAt =
     Date.now() + (Number(resp.expires_in) || 3600) * 1000;
   state.attach.googleFolderId = null;   /* re-resolve for this account */
+  resetDriveNotesCache();               /* v1.4: notes folders too */
   saveSettings();
   await storeProviderToken("google", resp.access_token);
   /* Prove the token works and prepare the folder right away, so a bad
@@ -3902,6 +4439,7 @@ async function googleDisconnect() {
   clearProviderToken("google");
   state.attach.googleExpiresAt = 0;
   state.attach.googleFolderId = null;
+  resetDriveNotesCache();
   saveSettings();
   if (token && window.google && window.google.accounts &&
       window.google.accounts.oauth2) {
@@ -3928,8 +4466,7 @@ async function googleGetStatus() {
 /* Shared Drive fetch: attaches the token, converts a 401 into the
    readable "sign in expired" path, and normalizes network failures. */
 async function gdriveFetch(url, options) {
-  const token = await getProviderToken("google");
-  if (!token) { throw new Error("Sign in with Google first (Attachments settings)."); }
+  const token = await getGoogleAccessToken();
   options = options || {};
   const headers = Object.assign({}, options.headers || {},
     { "Authorization": "Bearer " + token });
@@ -3937,13 +4474,15 @@ async function gdriveFetch(url, options) {
   try {
     res = await fetch(url, Object.assign({}, options, { headers: headers }));
   } catch (e) {
-    throw new Error("Network error talking to Google Drive. You appear to be offline.");
+    const err = new Error("Network error talking to Google Drive. You appear to be offline.");
+    err.offline = true;
+    throw err;
   }
   if (res.status === 401) {
     clearProviderToken("google");
     state.attach.googleExpiresAt = 0;
     saveSettings();
-    throw new Error("Your Google sign in expired. Sign in with Google again in Attachments settings.");
+    throw googleReconnectError();
   }
   return res;
 }
@@ -4007,8 +4546,7 @@ async function googleEnsureRootFolder() {
    chunk starts. A 200 or 201 carries the finished file resource. */
 async function googleUpload(file, storageName, onProgress) {
   const folderId = await googleEnsureRootFolder();
-  const token = await getProviderToken("google");
-  if (!token) { throw new Error("Sign in with Google first (Attachments settings)."); }
+  const token = await getGoogleAccessToken();
   let initRes;
   try {
     initRes = await fetch(
@@ -4029,7 +4567,7 @@ async function googleUpload(file, storageName, onProgress) {
     clearProviderToken("google");
     state.attach.googleExpiresAt = 0;
     saveSettings();
-    throw new Error("Your Google sign in expired. Sign in with Google again in Attachments settings.");
+    throw googleReconnectError();
   }
   if (!initRes.ok) {
     throw new Error(await gdriveErrorMessage(initRes,
@@ -4104,6 +4642,328 @@ async function googleDelete(fileId) {
   if (!res.ok) {
     throw new Error(await gdriveErrorMessage(res,
       "Google Drive delete failed with status " + res.status));
+  }
+}
+
+/* ----- Google Drive NOTES driver (new in v1.4) ---------------------------
+   This driver implements the neutral store operations from section 6B
+   on Google Drive. The layout mirrors the GitHub repository exactly:
+
+     SnakeScale Notes/
+       index.json
+       notebooks/<slug>/<noteId>.md
+       notebooks/<slug>/.gitkeep
+       trash/<noteId>.md
+
+   The root folder is separate from the attachments folder above. Every
+   file and folder here is created by this app, so the drive.file scope
+   can see the whole tree. All calls use getGoogleAccessToken through
+   gdriveFetch and gdriveJson: the notes driver and the attachments
+   driver share one Google sign in and one encrypted token.
+
+   Drive has real folders where GitHub has only paths. The one semantic
+   gap is that an empty Drive folder continues to exist after its last
+   file is deleted, while a GitHub folder disappears. driveStoreDeleteFile
+   closes that gap for notebook folders by removing a notebook folder
+   once it is empty, which keeps folder listings equivalent.
+   -------------------------------------------------------------------------- */
+const DRIVE_FOLDER_MIME = "application/vnd.google-apps.folder";
+const driveCache = {
+  rootId: null,
+  rootCreated: false,
+  folderIds: Object.create(null),
+  fileIds: Object.create(null)
+};
+
+/* Forget every resolved Drive ID. Called on Google sign in and sign out,
+   so a different Google account in the same browser session can never be
+   handed folder IDs from the previous account. */
+function resetDriveNotesCache() {
+  driveCache.rootId = null;
+  driveCache.rootCreated = false;
+  driveCache.folderIds = Object.create(null);
+  driveCache.fileIds = Object.create(null);
+}
+
+/* Escape one value for a Drive query string. Drive query strings are
+   single quoted; backslashes and quotes inside names must be escaped. */
+function driveEscapeQueryValue(value) {
+  return String(value).replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+}
+
+/* The optimistic concurrency token for one Drive file. The head revision
+   is preferred because it changes exactly when the file content changes.
+   Files that do not expose one fall back to their modified time. */
+function driveTokenFromMetadata(meta) {
+  if (!meta) { return null; }
+  if (meta.headRevisionId) { return "rev:" + meta.headRevisionId; }
+  if (meta.modifiedTime) { return "mtime:" + meta.modifiedTime; }
+  return meta.id ? "id:" + meta.id : null;
+}
+
+/* The Drive conflict decision, kept pure and separate so it can be unit
+   tested: a null expected token means the caller is creating or does not
+   claim to know the current revision, so the write may proceed. Any
+   other mismatch means the file changed first and must not be touched. */
+function assertDriveToken(expectedToken, currentToken, path) {
+  if (expectedToken != null && expectedToken !== currentToken) {
+    throw new StoreConflict(path);
+  }
+}
+
+async function driveGetFileMeta(fileId) {
+  return gdriveJson(
+    "https://www.googleapis.com/drive/v3/files/" +
+    encodeURIComponent(fileId) +
+    "?fields=" + encodeURIComponent("id,name,mimeType,headRevisionId,modifiedTime,trashed"));
+}
+
+/* List every child of one Drive folder, following pagination. */
+async function driveListChildren(parentId) {
+  const all = [];
+  let pageToken = "";
+  do {
+    const q = "'" + parentId + "' in parents and trashed = false";
+    let url = "https://www.googleapis.com/drive/v3/files?q=" +
+      encodeURIComponent(q) + "&fields=" + encodeURIComponent(
+        "nextPageToken,files(id,name,mimeType,headRevisionId,modifiedTime,trashed)") +
+      "&pageSize=1000";
+    if (pageToken) { url += "&pageToken=" + encodeURIComponent(pageToken); }
+    const data = await gdriveJson(url);
+    (data.files || []).forEach(function (f) { all.push(f); });
+    pageToken = data.nextPageToken || "";
+  } while (pageToken);
+  return all;
+}
+
+async function driveFindChild(parentId, name, wantFolder) {
+  const children = await driveListChildren(parentId);
+  return children.find(function (child) {
+    return child.name === name &&
+      ((child.mimeType === DRIVE_FOLDER_MIME) === !!wantFolder);
+  }) || null;
+}
+
+async function driveCreateFolder(name, parentId) {
+  const body = { name: name, mimeType: DRIVE_FOLDER_MIME };
+  if (parentId) { body.parents = [parentId]; }
+  return gdriveJson("https://www.googleapis.com/drive/v3/files", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body)
+  });
+}
+
+/* Find or create the SnakeScale Notes root folder. rootCreated records
+   whether THIS call created it, which is the first run signal the
+   connect flow uses to seed Personal and the welcome note exactly once. */
+async function driveEnsureNotesRoot() {
+  if (driveCache.rootId) {
+    try {
+      const info = await driveGetFileMeta(driveCache.rootId);
+      if (info && !info.trashed && info.mimeType === DRIVE_FOLDER_MIME) {
+        return info.id;
+      }
+    } catch (err) {
+      if (err.needsGoogleReconnect || err.offline) { throw err; }
+      /* A deleted or unreadable cached root falls through to a fresh
+         lookup instead of failing the whole connect. */
+    }
+    driveCache.rootId = null;
+    driveCache.rootCreated = false;
+  }
+  const q = "name = '" + driveEscapeQueryValue(NOTES_ROOT_NAME) +
+    "' and mimeType = '" + DRIVE_FOLDER_MIME +
+    "' and 'root' in parents and trashed = false";
+  const data = await gdriveJson(
+    "https://www.googleapis.com/drive/v3/files?q=" + encodeURIComponent(q) +
+    "&fields=" + encodeURIComponent("files(id,name,mimeType,trashed)"));
+  if (data.files && data.files.length) {
+    driveCache.rootId = data.files[0].id;
+    driveCache.rootCreated = false;
+    return driveCache.rootId;
+  }
+  const created = await driveCreateFolder(NOTES_ROOT_NAME, null);
+  driveCache.rootId = created.id;
+  driveCache.rootCreated = true;
+  return created.id;
+}
+
+/* Resolve a store folder path to a Drive folder ID, creating each missing
+   folder when create is true. Returns null for a missing folder when
+   create is false, matching the GitHub driver's missing folder result. */
+async function driveResolveFolder(path, create) {
+  if (!path) { return driveEnsureNotesRoot(); }
+  if (driveCache.folderIds[path]) { return driveCache.folderIds[path]; }
+  let currentId = await driveEnsureNotesRoot();
+  let currentPath = "";
+  const segments = splitStorePath(path);
+  for (const segment of segments) {
+    currentPath = currentPath ? currentPath + "/" + segment : segment;
+    if (driveCache.folderIds[currentPath]) {
+      currentId = driveCache.folderIds[currentPath];
+      continue;
+    }
+    let child = await driveFindChild(currentId, segment, true);
+    if (!child) {
+      if (!create) { return null; }
+      child = await driveCreateFolder(segment, currentId);
+    }
+    driveCache.folderIds[currentPath] = child.id;
+    currentId = child.id;
+  }
+  return currentId;
+}
+
+async function driveResolveFileMeta(path, createParents) {
+  const segments = splitStorePath(path);
+  if (!segments.length) { return null; }
+  const parentPath = segments.slice(0, -1).join("/");
+  const parentId = await driveResolveFolder(parentPath, createParents);
+  if (!parentId) { return null; }
+  const meta = await driveFindChild(parentId, segments[segments.length - 1], false);
+  if (meta) { driveCache.fileIds[path] = meta.id; }
+  return meta;
+}
+
+async function driveStoreGetFile(path) {
+  const meta = await driveResolveFileMeta(path, false);
+  if (!meta) { return null; }
+  const res = await gdriveFetch(
+    "https://www.googleapis.com/drive/v3/files/" +
+    encodeURIComponent(meta.id) + "?alt=media");
+  if (res.status === 404) { return null; }
+  if (!res.ok) {
+    throw new Error(await gdriveErrorMessage(res,
+      "Google Drive read failed with status " + res.status));
+  }
+  const text = await res.text();
+  return { text: text, token: driveTokenFromMetadata(meta) };
+}
+
+async function driveStoreListDir(path) {
+  const folderId = await driveResolveFolder(path, false);
+  if (!folderId) { return null; }
+  const children = await driveListChildren(folderId);
+  return children.map(function (child) {
+    return {
+      name: child.name,
+      path: path ? path + "/" + child.name : child.name,
+      isDir: child.mimeType === DRIVE_FOLDER_MIME
+    };
+  });
+}
+
+async function driveStorePutFile(path, text, expectedToken) {
+  const segments = splitStorePath(path);
+  if (!segments.length) {
+    throw new Error("Cannot write a file without a file name.");
+  }
+  const fileName = segments[segments.length - 1];
+  const parentPath = segments.slice(0, -1).join("/");
+  const parentId = await driveResolveFolder(parentPath, true);
+  const existing = await driveFindChild(parentId, fileName, false);
+
+  if (existing) {
+    /* Optimistic concurrency, the Drive half of the conflict rule: the
+       expected token must still be the file's current token, checked
+       before a single byte is sent. */
+    const currentToken = driveTokenFromMetadata(existing);
+    assertDriveToken(expectedToken || null, currentToken, path);
+    const res = await gdriveFetch(
+      "https://www.googleapis.com/upload/drive/v3/files/" +
+      encodeURIComponent(existing.id) +
+      "?uploadType=media&fields=" +
+      encodeURIComponent("id,headRevisionId,modifiedTime"), {
+        method: "PATCH",
+        headers: { "Content-Type": "text/markdown; charset=UTF-8" },
+        body: String(text)
+      });
+    if (!res.ok) {
+      throw new Error(await gdriveErrorMessage(res,
+        "Google Drive write failed with status " + res.status));
+    }
+    const data = await res.json();
+    driveCache.fileIds[path] = existing.id;
+    return driveTokenFromMetadata(data) ||
+      driveTokenFromMetadata(await driveGetFileMeta(existing.id)) ||
+      currentToken;
+  }
+
+  /* A caller holding a token for a file that no longer exists is in the
+     same position as a caller holding a stale token: refuse, rather
+     than silently recreating over someone else's delete. */
+  if (expectedToken != null) { throw new StoreConflict(path); }
+
+  /* Create with one multipart request: JSON metadata plus the text body.
+     Note files are small Markdown documents, far below Drive's 5 MB
+     simple and multipart upload limit. */
+  const boundary = "snakescale-" + Date.now().toString(36) + "-" +
+    Math.random().toString(36).slice(2);
+  const metadata = JSON.stringify({
+    name: fileName,
+    parents: [parentId],
+    mimeType: "text/markdown"
+  });
+  const body = "--" + boundary + "\r\n" +
+    "Content-Type: application/json; charset=UTF-8\r\n\r\n" +
+    metadata + "\r\n" +
+    "--" + boundary + "\r\n" +
+    "Content-Type: text/markdown; charset=UTF-8\r\n\r\n" +
+    String(text) + "\r\n" +
+    "--" + boundary + "--";
+  const res = await gdriveFetch(
+    "https://www.googleapis.com/upload/drive/v3/files" +
+    "?uploadType=multipart&fields=" +
+    encodeURIComponent("id,headRevisionId,modifiedTime"), {
+      method: "POST",
+      headers: { "Content-Type": "multipart/related; boundary=" + boundary },
+      body: body
+    });
+  if (!res.ok) {
+    throw new Error(await gdriveErrorMessage(res,
+      "Google Drive create failed with status " + res.status));
+  }
+  const data = await res.json();
+  driveCache.fileIds[path] = data.id;
+  return driveTokenFromMetadata(data) ||
+    driveTokenFromMetadata(await driveGetFileMeta(data.id));
+}
+
+async function driveStoreDeleteFile(path, token) {
+  const meta = await driveResolveFileMeta(path, false);
+  if (!meta) { return; }
+  assertDriveToken(token || null, driveTokenFromMetadata(meta), path);
+  const res = await gdriveFetch(
+    "https://www.googleapis.com/drive/v3/files/" +
+    encodeURIComponent(meta.id), { method: "DELETE" });
+  if (res.status !== 204 && res.status !== 404 && !res.ok) {
+    throw new Error(await gdriveErrorMessage(res,
+      "Google Drive delete failed with status " + res.status));
+  }
+  delete driveCache.fileIds[path];
+
+  /* Close the real folder gap described at the top of this driver: when
+     a notebook folder under notebooks/ becomes empty, remove the folder
+     itself, as GitHub's path based folders effectively do. The index
+     still names the notebook, so an intentionally empty notebook keeps
+     working; this only stops deleted or renamed folders reappearing in
+     folder listings. */
+  const segments = splitStorePath(path);
+  if (segments.length >= 3 && segments[0] === "notebooks") {
+    const parentPath = segments.slice(0, 2).join("/");
+    const parentId = driveCache.folderIds[parentPath];
+    if (parentId) {
+      const remaining = await driveListChildren(parentId);
+      if (!remaining.length) {
+        const del = await gdriveFetch(
+          "https://www.googleapis.com/drive/v3/files/" +
+          encodeURIComponent(parentId), { method: "DELETE" });
+        if (del.ok || del.status === 204 || del.status === 404) {
+          delete driveCache.folderIds[parentPath];
+        }
+      }
+    }
   }
 }
 /* ----- pCloud driver ----------------------------------------------------
@@ -4812,22 +5672,43 @@ async function refreshAttachDialog() {
    12. Screen flow and event wiring
    -------------------------------------------------------------------------- */
 function wireEvents() {
-  /* Setup form: validate, encrypt, store settings, then connect. */
+  /* v1.4: storage choice cards. The form below reads state.backend, so
+     these buttons only present and update that one choice. */
+  document.getElementById("setupBackendGoogle").addEventListener("click", function () {
+    setSetupBackend(BACKEND_GOOGLE);
+  });
+  document.getElementById("setupBackendGithub").addEventListener("click", function () {
+    setSetupBackend(BACKEND_GITHUB);
+  });
+
+  /* Setup form: validate the selected backend's fields, encrypt the vault,
+     store settings, then connect through the matching backend flow. */
   document.getElementById("setupForm").addEventListener("submit", async function (ev) {
     ev.preventDefault();
     const errEl = document.getElementById("setupError");
     errEl.textContent = "";
+    const isGoogle = state.backend === BACKEND_GOOGLE;
     const token = document.getElementById("setupToken").value.trim();
     const repo = document.getElementById("setupRepo").value.trim() || "snakescale-notes-data";
     const pw = document.getElementById("setupPassword").value;
     const pw2 = document.getElementById("setupPassword2").value;
-    if (!token) { errEl.textContent = "Paste your GitHub token first."; return; }
+    if (!isGoogle && !token) { errEl.textContent = "Paste your GitHub token first."; return; }
     if (pw.length < 6) { errEl.textContent = "Use an app password of at least 6 characters."; return; }
     if (pw !== pw2) { errEl.textContent = "The two passwords do not match."; return; }
     try {
-      await vaultCreate(token, pw);
-      state.token = token;
-      state.repo = repo;
+      if (isGoogle) {
+        /* Google users have no GitHub token to encrypt. The vault stores
+           the fixed non-secret backend marker instead, which gives the
+           password something real to verify and produces the session key
+           that encrypts the Google OAuth token. */
+        await vaultCreate(GOOGLE_BACKEND_VAULT_MARKER, pw);
+        state.token = GOOGLE_BACKEND_VAULT_MARKER;
+        state.repoExists = false;
+      } else {
+        await vaultCreate(token, pw);
+        state.token = token;
+        state.repo = repo;
+      }
       saveSettings();
       document.getElementById("repoNameInput").value = repo;
       /* v1.2: if this setup follows a pCloud sign in redirect, the vault
@@ -4849,6 +5730,14 @@ function wireEvents() {
     try {
       state.token = await vaultUnlock(pw);
       loadSettings();
+      /* Last resort backend identification for a vault whose settings
+         record is missing entirely: a Google vault contains the fixed
+         non-secret marker, while a legacy GitHub vault contains a real
+         GitHub token. Explicit stored settings always win over this. */
+      if (!state.backendExplicit) {
+        state.backend = state.token === GOOGLE_BACKEND_VAULT_MARKER
+          ? BACKEND_GOOGLE : BACKEND_GITHUB;
+      }
       loadCache();
       /* v1.2: complete any pCloud sign in that redirected back here. */
       await finalizePendingPcloud();
@@ -4859,7 +5748,10 @@ function wireEvents() {
   });
 
   document.getElementById("resetVaultBtn").addEventListener("click", function () {
-    const ok = confirm("Clear the encrypted vault on this device? You will set up again with a token and a new password. Notes in GitHub are not affected.");
+    const isGoogle = state.backend === BACKEND_GOOGLE;
+    const ok = confirm(isGoogle
+      ? "Clear the encrypted vault on this device? You will set up again with a new app password and sign in with Google again. Notes in Google Drive are not affected."
+      : "Clear the encrypted vault on this device? You will set up again with a token and a new password. Notes in GitHub are not affected.");
     if (ok) {
       vaultWipe();
       localStorage.removeItem(LS_CACHE);
@@ -4873,11 +5765,34 @@ function wireEvents() {
     }
   });
 
-  /* Repo screen buttons. */
+  /* Repo and storage connect screen buttons. */
   document.getElementById("createRepoBtn").addEventListener("click", function () {
     createRepoAndSeed().catch(function (err) {
       document.getElementById("repoError").textContent = err.message;
     });
+  });
+  /* v1.4: the prominent Google sign in on the connect gate. The typed
+     publisher client ID is saved first (googleConnect also reconciles
+     the Attachments dialog field), then the normal connect flow runs:
+     first run seeding for a brand new Drive root, or a normal load. */
+  document.getElementById("googleBackendConnectBtn").addEventListener("click", async function () {
+    const errEl = document.getElementById("repoError");
+    errEl.textContent = "";
+    const btn = document.getElementById("googleBackendConnectBtn");
+    btn.disabled = true;
+    btn.textContent = "Signing in...";
+    try {
+      state.attach.googleClientId =
+        document.getElementById("googleBackendClientId").value.trim();
+      saveSettings();
+      await providers.google.connect();
+      await connectAndLoad();
+    } catch (err) {
+      errEl.textContent = err.message;
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Sign in with Google";
+    }
   });
   document.getElementById("repoRetryBtn").addEventListener("click", function () {
     connectAndLoad().catch(function (err) { toast(err.message, true); });
@@ -5147,6 +6062,13 @@ function wireEvents() {
       } else {
         await providers.google.connect();
         toast("Signed in with Google. Attachments can now use your Google Drive.");
+        /* v1.4: when Google is also the notes backend, a fresh sign in is
+           the moment queued edits can finally flush. syncNow flushes the
+           queue before reloading, so reconnecting never loses an edit
+           that was preserved while the token was expired. */
+        if (state.backend === BACKEND_GOOGLE && state.repoExists) {
+          await syncNow(false);
+        }
       }
     } catch (err) {
       toast(err.message, true);
@@ -5200,7 +6122,11 @@ function wireEvents() {
        user knows exactly what remains in their cloud accounts. */
     const atts = note.attachments || [];
     let confirmText = "Delete \"" + (note.title || "Untitled note") +
-      "\" forever? This removes the file from your GitHub repository and cannot be undone from inside the app.";
+      "\" forever? This removes the file from your " +
+      (state.backend === BACKEND_GOOGLE
+        ? "SnakeScale Notes folder in Google Drive"
+        : "GitHub repository") +
+      " and cannot be undone from inside the app.";
     if (atts.length) {
       confirmText += " Its " + atts.length + " attachment file(s) will also be " +
         "deleted from their cloud storage where that provider is signed in. " +
