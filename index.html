@@ -28,10 +28,35 @@
   notes are files, and there is no server and no shared database anywhere
   in this design.
 
-  BUILD STAMP: 2026-10-19-SSN-V172
-  Version: 1.7.2
+  BUILD STAMP: 2026-10-19-SSN-V180
+  Version: 1.8.0
 
   Revision history:
+    v1.8.0 2026-10-19 A toolbar for the notes list: New Note, Filters,
+                      Sort, and a notebook menu. The list header gains
+                      a right aligned row of four icon buttons under
+                      the title and the note count. New Note creates a
+                      note in the current notebook (the default
+                      notebook in the combined views, exactly like the
+                      sidebar button; disabled in Trash and in the
+                      Archive, where a fresh note has no home).
+                      Filters open a panel: tag checkboxes a note
+                      must match ALL of, plus From and To date pickers
+                      for the created and updated dates, compared by
+                      local calendar day with either end left open.
+                      Filters combine with the current view and the
+                      search box, stay in place across views until
+                      cleared, and light the Filters button while any
+                      is set. Sort offers Title, Date Created, and
+                      Date Updated, each with a direction, and the
+                      choice is remembered between sessions; the
+                      default stays Date Updated, newest first, and
+                      pinned notes still lead the list as before. The
+                      notebook menu holds Rename Notebook and Delete
+                      Notebook, the exact prompt and confirm flows
+                      that used to hide as hover links on the sidebar
+                      notebook rows; those hover links are removed.
+                      Build stamp 2026-10-19-SSN-V180.
     v1.7.2 2026-10-19 Free image sizing, carried on the image's block.
                       Two problems from live testing of v1.7.1: an
                       image could not be made wider than the note
@@ -57,7 +82,6 @@
                       in the new form. The image menu gains an
                       Original preset (the image's natural width)
                       beside the column share presets.
-                      Build stamp 2026-10-19-SSN-V172.
     v1.7.1 2026-10-19 The image selection frame hugs the image. In
                       v1.7.0 the four corner grips, the selection
                       outline, and the three dot menu button anchored
@@ -552,12 +576,9 @@ body.dark .gate-brand .wordmark{color:#EAF3EC;}
 }
 .nav-item .count-pill:empty{display:none;}
 .nav-item.active .count-pill{background:var(--accent);color:#0B3D2E;}
-.nav-item .row-actions{display:none;gap:2px;}
-.nav-item:hover .row-actions{display:inline-flex;}
-.nav-item .row-actions button{
-  background:none;border:none;color:#BFD6C4;font-size:12px;padding:2px 4px;
-}
-.nav-item .row-actions button:hover{color:#fff;}
+/* v1.8: the sidebar notebook rows used to carry Rename and Delete
+   hover links (.row-actions). Those actions moved to the notes list
+   toolbar's notebook menu, so the hover link styles are gone. */
 .tag-chip-nav{font-size:13.5px;}
 .sidebar-foot{
   margin-top:auto;padding:16px;border-top:1px solid #1D4A38;font-size:13px;
@@ -602,6 +623,98 @@ body.dark .gate-brand .wordmark{color:#EAF3EC;}
 .list-head h2{margin:0 0 4px;font-size:18px;color:var(--primary);}
 body.dark .list-head h2{color:var(--accent);}
 .list-head .sub{font-size:12.5px;color:var(--muted);}
+/* v1.8: the notes list toolbar, a right aligned row of icon buttons
+   under the list title and count. The buttons follow the editor
+   toolbar's look (same border, radius, and hover treatment); their
+   labels live in tooltips and aria labels only. */
+.list-toolbar{
+  display:flex;justify-content:flex-end;align-items:center;gap:4px;
+  margin-top:10px;
+}
+.list-tb-wrap{position:relative;display:inline-flex;}
+.list-tb-btn{
+  position:relative;display:inline-flex;align-items:center;
+  justify-content:center;width:30px;height:30px;padding:0;
+  background:var(--bg);border:1px solid var(--border);
+  border-radius:var(--radius-button);color:var(--text);cursor:pointer;
+  transition:background-color var(--motion),border-color var(--motion),
+    color var(--motion),opacity var(--motion);
+}
+.list-tb-btn:hover:not(:disabled){border-color:var(--secondary);background:var(--soft);}
+.list-tb-btn:disabled{opacity:.45;cursor:default;}
+.list-tb-btn svg{display:block;}
+/* The Filters button while any filter is set: filled soft background,
+   accent border and glyph, plus a small dot in the corner, so the
+   active state is visible at a glance and not silently remembered. */
+.list-tb-btn.has-filters{
+  border-color:var(--secondary);background:var(--soft);color:var(--primary);
+}
+body.dark .list-tb-btn.has-filters{color:var(--accent);}
+.list-tb-btn.has-filters::after{
+  content:"";position:absolute;top:4px;right:4px;width:7px;height:7px;
+  border-radius:50%;background:var(--accent);border:1px solid var(--bg);
+}
+/* The three dropdown panels (filters, sort, notebook menu) hang below
+   their button, right aligned with the toolbar. They are list pane
+   chrome, styled like the editor's menus. */
+.list-panel{
+  position:absolute;top:calc(100% + 6px);right:0;z-index:30;
+  min-width:210px;max-width:86vw;background:var(--surface);
+  border:1px solid var(--border);border-radius:var(--radius-card);
+  box-shadow:var(--shadow);padding:6px;
+  display:flex;flex-direction:column;gap:2px;
+}
+.list-panel.hidden{display:none;}
+.list-menu-item{
+  display:flex;align-items:center;gap:8px;width:100%;text-align:left;
+  background:transparent;border:1px solid transparent;border-radius:8px;
+  color:var(--text);font-size:14px;padding:7px 9px;cursor:pointer;
+  white-space:nowrap;
+}
+.list-menu-item:hover:not(:disabled){background:var(--soft);border-color:var(--border);}
+.list-menu-item:disabled{opacity:.45;cursor:default;}
+.list-menu-item.danger{color:var(--danger);}
+.list-menu-item .sort-check{
+  width:14px;flex:0 0 14px;text-align:center;color:var(--secondary);
+  font-weight:700;
+}
+.list-menu-item .sort-label{flex:1;}
+.list-menu-item .sort-dir{
+  width:12px;text-align:center;color:var(--muted);font-size:12px;
+}
+/* The filter panel is a small form, not a menu: wider, with grouped
+   controls. It stays open while its checkboxes and date inputs are
+   being set. */
+#filterPanel{min-width:250px;padding:12px;gap:12px;}
+.filter-group-title{
+  font-size:12.5px;font-weight:700;color:var(--primary);margin-bottom:5px;
+}
+body.dark .filter-group-title{color:var(--accent);}
+.filter-tag-list{
+  display:flex;flex-direction:column;gap:2px;
+  max-height:150px;overflow-y:auto;
+}
+.filter-tag-row{
+  display:flex;align-items:center;gap:7px;font-size:13.5px;
+  padding:3px 4px;border-radius:6px;cursor:pointer;
+}
+.filter-tag-row:hover{background:var(--soft);}
+.filter-tag-row input[type="checkbox"]{margin:0;flex:0 0 auto;}
+.filter-tag-count{margin-left:auto;font-size:12px;color:var(--muted);}
+.filter-empty{font-size:13px;color:var(--muted);padding:2px 4px;}
+.filter-date-row{display:flex;align-items:center;gap:6px;margin-top:4px;}
+.filter-date-row label{font-size:12.5px;color:var(--muted);width:32px;flex:0 0 32px;}
+.filter-date-row input[type="date"]{
+  flex:1;min-width:0;padding:6px 7px;font-size:13px;color:var(--text);
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius-button);
+  transition:border-color var(--motion),box-shadow var(--motion);
+}
+.filter-date-row input[type="date"]:focus{
+  border-color:var(--secondary);outline:none;
+  box-shadow:0 0 0 3px rgba(87,167,115,.22);
+}
+#filterClearBtn{align-self:flex-end;}
 #noteList{overflow-y:auto;flex:1;padding:10px;}
 .note-card{
   background:var(--surface);border:1px solid var(--border);
@@ -1387,6 +1500,62 @@ body.dark .ss-att-provider{color:#EAF3EC;}
     <div class="list-head">
       <h2 id="listTitle">All Notes</h2>
       <div class="sub" id="listSub"></div>
+      <!-- v1.8: the notes list toolbar. Four icon buttons, right
+           aligned; their text lives in the title tooltips and the
+           aria labels. The three panels (filters, sort, notebook
+           menu) are list pane chrome: they live here in the list
+           header, far outside #noteBody, so they can never be saved
+           into a note. -->
+      <div class="list-toolbar" id="listToolbar">
+        <button type="button" class="list-tb-btn" id="listNewNoteBtn" title="New note" aria-label="New note"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false"><path d="M8 2.8v10.4M2.8 8h10.4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" fill="none"/></svg></button>
+        <div class="list-tb-wrap">
+          <button type="button" class="list-tb-btn" id="listFilterBtn" title="Filters" aria-label="Filters" aria-haspopup="true"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false"><path d="M2 2.8h12L9.6 8.1v4.3L6.4 14V8.1L2 2.8z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg></button>
+          <div id="filterPanel" class="list-panel hidden" role="dialog" aria-label="Filters">
+            <div class="filter-group">
+              <div class="filter-group-title">Tags</div>
+              <div class="filter-tag-list" id="filterTagList"></div>
+            </div>
+            <div class="filter-group">
+              <div class="filter-group-title">Date created</div>
+              <div class="filter-date-row">
+                <label for="filterCreatedFrom">From</label>
+                <input type="date" id="filterCreatedFrom">
+              </div>
+              <div class="filter-date-row">
+                <label for="filterCreatedTo">To</label>
+                <input type="date" id="filterCreatedTo">
+              </div>
+            </div>
+            <div class="filter-group">
+              <div class="filter-group-title">Date updated</div>
+              <div class="filter-date-row">
+                <label for="filterUpdatedFrom">From</label>
+                <input type="date" id="filterUpdatedFrom">
+              </div>
+              <div class="filter-date-row">
+                <label for="filterUpdatedTo">To</label>
+                <input type="date" id="filterUpdatedTo">
+              </div>
+            </div>
+            <button type="button" class="btn small" id="filterClearBtn">Clear all</button>
+          </div>
+        </div>
+        <div class="list-tb-wrap">
+          <button type="button" class="list-tb-btn" id="listSortBtn" title="Sort and display" aria-label="Sort and display" aria-haspopup="true"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false"><path d="M4.5 2v11.4M2.2 10.8l2.3 2.6 2.3-2.6M11.5 14V2.6M9.2 5.2l2.3-2.6 2.3 2.6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg></button>
+          <div id="sortMenu" class="list-panel hidden" role="menu" aria-label="Sort and display">
+            <button type="button" class="list-menu-item" data-sort="title" role="menuitem"><span class="sort-check"></span><span class="sort-label">Title</span><span class="sort-dir"></span></button>
+            <button type="button" class="list-menu-item" data-sort="created" role="menuitem"><span class="sort-check"></span><span class="sort-label">Date Created</span><span class="sort-dir"></span></button>
+            <button type="button" class="list-menu-item" data-sort="updated" role="menuitem"><span class="sort-check"></span><span class="sort-label">Date Updated</span><span class="sort-dir"></span></button>
+          </div>
+        </div>
+        <div class="list-tb-wrap">
+          <button type="button" class="list-tb-btn" id="listNbMenuBtn" title="Notebook options" aria-label="Notebook options" aria-haspopup="true"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="8" cy="3" r="1.5" fill="currentColor" stroke="none"/><circle cx="8" cy="8" r="1.5" fill="currentColor" stroke="none"/><circle cx="8" cy="13" r="1.5" fill="currentColor" stroke="none"/></svg></button>
+          <div id="nbActionMenu" class="list-panel hidden" role="menu" aria-label="Notebook options">
+            <button type="button" class="list-menu-item" id="nbRenameBtn" role="menuitem">Rename Notebook</button>
+            <button type="button" class="list-menu-item danger" id="nbDeleteBtn" role="menuitem">Delete Notebook</button>
+          </div>
+        </div>
+      </div>
     </div>
     <div id="noteList"></div>
   </section>
@@ -1672,8 +1841,8 @@ body.dark .ss-att-provider{color:#EAF3EC;}
 "use strict";
 
 /* ============================================================================
-   SnakeScale Notes v1.7.2: application script
-   BUILD STAMP: 2026-10-19-SSN-V172
+   SnakeScale Notes v1.8.0: application script
+   BUILD STAMP: 2026-10-19-SSN-V180
 
    How this script is organized:
      1. Constants and global state
@@ -1704,8 +1873,8 @@ body.dark .ss-att-provider{color:#EAF3EC;}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-19-SSN-V172";
-const APP_VERSION = "1.7.2";
+const APP_BUILD = "2026-10-19-SSN-V180";
+const APP_VERSION = "1.8.0";
 const API_BASE = "https://api.github.com";
 const API_VERSION_HEADER = "2022-11-28";
 /* v1.4: the two storage backends. "github" is the original repository
@@ -1794,6 +1963,17 @@ const state = {
   view: { kind: "all", value: null }, // all | pinned | trash | archive | notebook | tag
   selectedId: null,         // id of the note open in the editor
   search: "",               // current search text, lowercased
+  listFilters: {            // v1.8: notes list filters, session only.
+    tags: [],                 // tag names a note must ALL carry
+    createdFrom: "",          // "YYYY-MM-DD" or "" for open ended
+    createdTo: "",
+    updatedFrom: "",
+    updatedTo: ""
+  },
+  listSort: {               // v1.8: notes list sort, remembered in settings
+    field: "updated",         // title | created | updated
+    dir: "desc"               // asc | desc; default matches the pre-v1.8 order
+  },
   syncing: false,           // true while a sync or save is in flight
   online: navigator.onLine, // browser online flag, kept current by events
   cacheGeneration: 0,       // v1.4.1: invalidates an in-flight encrypted
@@ -2360,13 +2540,25 @@ function loadSettings() {
       if (s.attach[k] !== undefined) { state.attach[k] = s.attach[k]; }
     });
   }
+  /* v1.8: the remembered list sort. Only the shapes the sort menu can
+     produce are accepted; anything else leaves the default in place
+     (Date Updated, newest first, the pre-v1.8 list order). */
+  if (s.listSort) {
+    if (["title", "created", "updated"].indexOf(s.listSort.field) >= 0) {
+      state.listSort.field = s.listSort.field;
+    }
+    if (s.listSort.dir === "asc" || s.listSort.dir === "desc") {
+      state.listSort.dir = s.listSort.dir;
+    }
+  }
 }
 function saveSettings() {
   localStorage.setItem(LS_SETTINGS, JSON.stringify({
     backend: state.backend,
     repo: state.repo,
     dark: document.body.classList.contains("dark"),
-    attach: state.attach
+    attach: state.attach,
+    listSort: state.listSort   // v1.8: the remembered notes list sort
   }));
 }
 
@@ -4307,8 +4499,10 @@ function renderSidebar() {
   document.getElementById("navArchive").classList.toggle("active",
     state.view.kind === "archive");
 
-  /* Notebook rows, with rename and delete on hover. Delete is confirmed
-     in the click handler and moves the notes to Trash, never destroys. */
+  /* Notebook rows: click to open, with a count pill. Rename and
+     delete used to ride along as hover links on each row; v1.8 moved
+     both into the notes list toolbar's notebook menu, which runs the
+     same prompt and confirm flows against the open notebook. */
   const nav = document.getElementById("notebookNav");
   nav.innerHTML = "";
   if (!state.notebooks.length) {
@@ -4326,37 +4520,6 @@ function renderSidebar() {
     const nameSpan = document.createElement("span");
     nameSpan.textContent = nb.name;
     btn.appendChild(nameSpan);
-    const actions = document.createElement("span");
-    actions.className = "row-actions";
-    const renameBtn = document.createElement("button");
-    renameBtn.type = "button";
-    renameBtn.textContent = "Rename";
-    renameBtn.addEventListener("click", function (ev) {
-      ev.stopPropagation();
-      const next = prompt("Rename notebook", nb.name);
-      if (next && next.trim() && next.trim() !== nb.name) {
-        renameNotebook(nb.slug, next.trim()).catch(function (err) {
-          toast("Rename failed: " + err.message, true);
-        });
-      }
-    });
-    const deleteBtn = document.createElement("button");
-    deleteBtn.type = "button";
-    deleteBtn.textContent = "Delete";
-    deleteBtn.addEventListener("click", function (ev) {
-      ev.stopPropagation();
-      const count = notebookCount(nb.slug);
-      const ok = confirm("Delete the notebook \"" + nb.name + "\"? Its " +
-        count + " note(s) will be moved to Trash, not deleted.");
-      if (ok) {
-        deleteNotebook(nb.slug).catch(function (err) {
-          toast("Delete failed: " + err.message, true);
-        });
-      }
-    });
-    actions.appendChild(renameBtn);
-    actions.appendChild(deleteBtn);
-    btn.appendChild(actions);
     const countSpan = document.createElement("span");
     countSpan.className = "count count-pill";
     countSpan.textContent = notebookCount(nb.slug) || "";
@@ -4431,9 +4594,281 @@ function renderSidebar() {
   document.getElementById("lockBtn").textContent = isGoogle ? "Sign out" : "Lock";
 }
 
+/* --------------------------------------------------------------------------
+   v1.8: the notes list toolbar: filters, sorting, panels, and the
+   notebook menu flows.
+
+   The toolbar sits in the list header (New Note, Filters, Sort, and
+   the notebook menu). Its three panels are plain list pane chrome in
+   the static HTML, nowhere near #noteBody, so nothing about them can
+   ever be saved into a note.
+
+   Filters live in state.listFilters for the session and are applied
+   inside visibleNotes(), so the current view, the search text, and
+   the filters always combine (AND). They persist across view and
+   notebook switches until cleared. The sort choice lives in
+   state.listSort and is remembered in settings between sessions.
+   -------------------------------------------------------------------------- */
+
+/* True when any list filter is set. Drives the Filters button's
+   active state and the filtered empty list message. */
+function listFiltersActive() {
+  const f = state.listFilters;
+  return f.tags.length > 0 || !!f.createdFrom || !!f.createdTo ||
+    !!f.updatedFrom || !!f.updatedTo;
+}
+
+/* Date range math for the filter pickers. A date input speaks in
+   plain calendar days ("YYYY-MM-DD"), so a note belongs to a range
+   when the local calendar day of its timestamp falls inside it,
+   inclusive of both ends. An empty end leaves the range open there. */
+function localDayStartMs(dayText) {
+  const parts = dayText.split("-");
+  return new Date(+parts[0], +parts[1] - 1, +parts[2], 0, 0, 0, 0).getTime();
+}
+function localDayEndMs(dayText) {
+  const parts = dayText.split("-");
+  return new Date(+parts[0], +parts[1] - 1, +parts[2], 23, 59, 59, 999).getTime();
+}
+function timestampInDayRange(iso, fromDay, toDay) {
+  const t = new Date(iso).getTime();
+  if (isNaN(t)) { return false; }
+  if (fromDay && t < localDayStartMs(fromDay)) { return false; }
+  if (toDay && t > localDayEndMs(toDay)) { return false; }
+  return true;
+}
+
+/* One note against the current filters. Tags use ALL semantics: the
+   note must carry every checked tag, so each tag added narrows the
+   list further. Created and updated ranges are independent. */
+function notePassesListFilters(note) {
+  const f = state.listFilters;
+  for (let i = 0; i < f.tags.length; i++) {
+    if (note.tags.indexOf(f.tags[i]) < 0) { return false; }
+  }
+  if ((f.createdFrom || f.createdTo) &&
+      !timestampInDayRange(note.created, f.createdFrom, f.createdTo)) {
+    return false;
+  }
+  if ((f.updatedFrom || f.updatedTo) &&
+      !timestampInDayRange(note.updated, f.updatedFrom, f.updatedTo)) {
+    return false;
+  }
+  return true;
+}
+
+/* The sort half of the list order, as a comparator. The pinned first
+   rule is NOT here: visibleNotes still applies it ahead of this, the
+   same as before v1.8, so pinning behavior is unchanged. With the
+   default choice (updated, descending) this reproduces the old list
+   order exactly. Title compares as text; the dates compare as
+   timestamps. Direction "asc" is A to Z for titles and oldest first
+   for dates. */
+function compareNotesByListSort(a, b) {
+  const sort = state.listSort;
+  let cmp = 0;
+  if (sort.field === "title") {
+    cmp = String(a.title || "").localeCompare(String(b.title || ""));
+  } else if (sort.field === "created") {
+    cmp = new Date(a.created) - new Date(b.created);
+  } else {
+    cmp = new Date(a.updated) - new Date(b.updated);
+  }
+  if (isNaN(cmp)) { cmp = 0; }
+  return sort.dir === "asc" ? cmp : -cmp;
+}
+
+/* Panel handling. Only one of the three panels is ever open; each
+   toggle button opens its panel and closes the other two, and
+   renderNoteList closes all of them when the view changes. The
+   document level outside click and Escape closers are wired with the
+   rest of the toolbar events. */
+const LIST_PANEL_IDS = ["filterPanel", "sortMenu", "nbActionMenu"];
+function closeListPanels() {
+  LIST_PANEL_IDS.forEach(function (id) {
+    const panel = document.getElementById(id);
+    if (panel) { panel.classList.add("hidden"); }
+  });
+}
+function toggleListPanel(panelId) {
+  const panel = document.getElementById(panelId);
+  if (!panel) { return; }
+  const opening = panel.classList.contains("hidden");
+  closeListPanels();
+  if (opening) {
+    if (panelId === "filterPanel") {
+      /* Rebuild the tag checkboxes on every open, so tags added or
+         removed since the last open are reflected, and re-sync the
+         date inputs with the stored filter values. */
+      buildFilterTagList();
+      syncFilterControls();
+    }
+    if (panelId === "sortMenu") { renderSortMenu(); }
+    panel.classList.remove("hidden");
+  }
+}
+
+/* The filter panel's tag checkbox list, derived from the same source
+   as the sidebar tag list (allTagsWithCounts over the live notes),
+   so the two can never disagree about which tags exist. */
+function buildFilterTagList() {
+  const box = document.getElementById("filterTagList");
+  if (!box) { return; }
+  box.innerHTML = "";
+  const tags = allTagsWithCounts();
+  if (!tags.length) {
+    const empty = document.createElement("div");
+    empty.className = "filter-empty";
+    empty.textContent = "No tags yet.";
+    box.appendChild(empty);
+    return;
+  }
+  tags.forEach(function (entry) {
+    const row = document.createElement("label");
+    row.className = "filter-tag-row";
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.checked = state.listFilters.tags.indexOf(entry.tag) >= 0;
+    cb.addEventListener("change", function () {
+      const chosen = state.listFilters.tags;
+      const at = chosen.indexOf(entry.tag);
+      if (cb.checked && at < 0) { chosen.push(entry.tag); }
+      if (!cb.checked && at >= 0) { chosen.splice(at, 1); }
+      /* Re-render the list at once; the panel itself stays open
+         (renderNoteList only closes panels on a view change). */
+      renderNoteList();
+    });
+    row.appendChild(cb);
+    const name = document.createElement("span");
+    name.textContent = entry.tag;
+    row.appendChild(name);
+    const count = document.createElement("span");
+    count.className = "filter-tag-count";
+    count.textContent = entry.count;
+    row.appendChild(count);
+    box.appendChild(row);
+  });
+}
+
+/* Push the stored filter values into the panel's date inputs. Called
+   when the panel opens and after Clear all, so what the panel shows
+   is always the filter that is actually applied. */
+function syncFilterControls() {
+  const f = state.listFilters;
+  const values = {
+    filterCreatedFrom: f.createdFrom,
+    filterCreatedTo: f.createdTo,
+    filterUpdatedFrom: f.updatedFrom,
+    filterUpdatedTo: f.updatedTo
+  };
+  Object.keys(values).forEach(function (id) {
+    const input = document.getElementById(id);
+    if (input && input.value !== values[id]) { input.value = values[id]; }
+  });
+}
+
+/* Clear all: every filter control and the state behind it reset, and
+   the list re-renders unfiltered. The panel stays open. */
+function clearListFilters() {
+  state.listFilters = {
+    tags: [], createdFrom: "", createdTo: "", updatedFrom: "", updatedTo: ""
+  };
+  buildFilterTagList();
+  syncFilterControls();
+  renderNoteList();
+}
+
+/* The sort menu's check mark and direction arrow follow the current
+   choice, so the menu always shows what is in effect (and the choice
+   itself is remembered in settings by chooseListSort). */
+function renderSortMenu() {
+  document.querySelectorAll("#sortMenu [data-sort]").forEach(function (btn) {
+    const isActive = btn.getAttribute("data-sort") === state.listSort.field;
+    btn.querySelector(".sort-check").textContent = isActive ? "✓" : "";
+    btn.querySelector(".sort-dir").textContent =
+      isActive ? (state.listSort.dir === "asc" ? "↑" : "↓") : "";
+    btn.classList.toggle("active", isActive);
+  });
+}
+
+/* One sort menu click. A new field takes its natural default
+   direction (Title ascending, dates descending); clicking the field
+   already in use flips its direction. Either way the choice is saved
+   to settings, the menu closes, and the list re-renders. */
+function chooseListSort(field) {
+  if (state.listSort.field === field) {
+    state.listSort.dir = state.listSort.dir === "asc" ? "desc" : "asc";
+  } else {
+    state.listSort = { field: field, dir: field === "title" ? "asc" : "desc" };
+  }
+  saveSettings();
+  closeListPanels();
+  renderNoteList();
+}
+
+/* The toolbar's view dependent states, refreshed on every list
+   render: New Note is disabled in Trash and in the Archive (with a
+   tooltip saying why), the Filters button carries its active class
+   while any filter is set, and the notebook menu's two items are
+   disabled outside a notebook view, where there is no single
+   notebook to act on. */
+function renderListToolbar() {
+  const newBtn = document.getElementById("listNewNoteBtn");
+  if (newBtn) {
+    const kind = state.view.kind;
+    newBtn.disabled = kind === "trash" || kind === "archive";
+    newBtn.title = kind === "trash"
+      ? "New notes cannot be created in Trash"
+      : kind === "archive"
+        ? "New notes cannot be created in the Archive"
+        : "New note";
+  }
+  const filterBtn = document.getElementById("listFilterBtn");
+  if (filterBtn) {
+    filterBtn.classList.toggle("has-filters", listFiltersActive());
+  }
+  const inNotebook = state.view.kind === "notebook";
+  const renameBtn = document.getElementById("nbRenameBtn");
+  const deleteBtn = document.getElementById("nbDeleteBtn");
+  if (renameBtn) { renameBtn.disabled = !inNotebook; }
+  if (deleteBtn) { deleteBtn.disabled = !inNotebook; }
+  renderSortMenu();
+}
+
+/* The rename and delete notebook flows, prompt and confirm included.
+   Through v1.7.2 these lived on hover links in the sidebar notebook
+   rows; v1.8 keeps exactly one home for them, the list toolbar's
+   notebook menu, with the wording unchanged. */
+function promptRenameNotebook(slug) {
+  const nb = state.notebooks.find(function (n) { return n.slug === slug; });
+  if (!nb) { return; }
+  const next = prompt("Rename notebook", nb.name);
+  if (next && next.trim() && next.trim() !== nb.name) {
+    renameNotebook(nb.slug, next.trim()).catch(function (err) {
+      toast("Rename failed: " + err.message, true);
+    });
+  }
+}
+function confirmDeleteNotebook(slug) {
+  const nb = state.notebooks.find(function (n) { return n.slug === slug; });
+  if (!nb) { return; }
+  const count = notebookCount(nb.slug);
+  const ok = confirm("Delete the notebook \"" + nb.name + "\"? Its " +
+    count + " note(s) will be moved to Trash, not deleted.");
+  if (ok) {
+    deleteNotebook(nb.slug).catch(function (err) {
+      toast("Delete failed: " + err.message, true);
+    });
+  }
+}
+
 /* The filtered, sorted note set for the middle pane.
-   Sort rule: pinned first, then updated newest first. In Trash and in
-   the Archive there is no pinning, so it is just newest first. Search
+   Pipeline: the current view selects the pool, the search text
+   narrows it, then the v1.8 list filters narrow it further (all three
+   combine with AND). Sort rule: pinned first, then the remembered
+   list sort (compareNotesByListSort); the default sort, updated
+   newest first, reproduces the pre-v1.8 order exactly. In Trash and
+   in the Archive there is no pinning, so it is just the sort. Search
    matches title, body text, and tags, all locally against the cache. */
 function visibleNotes() {
   let list;
@@ -4468,9 +4903,12 @@ function visibleNotes() {
         n.tags.some(function (t) { return t.toLowerCase().indexOf(q) >= 0; });
     });
   }
+  if (listFiltersActive()) {
+    list = list.filter(notePassesListFilters);
+  }
   list.sort(function (a, b) {
     if (!!b.pinned !== !!a.pinned) { return b.pinned ? 1 : -1; }
-    return new Date(b.updated) - new Date(a.updated);
+    return compareNotesByListSort(a, b);
   });
   return list;
 }
@@ -4487,13 +4925,26 @@ function viewTitle() {
   return "All Notes";
 }
 
+/* v1.8: the view key of the most recent list render. A change means
+   the user switched views or notebooks, which closes any open list
+   toolbar panel; filter and sort driven re-renders keep the same
+   key, so the filter panel survives its own control changes. */
+let lastRenderedListViewKey = null;
+
 function renderNoteList() {
+  const viewKey = state.view.kind + ":" + (state.view.value || "");
+  if (lastRenderedListViewKey !== null &&
+      lastRenderedListViewKey !== viewKey) {
+    closeListPanels();
+  }
+  lastRenderedListViewKey = viewKey;
   const listEl = document.getElementById("noteList");
   const list = visibleNotes();
   document.getElementById("listTitle").textContent = viewTitle();
   document.getElementById("listSub").textContent =
     list.length + (list.length === 1 ? " note" : " notes") +
     (state.search ? " matching \"" + state.search + "\"" : "");
+  renderListToolbar();
   listEl.innerHTML = "";
 
   if (!state.repoExists && !list.length) {
@@ -4513,6 +4964,8 @@ function renderNoteList() {
       empty.innerHTML = "<div class=\"big\">Trash is empty</div>Notes you move to Trash will wait here until you restore them or delete them forever.";
     } else if (state.view.kind === "archive") {
       empty.innerHTML = "<div class=\"big\">Archive is empty</div>Notes you archive will wait here until you unarchive them or move them to Trash.";
+    } else if (listFiltersActive()) {
+      empty.innerHTML = "<div class=\"big\">No matches</div>No notes match the current filters in this view. Clear the filters to see everything again.";
     } else if (state.search) {
       empty.innerHTML = "<div class=\"big\">No matches</div>No notes match that search in this view.";
     } else {
@@ -8347,6 +8800,76 @@ function wireEvents() {
     createNoteInRepo(slug).catch(function (err) {
       toast("Could not create the note: " + err.message, true);
     });
+  });
+
+  /* v1.8: notes list toolbar wiring. The list New Note button makes
+     the same notebook choice as the sidebar button above (the current
+     notebook, else the default notebook) through the same instant
+     create path; its disabled state in Trash and the Archive is set
+     by renderListToolbar, and a disabled button fires no click. */
+  document.getElementById("listNewNoteBtn").addEventListener("click", function () {
+    const slug = state.view.kind === "notebook" ? state.view.value :
+      (state.notebooks.length ? state.notebooks[0].slug : null);
+    createNoteInRepo(slug).catch(function (err) {
+      toast("Could not create the note: " + err.message, true);
+    });
+  });
+  document.getElementById("listFilterBtn").addEventListener("click", function () {
+    toggleListPanel("filterPanel");
+  });
+  document.getElementById("listSortBtn").addEventListener("click", function () {
+    toggleListPanel("sortMenu");
+  });
+  document.getElementById("listNbMenuBtn").addEventListener("click", function () {
+    toggleListPanel("nbActionMenu");
+  });
+  /* Filter date inputs write straight into filter state and
+     re-render the list. Both input and change are heard (date
+     pickers fire them in different orders across browsers); the
+     write is idempotent. The panel stays open through all of it. */
+  [["filterCreatedFrom", "createdFrom"], ["filterCreatedTo", "createdTo"],
+   ["filterUpdatedFrom", "updatedFrom"], ["filterUpdatedTo", "updatedTo"]]
+    .forEach(function (pair) {
+      const input = document.getElementById(pair[0]);
+      ["input", "change"].forEach(function (eventName) {
+        input.addEventListener(eventName, function (ev) {
+          state.listFilters[pair[1]] = ev.target.value || "";
+          renderNoteList();
+        });
+      });
+    });
+  document.getElementById("filterClearBtn").addEventListener("click", function () {
+    clearListFilters();
+  });
+  /* Sort menu items: one listener per field button. */
+  document.querySelectorAll("#sortMenu [data-sort]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      chooseListSort(btn.getAttribute("data-sort"));
+    });
+  });
+  /* Notebook menu items act on the notebook of the current view.
+     renderListToolbar keeps them disabled outside a notebook view,
+     so these handlers can trust the view; the guard stays as a
+     second line of defense. */
+  document.getElementById("nbRenameBtn").addEventListener("click", function () {
+    if (state.view.kind !== "notebook") { return; }
+    closeListPanels();
+    promptRenameNotebook(state.view.value);
+  });
+  document.getElementById("nbDeleteBtn").addEventListener("click", function () {
+    if (state.view.kind !== "notebook") { return; }
+    closeListPanels();
+    confirmDeleteNotebook(state.view.value);
+  });
+  /* List panel closers, mirroring the editor toolbar menus: a click
+     anywhere outside the list toolbar closes the open panel, and so
+     does Escape. Clicks inside the toolbar (its buttons, its panels,
+     the filter checkboxes and date inputs) are left alone. */
+  document.addEventListener("click", function (ev) {
+    if (!ev.target.closest("#listToolbar")) { closeListPanels(); }
+  });
+  document.addEventListener("keydown", function (ev) {
+    if (ev.key === "Escape") { closeListPanels(); }
   });
 
   /* Search filters locally as the user types. */
