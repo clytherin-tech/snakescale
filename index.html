@@ -24,10 +24,27 @@
   belongs to the user. Notebooks are folders, notes are files, and there is
   no server and no shared database anywhere in this design.
 
-  BUILD STAMP: 2026-10-19-SSN-V11
-  Version: 1.1
+  BUILD STAMP: 2026-10-19-SSN-V12
+  Version: 1.2
 
   Revision history:
+    v1.2  2026-10-19  Attachments and images. Notes can now carry files and
+                      images stored in the user's own Google Drive or
+                      pCloud account (the user picks the provider in the
+                      new Attachments settings dialog). Attachment binaries
+                      never enter GitHub: the note file stores only small
+                      metadata in a new front matter line, attachments:,
+                      holding a JSON array of provider references, and the
+                      body stores clean placeholder elements that are
+                      hydrated from the provider when the note opens.
+                      Editor gains an Attach button, drag and drop, image
+                      paste, an upload progress panel, inline images, file
+                      cards with download and remove, and provider aware
+                      Delete Forever. Provider tokens are encrypted with
+                      the same password vault key as the GitHub token
+                      (session key kept in memory only). Apple iCloud Drive
+                      is not supported by web apps and stays deferred.
+                      Build stamp 2026-10-19-SSN-V12.
     v1.1  2026-10-19  Look and layout polish only. Rebuilt the tile S logo
                       as a cleaner vector with a brighter lower gradient,
                       added an inline SVG favicon, gave the setup, lock, and
@@ -36,8 +53,7 @@
                       list and centered editor reading column, added the
                       sync status dot, improved dark mode contrast, and
                       enlarged the mobile pane switcher. No feature behavior
-                      or data format changed. Build stamp
-                      2026-10-19-SSN-V11.
+                      or data format changed.
     v1.0  2026-10-18  First MVP release. Setup and lock vault, GitHub repo
                       connect and create flow, notebooks, rich text notes
                       stored as .md files with front matter, tags, pinned
@@ -382,6 +398,96 @@ body.dark .tag-chip{color:var(--accent);}
 }
 body.dark #conflictBanner{background:#3A2F10;color:#FFE1A8;}
 
+/* v1.2: the Attach button sits in its own toolbar group, matching the
+   separator treatment the other toolbar groups already use. */
+.toolbar button.attach-btn{margin-left:10px;}
+.toolbar button.attach-btn::before{
+  content:"";position:absolute;left:-10px;top:7px;bottom:7px;width:1px;
+  background:var(--border);
+}
+
+/* ---------- v1.2 attachments: upload progress panel ---------- */
+#uploadPanel{
+  border:1px solid var(--border);border-radius:var(--radius-card);
+  background:var(--soft);padding:8px 12px;margin-bottom:12px;
+  font-size:13.5px;font-weight:600;
+}
+#uploadPanel .bar{
+  height:8px;border-radius:var(--radius-pill);background:var(--surface);
+  margin-top:6px;overflow:hidden;
+}
+#uploadPanel .bar > div{
+  height:100%;width:0%;background:var(--secondary);
+  border-radius:var(--radius-pill);transition:width var(--motion);
+}
+
+/* ---------- v1.2 attachments: placeholders inside the note body ----------
+   A placeholder is the ONLY attachment markup ever saved in a note. While
+   a note is open, hydration fills it with the live image or a file card;
+   on save it is canonicalized back to this empty shell (see the script). */
+#noteBody .ss-attachment{
+  display:block;margin:12px 0;padding:10px 12px;
+  border:1px solid var(--border);border-radius:var(--radius-card);
+  background:var(--surface);
+}
+#noteBody .ss-attachment img.ss-att-img{
+  display:block;max-width:100%;height:auto;border-radius:8px;margin-bottom:8px;
+}
+.ss-att-name{font-weight:700;font-size:14px;word-break:break-word;}
+.ss-att-meta{font-size:12.5px;color:var(--muted);margin:2px 0 8px;}
+.ss-att-msg{font-size:13.5px;color:var(--muted);margin:4px 0 8px;}
+.ss-att-actions{display:flex;gap:6px;flex-wrap:wrap;}
+.ss-att-provider{
+  display:inline-block;font-size:11.5px;font-weight:700;letter-spacing:.3px;
+  background:var(--soft);color:var(--primary);border-radius:var(--radius-pill);
+  padding:1px 8px;margin-left:6px;vertical-align:middle;
+}
+body.dark .ss-att-provider{color:#EAF3EC;}
+#noteBody.drag-over{outline:3px dashed var(--accent);outline-offset:-6px;}
+
+/* ---------- v1.2 attachments: settings modal ---------- */
+.modal{
+  position:fixed;inset:0;z-index:80;display:flex;align-items:flex-start;
+  justify-content:center;padding:28px 14px;overflow-y:auto;
+  background:rgba(10,31,24,.55);
+}
+.modal-card{
+  background:var(--bg);color:var(--text);width:100%;max-width:620px;
+  border-radius:var(--radius-card);box-shadow:var(--shadow);padding:22px;
+}
+.modal-card h2{margin:0 0 4px;font-size:20px;}
+.modal-card .modal-sub{color:var(--muted);font-size:14px;margin:0 0 14px;}
+.modal-msg{
+  border:1px solid var(--border);border-left:4px solid var(--accent);
+  background:var(--surface);border-radius:var(--radius-button);
+  padding:8px 12px;font-size:14px;margin-bottom:14px;
+}
+.provider-card{
+  border:1px solid var(--border);border-radius:var(--radius-card);
+  background:var(--surface);padding:14px;margin:12px 0;
+}
+.provider-card.connected{border-color:var(--accent);box-shadow:inset 3px 0 0 var(--accent);}
+.provider-card h3{margin:0 0 2px;font-size:16px;display:flex;align-items:center;gap:8px;}
+.status-dot{
+  width:10px;height:10px;border-radius:50%;background:#B0B0B0;flex:0 0 auto;
+}
+.status-dot.on{background:var(--accent);}
+.provider-status{font-size:13.5px;color:var(--muted);margin:2px 0 10px;}
+.provider-card .field{margin-bottom:10px;}
+.provider-card label{display:block;font-weight:600;font-size:13.5px;margin-bottom:4px;}
+.provider-card input[type="text"]{
+  width:100%;padding:8px 10px;border:1px solid var(--border);
+  border-radius:var(--radius-button);background:var(--bg);
+}
+.provider-hint{font-size:13px;color:var(--muted);margin-top:8px;}
+.modal .field{margin-bottom:12px;}
+.modal .field label{display:block;font-weight:600;font-size:14px;margin-bottom:4px;}
+.modal .field select{
+  width:100%;padding:8px 10px;border:1px solid var(--border);
+  border-radius:var(--radius-button);background:var(--surface);
+}
+.modal-foot{display:flex;justify-content:flex-end;gap:8px;margin-top:16px;}
+
 /* mobile top bar (only shown on small screens) */
 #mobileBar{display:none;}
 
@@ -595,6 +701,7 @@ body.dark #conflictBanner{background:#3A2F10;color:#FFE1A8;}
       <div class="foot-buttons">
         <button class="btn small" id="saveRepoBtn" type="button">Save repo</button>
         <button class="btn small" id="syncNowBtn" type="button">Sync now</button>
+        <button class="btn small" id="attachSettingsBtn" type="button">Attachments</button>
         <button class="btn small" id="themeBtn" type="button">Dark mode</button>
         <button class="btn small" id="lockBtn" type="button">Lock</button>
       </div>
@@ -653,7 +760,16 @@ body.dark #conflictBanner{background:#3A2F10;color:#FFE1A8;}
             <button type="button" data-cmd="ol" title="Numbered list">1. List</button>
             <button type="button" data-cmd="checklist" title="Checklist">Checklist</button>
             <button type="button" data-cmd="clear" title="Clear formatting">Clear</button>
+            <button type="button" id="attachBtn" class="attach-btn" title="Attach files or images (stored in your Google Drive or pCloud)">Attach</button>
           </div>
+
+          <!-- v1.2 upload progress: shows the active upload and how many
+               files are still queued. Hidden unless an upload is running. -->
+          <div id="uploadPanel" class="hidden" aria-live="polite">
+            <span id="uploadText">Uploading...</span>
+            <div class="bar"><div id="uploadBarFill"></div></div>
+          </div>
+          <input type="file" id="attachFileInput" multiple class="hidden" aria-hidden="true">
 
           <!-- Rich text body. The note body is stored as HTML inside the
                .md file (documented in the script header), which keeps
@@ -674,6 +790,62 @@ body.dark #conflictBanner{background:#3A2F10;color:#FFE1A8;}
   </main>
 </div>
 
+<!-- ==========================================================================
+     v1.2: Attachments settings dialog
+     Attachments live in the user's own Google Drive or pCloud account, not
+     in GitHub. Signing in uses OAuth: the user clicks a sign in button and
+     approves access on the provider's own site. The two client ID fields
+     below are NOT something end users ever fill in with a developer app of
+     their own: they exist only so this v1.2 test build can receive the
+     publisher client IDs that Chris, the app owner, creates once (see
+     ATTACHMENT_PROVIDERS_SETUP.md). A later build bakes those public
+     client IDs in, and then the fields go away and only sign in remains.
+     ========================================================================== -->
+<div id="attachModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="attachModalTitle">
+  <div class="modal-card">
+    <h2 id="attachModalTitle">Attachments</h2>
+    <p class="modal-sub">Images and files are stored in your own cloud account, in a folder named <strong>SnakeScale Notes Attachments</strong>. Your notes in GitHub only keep a small reference to each file. You sign in with OAuth on the provider's own site; SnakeScale never sees your Google or pCloud password.</p>
+    <div id="attachModalMsg" class="modal-msg hidden"></div>
+
+    <div class="field">
+      <label for="attachDefaultProvider">Default storage provider for new attachments</label>
+      <select id="attachDefaultProvider">
+        <option value="none">None selected</option>
+        <option value="google">Google Drive</option>
+        <option value="pcloud">pCloud</option>
+      </select>
+    </div>
+
+    <div class="provider-card" id="googleCard">
+      <h3><span class="status-dot" id="googleDot"></span>Google Drive</h3>
+      <div class="provider-status" id="googleStatus">Not signed in.</div>
+      <div class="field">
+        <label for="googleClientId">Google OAuth client ID (publisher ID, test build only)</label>
+        <input type="text" id="googleClientId" placeholder="Paste the publisher Google client ID" autocomplete="off">
+      </div>
+      <button class="btn small" id="googleConnectBtn" type="button">Sign in with Google</button>
+      <div class="provider-hint hidden" id="googleHint">This test build needs the publisher Google client ID before sign in can work. The app owner creates it once in Google Cloud (free) and shares it for pasting here. End users of the finished app will never register a developer app or see this field; they will only click Sign in with Google. Setup steps are in ATTACHMENT_PROVIDERS_SETUP.md.</div>
+    </div>
+
+    <div class="provider-card" id="pcloudCard">
+      <h3><span class="status-dot" id="pcloudDot"></span>pCloud</h3>
+      <div class="provider-status" id="pcloudStatus">Not signed in.</div>
+      <div class="field">
+        <label for="pcloudClientId">pCloud client ID (publisher ID, test build only)</label>
+        <input type="text" id="pcloudClientId" placeholder="Paste the publisher pCloud client ID" autocomplete="off">
+      </div>
+      <button class="btn small" id="pcloudConnectBtn" type="button">Sign in with pCloud</button>
+      <div class="provider-hint hidden" id="pcloudHint">This test build needs the publisher pCloud client ID before sign in can work. The app owner creates the pCloud app once (free) and shares the ID for pasting here. End users of the finished app will never register a developer app or see this field; they will only click Sign in with pCloud, which sends them to pCloud to approve access. Setup steps are in ATTACHMENT_PROVIDERS_SETUP.md.</div>
+    </div>
+
+    <p class="provider-hint">Apple note: iCloud Drive cannot be used directly by web apps, so Apple attachment storage is deferred to a possible future release.</p>
+
+    <div class="modal-foot">
+      <button class="btn" id="attachDoneBtn" type="button">Done</button>
+    </div>
+  </div>
+</div>
+
 <!-- Toasts land here (bottom right). -->
 <div id="toastBox" aria-live="polite"></div>
 
@@ -681,8 +853,8 @@ body.dark #conflictBanner{background:#3A2F10;color:#FFE1A8;}
 "use strict";
 
 /* ============================================================================
-   SnakeScale Notes v1.1: application script
-   BUILD STAMP: 2026-10-19-SSN-V11
+   SnakeScale Notes v1.2: application script
+   BUILD STAMP: 2026-10-19-SSN-V12
 
    How this script is organized:
      1. Constants and global state
@@ -696,7 +868,9 @@ body.dark #conflictBanner{background:#3A2F10;color:#FFE1A8;}
         notebooks, trash, and the index.json rebuild
      9. Rendering: sidebar, tags, note list, editor
     10. Editor behavior: toolbar, checklists, autosave
-    11. Screen flow and event wiring, then boot
+    11. Attachments: provider drivers (Google Drive, pCloud), upload flow,
+        placeholder hydration, removal, and the settings dialog
+    12. Screen flow and event wiring, then boot
 
    Note body storage note (v1.0 decision): the editor is rich text, so the
    body of each .md file is stored as HTML below the front matter block. The
@@ -709,8 +883,8 @@ body.dark #conflictBanner{background:#3A2F10;color:#FFE1A8;}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-19-SSN-V11";
-const APP_VERSION = "1.1";
+const APP_BUILD = "2026-10-19-SSN-V12";
+const APP_VERSION = "1.2";
 const API_BASE = "https://api.github.com";
 const API_VERSION_HEADER = "2022-11-28";
 
@@ -719,11 +893,34 @@ const LS_VAULT = "snakescale.vault.v1";
 const LS_CACHE = "snakescale.cache.v1";
 const LS_QUEUE = "snakescale.queue.v1";
 const LS_SETTINGS = "snakescale.settings.v1";
+/* v1.2: provider OAuth tokens, AES-GCM encrypted under the same vault
+   key as the GitHub token (see section 11). Only ciphertext lives here. */
+const LS_PROVIDERS = "snakescale.providerTokens.v1";
+/* v1.2: sessionStorage key for the pCloud OAuth return handshake. */
+const SS_PCLOUD_OAUTH = "snakescale.pcloud.oauth";
+/* v1.2 attachment constants. */
+const ATTACH_ROOT_NAME = "SnakeScale Notes Attachments";
+const ATTACH_MAX_BYTES = 100 * 1024 * 1024; /* 100 MB per file cap */
+const GOOGLE_DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file";
 
 /* The in-memory app state. The plaintext token lives ONLY in state.token
    while the app is unlocked; locking the app sets it back to null. */
 const state = {
   token: null,              // plaintext GitHub token, memory only, never stored
+  sessionKey: null,         // v1.2: vault CryptoKey, memory only, set at unlock
+  providerTokens: { google: null, pcloud: null }, // v1.2: plaintext provider tokens, memory only
+  pendingPcloud: null,      // v1.2: pCloud OAuth return captured before unlock, memory only
+  objectUrls: [],           // v1.2: blob URLs created for the open note, revoked on switch/lock
+  attach: {                 // v1.2: attachment config, NOT secret, saved in settings
+    defaultProvider: "none",  // none | google | pcloud
+    googleClientId: "",
+    pcloudClientId: "",
+    googleFolderId: null,
+    pcloudFolderId: null,
+    pcloudHost: "",
+    pcloudUserId: "",
+    googleExpiresAt: 0
+  },
   username: null,           // GitHub login of the token owner
   repo: "snakescale-notes-data", // data repository name (owner is username)
   repoExists: false,        // true after the repo has been found or created
@@ -747,7 +944,10 @@ const state = {
      created:   ISO string,
      updated:   ISO string,
      pinned:    boolean,
-     body:      string,   HTML body
+     body:      string,   HTML body (attachment placeholders only, no binaries)
+     attachments: [object],  v1.2 metadata: {id, provider, fileId, name,
+                    storageName, mime, size, created}; binaries live with
+                    the provider, never in GitHub
      sha:       string|null,  GitHub blob sha of the file as last loaded
      trashed:   boolean,
      trashedFrom: string|null  notebook slug the note was trashed from
@@ -1018,6 +1218,10 @@ async function vaultCreate(token, password) {
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const key = await deriveKeyFromPassword(password, salt);
+  /* v1.2: keep the derived key in memory for this session so provider
+     OAuth tokens (Google, pCloud) can be encrypted under the very same
+     key. The key itself is never written anywhere; locking drops it. */
+  state.sessionKey = key;
   const cipher = await crypto.subtle.encrypt(
     { name: "AES-GCM", iv: iv },
     key,
@@ -1050,6 +1254,9 @@ async function vaultUnlock(password) {
     key,
     base64ToBytes(blob.data)
   );
+  /* v1.2: decryption succeeded, so this key is the right one. Retain it
+     in memory only, for provider token encryption during this session. */
+  state.sessionKey = key;
   return new TextDecoder().decode(plain);
 }
 
@@ -1064,6 +1271,14 @@ function vaultWipe() {
 function lockApp() {
   state.token = null;
   state.username = null;
+  /* v1.2: locking also drops the session vault key, every plaintext
+     provider token, any pending pCloud OAuth capture, and the blob URLs
+     of the note that was open. Encrypted provider tokens stay in
+     localStorage, unreadable until the next unlock. */
+  state.sessionKey = null;
+  state.providerTokens = { google: null, pcloud: null };
+  state.pendingPcloud = null;
+  revokeAttachmentUrls();
   showScreen(vaultExists() ? "lock" : "setup");
 }
 
@@ -1079,12 +1294,21 @@ function loadSettings() {
     const s = JSON.parse(localStorage.getItem(LS_SETTINGS) || "{}");
     if (s.repo) { state.repo = s.repo; }
     if (s.dark) { document.body.classList.add("dark"); }
+    /* v1.2: attachment config rides along in the same settings object.
+       None of it is secret: client IDs are public identifiers, folder IDs
+       and expiry times are bookkeeping. Tokens are NEVER stored here. */
+    if (s.attach) {
+      Object.keys(state.attach).forEach(function (k) {
+        if (s.attach[k] !== undefined) { state.attach[k] = s.attach[k]; }
+      });
+    }
   } catch (e) { /* damaged settings are ignored, defaults apply */ }
 }
 function saveSettings() {
   localStorage.setItem(LS_SETTINGS, JSON.stringify({
     repo: state.repo,
-    dark: document.body.classList.contains("dark")
+    dark: document.body.classList.contains("dark"),
+    attach: state.attach
   }));
 }
 
@@ -1252,17 +1476,55 @@ async function ghDeleteFile(path, sha, message) {
      updated: <ISO timestamp>
      pinned: true or false
      trashedFrom: <slug>          (only on files inside trash/)
+     attachments: <JSON array>    (v1.2, only when the note has attachments)
      ---
 
      <HTML body>
    The delimiter is a line of exactly three hyphens. Values never contain
    newlines (titles are flattened on save), which keeps parsing trivial and
    the files friendly to open in any other Markdown tool.
+   The v1.2 attachments line is a single line JSON array of small objects:
+   {id, provider, fileId, name, storageName, mime, size, created}. JSON
+   string escaping guarantees the value stays on one line. The attachment
+   BINARIES never live in GitHub; they sit in the user's Google Drive or
+   pCloud folder, and this line only carries the provider file references.
+   Notes written before v1.2 have no attachments line and parse as an
+   empty array, so old data loads unchanged.
    -------------------------------------------------------------------------- */
 function notePath(note) {
   if (note.trashed) { return "trash/" + note.id + ".md"; }
   return "notebooks/" + note.notebook + "/" + note.id + ".md";
 }
+
+/* v1.2: attachment metadata cleanup. Keeps only well formed entries with
+   the fields the app depends on, coerced to plain strings and numbers, so
+   a hand edited note file can never inject odd shapes into the app.
+   Every attachment object keeps this exact shape:
+   {id, provider, fileId, name, storageName, mime, size, created}. */
+function sanitizeAttachments(list) {
+  if (!Array.isArray(list)) { return []; }
+  const out = [];
+  list.forEach(function (a) {
+    if (!a || typeof a !== "object") { return; }
+    if (!a.id || !a.provider || !a.fileId) { return; }
+    out.push({
+      id: String(a.id),
+      provider: String(a.provider),
+      fileId: String(a.fileId),
+      name: String(a.name || "file"),
+      storageName: String(a.storageName || a.name || "file"),
+      mime: String(a.mime || "application/octet-stream"),
+      size: Number(a.size) || 0,
+      created: String(a.created || "")
+    });
+  });
+  return out;
+}
+
+/* v1.2: counts note files whose attachments line could not be parsed
+   during a load. loadAllFromRepo turns a nonzero count into one readable
+   toast instead of failing the whole load. */
+let attachmentParseWarnings = 0;
 
 function serializeNote(note) {
   const lines = [];
@@ -1276,6 +1538,14 @@ function serializeNote(note) {
   lines.push("pinned: " + (note.pinned ? "true" : "false"));
   if (note.trashed) {
     lines.push("trashedFrom: " + (note.trashedFrom || note.notebook || ""));
+  }
+  /* v1.2: attachment metadata. Written only when the note actually has
+     attachments, so notes without any keep byte identical front matter
+     to earlier versions. JSON.stringify never emits a raw newline, which
+     keeps the value on one line as the format requires. */
+  const atts = sanitizeAttachments(note.attachments);
+  if (atts.length) {
+    lines.push("attachments: " + JSON.stringify(atts));
   }
   lines.push("---");
   lines.push("");
@@ -1297,6 +1567,7 @@ function parseNoteFile(text, sha, fallbackId, trashed) {
     updated: new Date().toISOString(),
     pinned: false,
     body: "",
+    attachments: [],   /* v1.2: attachment metadata, see serializeNote */
     sha: sha || null,
     trashed: !!trashed,
     trashedFrom: null
@@ -1322,6 +1593,22 @@ function parseNoteFile(text, sha, fallbackId, trashed) {
     if (meta.updated) { note.updated = meta.updated; }
     note.pinned = meta.pinned === "true";
     if (meta.trashedFrom) { note.trashedFrom = meta.trashedFrom; }
+    /* v1.2: attachment metadata. A malformed line must never break the
+       note: it is counted as a warning (surfaced once after load) and the
+       note opens with no attachment metadata. */
+    if (meta.attachments) {
+      try {
+        const parsedAtts = JSON.parse(meta.attachments);
+        if (!Array.isArray(parsedAtts)) { throw new Error("not an array"); }
+        note.attachments = sanitizeAttachments(parsedAtts);
+        if (note.attachments.length !== parsedAtts.length) {
+          attachmentParseWarnings++;
+        }
+      } catch (attErr) {
+        note.attachments = [];
+        attachmentParseWarnings++;
+      }
+    }
     note.body = raw.slice(match[0].length).replace(/^\s*\n/, "");
   } else {
     note.body = raw;
@@ -1380,6 +1667,7 @@ function buildIndexFromFolders(folderSlugs) {
    refresh the cache. Throws on hard failures so the caller can fall back
    to the cache and say so. */
 async function loadAllFromRepo() {
+  attachmentParseWarnings = 0;   /* v1.2: reset the malformed metadata count */
   const indexFile = await ghGetFile("index.json");
   let index = null;
   if (indexFile) {
@@ -1438,6 +1726,15 @@ async function loadAllFromRepo() {
   state.notes = notes;
   state.trash = trash;
   saveCache();
+  /* v1.2: one readable warning if any note file carried attachment
+     metadata that could not be parsed. Those notes still loaded; they
+     simply show no attachments until the line is repaired or the files
+     are reattached. */
+  if (attachmentParseWarnings > 0) {
+    toast("Warning: " + attachmentParseWarnings + " note(s) had unreadable " +
+      "attachment data and were opened without it. The notes themselves are fine.", true);
+    attachmentParseWarnings = 0;
+  }
 }
 
 /* Full sync: flush queued offline edits first, then reload from the repo,
@@ -1524,6 +1821,7 @@ async function saveConflictCopy(note, originalPath) {
     updated: new Date().toISOString(),
     pinned: false,
     body: note.body,
+    attachments: sanitizeAttachments(note.attachments),   /* v1.2 */
     sha: null,
     trashed: false,
     trashedFrom: null
@@ -1720,6 +2018,7 @@ function makeNote(notebookSlug, title, body) {
     updated: now,
     pinned: false,
     body: body || "",
+    attachments: [],   /* v1.2: new notes start with no attachments */
     sha: null,
     trashed: false,
     trashedFrom: null
@@ -2120,6 +2419,11 @@ function visibleNotes() {
     list = list.filter(function (n) {
       return n.title.toLowerCase().indexOf(q) >= 0 ||
         htmlToText(n.body).toLowerCase().indexOf(q) >= 0 ||
+        /* v1.2: attachment file names are searchable. Placeholder markup
+           itself contributes no text, so snippets stay clean. */
+        (n.attachments || []).some(function (a) {
+          return (a.name || "").toLowerCase().indexOf(q) >= 0;
+        }) ||
         n.tags.some(function (t) { return t.toLowerCase().indexOf(q) >= 0; });
     });
   }
@@ -2247,11 +2551,20 @@ function renderEditor() {
      re-render during typing never moves the cursor or clobbers input. */
   if (renderEditor._forId !== note.id) {
     renderEditor._forId = note.id;
+    /* v1.2: the previous note's image blob URLs are released before the
+       editor switches, so long sessions do not accumulate them. */
+    revokeAttachmentUrls();
     document.getElementById("noteTitle").value = note.title || "";
     document.getElementById("noteTags").value = note.tags.join(", ");
     document.getElementById("notePinned").checked = !!note.pinned;
     document.getElementById("noteBody").innerHTML = note.body || "";
     setSaveState(note.trashed ? "In Trash" : "Saved");
+    /* v1.2: fill the attachment placeholders from the providers. This is
+       async and fire and forget: text renders immediately, images and
+       file cards pop in as each download lands. */
+    hydrateAttachments(note).catch(function (err) {
+      console.warn("Attachment hydration failed:", err);
+    });
   }
 
   /* Notebook picker options follow the notebook list. */
@@ -2303,6 +2616,30 @@ function setMobileView(which) {
    only the sidebar and list panes re-render, never the editor itself, so
    typing is never interrupted.
    -------------------------------------------------------------------------- */
+/* v1.2: canonicalize attachment placeholders before a body is saved.
+   While a note is open, hydration fills each .ss-attachment placeholder
+   with live DOM: an <img> with a blob URL, file name text, buttons, and
+   possibly an error message. NONE of that may be persisted. This walks
+   the HTML and replaces every placeholder with a clean empty shell that
+   carries only the tag kind (figure for images, div for files), the
+   class, the attachment id, and contenteditable=false. It is called from
+   collectEditor, which is the single funnel every save passes through,
+   so autosave, trash moves, restores, and notebook moves all store the
+   same canonical form. */
+function canonicalizeAttachmentPlaceholders(html) {
+  const holder = document.createElement("div");
+  holder.innerHTML = html || "";
+  holder.querySelectorAll(".ss-attachment").forEach(function (el) {
+    const id = el.getAttribute("data-attachment-id");
+    const clean = document.createElement(el.tagName === "FIGURE" ? "figure" : "div");
+    clean.setAttribute("class", "ss-attachment");
+    if (id) { clean.setAttribute("data-attachment-id", id); }
+    clean.setAttribute("contenteditable", "false");
+    el.replaceWith(clean);
+  });
+  return holder.innerHTML;
+}
+
 function collectEditor(note) {
   note.title = document.getElementById("noteTitle").value.trim() || "Untitled note";
   const pickerValue = document.getElementById("noteNotebook").value;
@@ -2312,7 +2649,13 @@ function collectEditor(note) {
     .map(function (t) { return t.trim(); })
     .filter(function (t) { return t.length > 0; });
   note.pinned = document.getElementById("notePinned").checked;
-  note.body = document.getElementById("noteBody").innerHTML;
+  /* v1.2: the stored body always carries canonical placeholders. */
+  note.body = canonicalizeAttachmentPlaceholders(
+    document.getElementById("noteBody").innerHTML);
+  /* v1.2: attachment metadata is edited through the attachment actions,
+     not the form fields, but re-sanitize here so the saved note always
+     carries a clean array on the object. */
+  note.attachments = sanitizeAttachments(note.attachments);
   return note;
 }
 
@@ -2391,7 +2734,1054 @@ function runToolbarCommand(cmd) {
 }
 
 /* --------------------------------------------------------------------------
-   11. Screen flow and event wiring
+   11. Attachments: storage providers, upload flow, hydration, settings
+   --------------------------------------------------------------------------
+   Design in one paragraph: binaries never enter GitHub. A note stores
+   small attachment metadata in its front matter (section 7) and clean
+   placeholder elements in its body. The bytes live in ONE folder named
+   "SnakeScale Notes Attachments" inside the user's own Google Drive or
+   pCloud account. Both providers are reached with OAuth sign in: the
+   user clicks "Sign in with Google" or "Sign in with pCloud" and
+   approves access on the provider's own site. SnakeScale never sees the
+   user's provider password. The client IDs that make those buttons work
+   belong to the PUBLISHER (Chris, the app owner), who registers one app
+   with each provider, once, for free. End users never register anything.
+   In this v1.2 test build the two publisher IDs are pasted into the
+   Attachments settings dialog; a later build bakes the public IDs in.
+
+   Token safety: provider OAuth tokens are encrypted with AES-GCM under
+   the SAME key as the GitHub vault (the key derived from the app
+   password at unlock and kept only in memory as state.sessionKey).
+   localStorage holds only ciphertext. Google's browser token flow hands
+   out short lived access tokens (about an hour) and NO refresh token, so
+   expiry is tracked and the user simply signs in again. Locking the app
+   drops the key and every plaintext token from memory.
+   -------------------------------------------------------------------------- */
+
+/* ----- provider token vault (encrypted under the session vault key) -- */
+function loadProviderTokenBlob() {
+  try { return JSON.parse(localStorage.getItem(LS_PROVIDERS) || "{}"); }
+  catch (e) { return {}; }
+}
+
+async function storeProviderToken(provider, token) {
+  if (!state.sessionKey) {
+    throw new Error("Unlock SnakeScale with your app password before signing in to a storage provider.");
+  }
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const cipher = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv: iv },
+    state.sessionKey,
+    new TextEncoder().encode(token)
+  );
+  const all = loadProviderTokenBlob();
+  all[provider] = {
+    iv: bytesToBase64(iv),
+    data: bytesToBase64(new Uint8Array(cipher))
+  };
+  localStorage.setItem(LS_PROVIDERS, JSON.stringify(all));
+  state.providerTokens[provider] = token;
+}
+
+/* Read a provider token: memory first, then decrypt the stored blob with
+   the session key. Returns null when signed out, locked, or damaged. */
+async function getProviderToken(provider) {
+  if (state.providerTokens[provider]) { return state.providerTokens[provider]; }
+  const rec = loadProviderTokenBlob()[provider];
+  if (!rec || !state.sessionKey) { return null; }
+  try {
+    const plain = await crypto.subtle.decrypt(
+      { name: "AES-GCM", iv: base64ToBytes(rec.iv) },
+      state.sessionKey,
+      base64ToBytes(rec.data)
+    );
+    state.providerTokens[provider] = new TextDecoder().decode(plain);
+    return state.providerTokens[provider];
+  } catch (e) {
+    return null;
+  }
+}
+
+function clearProviderToken(provider) {
+  const all = loadProviderTokenBlob();
+  if (all[provider]) {
+    delete all[provider];
+    localStorage.setItem(LS_PROVIDERS, JSON.stringify(all));
+  }
+  state.providerTokens[provider] = null;
+}
+
+/* ----- small attachment utilities -------------------------------------- */
+function humanSize(bytes) {
+  const n = Number(bytes) || 0;
+  if (n < 1024) { return n + " B"; }
+  if (n < 1024 * 1024) { return (n / 1024).toFixed(1) + " KB"; }
+  if (n < 1024 * 1024 * 1024) { return (n / (1024 * 1024)).toFixed(1) + " MB"; }
+  return (n / (1024 * 1024 * 1024)).toFixed(2) + " GB";
+}
+
+/* Make an original file name safe as the tail of a storage file name. */
+function sanitizeFileName(name) {
+  const clean = String(name || "file")
+    .replace(/[\\/:*?"<>|]/g, "_")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 120);
+  return clean || "file";
+}
+
+/* Release every blob URL created for the currently open note. Called on
+   note switches and on lock, so a long session cannot pile them up. */
+function revokeAttachmentUrls() {
+  (state.objectUrls || []).forEach(function (u) {
+    try { URL.revokeObjectURL(u); } catch (e) { /* already gone */ }
+  });
+  state.objectUrls = [];
+}
+
+/* ----- Google Drive driver ----------------------------------------------
+   Sign in uses Google Identity Services (GIS) token client, loaded
+   lazily from Google ONLY when the user clicks Sign in with Google, so
+   users who never touch attachments never load Google code. Scope is
+   drive.file only: SnakeScale can see and manage just the files it
+   creates (plus files the user picks), never the whole Drive.        */
+let gisScriptPromise = null;
+function loadGisScript() {
+  if (window.google && window.google.accounts && window.google.accounts.oauth2) {
+    return Promise.resolve();
+  }
+  if (gisScriptPromise) { return gisScriptPromise; }
+  gisScriptPromise = new Promise(function (resolve, reject) {
+    const s = document.createElement("script");
+    s.src = "https://accounts.google.com/gsi/client";
+    s.async = true;
+    s.defer = true;
+    s.onload = function () { resolve(); };
+    s.onerror = function () {
+      gisScriptPromise = null;
+      reject(new Error("The Google sign in script could not be loaded. Check your connection and try again."));
+    };
+    document.head.appendChild(s);
+  });
+  return gisScriptPromise;
+}
+
+async function googleConnect() {
+  const clientId = (document.getElementById("googleClientId").value || "").trim();
+  state.attach.googleClientId = clientId;
+  saveSettings();
+  if (!clientId) {
+    document.getElementById("googleHint").classList.remove("hidden");
+    document.getElementById("googleClientId").focus();
+    throw new Error("Paste the publisher Google client ID first. It comes from a one time setup by the app owner (see ATTACHMENT_PROVIDERS_SETUP.md). End users never register a developer app.");
+  }
+  await loadGisScript();
+  const resp = await new Promise(function (resolve, reject) {
+    const client = window.google.accounts.oauth2.initTokenClient({
+      client_id: clientId,
+      scope: GOOGLE_DRIVE_SCOPE,
+      callback: function (r) {
+        if (r && r.access_token) { resolve(r); }
+        else { reject(new Error("Google sign in did not return an access token.")); }
+      },
+      error_callback: function (err) {
+        reject(new Error("Google sign in was cancelled or failed" +
+          (err && err.type ? " (" + err.type + ")" : "") + "."));
+      }
+    });
+    client.requestAccessToken({ prompt: "" });
+  });
+  state.attach.googleExpiresAt =
+    Date.now() + (Number(resp.expires_in) || 3600) * 1000;
+  state.attach.googleFolderId = null;   /* re-resolve for this account */
+  saveSettings();
+  await storeProviderToken("google", resp.access_token);
+  /* Prove the token works and prepare the folder right away, so a bad
+     grant fails here with a clear message instead of at first upload. */
+  await googleEnsureRootFolder();
+}
+
+async function googleDisconnect() {
+  const token = await getProviderToken("google");
+  clearProviderToken("google");
+  state.attach.googleExpiresAt = 0;
+  state.attach.googleFolderId = null;
+  saveSettings();
+  if (token && window.google && window.google.accounts &&
+      window.google.accounts.oauth2) {
+    try { window.google.accounts.oauth2.revoke(token, function () {}); }
+    catch (e) { /* revoke is best effort; the local copy is already gone */ }
+  }
+}
+
+async function googleGetStatus() {
+  const token = await getProviderToken("google");
+  if (!token) { return { connected: false, reason: "signed-out" }; }
+  if (!state.attach.googleExpiresAt ||
+      Date.now() > state.attach.googleExpiresAt - 30000) {
+    /* Expired (or expiry unknown): drop the dead token and ask the user
+       to sign in again. The browser token flow has no refresh token. */
+    clearProviderToken("google");
+    state.attach.googleExpiresAt = 0;
+    saveSettings();
+    return { connected: false, reason: "expired" };
+  }
+  return { connected: true };
+}
+
+/* Shared Drive fetch: attaches the token, converts a 401 into the
+   readable "sign in expired" path, and normalizes network failures. */
+async function gdriveFetch(url, options) {
+  const token = await getProviderToken("google");
+  if (!token) { throw new Error("Sign in with Google first (Attachments settings)."); }
+  options = options || {};
+  const headers = Object.assign({}, options.headers || {},
+    { "Authorization": "Bearer " + token });
+  let res;
+  try {
+    res = await fetch(url, Object.assign({}, options, { headers: headers }));
+  } catch (e) {
+    throw new Error("Network error talking to Google Drive. You appear to be offline.");
+  }
+  if (res.status === 401) {
+    clearProviderToken("google");
+    state.attach.googleExpiresAt = 0;
+    saveSettings();
+    throw new Error("Your Google sign in expired. Sign in with Google again in Attachments settings.");
+  }
+  return res;
+}
+
+async function gdriveErrorMessage(res, fallback) {
+  let msg = fallback || ("Google Drive error " + res.status);
+  try {
+    const j = await res.json();
+    if (j && j.error && j.error.message) { msg = j.error.message; }
+  } catch (e) { /* keep the fallback */ }
+  return msg;
+}
+
+async function gdriveJson(url, options) {
+  const res = await gdriveFetch(url, options);
+  if (!res.ok) { throw new Error(await gdriveErrorMessage(res)); }
+  if (res.status === 204) { return null; }
+  return res.json();
+}
+
+/* Find or create the one attachments folder. The folder ID is cached in
+   settings; a cached ID is revalidated once because the user could have
+   deleted the folder in Drive between sessions. */
+async function googleEnsureRootFolder() {
+  if (state.attach.googleFolderId) {
+    try {
+      const info = await gdriveJson(
+        "https://www.googleapis.com/drive/v3/files/" +
+        encodeURIComponent(state.attach.googleFolderId) + "?fields=id,trashed");
+      if (info && !info.trashed) { return info.id; }
+    } catch (e) { /* fall through and resolve the folder again */ }
+    state.attach.googleFolderId = null;
+  }
+  const q = "name = '" + ATTACH_ROOT_NAME +
+    "' and mimeType = 'application/vnd.google-apps.folder' and trashed = false";
+  const list = await gdriveJson(
+    "https://www.googleapis.com/drive/v3/files?q=" + encodeURIComponent(q) +
+    "&fields=" + encodeURIComponent("files(id,name)"));
+  if (list && list.files && list.files.length) {
+    state.attach.googleFolderId = list.files[0].id;
+    saveSettings();
+    return list.files[0].id;
+  }
+  const created = await gdriveJson("https://www.googleapis.com/drive/v3/files", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      name: ATTACH_ROOT_NAME,
+      mimeType: "application/vnd.google-apps.folder"
+    })
+  });
+  state.attach.googleFolderId = created.id;
+  saveSettings();
+  return created.id;
+}
+
+/* Resumable upload, per Google's protocol: one POST opens a session,
+   then the bytes go up in 8 MiB chunks (a multiple of the required
+   256 KiB). A 308 answer means "resume incomplete"; its Range header
+   says how many bytes Google actually holds, which is where the next
+   chunk starts. A 200 or 201 carries the finished file resource. */
+async function googleUpload(file, storageName, onProgress) {
+  const folderId = await googleEnsureRootFolder();
+  const token = await getProviderToken("google");
+  if (!token) { throw new Error("Sign in with Google first (Attachments settings)."); }
+  let initRes;
+  try {
+    initRes = await fetch(
+      "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable", {
+        method: "POST",
+        headers: {
+          "Authorization": "Bearer " + token,
+          "Content-Type": "application/json; charset=UTF-8",
+          "X-Upload-Content-Type": file.type || "application/octet-stream",
+          "X-Upload-Content-Length": String(file.size)
+        },
+        body: JSON.stringify({ name: storageName, parents: [folderId] })
+      });
+  } catch (e) {
+    throw new Error("Network error starting the Google Drive upload.");
+  }
+  if (initRes.status === 401) {
+    clearProviderToken("google");
+    state.attach.googleExpiresAt = 0;
+    saveSettings();
+    throw new Error("Your Google sign in expired. Sign in with Google again in Attachments settings.");
+  }
+  if (!initRes.ok) {
+    throw new Error(await gdriveErrorMessage(initRes,
+      "Google Drive refused to start the upload (status " + initRes.status + ")"));
+  }
+  const sessionUrl = initRes.headers.get("Location");
+  if (!sessionUrl) {
+    throw new Error("Google Drive did not return an upload session address.");
+  }
+  if (file.size === 0) {
+    const emptyRes = await fetch(sessionUrl, {
+      method: "PUT",
+      headers: { "Content-Range": "bytes */0" }
+    });
+    if (emptyRes.status === 200 || emptyRes.status === 201) {
+      const doneEmpty = await emptyRes.json();
+      return { fileId: doneEmpty.id };
+    }
+    throw new Error(await gdriveErrorMessage(emptyRes,
+      "Google Drive upload of the empty file failed (status " + emptyRes.status + ")"));
+  }
+  const CHUNK = 8 * 1024 * 1024;
+  let offset = 0;
+  while (offset < file.size) {
+    const end = Math.min(offset + CHUNK, file.size);
+    let res;
+    try {
+      res = await fetch(sessionUrl, {
+        method: "PUT",
+        headers: {
+          "Content-Range": "bytes " + offset + "-" + (end - 1) + "/" + file.size
+        },
+        body: file.slice(offset, end)
+      });
+    } catch (e) {
+      throw new Error("Network error during the Google Drive upload of " + file.name + ".");
+    }
+    if (res.status === 200 || res.status === 201) {
+      const done = await res.json();
+      if (onProgress) { onProgress(100); }
+      return { fileId: done.id };
+    }
+    if (res.status === 308) {
+      const range = res.headers.get("Range");
+      const m = range ? range.match(/bytes=0-(\d+)/) : null;
+      offset = m ? (Number(m[1]) + 1) : end;
+      if (onProgress) { onProgress(Math.round(offset / file.size * 100)); }
+      continue;
+    }
+    throw new Error(await gdriveErrorMessage(res,
+      "Google Drive upload failed with status " + res.status));
+  }
+  throw new Error("Google Drive upload did not complete.");
+}
+
+async function googleDownload(fileId) {
+  const res = await gdriveFetch(
+    "https://www.googleapis.com/drive/v3/files/" +
+    encodeURIComponent(fileId) + "?alt=media");
+  if (!res.ok) {
+    throw new Error(await gdriveErrorMessage(res,
+      "Google Drive download failed with status " + res.status));
+  }
+  return res.blob();
+}
+
+async function googleDelete(fileId) {
+  const res = await gdriveFetch(
+    "https://www.googleapis.com/drive/v3/files/" +
+    encodeURIComponent(fileId), { method: "DELETE" });
+  if (res.status === 204 || res.status === 404) { return; }
+  if (!res.ok) {
+    throw new Error(await gdriveErrorMessage(res,
+      "Google Drive delete failed with status " + res.status));
+  }
+}
+/* ----- pCloud driver ----------------------------------------------------
+   Sign in uses pCloud's OAuth 2.0 token (implicit) flow, which pCloud
+   documents as appropriate for pure client side JavaScript apps: the
+   browser is sent to my.pcloud.com, the user approves, and pCloud
+   redirects back to the app URL with the access token in the fragment.
+   boot() captures that fragment BEFORE any screen routing (see
+   capturePcloudReturn). The account may live in the US or EU data
+   region; the redirect returns the right API hostname, which is stored
+   and used for every later call.                                     */
+function pcloudApiBase() {
+  return "https://" + (state.attach.pcloudHost || "api.pcloud.com");
+}
+
+function pcloudConnect() {
+  const clientId = (document.getElementById("pcloudClientId").value || "").trim();
+  state.attach.pcloudClientId = clientId;
+  saveSettings();
+  if (!clientId) {
+    document.getElementById("pcloudHint").classList.remove("hidden");
+    document.getElementById("pcloudClientId").focus();
+    throw new Error("Paste the publisher pCloud client ID first. It comes from a one time setup by the app owner (see ATTACHMENT_PROVIDERS_SETUP.md). End users never register a developer app.");
+  }
+  const oauthState = bytesToBase64(crypto.getRandomValues(new Uint8Array(16)));
+  sessionStorage.setItem(SS_PCLOUD_OAUTH,
+    JSON.stringify({ state: oauthState, ts: Date.now() }));
+  const redirectUri = window.location.origin + window.location.pathname;
+  window.location.href = "https://my.pcloud.com/oauth2_authorize" +
+    "?client_id=" + encodeURIComponent(clientId) +
+    "&response_type=token" +
+    "&redirect_uri=" + encodeURIComponent(redirectUri) +
+    "&state=" + encodeURIComponent(oauthState);
+  /* The page navigates away. capturePcloudReturn picks the result up
+     on the way back in. */
+}
+
+/* Runs first inside boot(), before screen routing. When pCloud sends the
+   browser back with a token in the URL fragment, capture it into memory,
+   verify the anti forgery state value, and scrub the fragment from the
+   address bar and history. The token is only written to storage later,
+   by finalizePendingPcloud, once the vault key exists (after unlock). */
+function capturePcloudReturn() {
+  if (!window.location.hash ||
+      window.location.hash.indexOf("access_token=") < 0) { return; }
+  const params = new URLSearchParams(window.location.hash.slice(1));
+  const token = params.get("access_token");
+  const returnedState = params.get("state");
+  let expected = null;
+  try {
+    expected = JSON.parse(sessionStorage.getItem(SS_PCLOUD_OAUTH) || "null");
+  } catch (e) { expected = null; }
+  sessionStorage.removeItem(SS_PCLOUD_OAUTH);
+  try {
+    window.history.replaceState(null, "",
+      window.location.pathname + window.location.search);
+  } catch (e) { /* fragment scrub is best effort */ }
+  if (!token || !expected || expected.state !== returnedState) { return; }
+  state.pendingPcloud = {
+    token: token,
+    userId: params.get("userid") || "",
+    locationId: params.get("locationid") || "",
+    hostname: params.get("hostname") || "api.pcloud.com"
+  };
+}
+
+/* After setup or unlock, the session vault key exists, so the pending
+   pCloud token can finally be encrypted and stored. Called from the
+   setup and lock submit handlers. */
+async function finalizePendingPcloud() {
+  const pending = state.pendingPcloud;
+  if (!pending) { return; }
+  state.pendingPcloud = null;
+  try {
+    await storeProviderToken("pcloud", pending.token);
+    state.attach.pcloudHost = pending.hostname || "api.pcloud.com";
+    state.attach.pcloudUserId = pending.userId || "";
+    state.attach.pcloudFolderId = null;
+    saveSettings();
+    toast("Signed in with pCloud. Attachments can now use your pCloud account.");
+  } catch (err) {
+    toast("pCloud sign in could not be saved: " + err.message, true);
+  }
+}
+
+async function pcloudGetStatus() {
+  const token = await getProviderToken("pcloud");
+  return token ? { connected: true } : { connected: false, reason: "signed-out" };
+}
+
+function pcloudDisconnect() {
+  clearProviderToken("pcloud");
+  state.attach.pcloudHost = "";
+  state.attach.pcloudUserId = "";
+  state.attach.pcloudFolderId = null;
+  saveSettings();
+}
+
+/* One pCloud API call. pCloud answers JSON with a result field: 0 means
+   success, anything else carries a human readable error string, which is
+   surfaced verbatim so failures are understandable. */
+async function pcloudCall(method, params) {
+  const token = await getProviderToken("pcloud");
+  if (!token) { throw new Error("Sign in with pCloud first (Attachments settings)."); }
+  const qs = new URLSearchParams(
+    Object.assign({ access_token: token }, params || {}));
+  let res;
+  try {
+    res = await fetch(pcloudApiBase() + "/" + method + "?" + qs.toString());
+  } catch (e) {
+    throw new Error("Network error talking to pCloud. You appear to be offline.");
+  }
+  let data = null;
+  try { data = await res.json(); } catch (e) { data = null; }
+  if (!data) {
+    throw new Error("pCloud returned an unreadable response for " + method + ".");
+  }
+  if (data.result !== 0) {
+    throw new Error(data.error || ("pCloud error " + data.result));
+  }
+  return data;
+}
+
+async function pcloudEnsureRootFolder() {
+  if (state.attach.pcloudFolderId) { return state.attach.pcloudFolderId; }
+  const data = await pcloudCall("createfolderifnotexists",
+    { path: "/" + ATTACH_ROOT_NAME });
+  const folderId = data && data.metadata ? data.metadata.folderid : null;
+  if (folderId === null || folderId === undefined) {
+    throw new Error("pCloud did not return the attachments folder ID.");
+  }
+  state.attach.pcloudFolderId = folderId;
+  saveSettings();
+  return folderId;
+}
+
+/* pCloud upload is one multipart POST. XMLHttpRequest is used on
+   purpose: fetch has no upload progress events in most browsers, and
+   this endpoint accepts the browser file control style directly. Form
+   fields are appended with the parameters BEFORE the file, which the
+   pCloud documentation asks for. */
+async function pcloudUpload(file, storageName, onProgress) {
+  const token = await getProviderToken("pcloud");
+  if (!token) { throw new Error("Sign in with pCloud first (Attachments settings)."); }
+  const folderId = await pcloudEnsureRootFolder();
+  return new Promise(function (resolve, reject) {
+    const form = new FormData();
+    form.append("access_token", token);
+    form.append("folderid", String(folderId));
+    form.append("nopartial", "1");
+    form.append("file", file, storageName);
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", pcloudApiBase() + "/uploadfile");
+    xhr.upload.addEventListener("progress", function (ev) {
+      if (ev.lengthComputable && onProgress) {
+        onProgress(Math.round(ev.loaded / ev.total * 100));
+      }
+    });
+    xhr.addEventListener("load", function () {
+      let data = null;
+      try { data = JSON.parse(xhr.responseText); } catch (e) { data = null; }
+      if (!data) {
+        reject(new Error("pCloud returned an unreadable upload response."));
+        return;
+      }
+      if (data.result !== 0) {
+        reject(new Error(data.error || ("pCloud error " + data.result)));
+        return;
+      }
+      const meta = data.metadata && data.metadata[0];
+      if (!meta || meta.fileid === undefined) {
+        reject(new Error("pCloud upload finished but returned no file ID."));
+        return;
+      }
+      resolve({ fileId: String(meta.fileid) });
+    });
+    xhr.addEventListener("error", function () {
+      reject(new Error("Network error during the pCloud upload. If this keeps happening, pCloud may be blocking browser uploads from this site."));
+    });
+    xhr.send(form);
+  });
+}
+
+/* pCloud downloads are two steps: ask for a temporary file link, then
+   fetch the bytes from the file host. That second fetch is the one
+   place where pCloud may refuse a browser (cross origin) download; the
+   error message says exactly that instead of hiding behind a generic
+   failure. This path is untested until a live pCloud account test. */
+async function pcloudDownload(fileId) {
+  const data = await pcloudCall("getfilelink", { fileid: fileId });
+  if (!data.hosts || !data.hosts.length || !data.path) {
+    throw new Error("pCloud did not return a download link for this file.");
+  }
+  const url = "https://" + data.hosts[0] + data.path;
+  let res;
+  try {
+    res = await fetch(url);
+  } catch (e) {
+    throw new Error("pCloud sent a download link, but the browser could not fetch the file from it. pCloud's file host may be blocking cross origin downloads from web apps.");
+  }
+  if (!res.ok) {
+    throw new Error("pCloud sent a download link, but the file host answered with status " + res.status + ", so the file was not downloaded.");
+  }
+  return res.blob();
+}
+
+async function pcloudDelete(fileId) {
+  try {
+    await pcloudCall("deletefile", { fileid: fileId });
+  } catch (err) {
+    /* Deleting a file that is already gone is success for our purposes. */
+    if (/not found|no such/i.test(err.message)) { return; }
+    throw err;
+  }
+}
+
+/* ----- provider registry ----------------------------------------------
+   One consistent internal shape over both services. Everything above
+   this line that touches attachments goes through this table, never
+   through provider specific code directly. */
+const providers = {
+  google: {
+    label: "Google Drive",
+    getStatus: googleGetStatus,
+    connect: googleConnect,
+    disconnect: googleDisconnect,
+    upload: googleUpload,
+    download: googleDownload,
+    delete: googleDelete
+  },
+  pcloud: {
+    label: "pCloud",
+    getStatus: pcloudGetStatus,
+    connect: pcloudConnect,
+    disconnect: pcloudDisconnect,
+    upload: pcloudUpload,
+    download: pcloudDownload,
+    delete: pcloudDelete
+  }
+};
+
+function providerLabel(name) {
+  return providers[name] ? providers[name].label : String(name || "storage provider");
+}
+
+/* ----- placeholder hydration -------------------------------------------
+   When a note opens, each canonical placeholder in the body is filled
+   with live content: the real image for image attachments (through an
+   authenticated provider download and a blob URL), or a file card for
+   everything else. Hydration writes ONLY into the live DOM; the save
+   path canonicalizes placeholders back to empty shells, so nothing
+   hydrated is ever persisted. */
+function makeAttButton(label, handler) {
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = "btn small";
+  b.textContent = label;
+  /* Keep editor focus and caret logic out of attachment controls. */
+  b.addEventListener("mousedown", function (ev) { ev.preventDefault(); });
+  b.addEventListener("click", function (ev) {
+    ev.preventDefault();
+    ev.stopPropagation();
+    handler();
+  });
+  return b;
+}
+
+async function hydrateAttachments(note) {
+  const bodyEl = document.getElementById("noteBody");
+  if (!bodyEl || renderEditor._forId !== note.id) { return; }
+  const holders = bodyEl.querySelectorAll(".ss-attachment");
+  for (const el of holders) {
+    /* The user may switch notes mid hydration; stop quietly. */
+    if (renderEditor._forId !== note.id) { return; }
+    await hydrateOneAttachment(note, el);
+  }
+}
+
+async function hydrateOneAttachment(note, el) {
+  const attId = el.getAttribute("data-attachment-id");
+  const att = (note.attachments || []).find(function (a) { return a.id === attId; });
+  el.innerHTML = "";
+  if (!att) {
+    const msg = document.createElement("div");
+    msg.className = "ss-att-msg";
+    msg.textContent = "This attachment's details are missing from the note, so it cannot be loaded.";
+    el.appendChild(msg);
+    if (!note.trashed) {
+      const actions = document.createElement("div");
+      actions.className = "ss-att-actions";
+      actions.appendChild(makeAttButton("Remove placeholder", function () {
+        el.remove();
+        markDirty();
+      }));
+      el.appendChild(actions);
+    }
+    return;
+  }
+
+  const isImage = (att.mime || "").indexOf("image/") === 0;
+  const driver = providers[att.provider];
+  const status = driver ? await driver.getStatus() : { connected: false };
+
+  const head = document.createElement("div");
+  const nameSpan = document.createElement("span");
+  nameSpan.className = "ss-att-name";
+  nameSpan.textContent = att.name;
+  head.appendChild(nameSpan);
+  const chip = document.createElement("span");
+  chip.className = "ss-att-provider";
+  chip.textContent = providerLabel(att.provider);
+  head.appendChild(chip);
+
+  const meta = document.createElement("div");
+  meta.className = "ss-att-meta";
+  meta.textContent = humanSize(att.size) + (att.mime ? " - " + att.mime : "");
+
+  const actions = document.createElement("div");
+  actions.className = "ss-att-actions";
+  actions.appendChild(makeAttButton("Download", function () {
+    downloadAttachment(att);
+  }));
+  /* Trashed notes are read only: Download still works, Remove does not
+     (restore the note first). This keeps Trash state consistent, since
+     a trashed note never autosaves. */
+  if (!note.trashed) {
+    actions.appendChild(makeAttButton("Remove", function () {
+      removeAttachment(note, att);
+    }));
+  }
+
+  if (isImage && driver && status.connected) {
+    const loading = document.createElement("div");
+    loading.className = "ss-att-msg";
+    loading.textContent = "Loading image...";
+    el.appendChild(loading);
+    try {
+      const blob = await driver.download(att.fileId);
+      if (!el.isConnected) { return; }   /* editor moved on meanwhile */
+      const url = URL.createObjectURL(blob);
+      state.objectUrls.push(url);
+      const img = document.createElement("img");
+      img.className = "ss-att-img";
+      img.alt = att.name;
+      img.src = url;
+      el.innerHTML = "";
+      el.appendChild(img);
+      el.appendChild(head);
+      el.appendChild(meta);
+      el.appendChild(actions);
+    } catch (err) {
+      if (!el.isConnected) { return; }
+      el.innerHTML = "";
+      el.appendChild(head);
+      const fail = document.createElement("div");
+      fail.className = "ss-att-msg";
+      fail.textContent = "This image could not be loaded: " + err.message;
+      el.appendChild(fail);
+      el.appendChild(meta);
+      el.appendChild(actions);
+    }
+    return;
+  }
+
+  el.appendChild(head);
+  if (isImage && !status.connected) {
+    const note1 = document.createElement("div");
+    note1.className = "ss-att-msg";
+    note1.textContent = driver
+      ? "Sign in with " + providerLabel(att.provider) + " (Attachments settings) to view this image."
+      : "The storage provider for this image is not available in this version.";
+    el.appendChild(note1);
+  }
+  el.appendChild(meta);
+  el.appendChild(actions);
+}
+
+/* Download one attachment through its provider and hand it to the
+   browser as a normal file download under its original name. */
+async function downloadAttachment(att) {
+  if (!state.online) {
+    toast("Downloads need an internet connection. You appear to be offline.", true);
+    return;
+  }
+  const driver = providers[att.provider];
+  if (!driver) {
+    toast("Unknown storage provider for this attachment.", true);
+    return;
+  }
+  const status = await driver.getStatus();
+  if (!status.connected) {
+    openAttachSettings("Sign in with " + providerLabel(att.provider) +
+      " to download \"" + att.name + "\".");
+    return;
+  }
+  try {
+    toast("Downloading " + att.name + "...");
+    const blob = await driver.download(att.fileId);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = att.name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+  } catch (err) {
+    toast("Download failed: " + err.message, true);
+  }
+}
+
+/* Remove one attachment: delete the cloud file FIRST, and only when that
+   succeeds remove the metadata and the placeholder and let autosave
+   persist the change. Any failure keeps the attachment untouched, so a
+   note never points at a deleted file nor loses track of a live one. */
+async function removeAttachment(note, att) {
+  const ok = confirm("Remove \"" + att.name + "\" from this note AND delete " +
+    "the file from " + providerLabel(att.provider) + "? This cannot be undone.");
+  if (!ok) { return; }
+  if (!state.online) {
+    toast("Removing an attachment needs an internet connection, because the cloud file is deleted too. You appear to be offline.", true);
+    return;
+  }
+  const driver = providers[att.provider];
+  if (!driver) {
+    toast("Unknown storage provider for this attachment.", true);
+    return;
+  }
+  const status = await driver.getStatus();
+  if (!status.connected) {
+    openAttachSettings("Sign in with " + providerLabel(att.provider) +
+      " to delete the cloud copy of \"" + att.name + "\". The attachment was kept.");
+    return;
+  }
+  try {
+    await driver.delete(att.fileId);
+  } catch (err) {
+    toast("The cloud file could not be deleted, so the attachment was kept: " + err.message, true);
+    return;
+  }
+  note.attachments = (note.attachments || []).filter(function (a) {
+    return a.id !== att.id;
+  });
+  const bodyEl = document.getElementById("noteBody");
+  if (bodyEl) {
+    const el = bodyEl.querySelector(
+      ".ss-attachment[data-attachment-id=\"" + att.id + "\"]");
+    if (el) { el.remove(); }
+  }
+  markDirty();
+  toast("Attachment removed and the cloud file deleted.");
+}
+
+/* Delete Forever helper: best effort deletion of a note's cloud files.
+   Returns the names of files that could NOT be deleted (provider signed
+   out, offline, or an API failure), so the caller can warn the user
+   that those files remain in their cloud accounts. */
+async function deleteAttachmentsBestEffort(note) {
+  const failed = [];
+  const atts = note.attachments || [];
+  for (const att of atts) {
+    const driver = providers[att.provider];
+    if (!driver) { failed.push(att.name); continue; }
+    try {
+      const status = await driver.getStatus();
+      if (!status.connected) { failed.push(att.name); continue; }
+      await driver.delete(att.fileId);
+    } catch (e) {
+      failed.push(att.name);
+    }
+  }
+  return failed;
+}
+
+/* ----- upload flow -------------------------------------------------------
+   Files arrive from the Attach button's picker, from drag and drop onto
+   the editor, or from pasting an image. Uploads run one at a time, in
+   order, with the progress panel showing the active file. A temporary
+   placeholder marks the spot in the note while bytes are moving; on
+   success it is finalized (hydrated), on failure it is removed.      */
+const uploadUi = { total: 0, index: 0 };
+
+function setUploadProgress(name, pct) {
+  const panel = document.getElementById("uploadPanel");
+  const text = document.getElementById("uploadText");
+  const fill = document.getElementById("uploadBarFill");
+  panel.classList.remove("hidden");
+  text.textContent = "Uploading " + name +
+    (uploadUi.total > 1 ? " (" + uploadUi.index + " of " + uploadUi.total + ")" : "") +
+    ": " + pct + "%";
+  fill.style.width = pct + "%";
+}
+function hideUploadProgress() {
+  document.getElementById("uploadPanel").classList.add("hidden");
+}
+
+/* Caret memory: the file picker and drag and drop steal focus, so the
+   editor selection is captured before they open and restored when the
+   placeholder is inserted. */
+let savedCaretRange = null;
+function captureCaret() {
+  const bodyEl = document.getElementById("noteBody");
+  const sel = window.getSelection();
+  if (sel && sel.rangeCount && bodyEl.contains(sel.anchorNode)) {
+    savedCaretRange = sel.getRangeAt(0).cloneRange();
+  }
+}
+function insertPlaceholderAtCaret(el) {
+  const bodyEl = document.getElementById("noteBody");
+  bodyEl.focus();
+  let placed = false;
+  if (savedCaretRange && bodyEl.contains(savedCaretRange.startContainer)) {
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(savedCaretRange);
+    const range = sel.getRangeAt(0);
+    range.deleteContents();
+    range.insertNode(el);
+    range.setStartAfter(el);
+    range.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(range);
+    placed = true;
+  }
+  if (!placed) { bodyEl.appendChild(el); }
+  savedCaretRange = null;
+  /* A following empty paragraph keeps the note easy to continue. */
+  const p = document.createElement("p");
+  p.appendChild(document.createElement("br"));
+  el.after(p);
+}
+
+async function handleIncomingFiles(fileList) {
+  const note = currentNote();
+  if (!note) {
+    toast("Open a note first, then attach files to it.", true);
+    return;
+  }
+  if (note.trashed) {
+    toast("Attachments cannot be added while a note is in Trash. Restore it first.", true);
+    return;
+  }
+  if (!state.online) {
+    toast("Attachments need an internet connection: the file is uploaded to your storage provider. You appear to be offline.", true);
+    return;
+  }
+  const providerName = state.attach.defaultProvider;
+  if (!providerName || providerName === "none" || !providers[providerName]) {
+    openAttachSettings("Choose a default storage provider and sign in before adding attachments.");
+    return;
+  }
+  const driver = providers[providerName];
+  const status = await driver.getStatus();
+  if (!status.connected) {
+    openAttachSettings("Sign in with " + providerLabel(providerName) +
+      " before adding attachments.");
+    return;
+  }
+  const accepted = [];
+  Array.prototype.slice.call(fileList || []).forEach(function (f) {
+    if (f.size > ATTACH_MAX_BYTES) {
+      toast("\"" + f.name + "\" is larger than the 100 MB per file limit and was skipped.", true);
+    } else {
+      accepted.push(f);
+    }
+  });
+  if (!accepted.length) { return; }
+  uploadUi.total = accepted.length;
+  uploadUi.index = 0;
+  for (const file of accepted) {
+    uploadUi.index++;
+    await uploadOneAttachment(note, providerName, driver, file);
+  }
+  hideUploadProgress();
+}
+
+async function uploadOneAttachment(note, providerName, driver, file) {
+  const attId = newNoteId() + "a";
+  const storageName = attId + "__" + sanitizeFileName(file.name);
+  const isImage = (file.type || "").indexOf("image/") === 0;
+  const el = document.createElement(isImage ? "figure" : "div");
+  el.setAttribute("class", "ss-attachment");
+  el.setAttribute("data-attachment-id", attId);
+  el.setAttribute("contenteditable", "false");
+  const uploading = document.createElement("div");
+  uploading.className = "ss-att-msg";
+  uploading.textContent = "Uploading " + file.name + "...";
+  el.appendChild(uploading);
+  captureCaret();
+  insertPlaceholderAtCaret(el);
+  setUploadProgress(file.name, 0);
+  try {
+    const result = await driver.upload(file, storageName, function (pct) {
+      setUploadProgress(file.name, pct);
+    });
+    const att = {
+      id: attId,
+      provider: providerName,
+      fileId: String(result.fileId),
+      name: file.name,
+      storageName: storageName,
+      mime: file.type || "application/octet-stream",
+      size: file.size,
+      created: new Date().toISOString()
+    };
+    note.attachments = note.attachments || [];
+    note.attachments.push(att);
+    await hydrateOneAttachment(note, el);
+    markDirty();
+    toast("Attached " + file.name + ".");
+  } catch (err) {
+    el.remove();
+    toast("Upload failed for " + file.name + ": " + err.message, true);
+  }
+}
+
+/* ----- Attachments settings dialog ---------------------------------------
+   The dialog is where the default provider is chosen and where each
+   provider is signed in or out. Connection state must be impossible to
+   miss (Chris's standing UI rule): each card gets a filled accent edge
+   and a green status dot when signed in, the status line says so in
+   words, and the button flips between Sign in and Sign out.          */
+function openAttachSettings(message) {
+  document.getElementById("googleClientId").value = state.attach.googleClientId || "";
+  document.getElementById("pcloudClientId").value = state.attach.pcloudClientId || "";
+  document.getElementById("attachDefaultProvider").value =
+    state.attach.defaultProvider || "none";
+  const msg = document.getElementById("attachModalMsg");
+  if (message) {
+    msg.textContent = message;
+    msg.classList.remove("hidden");
+  } else {
+    msg.textContent = "";
+    msg.classList.add("hidden");
+  }
+  document.getElementById("attachModal").classList.remove("hidden");
+  refreshAttachDialog();
+}
+
+function closeAttachSettings() {
+  document.getElementById("attachModal").classList.add("hidden");
+}
+
+async function refreshAttachDialog() {
+  document.getElementById("attachDefaultProvider").value =
+    state.attach.defaultProvider || "none";
+
+  const g = await providers.google.getStatus();
+  document.getElementById("googleCard").classList.toggle("connected", g.connected);
+  document.getElementById("googleDot").className =
+    "status-dot" + (g.connected ? " on" : "");
+  document.getElementById("googleStatus").textContent = g.connected
+    ? "Signed in. New files go to the \"" + ATTACH_ROOT_NAME + "\" folder in your Drive. Google sign ins expire after about an hour; signing in again takes one click."
+    : (g.reason === "expired"
+        ? "Your Google sign in expired. Sign in with Google again to use Drive attachments."
+        : "Not signed in.");
+  document.getElementById("googleConnectBtn").textContent =
+    g.connected ? "Sign out of Google" : "Sign in with Google";
+
+  const p = await providers.pcloud.getStatus();
+  document.getElementById("pcloudCard").classList.toggle("connected", p.connected);
+  document.getElementById("pcloudDot").className =
+    "status-dot" + (p.connected ? " on" : "");
+  document.getElementById("pcloudStatus").textContent = p.connected
+    ? "Signed in" + (state.attach.pcloudUserId ? " as user " + state.attach.pcloudUserId : "") +
+      " on " + (state.attach.pcloudHost || "api.pcloud.com") +
+      ". New files go to the \"" + ATTACH_ROOT_NAME + "\" folder in your pCloud."
+    : "Not signed in.";
+  document.getElementById("pcloudConnectBtn").textContent =
+    p.connected ? "Sign out of pCloud" : "Sign in with pCloud";
+}
+
+/* --------------------------------------------------------------------------
+   12. Screen flow and event wiring
    -------------------------------------------------------------------------- */
 function wireEvents() {
   /* Setup form: validate, encrypt, store settings, then connect. */
@@ -2412,6 +3802,9 @@ function wireEvents() {
       state.repo = repo;
       saveSettings();
       document.getElementById("repoNameInput").value = repo;
+      /* v1.2: if this setup follows a pCloud sign in redirect, the vault
+         key now exists, so the pending token can be encrypted and kept. */
+      await finalizePendingPcloud();
       await connectAndLoad();
     } catch (err) {
       errEl.textContent = "Setup failed: " + err.message;
@@ -2429,6 +3822,8 @@ function wireEvents() {
       state.token = await vaultUnlock(pw);
       loadSettings();
       loadCache();
+      /* v1.2: complete any pCloud sign in that redirected back here. */
+      await finalizePendingPcloud();
       await connectAndLoad();
     } catch (err) {
       errEl.textContent = "That password did not unlock the vault. Try again.";
@@ -2441,6 +3836,11 @@ function wireEvents() {
       vaultWipe();
       localStorage.removeItem(LS_CACHE);
       localStorage.removeItem(LS_QUEUE);
+      /* v1.2: encrypted provider tokens belong to the wiped vault (they
+         are unreadable without its password), so they go too. */
+      localStorage.removeItem(LS_PROVIDERS);
+      state.sessionKey = null;
+      state.providerTokens = { google: null, pcloud: null };
       showScreen("setup");
     }
   });
@@ -2549,10 +3949,127 @@ function wireEvents() {
   /* Toolbar buttons. mousedown is prevented so the text selection in the
      editor is not lost before execCommand runs. */
   document.querySelectorAll("#toolbar button").forEach(function (btn) {
+    /* v1.2: the Attach button shares the toolbar but is not a formatting
+       command; it is wired separately below. */
+    if (!btn.getAttribute("data-cmd")) { return; }
     btn.addEventListener("mousedown", function (ev) { ev.preventDefault(); });
     btn.addEventListener("click", function () {
       runToolbarCommand(btn.getAttribute("data-cmd"));
     });
+  });
+
+  /* v1.2 Attach button and its hidden file picker. The caret is captured
+     before the picker opens, because the picker steals focus. */
+  document.getElementById("attachBtn").addEventListener("click", function () {
+    const note = currentNote();
+    if (!note) {
+      toast("Open a note first, then attach files to it.", true);
+      return;
+    }
+    if (note.trashed) {
+      toast("Attachments cannot be added while a note is in Trash. Restore it first.", true);
+      return;
+    }
+    if (!state.online) {
+      toast("Attachments need an internet connection: the file is uploaded to your storage provider. You appear to be offline.", true);
+      return;
+    }
+    captureCaret();
+    document.getElementById("attachFileInput").click();
+  });
+  document.getElementById("attachFileInput").addEventListener("change", function (ev) {
+    const files = ev.target.files;
+    ev.target.value = "";   /* allow picking the same file again later */
+    handleIncomingFiles(files).catch(function (err) {
+      toast("Attach failed: " + err.message, true);
+    });
+  });
+
+  /* v1.2 drag and drop onto the editor body, with a visible outline
+     while files are being dragged over it. */
+  const noteBodyEl = document.getElementById("noteBody");
+  noteBodyEl.addEventListener("dragover", function (ev) {
+    ev.preventDefault();
+    noteBodyEl.classList.add("drag-over");
+  });
+  noteBodyEl.addEventListener("dragleave", function () {
+    noteBodyEl.classList.remove("drag-over");
+  });
+  noteBodyEl.addEventListener("drop", function (ev) {
+    ev.preventDefault();
+    noteBodyEl.classList.remove("drag-over");
+    if (ev.dataTransfer && ev.dataTransfer.files && ev.dataTransfer.files.length) {
+      handleIncomingFiles(ev.dataTransfer.files).catch(function (err) {
+        toast("Attach failed: " + err.message, true);
+      });
+    }
+  });
+
+  /* v1.2 paste: image files on the clipboard become attachments. Plain
+     text and HTML pastes fall through to the normal editor behavior. */
+  noteBodyEl.addEventListener("paste", function (ev) {
+    const files = ev.clipboardData ? ev.clipboardData.files : null;
+    if (files && files.length) {
+      ev.preventDefault();
+      captureCaret();
+      handleIncomingFiles(files).catch(function (err) {
+        toast("Attach failed: " + err.message, true);
+      });
+    }
+  });
+
+  /* v1.2 Attachments settings dialog controls. */
+  document.getElementById("attachSettingsBtn").addEventListener("click", function () {
+    openAttachSettings();
+  });
+  document.getElementById("attachDoneBtn").addEventListener("click", closeAttachSettings);
+  document.getElementById("attachModal").addEventListener("click", function (ev) {
+    if (ev.target === ev.currentTarget) { closeAttachSettings(); }
+  });
+  document.getElementById("attachDefaultProvider").addEventListener("change", function (ev) {
+    state.attach.defaultProvider = ev.target.value;
+    saveSettings();
+    refreshAttachDialog();
+  });
+  document.getElementById("googleClientId").addEventListener("change", function (ev) {
+    state.attach.googleClientId = ev.target.value.trim();
+    saveSettings();
+  });
+  document.getElementById("pcloudClientId").addEventListener("change", function (ev) {
+    state.attach.pcloudClientId = ev.target.value.trim();
+    saveSettings();
+  });
+  document.getElementById("googleConnectBtn").addEventListener("click", async function () {
+    try {
+      const status = await providers.google.getStatus();
+      if (status.connected) {
+        await providers.google.disconnect();
+        toast("Signed out of Google Drive.");
+      } else {
+        await providers.google.connect();
+        toast("Signed in with Google. Attachments can now use your Google Drive.");
+      }
+    } catch (err) {
+      toast(err.message, true);
+    }
+    refreshAttachDialog();
+  });
+  document.getElementById("pcloudConnectBtn").addEventListener("click", async function () {
+    try {
+      const status = await providers.pcloud.getStatus();
+      if (status.connected) {
+        providers.pcloud.disconnect();
+        toast("Signed out of pCloud.");
+        refreshAttachDialog();
+      } else {
+        /* On success this navigates to pCloud and back; it only returns
+           here when something failed before the redirect. */
+        providers.pcloud.connect();
+      }
+    } catch (err) {
+      toast(err.message, true);
+      refreshAttachDialog();
+    }
   });
 
   /* Trash actions. */
@@ -2575,15 +4092,38 @@ function wireEvents() {
       }).catch(function (err) { toast(err.message, true); });
     }
   });
-  document.getElementById("deleteForeverBtn").addEventListener("click", function () {
+  document.getElementById("deleteForeverBtn").addEventListener("click", async function () {
     const note = currentNote();
     if (!note) { return; }
-    const ok = confirm("Delete \"" + (note.title || "Untitled note") +
-      "\" forever? This removes the file from your GitHub repository and cannot be undone from inside the app.");
-    if (ok) {
-      deleteNoteForever(note).then(function () {
-        toast("Deleted forever.");
-      }).catch(function (err) { toast(err.message, true); });
+    /* v1.2: the confirmation also covers the note's cloud files. They
+       are deleted best effort BEFORE the note file goes, and anything
+       that could not be deleted is named in a warning afterwards, so the
+       user knows exactly what remains in their cloud accounts. */
+    const atts = note.attachments || [];
+    let confirmText = "Delete \"" + (note.title || "Untitled note") +
+      "\" forever? This removes the file from your GitHub repository and cannot be undone from inside the app.";
+    if (atts.length) {
+      confirmText += " Its " + atts.length + " attachment file(s) will also be " +
+        "deleted from their cloud storage where that provider is signed in. " +
+        "Files whose provider is not signed in cannot be deleted by the app " +
+        "and will be left behind in that cloud account.";
+    }
+    if (!confirm(confirmText)) { return; }
+    let failed = [];
+    if (atts.length) {
+      failed = state.online
+        ? await deleteAttachmentsBestEffort(note)
+        : atts.map(function (a) { return a.name; });
+    }
+    try {
+      await deleteNoteForever(note);
+      toast("Deleted forever.");
+    } catch (err) {
+      toast(err.message, true);
+    }
+    if (failed.length) {
+      toast("Warning: these cloud files could not be deleted and remain in " +
+        "their storage accounts: " + failed.join(", "), true);
     }
   });
 
@@ -2609,6 +4149,9 @@ function wireEvents() {
    so a locked app shows nothing of the user's notes.
    -------------------------------------------------------------------------- */
 function boot() {
+  /* v1.2: a pCloud OAuth redirect may have landed here with a token in
+     the URL fragment. Capture and scrub it before anything renders. */
+  capturePcloudReturn();
   injectLogos();
   loadSettings();
   wireEvents();

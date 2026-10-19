@@ -13,10 +13,11 @@ Live app: https://clytherin-tech.github.io/snakescale/
 - Works anywhere. Any modern browser on PC, tablet, or phone. No install required.
 - Your data is yours. Export any time by downloading your data repo. It is just files.
 
-## Features in v1.0
+## Features
 
 - Notebooks, notes, and tags, with local full text search
 - Rich text editor with headings, lists, and checklists
+- Attachments and inline images (new in v1.2): files are stored in your own Google Drive or pCloud account, in a folder named SnakeScale Notes Attachments, and your notes keep only a small reference to each file. You pick the provider in the app, sign in with OAuth (Sign in with Google or Sign in with pCloud), and attach by button, drag and drop, or pasting an image. Publisher setup for the sign in buttons is a one time job for the app owner: see [ATTACHMENT_PROVIDERS_SETUP.md](ATTACHMENT_PROVIDERS_SETUP.md). End users never register a developer app.
 - Pinned notes, trash with restore, and delete forever
 - Encrypted token vault: your GitHub token is stored in your browser encrypted with your password (PBKDF2 plus AES-GCM), never in plain text
 - Offline reading and editing from the local cache, with queued changes synced when you reconnect
@@ -36,10 +37,11 @@ Live app: https://clytherin-tech.github.io/snakescale/
 - One folder per notebook inside the notebooks folder of your data repo
 - One Markdown file per note, with simple front matter and an HTML body
 - A trash folder for deleted notes, and an index.json the app can rebuild from the folders at any time
+- Attachments are different on purpose: the binary files live in your Google Drive or pCloud account, never in GitHub. The note file stores only a one line attachments list in its front matter (provider name and file ID) plus a placeholder in the body where the image or file card appears
 
 ## Privacy and security notes
 
-- The app makes calls only to api.github.com from your browser.
+- Note sync talks only to api.github.com from your browser. If you use attachments, the app also talks to the storage provider you signed in to (Google or pCloud), and Google's sign in script is loaded from Google only at the moment you click Sign in with Google. Provider tokens are stored in your browser encrypted with the same app password as your GitHub token, never in plain text.
 - Anyone with your GitHub token has the access that token grants, so use a token you can revoke, and lock the app when you step away.
 - SnakeScale Notes is not affiliated with Evernote Corporation.
 
@@ -49,4 +51,4 @@ AGPL-3.0. See the LICENSE file. Anyone can use, study, and share this code, and 
 
 ## Current status
 
-Version 1.1, build stamp 2026-10-19-SSN-V11. Built and tested first as a single file app, with a look and layout polish pass in v1.1. Known v1.1 gap: no service worker yet, so it is not installable as a full PWA. That is planned for a later release.
+Version 1.2, build stamp 2026-10-19-SSN-V12. Built and tested first as a single file app, with a look and layout polish pass in v1.1, and attachments with Google Drive and pCloud in v1.2. Known limits: Google sign ins expire after about an hour and need a one click sign in again (the browser token flow gives no refresh token); the pCloud browser download path follows pCloud's published API but is untested against a live account until the publisher test in the setup guide is run; attachments need an internet connection, with a 100 MB per file cap; and there is still no service worker, so it is not installable as a full PWA. That is planned for a later release.
