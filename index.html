@@ -28,10 +28,42 @@
   notes are files, and there is no server and no shared database anywhere
   in this design.
 
-  BUILD STAMP: 2026-10-19-SSN-V180
-  Version: 1.8.0
+  BUILD STAMP: 2026-10-19-SSN-V181
+  Version: 1.8.1
 
   Revision history:
+    v1.8.1 2026-10-19 Checklist in place, Trash and Archive multi
+                      select, and a desktop fix for the Back to list
+                      button. The toolbar Checklist button used to
+                      insert a brand new checklist block with filler
+                      text and a spare empty line after it; it now
+                      converts the line the caret is on into a
+                      checklist item where it stands, keeping the
+                      line's own text and the caret on that line, and
+                      pressing it on a checklist item converts that
+                      item back into a normal paragraph, the same
+                      toggle feel as the bullet and numbered list
+                      buttons. Converted lists carry the ss-checklist
+                      class and a real checkbox per item, so the
+                      checklist Enter behavior works on them exactly
+                      as before. The editor footer's Back to list
+                      button is the phone pane switcher: its handler
+                      is a deliberate no-op on wide screens, where
+                      every pane is already visible, so the button is
+                      now hidden at desktop widths and still appears
+                      and works at phone widths. Trash and Archive
+                      rows gain selection checkboxes (shown in those
+                      two views only; clicking one never opens the
+                      note), and the list toolbar's menu adapts to
+                      the view: in Trash it offers Empty Trash and
+                      Delete Selected (with the selected count in
+                      the label), in the Archive it offers Restore
+                      Selected, and notebook views keep Rename
+                      Notebook and Delete Notebook as in v1.8. Bulk
+                      permanent deletes run through the same confirm
+                      wording style, best effort attachment cleanup,
+                      and per note operation chain as a single
+                      Delete Forever. Build stamp 2026-10-19-SSN-V181.
     v1.8.0 2026-10-19 A toolbar for the notes list: New Note, Filters,
                       Sort, and a notebook menu. The list header gains
                       a right aligned row of four icon buttons under
@@ -56,7 +88,6 @@
                       Notebook, the exact prompt and confirm flows
                       that used to hide as hover links on the sidebar
                       notebook rows; those hover links are removed.
-                      Build stamp 2026-10-19-SSN-V180.
     v1.7.2 2026-10-19 Free image sizing, carried on the image's block.
                       Two problems from live testing of v1.7.1: an
                       image could not be made wider than the note
@@ -742,6 +773,24 @@ body.dark .filter-group-title{color:var(--accent);}
   border-radius:var(--radius-pill);padding:2px 7px;font-weight:600;line-height:1.35;
 }
 body.dark .tag-chip{color:var(--accent);}
+/* v1.8.1: Trash and Archive multi select. Rows in those two views
+   carry a selection checkbox at their left edge, so the card makes
+   room for it and anchors it; a checked card takes the same selected
+   treatment as the open note's card, so what is selected is obvious
+   at a glance. Other views never get the selectable class and render
+   exactly as before. */
+.note-card.selectable{position:relative;padding-left:37px;}
+.note-select{
+  position:absolute;left:12px;top:14px;display:flex;
+  align-items:center;cursor:pointer;
+}
+.note-select input[type="checkbox"]{
+  width:16px;height:16px;margin:0;cursor:pointer;
+  accent-color:var(--secondary);
+}
+.note-card.multi-selected{
+  background:var(--selected);border-color:var(--secondary);
+}
 /* The empty list keeps its existing guidance, now over a very faint tile S
    watermark supplied by the generated inline SVG data URI below. */
 .empty-state{
@@ -1176,6 +1225,17 @@ body.dark .ss-att-provider{color:#EAF3EC;}
 /* mobile top bar (only shown on small screens) */
 #mobileBar{display:none;}
 
+/* v1.8.1: the editor footer's Back to list button is the phone pane
+   switcher: it calls setMobileView, which is a deliberate no-op above
+   900px, where the sidebar, the list, and the editor are all on
+   screen at once. On desktop widths the button only invites a click
+   that can do nothing, so it is not shown there. At 900px and below
+   no rule hides it: it appears in the footer and switches back to
+   the list pane exactly as before. */
+@media (min-width:901px){
+  #editorBackBtn{display:none;}
+}
+
 /* toasts. v1.5.1: the stack used to sit at bottom:14px, directly over
    the editor footer's action buttons (Back to list, Move to Trash,
    Archive, and friends) in the lower right, so an "Archived" or
@@ -1505,7 +1565,9 @@ body.dark .ss-att-provider{color:#EAF3EC;}
            aria labels. The three panels (filters, sort, notebook
            menu) are list pane chrome: they live here in the list
            header, far outside #noteBody, so they can never be saved
-           into a note. -->
+           into a note. v1.8.1: the notebook menu is view aware (its
+           items change in Trash and in the Archive), and the button
+           tooltip follows it. -->
       <div class="list-toolbar" id="listToolbar">
         <button type="button" class="list-tb-btn" id="listNewNoteBtn" title="New note" aria-label="New note"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false"><path d="M8 2.8v10.4M2.8 8h10.4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" fill="none"/></svg></button>
         <div class="list-tb-wrap">
@@ -1553,6 +1615,13 @@ body.dark .ss-att-provider{color:#EAF3EC;}
           <div id="nbActionMenu" class="list-panel hidden" role="menu" aria-label="Notebook options">
             <button type="button" class="list-menu-item" id="nbRenameBtn" role="menuitem">Rename Notebook</button>
             <button type="button" class="list-menu-item danger" id="nbDeleteBtn" role="menuitem">Delete Notebook</button>
+            <!-- v1.8.1: the menu adapts to the view. These three items
+                 belong to Trash and the Archive; renderListToolbar
+                 shows and enables the ones for the current view and
+                 keeps the rest hidden. -->
+            <button type="button" class="list-menu-item danger hidden" id="nbEmptyTrashBtn" role="menuitem">Empty Trash</button>
+            <button type="button" class="list-menu-item danger hidden" id="nbDeleteSelectedBtn" role="menuitem">Delete Selected</button>
+            <button type="button" class="list-menu-item hidden" id="nbRestoreSelectedBtn" role="menuitem">Restore Selected</button>
           </div>
         </div>
       </div>
@@ -1841,8 +1910,8 @@ body.dark .ss-att-provider{color:#EAF3EC;}
 "use strict";
 
 /* ============================================================================
-   SnakeScale Notes v1.8.0: application script
-   BUILD STAMP: 2026-10-19-SSN-V180
+   SnakeScale Notes v1.8.1: application script
+   BUILD STAMP: 2026-10-19-SSN-V181
 
    How this script is organized:
      1. Constants and global state
@@ -1873,8 +1942,8 @@ body.dark .ss-att-provider{color:#EAF3EC;}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-19-SSN-V180";
-const APP_VERSION = "1.8.0";
+const APP_BUILD = "2026-10-19-SSN-V181";
+const APP_VERSION = "1.8.1";
 const API_BASE = "https://api.github.com";
 const API_VERSION_HEADER = "2022-11-28";
 /* v1.4: the two storage backends. "github" is the original repository
@@ -1974,6 +2043,10 @@ const state = {
     field: "updated",         // title | created | updated
     dir: "desc"               // asc | desc; default matches the pre-v1.8 order
   },
+  trashSelection: [],       // v1.8.1: ids of the notes checked in the
+                            // Trash view, for Delete Selected
+  archiveSelection: [],     // v1.8.1: ids of the notes checked in the
+                            // Archive view, for Restore Selected
   syncing: false,           // true while a sync or save is in flight
   online: navigator.onLine, // browser online flag, kept current by events
   cacheGeneration: 0,       // v1.4.1: invalidates an in-flight encrypted
@@ -4608,6 +4681,13 @@ function renderSidebar() {
    the filters always combine (AND). They persist across view and
    notebook switches until cleared. The sort choice lives in
    state.listSort and is remembered in settings between sessions.
+
+   v1.8.1: Trash and Archive multi select. Rows in those two views
+   carry a selection checkbox; the checked ids live in
+   state.trashSelection and state.archiveSelection, are cleared when
+   the view changes or when the set is acted on, and drive the bulk
+   items the notebook menu shows in those views (Empty Trash and
+   Delete Selected in Trash, Restore Selected in the Archive).
    -------------------------------------------------------------------------- */
 
 /* True when any list filter is set. Drives the Filters button's
@@ -4704,6 +4784,10 @@ function toggleListPanel(panelId) {
       syncFilterControls();
     }
     if (panelId === "sortMenu") { renderSortMenu(); }
+    /* v1.8.1: the action menu's items, labels, and disabled states
+       follow the view and the current multi select sets, so refresh
+       them at open time as well as on every list render. */
+    if (panelId === "nbActionMenu") { renderListToolbar(); }
     panel.classList.remove("hidden");
   }
 }
@@ -4807,15 +4891,21 @@ function chooseListSort(field) {
 }
 
 /* The toolbar's view dependent states, refreshed on every list
-   render: New Note is disabled in Trash and in the Archive (with a
-   tooltip saying why), the Filters button carries its active class
-   while any filter is set, and the notebook menu's two items are
-   disabled outside a notebook view, where there is no single
-   notebook to act on. */
+   render and whenever a multi select checkbox changes: New Note is
+   disabled in Trash and in the Archive (with a tooltip saying why),
+   the Filters button carries its active class while any filter is
+   set, and the action menu adapts to the view (v1.8.1). Notebook
+   views get Rename Notebook and Delete Notebook, enabled. The
+   combined views (All Notes, Pinned, a tag) keep those two items
+   visible but disabled, as v1.8 had them, since there is no single
+   notebook to act on. Trash swaps them for Empty Trash and Delete
+   Selected, the Archive for Restore Selected; the bulk items carry
+   the selection count in their label and are disabled when they
+   would have nothing to act on. */
 function renderListToolbar() {
+  const kind = state.view.kind;
   const newBtn = document.getElementById("listNewNoteBtn");
   if (newBtn) {
-    const kind = state.view.kind;
     newBtn.disabled = kind === "trash" || kind === "archive";
     newBtn.title = kind === "trash"
       ? "New notes cannot be created in Trash"
@@ -4827,11 +4917,47 @@ function renderListToolbar() {
   if (filterBtn) {
     filterBtn.classList.toggle("has-filters", listFiltersActive());
   }
-  const inNotebook = state.view.kind === "notebook";
+  const inNotebook = kind === "notebook";
   const renameBtn = document.getElementById("nbRenameBtn");
   const deleteBtn = document.getElementById("nbDeleteBtn");
-  if (renameBtn) { renameBtn.disabled = !inNotebook; }
-  if (deleteBtn) { deleteBtn.disabled = !inNotebook; }
+  if (renameBtn) {
+    renameBtn.classList.toggle("hidden", kind === "trash" || kind === "archive");
+    renameBtn.disabled = !inNotebook;
+  }
+  if (deleteBtn) {
+    deleteBtn.classList.toggle("hidden", kind === "trash" || kind === "archive");
+    deleteBtn.disabled = !inNotebook;
+  }
+  const emptyTrashBtn = document.getElementById("nbEmptyTrashBtn");
+  if (emptyTrashBtn) {
+    emptyTrashBtn.classList.toggle("hidden", kind !== "trash");
+    emptyTrashBtn.disabled = state.trash.length === 0;
+  }
+  const deleteSelectedBtn = document.getElementById("nbDeleteSelectedBtn");
+  if (deleteSelectedBtn) {
+    deleteSelectedBtn.classList.toggle("hidden", kind !== "trash");
+    const count = state.trashSelection.length;
+    deleteSelectedBtn.disabled = count === 0;
+    deleteSelectedBtn.textContent = count
+      ? "Delete Selected (" + count + ")"
+      : "Delete Selected";
+  }
+  const restoreSelectedBtn = document.getElementById("nbRestoreSelectedBtn");
+  if (restoreSelectedBtn) {
+    restoreSelectedBtn.classList.toggle("hidden", kind !== "archive");
+    const count = state.archiveSelection.length;
+    restoreSelectedBtn.disabled = count === 0;
+    restoreSelectedBtn.textContent = count
+      ? "Restore Selected (" + count + ")"
+      : "Restore Selected";
+  }
+  const menuBtn = document.getElementById("listNbMenuBtn");
+  if (menuBtn) {
+    const label = kind === "trash" ? "Trash options"
+      : kind === "archive" ? "Archive options" : "Notebook options";
+    menuBtn.title = label;
+    menuBtn.setAttribute("aria-label", label);
+  }
   renderSortMenu();
 }
 
@@ -4860,6 +4986,152 @@ function confirmDeleteNotebook(slug) {
       toast("Delete failed: " + err.message, true);
     });
   }
+}
+
+/* --------------------------------------------------------------------------
+   v1.8.1: Trash and Archive multi select actions
+   The selection sets themselves live in state (trashSelection and
+   archiveSelection) and are filled by the row checkboxes that
+   renderNoteList draws in those two views. They are cleared when
+   the view changes (see renderNoteList) and at the start of the
+   action they fed, so a set can never act twice or leak into
+   another view.
+   -------------------------------------------------------------------------- */
+
+/* Empty both selection sets. Called on every view change and after
+   a bulk action runs. */
+function clearListSelections() {
+  state.trashSelection = [];
+  state.archiveSelection = [];
+}
+
+/* One row checkbox changed: record it in the current view's set,
+   then refresh the toolbar so the menu labels and disabled states
+   follow the selection at once. */
+function toggleListSelection(noteId, checked) {
+  const set = state.view.kind === "trash" ? state.trashSelection
+    : state.view.kind === "archive" ? state.archiveSelection : null;
+  if (!set) { return; }
+  const at = set.indexOf(noteId);
+  if (checked && at < 0) { set.push(noteId); }
+  if (!checked && at >= 0) { set.splice(at, 1); }
+  renderListToolbar();
+}
+
+/* Permanently delete several trashed notes, one at a time. Each
+   note goes through exactly what the editor's Delete Forever
+   button does for a single note: a best effort cleanup of its
+   cloud attachment files first, then deleteNoteForever (the per
+   note operation chain, the store delete, the offline queue when
+   disconnected). Files the app cannot reach are collected and
+   returned, so the caller can name them in the same warning the
+   single delete shows. Sequential, so storage sees the deletes in
+   the order the notes were listed. */
+async function deleteNotesForever(notes) {
+  const failed = [];
+  for (const note of notes) {
+    const atts = note.attachments || [];
+    if (atts.length) {
+      if (state.online) {
+        const missed = await deleteAttachmentsBestEffort(note);
+        missed.forEach(function (name) { failed.push(name); });
+      } else {
+        atts.forEach(function (a) { failed.push(a.name); });
+      }
+    }
+    await deleteNoteForever(note);
+  }
+  return failed;
+}
+
+/* The storage phrase the permanent delete confirmations use, the
+   same one the single Delete Forever built for itself. */
+function storageDeletePhrase() {
+  return state.backend === BACKEND_GOOGLE
+    ? "SnakeScale Notes folder in Google Drive"
+    : "GitHub repository";
+}
+
+/* The attachment sentence the permanent delete confirmations add
+   when the notes being deleted carry files, worded like the single
+   Delete Forever's. */
+function bulkAttachmentSentence(attachCount) {
+  if (!attachCount) { return ""; }
+  return " Their " + attachCount + " attachment file(s) will also be " +
+    "deleted from their cloud storage where that provider is signed " +
+    "in. Files whose provider is not signed in cannot be deleted by " +
+    "the app and will be left behind in that cloud account.";
+}
+
+/* Warn about any cloud files a bulk delete could not remove, the
+   same warning the single Delete Forever ends with. */
+function warnUndeletedAttachments(failed) {
+  if (!failed.length) { return; }
+  toast("Warning: these cloud files could not be deleted and remain in " +
+    "their storage accounts: " + failed.join(", "), true);
+}
+
+/* Trash menu: Delete Selected. Confirms with the count, then
+   permanently deletes exactly the checked notes. The selection is
+   cleared before the work starts, so the re-renders the deletes
+   trigger already show the final, unselected state. */
+async function deleteSelectedTrashNotes() {
+  const chosen = state.trash.filter(function (n) {
+    return state.trashSelection.indexOf(n.id) >= 0;
+  });
+  if (!chosen.length) { return; }
+  let attachCount = 0;
+  chosen.forEach(function (n) { attachCount += (n.attachments || []).length; });
+  const ok = confirm("Delete the " + chosen.length + " selected note" +
+    (chosen.length === 1 ? "" : "s") + " forever? This removes their " +
+    "files from your " + storageDeletePhrase() +
+    " and cannot be undone from inside the app." +
+    bulkAttachmentSentence(attachCount));
+  if (!ok) { return; }
+  state.trashSelection = [];
+  const failed = await deleteNotesForever(chosen);
+  toast("Deleted " + chosen.length + " note" +
+    (chosen.length === 1 ? "" : "s") + " forever.");
+  warnUndeletedAttachments(failed);
+}
+
+/* Trash menu: Empty Trash. Confirms naming the number of trashed
+   notes, then permanently deletes every one of them through the
+   same path as Delete Selected. */
+async function emptyTrash() {
+  const all = state.trash.slice();
+  if (!all.length) { return; }
+  let attachCount = 0;
+  all.forEach(function (n) { attachCount += (n.attachments || []).length; });
+  const ok = confirm("Empty the Trash? All " + all.length +
+    " trashed note" + (all.length === 1 ? "" : "s") +
+    " will be deleted forever. This removes their files from your " +
+    storageDeletePhrase() + " and cannot be undone from inside the app." +
+    bulkAttachmentSentence(attachCount));
+  if (!ok) { return; }
+  state.trashSelection = [];
+  const failed = await deleteNotesForever(all);
+  toast("Trash emptied: " + all.length + " note" +
+    (all.length === 1 ? "" : "s") + " deleted forever.");
+  warnUndeletedAttachments(failed);
+}
+
+/* Archive menu: Restore Selected. Each checked note goes through
+   the existing unarchive path, which returns it to the notebook it
+   was archived from (with that path's usual fallback when the
+   notebook is gone). No confirmation: restoring is reversible by
+   archiving again, like the single Unarchive button. */
+async function restoreSelectedArchiveNotes() {
+  const chosen = state.archive.filter(function (n) {
+    return state.archiveSelection.indexOf(n.id) >= 0;
+  });
+  if (!chosen.length) { return; }
+  state.archiveSelection = [];
+  for (const note of chosen) {
+    await unarchiveNote(note);
+  }
+  toast("Restored " + chosen.length + " note" +
+    (chosen.length === 1 ? "" : "s") + " from the Archive.");
 }
 
 /* The filtered, sorted note set for the middle pane.
@@ -4936,6 +5208,8 @@ function renderNoteList() {
   if (lastRenderedListViewKey !== null &&
       lastRenderedListViewKey !== viewKey) {
     closeListPanels();
+    /* v1.8.1: leaving a view leaves its multi select set behind. */
+    clearListSelections();
   }
   lastRenderedListViewKey = viewKey;
   const listEl = document.getElementById("noteList");
@@ -4975,9 +5249,39 @@ function renderNoteList() {
     return;
   }
 
+  /* v1.8.1: the multi select set this view's rows draw from, or
+     null outside Trash and the Archive. */
+  const selectSet = state.view.kind === "trash" ? state.trashSelection
+    : state.view.kind === "archive" ? state.archiveSelection : null;
+
   list.forEach(function (note) {
     const card = document.createElement("div");
     card.className = "note-card" + (note.id === state.selectedId ? " active" : "");
+    if (selectSet) {
+      /* A selection checkbox at the row's left edge. Its click is
+         stopped at the picker, so checking a note can never fall
+         through to the card's own click and open the note. */
+      const isChecked = selectSet.indexOf(note.id) >= 0;
+      card.classList.add("selectable");
+      if (isChecked) { card.classList.add("multi-selected"); }
+      const picker = document.createElement("label");
+      picker.className = "note-select";
+      picker.title = "Select note";
+      const box = document.createElement("input");
+      box.type = "checkbox";
+      box.checked = isChecked;
+      box.setAttribute("aria-label",
+        "Select note: " + (note.title || "Untitled note"));
+      picker.addEventListener("click", function (ev) {
+        ev.stopPropagation();
+      });
+      box.addEventListener("change", function () {
+        toggleListSelection(note.id, box.checked);
+        card.classList.toggle("multi-selected", box.checked);
+      });
+      picker.appendChild(box);
+      card.appendChild(picker);
+    }
     const titleRow = document.createElement("div");
     titleRow.className = "card-title";
     if (note.pinned && !note.trashed && !note.archived) {
@@ -5467,8 +5771,9 @@ function markDirty() {
 
 /* Toolbar commands. execCommand is deprecated but universally supported
    for contenteditable in current browsers, and it keeps v1.0 dependency
-   free. The checklist command inserts a <ul class="ss-checklist"> whose
-   items start with a checkbox input; clicking a checkbox toggles the
+   free. The checklist command converts the line the caret is on into
+   a checklist item in place (see the v1.8.1 block right below), so the
+   item starts with a checkbox input; clicking a checkbox toggles the
    done style on its <li> (handled in the body click listener below),
    and Enter inside an item is handled by the v1.6 checklist block
    further down.
@@ -5497,12 +5802,271 @@ function runToolbarCommand(cmd) {
   } else if (cmd === "ol") {
     document.execCommand("insertOrderedList", false, null);
   } else if (cmd === "checklist") {
-    document.execCommand("insertHTML", false,
-      "<ul class=\"ss-checklist\"><li><input type=\"checkbox\"> New item</li></ul><p></p>");
+    toggleChecklistAtCaret();
   } else if (cmd === "clear") {
     clearFormattingExtended();
   }
   markDirty();
+}
+
+/* --------------------------------------------------------------------------
+   v1.8.1 checklists: the toolbar button converts the current line
+   Through v1.8 the checklist command inserted a brand new checklist
+   block holding filler text, plus a spare empty paragraph after it:
+   the user's own line was left alone and the new block landed
+   wherever the caret happened to be. Now the button behaves like
+   the bullet and numbered list buttons beside it: it converts the
+   line the caret is on, in place. The line keeps its own text, the
+   checkbox appears at the start of that same line, the caret stays
+   on that line, no new line is created, and no filler text is
+   inserted anywhere. Pressing it with the caret inside a checklist
+   item converts that item back into a normal paragraph.
+
+   The result always uses the existing checklist shape (a
+   <ul class="ss-checklist"> whose items start with a checkbox
+   input), so the v1.6 Enter behavior and the done styling work on a
+   converted list exactly as on any other.
+
+   Conversion routes by what the caret is in:
+     - a checklist item: that item becomes a paragraph (below);
+     - a plain bullet list: the list becomes a checklist in place;
+     - a numbered list: it is swapped for a checklist with the
+       same items;
+     - any other block (paragraph, heading, and friends): the
+       toolbar's usual list primitive (execCommand
+       insertUnorderedList) is tried first, and its result is then
+       normalized into checklist shape. Where that primitive is
+       missing or does not take (some embedded browsers ship
+       without it), convertBlockToChecklistItem does the same work
+       by hand, so the result is identical either way.
+   A selection spanning several lines converts from the line where
+   the selection starts; the primitive, when it runs, naturally
+   takes the lines it covers.
+   -------------------------------------------------------------------------- */
+
+/* The editing context at the caret, for the checklist command: the
+   list item and list around the caret when it is inside one, and
+   otherwise the top level block that holds the caret (null when the
+   caret sits directly in the body, outside any block). */
+function checklistCaretContext() {
+  const bodyEl = document.getElementById("noteBody");
+  const sel = window.getSelection();
+  if (!sel || !sel.rangeCount) { return null; }
+  const range = sel.getRangeAt(0);
+  if (!bodyEl.contains(range.startContainer)) { return null; }
+  let node = range.startContainer;
+  if (node.nodeType !== 1) { node = node.parentNode; }
+  if (!node) { return null; }
+  const li = node.closest ? node.closest("li") : null;
+  if (li && bodyEl.contains(li)) {
+    return { li: li, list: li.parentElement, block: li };
+  }
+  let block = node;
+  while (block && block !== bodyEl &&
+         block.parentElement && block.parentElement !== bodyEl) {
+    block = block.parentElement;
+  }
+  if (!block || block === bodyEl) { block = null; }
+  return { li: null, list: null, block: block };
+}
+
+/* How far into a block's text the caret sits, counted in characters
+   from the block's start. Used to put the caret back on the same
+   spot of the same line after a conversion rebuilds the line's
+   markup around it. */
+function caretTextOffsetWithin(root, range) {
+  const pre = range.cloneRange();
+  pre.selectNodeContents(root);
+  pre.setEnd(range.startContainer, range.startOffset);
+  return pre.toString().length;
+}
+
+/* Place the caret offset characters into root's text. Past the end
+   (or in a block with no text at all, such as a freshly emptied
+   checklist item) the caret lands at the end of the content, which
+   for a checklist item is right after the checkbox. */
+function placeCaretAtTextOffset(root, offset) {
+  const sel = window.getSelection();
+  if (!sel) { return; }
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+  let node = walker.nextNode();
+  let remaining = offset;
+  while (node) {
+    if (remaining <= node.nodeValue.length) {
+      const caret = document.createRange();
+      caret.setStart(node, remaining);
+      caret.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(caret);
+      return;
+    }
+    remaining -= node.nodeValue.length;
+    node = walker.nextNode();
+  }
+  const end = document.createRange();
+  end.setStart(root, root.childNodes.length);
+  end.collapse(true);
+  sel.removeAllRanges();
+  sel.addRange(end);
+}
+
+/* Give one list item the checklist's leading checkbox, unless it
+   already starts with one. */
+function ensureChecklistCheckbox(li) {
+  const first = li.firstElementChild;
+  if (first && first.tagName === "INPUT" && first.type === "checkbox") {
+    return;
+  }
+  const box = document.createElement("input");
+  box.type = "checkbox";
+  li.insertBefore(box, li.firstChild);
+}
+
+/* Turn an existing list into a checklist where it stands: the
+   ss-checklist class on the list, and a checkbox at the start of
+   every item. The items' own content is not touched. */
+function makeListChecklist(ul) {
+  ul.classList.add("ss-checklist");
+  for (let i = 0; i < ul.children.length; i++) {
+    if (ul.children[i].tagName === "LI") {
+      ensureChecklistCheckbox(ul.children[i]);
+    }
+  }
+}
+
+/* The hand done fallback for turning a plain block into a checklist
+   item, used when the insertUnorderedList primitive is unavailable
+   or did not run. The block's own content moves into the item, so
+   the line keeps its text (and any inline formatting) exactly. */
+function convertBlockToChecklistItem(block, range) {
+  const bodyEl = document.getElementById("noteBody");
+  const ul = document.createElement("ul");
+  ul.className = "ss-checklist";
+  const li = document.createElement("li");
+  const box = document.createElement("input");
+  box.type = "checkbox";
+  li.appendChild(box);
+  ul.appendChild(li);
+  let offset = 0;
+  if (block) {
+    if (range) { offset = caretTextOffsetWithin(block, range); }
+    while (block.firstChild) { li.appendChild(block.firstChild); }
+    /* An emptied block's lone <br> is a placeholder the browser put
+       there, not content; leaving it would make the item look
+       filled to the Enter handler. */
+    if (li.childNodes.length === 2 && li.lastChild.tagName === "BR" &&
+        !checklistItemText(li).trim()) {
+      li.removeChild(li.lastChild);
+    }
+    block.replaceWith(ul);
+  } else if (range && range.startContainer.nodeType === 3 &&
+             range.startContainer.parentNode === bodyEl) {
+    /* The caret sits in a bare text run directly under the body
+       (no wrapping block): the run becomes the item's text. */
+    const anchor = range.startContainer.nextSibling;
+    offset = range.startOffset;
+    li.appendChild(range.startContainer);
+    bodyEl.insertBefore(ul, anchor);
+  } else {
+    /* No block and no text run (an empty body): the fresh list is
+       simply appended, holding one empty item. */
+    bodyEl.appendChild(ul);
+  }
+  placeCaretAtTextOffset(li, offset);
+}
+
+/* Toggle one checklist item back into a normal paragraph, in place.
+   The list splits around the paragraph, the same shape the v1.6
+   Enter handler leaves when an item exits a checklist: items above
+   stay a checklist, items below stay a checklist of their own, and
+   an emptied list is removed. */
+function checklistItemToParagraph(li, ul) {
+  const sel = window.getSelection();
+  const range = sel && sel.rangeCount ? sel.getRangeAt(0) : null;
+  let offset = range ? caretTextOffsetWithin(li, range) : 0;
+  const p = document.createElement("p");
+  /* Move everything but the checkbox into the paragraph. */
+  while (li.firstChild) {
+    const child = li.firstChild;
+    if (child.nodeType === 1 && child.tagName === "INPUT" &&
+        child.type === "checkbox") {
+      li.removeChild(child);
+    } else {
+      p.appendChild(child);
+    }
+  }
+  /* Checklist items written by older versions carry one separator
+     space after the checkbox; that space was formatting, not text,
+     so it does not follow the line back into a paragraph. */
+  const walker = document.createTreeWalker(p, NodeFilter.SHOW_TEXT, null);
+  const firstText = walker.nextNode();
+  if (firstText && firstText.nodeValue.charAt(0) === " ") {
+    firstText.nodeValue = firstText.nodeValue.slice(1);
+    if (offset > 0) { offset -= 1; }
+  }
+  if (!p.childNodes.length) { p.appendChild(document.createElement("br")); }
+  const rest = document.createElement("ul");
+  rest.setAttribute("class", ul.getAttribute("class") || "ss-checklist");
+  let next = li.nextSibling;
+  while (next) {
+    const moving = next;
+    next = next.nextSibling;
+    rest.appendChild(moving);
+  }
+  li.remove();
+  ul.after(p);
+  if (rest.childNodes.length) { p.after(rest); }
+  if (!ul.querySelector("li")) { ul.remove(); }
+  placeCaretAtTextOffset(p, offset);
+}
+
+/* The Checklist toolbar command itself. Decides from the caret's
+   context, per the routes in this block's header comment. */
+function toggleChecklistAtCaret() {
+  const ctx = checklistCaretContext();
+  if (!ctx) { return; }
+  const sel = window.getSelection();
+  const range = sel && sel.rangeCount ? sel.getRangeAt(0) : null;
+
+  /* In a checklist already: toggle the item back to a paragraph. */
+  if (ctx.li && isChecklistList(ctx.list)) {
+    checklistItemToParagraph(ctx.li, ctx.list);
+    return;
+  }
+  /* In a plain bullet list: the list itself becomes a checklist. */
+  if (ctx.li && ctx.list && ctx.list.tagName === "UL") {
+    makeListChecklist(ctx.list);
+    return;
+  }
+  /* In a numbered list: swap it for a checklist with the same items. */
+  if (ctx.li && ctx.list && ctx.list.tagName === "OL") {
+    const ul = document.createElement("ul");
+    while (ctx.list.firstChild) { ul.appendChild(ctx.list.firstChild); }
+    ctx.list.replaceWith(ul);
+    makeListChecklist(ul);
+    return;
+  }
+  /* Any other block, or no block at all: the toolbar's list
+     primitive first, its result normalized into checklist shape;
+     the hand done conversion whenever the primitive is missing or
+     did not produce a list at the caret. */
+  let primitiveWorked = false;
+  if (ctx.block && typeof document.execCommand === "function") {
+    try {
+      primitiveWorked =
+        document.execCommand("insertUnorderedList", false, null);
+    } catch (err) {
+      primitiveWorked = false;
+    }
+  }
+  if (primitiveWorked) {
+    const after = checklistCaretContext();
+    if (after && after.list && after.list.tagName === "UL") {
+      makeListChecklist(after.list);
+      return;
+    }
+  }
+  convertBlockToChecklistItem(ctx.block, range);
 }
 
 /* --------------------------------------------------------------------------
@@ -8860,6 +9424,25 @@ function wireEvents() {
     if (state.view.kind !== "notebook") { return; }
     closeListPanels();
     confirmDeleteNotebook(state.view.value);
+  });
+  /* v1.8.1: the same menu's Trash and Archive items. renderListToolbar
+     only shows them in their view (and disables them when they would
+     have nothing to act on); the view guards stay as a second line
+     of defense, mirroring the notebook items above. */
+  document.getElementById("nbEmptyTrashBtn").addEventListener("click", function () {
+    if (state.view.kind !== "trash") { return; }
+    closeListPanels();
+    emptyTrash().catch(function (err) { toast(err.message, true); });
+  });
+  document.getElementById("nbDeleteSelectedBtn").addEventListener("click", function () {
+    if (state.view.kind !== "trash") { return; }
+    closeListPanels();
+    deleteSelectedTrashNotes().catch(function (err) { toast(err.message, true); });
+  });
+  document.getElementById("nbRestoreSelectedBtn").addEventListener("click", function () {
+    if (state.view.kind !== "archive") { return; }
+    closeListPanels();
+    restoreSelectedArchiveNotes().catch(function (err) { toast(err.message, true); });
   });
   /* List panel closers, mirroring the editor toolbar menus: a click
      anywhere outside the list toolbar closes the open panel, and so
