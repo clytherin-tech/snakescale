@@ -24,8 +24,8 @@
   belongs to the user. Notebooks are folders, notes are files, and there is
   no server and no shared database anywhere in this design.
 
-  BUILD STAMP: 2026-10-19-SSN-V12
-  Version: 1.2
+  BUILD STAMP: 2026-10-19-SSN-V121
+  Version: 1.2.1
 
   Revision history:
     v1.2  2026-10-19  Attachments and images. Notes can now carry files and
@@ -44,7 +44,7 @@
                       the same password vault key as the GitHub token
                       (session key kept in memory only). Apple iCloud Drive
                       is not supported by web apps and stays deferred.
-                      Build stamp 2026-10-19-SSN-V12.
+                      Build stamp 2026-10-19-SSN-V121.
     v1.1  2026-10-19  Look and layout polish only. Rebuilt the tile S logo
                       as a cleaner vector with a brighter lower gradient,
                       added an inline SVG favicon, gave the setup, lock, and
@@ -853,8 +853,8 @@ body.dark .ss-att-provider{color:#EAF3EC;}
 "use strict";
 
 /* ============================================================================
-   SnakeScale Notes v1.2: application script
-   BUILD STAMP: 2026-10-19-SSN-V12
+   SnakeScale Notes v1.2.1: application script
+   BUILD STAMP: 2026-10-19-SSN-V121
 
    How this script is organized:
      1. Constants and global state
@@ -883,8 +883,8 @@ body.dark .ss-att-provider{color:#EAF3EC;}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-19-SSN-V12";
-const APP_VERSION = "1.2";
+const APP_BUILD = "2026-10-19-SSN-V121";
+const APP_VERSION = "1.2.1";
 const API_BASE = "https://api.github.com";
 const API_VERSION_HEADER = "2022-11-28";
 
@@ -3641,6 +3641,7 @@ function insertPlaceholderAtCaret(el) {
 }
 
 async function handleIncomingFiles(fileList) {
+  const incomingFiles = Array.prototype.slice.call(fileList || []);
   const note = currentNote();
   if (!note) {
     toast("Open a note first, then attach files to it.", true);
@@ -3667,7 +3668,7 @@ async function handleIncomingFiles(fileList) {
     return;
   }
   const accepted = [];
-  Array.prototype.slice.call(fileList || []).forEach(function (f) {
+  incomingFiles.forEach(function (f) {
     if (f.size > ATTACH_MAX_BYTES) {
       toast("\"" + f.name + "\" is larger than the 100 MB per file limit and was skipped.", true);
     } else {
@@ -3978,7 +3979,8 @@ function wireEvents() {
     document.getElementById("attachFileInput").click();
   });
   document.getElementById("attachFileInput").addEventListener("change", function (ev) {
-    const files = ev.target.files;
+    /* Copy first: clearing the input also empties its live FileList. */
+    const files = Array.prototype.slice.call(ev.target.files || []);
     ev.target.value = "";   /* allow picking the same file again later */
     handleIncomingFiles(files).catch(function (err) {
       toast("Attach failed: " + err.message, true);
