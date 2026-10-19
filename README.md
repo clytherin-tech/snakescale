@@ -49,4 +49,4 @@ AGPL-3.0. See the LICENSE file. Anyone can use, study, and share this code, and 
 
 ## Current status
 
-Version 1.0, build stamp 2026-10-18-SSN-V10. Built and tested first as a single file app. Known v1.0 gap: no service worker yet, so it is not installable as a full PWA. That is planned for v1.1.
+Version 1.1, build stamp 2026-10-19-SSN-V11. Built and tested first as a single file app, with a look and layout polish pass in v1.1. Known v1.1 gap: no service worker yet, so it is not installable as a full PWA. That is planned for a later release.
