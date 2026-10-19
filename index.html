@@ -28,10 +28,26 @@
   notes are files, and there is no server and no shared database anywhere
   in this design.
 
-  BUILD STAMP: 2026-10-19-SSN-V142
-  Version: 1.4.2
+  BUILD STAMP: 2026-10-19-SSN-V143
+  Version: 1.4.3
 
   Revision history:
+    v1.4.3 2026-10-19 Google backend load fix. Two bugs made the Drive
+                      backend look empty after a successful sign in.
+                      First, sync and library loading only ran when a
+                      GitHub token was present, and Drive users (Google
+                      sign in only since v1.4.1) never have one, so their
+                      library never loaded on any browser even though
+                      their notes were saved in Drive all along. Sync
+                      readiness is now backend aware. Second, the first
+                      run welcome note was seeded only when the Drive
+                      notes folder happened to be created during that
+                      same visit, so an interrupted first attempt left
+                      the store empty forever. Seeding is now decided
+                      from the store itself: a store with no index.json
+                      and no notebooks is seeded on connect, and a store
+                      with any data never is.
+                      Build stamp 2026-10-19-SSN-V143.
     v1.4.2 2026-10-19 The publisher Google client ID is baked into the app.
                       No user is ever asked for a client ID again: the
                       Google sign in gate no longer has a client ID field
@@ -40,7 +56,6 @@
                       helper that uses the built in publisher ID unless
                       an advanced override was saved in the Attachments
                       settings dialog (kept for testing and for forks).
-                      Build stamp 2026-10-19-SSN-V142.
     v1.4.1 2026-10-19 Google Drive sign in only. The Drive backend no longer
                       asks for or creates an app password vault. A device
                       key replaces the password derived session key for
@@ -1258,8 +1273,8 @@ body.dark .ss-att-provider{color:#EAF3EC;}
 "use strict";
 
 /* ============================================================================
-   SnakeScale Notes v1.4.2: application script
-   BUILD STAMP: 2026-10-19-SSN-V142
+   SnakeScale Notes v1.4.3: application script
+   BUILD STAMP: 2026-10-19-SSN-V143
 
    How this script is organized:
      1. Constants and global state
@@ -1290,8 +1305,8 @@ body.dark .ss-att-provider{color:#EAF3EC;}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-19-SSN-V142";
-const APP_VERSION = "1.4.2";
+const APP_BUILD = "2026-10-19-SSN-V143";
+const APP_VERSION = "1.4.3";
 const API_BASE = "https://api.github.com";
 const API_VERSION_HEADER = "2022-11-28";
 /* v1.4: the two storage backends. "github" is the original repository
@@ -2602,10 +2617,42 @@ async function loadAllFromRepo() {
   }
 }
 
+/* v1.4.3: is the Google sign in live, judged from memory only? This is
+   the synchronous twin of googleGetStatus below: a Google token is
+   loaded in memory and its expiry is still ahead of the same 30 second
+   safety margin googleGetStatus uses. It never decrypts the stored
+   token blob, never prompts for sign in, and never touches the
+   network, so it is safe to call from the sync guards, which must
+   answer immediately. Callers that can await should still use
+   googleGetStatus, which is the authoritative check. */
+function googleSignInLiveInMemory() {
+  if (!state.providerTokens.google) { return false; }
+  if (!state.attach.googleExpiresAt) { return false; }
+  return Date.now() <= state.attach.googleExpiresAt - 30000;
+}
+
+/* v1.4.3: may a sync or a library load run against the selected store
+   right now? The store must be connected (state.repoExists), and the
+   selected backend must hold whatever proves sign in on that backend:
+   the GitHub token for the GitHub backend, a live in memory Google
+   sign in for the Drive backend. Before v1.4.3 the guards read
+   state.token directly. Drive users never have one (their only sign in
+   is Google, since v1.4.1 removed their app password vault), so sync
+   silently never ran for them: they signed in to an empty app and
+   their Drive library never loaded on any browser, even though their
+   notes were being saved to Drive all along. */
+function storeSyncReady() {
+  if (!state.repoExists) { return false; }
+  if (state.backend === BACKEND_GOOGLE) { return googleSignInLiveInMemory(); }
+  return !!state.token;
+}
+
 /* Full sync: flush queued offline edits first, then reload from the repo,
-   then re-render. Used by Sync now and automatically after unlock. */
+   then re-render. Used by Sync now and automatically after unlock.
+   Skipped unless storeSyncReady() says the selected backend is signed
+   in and its store is connected. */
 async function syncNow(showToast) {
-  if (!state.token || !state.repoExists) { return; }
+  if (!storeSyncReady()) { return; }
   if (state.syncing) { return; }
   state.syncing = true;
   refreshSyncPill();
@@ -3028,8 +3075,11 @@ async function deleteNoteForever(note) {
 /* Build the first store through the neutral store layer: the Personal
    notebook, the trash folder, index.json, and exactly one welcome note.
    GitHub calls this after creating the private repository. Google Drive
-   calls it only when the SnakeScale Notes root folder was just created,
-   so returning Drive users never get a second welcome note. */
+   calls it when the store itself is empty (v1.4.3: no index.json and a
+   missing or empty notebooks listing), so a store holding any data is
+   never seeded, returning Drive users never get a second welcome note,
+   and an interrupted first attempt is repaired on the next connect
+   instead of staying empty forever. */
 async function seedInitialStore() {
   const personal = {
     slug: "personal",
@@ -3126,12 +3176,26 @@ async function connectGoogleAndLoad() {
   state.username = "Google Drive";
   try {
     await driveEnsureNotesRoot();
-    const rootWasCreated = driveCache.rootCreated;
     state.repoExists = true;
+    /* v1.4.3: first run seeding is decided from the store itself, not
+       from whether this visit happened to create the notes root
+       folder. The old rule seeded only when driveCache.rootCreated
+       was set, so if the folder had been created in any earlier or
+       interrupted attempt (an easy thing to do while Google sign in
+       itself was being set up), seeding was skipped on every later
+       visit and the user signed in to a permanently empty app. The
+       store counts as a first run only when it holds nothing at all:
+       no index.json and a missing or empty notebooks listing.
+       seedInitialStore writes index.json, so a seeded store can never
+       look empty again, and a store holding any real data is never
+       seeded. */
+    const existingIndex = await storeGetFile("index.json");
+    const notebookEntries = await storeListDir("notebooks");
+    const storeIsEmpty = !existingIndex &&
+      (!notebookEntries || notebookEntries.length === 0);
     let welcome = null;
-    if (rootWasCreated) {
+    if (storeIsEmpty) {
       welcome = await seedInitialStore();
-      driveCache.rootCreated = false;
       state.selectedId = welcome.id;
     }
     showScreen("app");
@@ -5047,8 +5111,10 @@ async function driveCreateFolder(name, parentId) {
 }
 
 /* Find or create the SnakeScale Notes root folder. rootCreated records
-   whether THIS call created it, which is the first run signal the
-   connect flow uses to seed Personal and the welcome note exactly once. */
+   whether THIS call created it. Before v1.4.3 the connect flow used it
+   as the first run seeding signal; seeding is now decided from the
+   store contents in connectGoogleAndLoad, and rootCreated remains only
+   as a record of how the root was found on this visit. */
 async function driveEnsureNotesRoot() {
   if (driveCache.rootId) {
     try {
@@ -6487,7 +6553,9 @@ function wireEvents() {
   window.addEventListener("online", function () {
     state.online = true;
     refreshSyncPill();
-    if (state.token && state.repoExists) { syncNow(false); }
+    /* v1.4.3: backend aware readiness, so a Drive user coming back
+       online auto syncs too (this used to require a GitHub token). */
+    if (storeSyncReady()) { syncNow(false); }
   });
   window.addEventListener("offline", function () {
     state.online = false;
