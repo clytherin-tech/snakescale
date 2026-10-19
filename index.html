@@ -24,10 +24,21 @@
   belongs to the user. Notebooks are folders, notes are files, and there is
   no server and no shared database anywhere in this design.
 
-  BUILD STAMP: 2026-10-19-SSN-V13
-  Version: 1.3
+  BUILD STAMP: 2026-10-19-SSN-V131
+  Version: 1.3.1
 
   Revision history:
+    v1.3.1 2026-10-19 Link opening. The note body is editable, so a plain
+                      click on a link used to only place the caret and a
+                      link could never be followed from inside a note.
+                      Now Ctrl+click (or Cmd+click on a Mac) opens a link
+                      in a new tab, and a plain click also shows a small
+                      floating link popup with the address and an Open
+                      button, which is how touch screens open links. Only
+                      http, https, and mailto links can be opened; anything
+                      else is refused with a message. The popup lives
+                      outside the note body element, so it can never be
+                      saved into a note. Build stamp 2026-10-19-SSN-V131.
     v1.3  2026-10-19  Formatting toolbar rebuild. The one row of text
                       buttons is now a grouped bar modeled on a modern
                       editor toolbar: an Insert menu (attach, link,
@@ -43,7 +54,6 @@
                       never as font tags, so formatted notes render the
                       same from GitHub on any device. Editor selection
                       is preserved across every toolbar control.
-                      Build stamp 2026-10-19-SSN-V13.
     v1.2.1 2026-10-19 Attach button file picker fix: the picker change
                       handler now copies the selected files into a plain
                       array before clearing the input, because clearing
@@ -455,6 +465,36 @@ body.dark .tag-chip{color:var(--accent);}
 #noteBody ul,#noteBody ol{padding-left:24px;}
 #noteBody li.done{color:var(--muted);text-decoration:line-through;}
 #noteBody li.done input[type="checkbox"]{accent-color:var(--secondary);}
+/* v1.3.1: links inside the editable body keep the standard link look and
+   get a pointer cursor as the affordance that they can be opened (plain
+   click shows the link popup below, Ctrl or Cmd click opens directly). */
+#noteBody a{cursor:pointer;}
+/* v1.3.1 link popup: a small floating card shown near a clicked link.
+   It is position:fixed and lives OUTSIDE #noteBody in the DOM (a sibling
+   in .editor-inner), so it can never be saved into a note's HTML. The
+   script sets its left/top from the clicked link's on screen position
+   and clamps it into the viewport. */
+#linkPopup{
+  position:fixed;z-index:60;display:flex;align-items:center;gap:8px;
+  max-width:min(420px,92vw);padding:7px 8px 7px 12px;
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius-card);box-shadow:0 10px 28px rgba(6,32,22,.28);
+}
+#linkPopupUrl{
+  font-size:13px;font-weight:600;color:var(--primary);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px;
+}
+body.dark #linkPopupUrl{color:#9FD4B2;}
+#linkPopupOpen{white-space:nowrap;}
+#linkPopupClose{
+  border:none;background:none;color:var(--muted);font-size:17px;line-height:1;
+  width:30px;height:30px;border-radius:8px;cursor:pointer;flex:none;
+}
+#linkPopupClose:hover{background:var(--soft);color:var(--text);}
+/* v1.3.1: the one line link hint in the editor footer, beside the save
+   state. It wraps away on narrow screens so the footer never crowds. */
+.editor-hint{font-size:12.5px;color:var(--muted);}
+@media (max-width:900px){ .editor-hint{display:none;} }
 .editor-foot{
   display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;
   padding:10px 22px;border-top:1px solid var(--border);background:var(--surface);
@@ -940,10 +980,23 @@ body.dark .ss-att-provider{color:#EAF3EC;}
                .md file (documented in the script header), which keeps
                checklists and formatting intact in v1.0. -->
           <div id="noteBody" contenteditable="true" aria-label="Note body"></div>
+
+          <!-- v1.3.1 link popup. IMPORTANT: this element is a SIBLING of
+               #noteBody, never a child, and collectEditor() only reads
+               #noteBody's innerHTML, so the popup can never be saved into
+               a note. It is shown when a link in the body is clicked and
+               carries the address plus an Open button (the touch screen
+               way to follow a link). Hidden by default. -->
+          <div id="linkPopup" class="hidden" role="dialog" aria-label="Link options">
+            <span id="linkPopupUrl"></span>
+            <button class="btn small" id="linkPopupOpen" type="button">Open</button>
+            <button id="linkPopupClose" type="button" aria-label="Close link popup">&times;</button>
+          </div>
         </div>
       </div>
       <div class="editor-foot">
         <span id="saveState">No changes</span>
+        <span class="editor-hint">Links: Ctrl+click (Cmd+click on Mac) opens a link, or click it for options.</span>
         <div class="editor-actions">
           <button class="btn small" id="editorBackBtn" type="button">Back to list</button>
           <button class="btn small danger" id="trashBtn" type="button">Move to Trash</button>
@@ -1018,8 +1071,8 @@ body.dark .ss-att-provider{color:#EAF3EC;}
 "use strict";
 
 /* ============================================================================
-   SnakeScale Notes v1.3: application script
-   BUILD STAMP: 2026-10-19-SSN-V13
+   SnakeScale Notes v1.3.1: application script
+   BUILD STAMP: 2026-10-19-SSN-V131
 
    How this script is organized:
      1. Constants and global state
@@ -1048,8 +1101,8 @@ body.dark .ss-att-provider{color:#EAF3EC;}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-19-SSN-V13";
-const APP_VERSION = "1.3";
+const APP_BUILD = "2026-10-19-SSN-V131";
+const APP_VERSION = "1.3.1";
 const API_BASE = "https://api.github.com";
 const API_VERSION_HEADER = "2022-11-28";
 
@@ -1444,6 +1497,8 @@ function lockApp() {
   state.providerTokens = { google: null, pcloud: null };
   state.pendingPcloud = null;
   revokeAttachmentUrls();
+  /* v1.3.1: locking closes any open link popup. */
+  hideLinkPopup();
   showScreen(vaultExists() ? "lock" : "setup");
 }
 
@@ -2707,6 +2762,8 @@ function renderEditor() {
   if (!note) {
     noNote.classList.remove("hidden");
     wrap.classList.add("hidden");
+    /* v1.3.1: no note on screen, so no link popup either. */
+    hideLinkPopup();
     return;
   }
   noNote.classList.add("hidden");
@@ -2716,6 +2773,9 @@ function renderEditor() {
      re-render during typing never moves the cursor or clobbers input. */
   if (renderEditor._forId !== note.id) {
     renderEditor._forId = note.id;
+    /* v1.3.1: switching notes closes any open link popup, since it
+       refers to a link in the previous note. */
+    hideLinkPopup();
     /* v1.2: the previous note's image blob URLs are released before the
        editor switches, so long sessions do not accumulate them. */
     revokeAttachmentUrls();
@@ -2822,6 +2882,89 @@ function collectEditor(note) {
      carries a clean array on the object. */
   note.attachments = sanitizeAttachments(note.attachments);
   return note;
+}
+
+/* --------------------------------------------------------------------------
+   v1.3.1: opening links from inside a note
+   The note body is contenteditable, so the browser treats a plain click
+   on a link as "place the caret for editing" and never follows it. This
+   block gives links real behavior without disturbing editing:
+     - Ctrl+click (Cmd+click on a Mac) opens the link in a new tab.
+     - A plain click still places the caret exactly as before, and ALSO
+       shows the floating link popup (address plus an Open button), which
+       is how touch screens, with no Ctrl key, open links.
+   Safety: only http, https, and mailto links may open. Anything else
+   (javascript:, data:, a malformed string) is refused with a toast. The
+   popup element lives outside #noteBody, and collectEditor only reads
+   #noteBody's innerHTML, so the popup can never be saved into a note,
+   and using it never marks the note dirty.
+   -------------------------------------------------------------------------- */
+
+/* Pure protocol check, kept separate and side effect free so it can be
+   unit tested on its own: returns the normalized URL to open, or null
+   when the link must not be opened. Callers pass the anchor's resolved
+   href property (always absolute), never the raw attribute, so this
+   function only ever judges complete URLs. */
+function linkOpenTarget(rawUrl) {
+  if (!rawUrl) { return null; }
+  let parsed;
+  try {
+    parsed = new URL(String(rawUrl).trim());
+  } catch (err) {
+    return null;
+  }
+  if (parsed.protocol === "http:" ||
+      parsed.protocol === "https:" ||
+      parsed.protocol === "mailto:") {
+    return parsed.href;
+  }
+  return null;
+}
+
+/* Open a note link in a new tab, or explain why it cannot be opened.
+   noopener keeps the opened page from reaching back into this window. */
+function openNoteLink(rawUrl) {
+  const target = linkOpenTarget(rawUrl);
+  if (!target) {
+    toast("That link cannot be opened. Only web (http or https) and email (mailto) links are allowed.", true);
+    return;
+  }
+  window.open(target, "_blank", "noopener");
+}
+
+/* The href of the link the popup currently refers to. Kept in a variable
+   rather than read back from the DOM so the Open button always uses the
+   exact href of the link that was clicked. */
+let linkPopupHref = "";
+
+function hideLinkPopup() {
+  const popup = document.getElementById("linkPopup");
+  if (popup) { popup.classList.add("hidden"); }
+  linkPopupHref = "";
+}
+
+/* Show the popup just under the clicked link (above it when there is no
+   room below), clamped so it always stays inside the viewport. The
+   popup is unhidden first so its real size can be measured. */
+function showLinkPopup(anchor) {
+  const popup = document.getElementById("linkPopup");
+  if (!popup || !anchor) { return; }
+  /* anchor.href is the browser resolved absolute URL, which is both
+     what the popup should display and what Open will open. */
+  linkPopupHref = anchor.href || anchor.getAttribute("href") || "";
+  document.getElementById("linkPopupUrl").textContent = linkPopupHref;
+  popup.classList.remove("hidden");
+  const rect = anchor.getBoundingClientRect();
+  const width = popup.offsetWidth;
+  const height = popup.offsetHeight;
+  let left = Math.min(rect.left, window.innerWidth - width - 8);
+  left = Math.max(8, left);
+  let top = rect.bottom + 6;
+  if (top + height > window.innerHeight - 8) {
+    top = Math.max(8, rect.top - height - 6);
+  }
+  popup.style.left = left + "px";
+  popup.style.top = top + "px";
 }
 
 const autosave = debounce(async function () {
@@ -4619,6 +4762,64 @@ function wireEvents() {
         markDirty();
       }
     }
+  });
+
+  /* v1.3.1 link behavior, a SEPARATE listener so the checkbox handler
+     above is untouched. Ctrl+click or Cmd+click opens the link in a new
+     tab (preventDefault stops the browser from also trying to follow or
+     select). A plain click is NOT prevented: the caret still lands in
+     the link text for editing exactly as before, and the link popup
+     appears alongside as the way to open it (and the only way on touch
+     screens). Clicking a non link part of the body hides the popup. */
+  document.getElementById("noteBody").addEventListener("click", function (ev) {
+    const target = ev.target;
+    const anchor = (target && target.closest) ? target.closest("a") : null;
+    if (!anchor) {
+      hideLinkPopup();
+      return;
+    }
+    if (ev.ctrlKey || ev.metaKey) {
+      ev.preventDefault();
+      hideLinkPopup();
+      openNoteLink(anchor.href || anchor.getAttribute("href") || "");
+    } else {
+      showLinkPopup(anchor);
+    }
+  });
+
+  /* v1.3.1 popup buttons. Open uses the href captured when the popup was
+     shown, then closes the popup. Both buttons live outside #noteBody,
+     so these clicks can never edit the note or mark it dirty. */
+  document.getElementById("linkPopupOpen").addEventListener("click", function () {
+    const href = linkPopupHref;
+    hideLinkPopup();
+    if (href) { openNoteLink(href); }
+  });
+  document.getElementById("linkPopupClose").addEventListener("click", function () {
+    hideLinkPopup();
+  });
+
+  /* v1.3.1: clicking anywhere else in the app closes the popup. Clicks
+     inside the popup itself, and clicks on body links (handled by the
+     listener above, which repositions or reopens it), are excluded. */
+  document.addEventListener("click", function (ev) {
+    const popup = document.getElementById("linkPopup");
+    if (!popup || popup.classList.contains("hidden")) { return; }
+    const target = ev.target;
+    if (!target || !target.closest) { return; }
+    if (target.closest("#linkPopup")) { return; }
+    const anchor = target.closest("a");
+    if (anchor && document.getElementById("noteBody").contains(anchor)) { return; }
+    hideLinkPopup();
+  });
+
+  /* v1.3.1: Escape closes the popup, and scrolling the editor closes it
+     too, since its fixed position is tied to where the link was. */
+  document.addEventListener("keydown", function (ev) {
+    if (ev.key === "Escape") { hideLinkPopup(); }
+  });
+  document.querySelector(".editor-scroll").addEventListener("scroll", function () {
+    hideLinkPopup();
   });
 
   /* Toolbar buttons. mousedown is prevented so the text selection in the
