@@ -28,10 +28,30 @@
   notes are files, and there is no server and no shared database anywhere
   in this design.
 
-  BUILD STAMP: 2026-10-19-SSN-V144
-  Version: 1.4.4
+  BUILD STAMP: 2026-10-19-SSN-V150
+  Version: 1.5.0
 
   Revision history:
+    v1.5.0 2026-10-19 Instant deletes, and note archiving. Moving a note
+                      to Trash, restoring it, and deleting it forever used
+                      to wait on the storage round trips before the
+                      screen changed; the screen now updates the moment
+                      the action is taken and the storage work finishes
+                      in the background, under the same failure messages
+                      and offline queue rules as before. Every storage
+                      operation on one note (saves, trash, restore,
+                      delete forever, archive, unarchive) now runs
+                      through one per note operation chain, so a rapid
+                      sequence of actions on the same note reaches
+                      storage in click order. New: Archive. A note can be
+                      archived out of its notebook into an Archive view
+                      in the sidebar; archived notes live in an archive
+                      folder in the user's own storage, stay out of the
+                      regular lists and search, open read only like
+                      trashed notes, and unarchive back to the notebook
+                      they came from. Moving an archived note to Trash
+                      keeps its original notebook as the restore target.
+                      Build stamp 2026-10-19-SSN-V150.
     v1.4.4 2026-10-19 Faster note and notebook creation. Creating a note
                       or a notebook used to wait on a chain of storage
                       calls before anything appeared, which on Google
@@ -50,7 +70,6 @@
                       first run seeding finishes and before a sync reads
                       the library. Failure messages and the local data
                       protection behind them are unchanged.
-                      Build stamp 2026-10-19-SSN-V144.
     v1.4.3 2026-10-19 Google backend load fix. Two bugs made the Drive
                       backend look empty after a successful sign in.
                       First, sync and library loading only ran when a
@@ -992,6 +1011,7 @@ body.dark .ss-att-provider{color:#EAF3EC;}
       <button class="nav-item" id="navAll" type="button">All Notes <span class="count count-pill" id="countAll"></span></button>
       <button class="nav-item" id="navPinned" type="button">Pinned <span class="count count-pill" id="countPinned"></span></button>
       <button class="nav-item" id="navTrash" type="button">Trash <span class="count count-pill" id="countTrash"></span></button>
+      <button class="nav-item" id="navArchive" type="button">Archive <span class="count count-pill" id="countArchive"></span></button>
     </div>
 
     <div class="nav-section">
@@ -1216,7 +1236,9 @@ body.dark .ss-att-provider{color:#EAF3EC;}
         <div class="editor-actions">
           <button class="btn small" id="editorBackBtn" type="button">Back to list</button>
           <button class="btn small danger" id="trashBtn" type="button">Move to Trash</button>
+          <button class="btn small" id="archiveBtn" type="button">Archive</button>
           <button class="btn small hidden" id="restoreBtn" type="button">Restore</button>
+          <button class="btn small hidden" id="unarchiveBtn" type="button">Unarchive</button>
           <button class="btn small danger hidden" id="deleteForeverBtn" type="button">Delete Forever</button>
         </div>
       </div>
@@ -1291,8 +1313,8 @@ body.dark .ss-att-provider{color:#EAF3EC;}
 "use strict";
 
 /* ============================================================================
-   SnakeScale Notes v1.4.4: application script
-   BUILD STAMP: 2026-10-19-SSN-V144
+   SnakeScale Notes v1.5.0: application script
+   BUILD STAMP: 2026-10-19-SSN-V150
 
    How this script is organized:
      1. Constants and global state
@@ -1323,8 +1345,8 @@ body.dark .ss-att-provider{color:#EAF3EC;}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-19-SSN-V144";
-const APP_VERSION = "1.4.4";
+const APP_BUILD = "2026-10-19-SSN-V150";
+const APP_VERSION = "1.5.0";
 const API_BASE = "https://api.github.com";
 const API_VERSION_HEADER = "2022-11-28";
 /* v1.4: the two storage backends. "github" is the original repository
@@ -1408,8 +1430,9 @@ const state = {
   notebooks: [],            // [{slug, name, created}]
   notes: [],                // note objects, see parseNoteFile for the shape
   trash: [],                // note objects with trashed = true
+  archive: [],              // v1.5: note objects with archived = true
   index: null,              // parsed index.json contents, or null
-  view: { kind: "all", value: null }, // all | pinned | trash | notebook | tag
+  view: { kind: "all", value: null }, // all | pinned | trash | archive | notebook | tag
   selectedId: null,         // id of the note open in the editor
   search: "",               // current search text, lowercased
   syncing: false,           // true while a sync or save is in flight
@@ -1436,10 +1459,15 @@ const state = {
                     (a GitHub blob sha, or a Google Drive revision token)
      trashed:   boolean,
      trashedFrom: string|null  notebook slug the note was trashed from
+     archived:  boolean,       (v1.5)
+     archivedFrom: string|null notebook slug the note was archived from
    }
-   The repo path is derived, never stored on the object:
+   A note sits in exactly one of the three lists at a time: state.notes,
+   state.trash, or state.archive. The repo path is derived, never stored
+   on the object:
      live note:  notebooks/<slug>/<id>.md
      trashed:    trash/<id>.md
+     archived:   archive/<id>.md   (v1.5)
 */
 
 /* --------------------------------------------------------------------------
@@ -1878,6 +1906,7 @@ async function signOutGoogle() {
   state.notebooks = [];
   state.notes = [];
   state.trash = [];
+  state.archive = [];
   state.index = null;
   state.selectedId = null;
   state.attach.googleExpiresAt = 0;
@@ -1909,8 +1938,8 @@ function lockOrSignOut() {
 /* --------------------------------------------------------------------------
    5. Settings, local cache, and the offline edit queue
    Settings are not secret (repo name, theme), so they live in plain JSON.
-   The cache mirrors notebooks, notes, and trash so the app opens and reads
-   fully offline. The queue holds file operations made while offline (or
+   The cache mirrors notebooks, notes, trash, and the archive so the app
+   opens and reads fully offline. The queue holds file operations made while offline (or
    while a save failed) and is flushed on reconnect or Sync now.
    -------------------------------------------------------------------------- */
 /* v1.4: normalize a stored backend value. Only the exact string "google"
@@ -2013,6 +2042,7 @@ function cacheSnapshot() {
     notebooks: state.notebooks,
     notes: state.notes,
     trash: state.trash,
+    archive: state.archive,
     index: state.index,
     savedAt: new Date().toISOString()
   };
@@ -2030,6 +2060,10 @@ function applyCacheSnapshot(c) {
   state.notebooks = c.notebooks || [];
   state.notes = c.notes || [];
   state.trash = c.trash || [];
+  /* v1.5: caches written before archiving existed have no archive
+     list; they load as an empty archive, exactly like old note files
+     load as unarchived. */
+  state.archive = c.archive || [];
   state.index = c.index || null;
   return true;
 }
@@ -2381,6 +2415,7 @@ async function storeDeleteFile(path, token, message) {
      updated: <ISO timestamp>
      pinned: true or false
      trashedFrom: <slug>          (only on files inside trash/)
+     archivedFrom: <slug>         (v1.5, only on files inside archive/)
      attachments: <JSON array>    (v1.2, only when the note has attachments)
      ---
 
@@ -2398,6 +2433,8 @@ async function storeDeleteFile(path, token, message) {
    -------------------------------------------------------------------------- */
 function notePath(note) {
   if (note.trashed) { return "trash/" + note.id + ".md"; }
+  /* v1.5: archived notes live in the archive folder, mirroring trash. */
+  if (note.archived) { return "archive/" + note.id + ".md"; }
   return "notebooks/" + note.notebook + "/" + note.id + ".md";
 }
 
@@ -2444,6 +2481,12 @@ function serializeNote(note) {
   if (note.trashed) {
     lines.push("trashedFrom: " + (note.trashedFrom || note.notebook || ""));
   }
+  /* v1.5: archived files carry where they were archived from, exactly
+     the way trashed files carry trashedFrom. Written only for archived
+     notes, so live and trashed files keep their earlier front matter. */
+  if (note.archived) {
+    lines.push("archivedFrom: " + (note.archivedFrom || note.notebook || ""));
+  }
   /* v1.2: attachment metadata. Written only when the note actually has
      attachments, so notes without any keep byte identical front matter
      to earlier versions. JSON.stringify never emits a raw newline, which
@@ -2462,7 +2505,7 @@ function serializeNote(note) {
    the file name for hand written files with no front matter at all, so a
    user can drop a plain .md file into a notebook folder and it still
    shows up in the app. */
-function parseNoteFile(text, sha, fallbackId, trashed) {
+function parseNoteFile(text, sha, fallbackId, trashed, archived) {
   const note = {
     id: fallbackId,
     title: "Untitled note",
@@ -2475,7 +2518,9 @@ function parseNoteFile(text, sha, fallbackId, trashed) {
     attachments: [],   /* v1.2: attachment metadata, see serializeNote */
     sha: sha || null,
     trashed: !!trashed,
-    trashedFrom: null
+    trashedFrom: null,
+    archived: !!archived,   /* v1.5, mirrors trashed */
+    archivedFrom: null      /* v1.5, mirrors trashedFrom */
   };
   const raw = String(text || "");
   const match = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?/);
@@ -2498,6 +2543,7 @@ function parseNoteFile(text, sha, fallbackId, trashed) {
     if (meta.updated) { note.updated = meta.updated; }
     note.pinned = meta.pinned === "true";
     if (meta.trashedFrom) { note.trashedFrom = meta.trashedFrom; }
+    if (meta.archivedFrom) { note.archivedFrom = meta.archivedFrom; }
     /* v1.2: attachment metadata. A malformed line must never break the
        note: it is counted as a warning (surfaced once after load) and the
        note opens with no attachment metadata. */
@@ -2524,6 +2570,13 @@ function parseNoteFile(text, sha, fallbackId, trashed) {
     note.trashedFrom = note.notebook || "personal";
   }
   if (!note.notebook && note.trashedFrom) { note.notebook = note.trashedFrom; }
+  /* v1.5: the same repairs for archived files. Files written before
+     archiving existed never reach this code with archived set, so they
+     load as ordinary unarchived notes. */
+  if (note.archived && !note.archivedFrom) {
+    note.archivedFrom = note.notebook || "personal";
+  }
+  if (!note.notebook && note.archivedFrom) { note.notebook = note.archivedFrom; }
   return note;
 }
 
@@ -2684,9 +2737,9 @@ function buildIndexFromFolders(folderSlugs) {
 }
 
 /* Load everything from the repo: index (or rebuild it), every notebook
-   folder, every note file, and the trash folder. Results replace state and
-   refresh the cache. Throws on hard failures so the caller can fall back
-   to the cache and say so. */
+   folder, every note file, the trash folder, and the archive folder.
+   Results replace state and refresh the cache. Throws on hard failures
+   so the caller can fall back to the cache and say so. */
 async function loadAllFromRepo() {
   attachmentParseWarnings = 0;   /* v1.2: reset the malformed metadata count */
   const indexFile = await storeGetFile("index.json");
@@ -2744,8 +2797,25 @@ async function loadAllFromRepo() {
     trash.push(parseNoteFile(file.text, file.token, fallbackId, true));
   }
 
+  /* v1.5: the archive folder loads exactly like the trash folder.
+     Stores created before archiving have no archive folder at all;
+     the listing then comes back null and the archive is simply empty.
+     The folder materializes on the first archive (a put creates the
+     path on GitHub, and the Drive driver creates folders on the way
+     to a file). */
+  const archive = [];
+  const archiveEntries = await storeListDir("archive");
+  for (const entry of (archiveEntries || [])) {
+    if (entry.isDir || !/\.md$/i.test(entry.name)) { continue; }
+    const file = await storeGetFile("archive/" + entry.name);
+    if (!file) { continue; }
+    const fallbackId = entry.name.replace(/\.md$/i, "");
+    archive.push(parseNoteFile(file.text, file.token, fallbackId, false, true));
+  }
+
   state.notes = notes;
   state.trash = trash;
+  state.archive = archive;
   saveCache();
   /* v1.2: one readable warning if any note file carried attachment
      metadata that could not be parsed. Those notes still loaded; they
@@ -2817,32 +2887,51 @@ async function syncNow(showToast) {
   }
 }
 
-/* v1.4.4: saves of one note are serialized per file path.
-   Creating a note no longer waits for its upload (see
-   createNoteInRepo), so the first autosave of an edit can be requested
-   while the create is still in flight. On Google Drive that race was
-   dangerous: the second save would find no file yet and create a
-   second file with the same name, leaving a duplicate. To rule that
-   out, every saveNoteToRepo call for a path waits for the previous
-   save of the same path to finish, in call order. Different paths are
-   unaffected and still save in parallel. The chain tail stored here
-   never rejects, so one failed save cannot poison later saves of the
-   same note; each caller still receives its own result (or rejection)
-   through the promise this function returns. */
-const noteSaveChains = Object.create(null);
+/* The per note operation chain (v1.4.4, generalized in v1.5).
+   Every storage operation that creates, rewrites, moves, or deletes
+   one note's file goes through this chain, keyed by note id: saves,
+   trash moves, restores, deletes forever, and (v1.5) archive and
+   unarchive moves. Operations on the same note run one at a time in
+   the exact order they were triggered; operations on different notes
+   are unaffected and still run in parallel.
 
-function saveNoteToRepo(note, options) {
-  const path = notePath(note);
-  const previous = noteSaveChains[path] || Promise.resolve();
-  const run = previous.then(function () {
-    return saveNoteToRepoNow(note, options);
-  });
+   Why it exists: since v1.4.4 the interface updates instantly and
+   storage work finishes in the background, so two operations on one
+   note can be in flight at once. On Google Drive an out of order pair
+   is dangerous. A save that overtook the create it edits would find
+   no file yet and create a second file with the same name, leaving a
+   duplicate. A restore that overtook its own trash move would rewrite
+   the notebook file and then watch the trash move delete it. The
+   chain rules both out.
+
+   The tail stored here never rejects, so one failed operation cannot
+   poison later operations on the same note; each caller still
+   receives its own result (or rejection) through the promise
+   chainNoteOp returns, and operations that callers await today
+   (deleteNotebook waiting on each trash move, for one) keep awaiting
+   exactly as before. v1.4.4 keyed this chain by file path and used it
+   for saves only; v1.5 keys it by note id, because a note's path
+   changes as the note moves between folders, and shares it across
+   every note operation. */
+const noteOpChains = Object.create(null);
+
+function chainNoteOp(note, opFn) {
+  const key = note.id;
+  const previous = noteOpChains[key] || Promise.resolve();
+  const run = previous.then(function () { return opFn(); });
   const tail = run.catch(function () { return null; });
-  noteSaveChains[path] = tail;
+  noteOpChains[key] = tail;
   tail.then(function () {
-    if (noteSaveChains[path] === tail) { delete noteSaveChains[path]; }
+    if (noteOpChains[key] === tail) { delete noteOpChains[key]; }
   });
   return run;
+}
+
+function saveNoteToRepo(note, options) {
+  /* Callers use saveNoteToRepo; the chain runs the worker below. */
+  return chainNoteOp(note, function () {
+    return saveNoteToRepoNow(note, options);
+  });
 }
 
 /* Save one note to the repo, with the critical conflict rule:
@@ -2855,7 +2944,8 @@ function saveNoteToRepo(note, options) {
    When offline, the write is queued instead and the note keeps a dirty
    marker in the cache.
    This is the worker behind saveNoteToRepo above, which serializes
-   calls per file path (v1.4.4). Callers use saveNoteToRepo. */
+   calls per note through the operation chain. Callers use
+   saveNoteToRepo. */
 async function saveNoteToRepoNow(note, options) {
   options = options || {};
   note.updated = new Date().toISOString();
@@ -2930,7 +3020,9 @@ async function saveConflictCopy(note, originalPath) {
     attachments: sanitizeAttachments(note.attachments),   /* v1.2 */
     sha: null,
     trashed: false,
-    trashedFrom: null
+    trashedFrom: null,
+    archived: false,        /* v1.5 */
+    archivedFrom: null      /* v1.5 */
   };
   const copyPath = "notebooks/" + copy.notebook + "/" + copy.id + ".md";
   copy.sha = await storePutFile(copyPath, serializeNote(copy), null,
@@ -2975,8 +3067,12 @@ async function flushQueue() {
         const localNote = findNoteById(op.noteId);
         const loadedSha = localNote ? localNote.sha : null;
         if (existing && loadedSha && existing.token !== loadedSha &&
-            !op.path.startsWith("trash/")) {
-          /* The repo version changed while offline. Keep both copies. */
+            !op.path.startsWith("trash/") &&
+            !op.path.startsWith("archive/")) {
+          /* The repo version changed while offline. Keep both copies.
+             v1.5: trash moves and archive moves are exempt, exactly
+             alike: a queued move must never spawn a conflict copy,
+             because the note now lives at its new path by design. */
           const parsed = parseNoteFile(op.content, null, op.noteId, false);
           parsed.id = newNoteId();
           parsed.title = (parsed.title || "Untitled note") + " (conflict copy)";
@@ -3010,10 +3106,12 @@ async function flushQueue() {
   saveCache();
 }
 
-/* Look a note up in the live list or the trash list. */
+/* Look a note up in the live list, the trash list, or the archive
+   list (v1.5). A note is in exactly one of the three at any moment. */
 function findNoteById(id) {
   return state.notes.find(function (n) { return n.id === id; }) ||
-    state.trash.find(function (n) { return n.id === id; }) || null;
+    state.trash.find(function (n) { return n.id === id; }) ||
+    state.archive.find(function (n) { return n.id === id; }) || null;
 }
 
 /* --------------------------------------------------------------------------
@@ -3145,9 +3243,20 @@ async function deleteNotebook(slug) {
 }
 
 /* --------------------------------------------------------------------------
-   Note operations: create, trash, restore, delete forever
-   Moving a note between the notebooks tree and trash/ is a write to the
-   new path plus a delete of the old path. Offline, both halves are queued.
+   Note operations: create, trash, restore, delete forever, archive
+   Moving a note between the notebooks tree, trash/, and archive/ is a
+   write to the new path plus a delete of the old path. Offline, both
+   halves are queued.
+
+   v1.5: every operation in this section updates state and re-renders
+   FIRST, so the screen changes the instant the user acts, and runs its
+   storage work afterwards through the per note operation chain (see
+   chainNoteOp). Each function still returns the promise of its storage
+   work: click handlers let it run in the background, while composite
+   callers such as deleteNotebook keep awaiting it exactly as before.
+   The file text and both paths are captured at action time, so a
+   later operation on the same note can never change what an earlier,
+   still queued operation writes.
    -------------------------------------------------------------------------- */
 function makeNote(notebookSlug, title, body) {
   const now = new Date().toISOString();
@@ -3163,7 +3272,9 @@ function makeNote(notebookSlug, title, body) {
     attachments: [],   /* v1.2: new notes start with no attachments */
     sha: null,
     trashed: false,
-    trashedFrom: null
+    trashedFrom: null,
+    archived: false,        /* v1.5 */
+    archivedFrom: null      /* v1.5 */
   };
 }
 
@@ -3203,41 +3314,72 @@ async function createNoteInRepo(notebookSlug) {
 }
 
 /* Move a note to Trash. quiet=true is used by deleteNotebook, which moves
-   many notes at once and renders once at the end. */
-async function moveNoteToTrash(note, quiet) {
+   many notes at once and renders once at the end.
+   v1.5: the state change, the cache write, and the render all happen
+   immediately; the file move runs afterwards through the per note
+   operation chain and this function returns that work's promise.
+   v1.5 also lets an archived note be trashed directly from the Archive
+   view: it leaves the archive list, its archivedFrom notebook becomes
+   its trashedFrom (so Restore still returns it to the notebook it
+   originally came from), and its file moves out of archive/. */
+function moveNoteToTrash(note, quiet) {
   const oldPath = notePath(note);
+  const wasArchived = !!note.archived;
+  const online = state.online && state.repoExists;
   note.trashed = true;
-  note.trashedFrom = note.notebook;
+  note.trashedFrom = wasArchived
+    ? (note.archivedFrom || note.notebook)
+    : note.notebook;
+  note.archived = false;
+  note.archivedFrom = null;
   note.pinned = false;
   note.updated = new Date().toISOString();
   const newPath = notePath(note);
+  const text = serializeNote(note);
   state.notes = state.notes.filter(function (n) { return n.id !== note.id; });
+  state.archive = state.archive.filter(function (n) { return n.id !== note.id; });
   state.trash.unshift(note);
-  if (state.online && state.repoExists) {
-    try {
-      note.sha = await storePutFile(newPath, serializeNote(note), null, "Move note to trash");
-      const oldFile = await storeGetFile(oldPath);
-      if (oldFile) { await storeDeleteFile(oldPath, oldFile.token, "Remove note from notebook"); }
-    } catch (err) {
-      toast("Trash move failed on " + storageDisplayName() + ": " + err.message, true);
-    }
-  } else {
-    queueOp({ kind: "put", path: newPath, content: serializeNote(note), noteId: note.id });
+  if (state.selectedId === note.id) { state.selectedId = null; }
+  if (!online) {
+    /* Offline (or the store is not connected): queue both halves, in
+       order, exactly as before. The note keeps no storage token until
+       the flush writes it. */
+    queueOp({ kind: "put", path: newPath, content: text, noteId: note.id });
     queueOp({ kind: "delete", path: oldPath, noteId: note.id });
     note.sha = null;
   }
-  if (state.selectedId === note.id) { state.selectedId = null; }
   saveCache();
   if (!quiet) { renderAll(); }
+  if (!online) { return Promise.resolve(); }
+  return chainNoteOp(note, async function () {
+    try {
+      note.sha = await storePutFile(newPath, text, null, "Move note to trash");
+      const oldFile = await storeGetFile(oldPath);
+      if (oldFile) {
+        await storeDeleteFile(oldPath, oldFile.token,
+          wasArchived ? "Remove note from archive" : "Remove note from notebook");
+      }
+      /* The put assigned the note its new storage token. Persist it,
+         so later conflict checks compare against the right token. */
+      saveCache();
+    } catch (err) {
+      toast("Trash move failed on " + storageDisplayName() + ": " + err.message, true);
+    }
+  });
 }
 
-async function restoreNote(note) {
+/* Restore a note from Trash back to its notebook.
+   v1.5: same instant pattern as moveNoteToTrash. The target notebook
+   is settled synchronously: createNotebook updates state before it
+   returns its promise, so the fallback below never has to wait. */
+function restoreNote(note) {
   const oldPath = notePath(note);
+  const online = state.online && state.repoExists;
   let target = note.trashedFrom || note.notebook || "personal";
   if (!state.notebooks.some(function (nb) { return nb.slug === target; })) {
     /* The notebook it came from is gone. Put it in the first notebook
        that exists, creating Personal if there are none at all. */
-    if (!state.notebooks.length) { await createNotebook("Personal"); }
+    if (!state.notebooks.length) { createNotebook("Personal"); }
     target = state.notebooks[0].slug;
   }
   note.trashed = false;
@@ -3245,30 +3387,47 @@ async function restoreNote(note) {
   note.notebook = target;
   note.updated = new Date().toISOString();
   const newPath = notePath(note);
+  const text = serializeNote(note);
   state.trash = state.trash.filter(function (n) { return n.id !== note.id; });
   state.notes.unshift(note);
-  if (state.online && state.repoExists) {
-    try {
-      note.sha = await storePutFile(newPath, serializeNote(note), null, "Restore note from trash");
-      const oldFile = await storeGetFile(oldPath);
-      if (oldFile) { await storeDeleteFile(oldPath, oldFile.token, "Remove note from trash"); }
-    } catch (err) {
-      toast("Restore failed on " + storageDisplayName() + ": " + err.message, true);
-    }
-  } else {
-    queueOp({ kind: "put", path: newPath, content: serializeNote(note), noteId: note.id });
+  if (!online) {
+    queueOp({ kind: "put", path: newPath, content: text, noteId: note.id });
     queueOp({ kind: "delete", path: oldPath, noteId: note.id });
     note.sha = null;
   }
   saveCache();
   renderAll();
+  if (!online) { return Promise.resolve(); }
+  return chainNoteOp(note, async function () {
+    try {
+      note.sha = await storePutFile(newPath, text, null, "Restore note from trash");
+      const oldFile = await storeGetFile(oldPath);
+      if (oldFile) { await storeDeleteFile(oldPath, oldFile.token, "Remove note from trash"); }
+      saveCache();
+    } catch (err) {
+      toast("Restore failed on " + storageDisplayName() + ": " + err.message, true);
+    }
+  });
 }
 
-async function deleteNoteForever(note) {
+/* Delete a trashed note's file for good.
+   v1.5: the note leaves the screen immediately and the delete runs
+   through the operation chain. The storage token is read inside the
+   chain, not at click time: if the trash move that put the file there
+   is still in flight ahead of this delete, the token it assigns is
+   the one this delete must present. */
+function deleteNoteForever(note) {
   const path = notePath(note);
+  const online = state.online && state.repoExists;
   state.trash = state.trash.filter(function (n) { return n.id !== note.id; });
   if (state.selectedId === note.id) { state.selectedId = null; }
-  if (state.online && state.repoExists) {
+  if (!online) {
+    queueOp({ kind: "delete", path: path, noteId: note.id });
+  }
+  saveCache();
+  renderAll();
+  if (!online) { return Promise.resolve(); }
+  return chainNoteOp(note, async function () {
     try {
       const file = note.sha ? { token: note.sha } : await storeGetFile(path);
       if (file && file.token) {
@@ -3277,15 +3436,89 @@ async function deleteNoteForever(note) {
     } catch (err) {
       toast("Delete failed on " + storageDisplayName() + ": " + err.message, true);
     }
-  } else {
-    queueOp({ kind: "delete", path: path, noteId: note.id });
+  });
+}
+
+/* Archive a note (v1.5): tuck it out of its notebook into the archive
+   folder without deleting it. Mirrors moveNoteToTrash exactly: the
+   note leaves the regular lists the moment it is archived, and its
+   file move finishes in the background through the operation chain.
+   archivedFrom remembers the notebook, so Unarchive is a plain
+   restore under another name. Pinned is cleared, as with Trash. */
+function archiveNote(note) {
+  const oldPath = notePath(note);
+  const online = state.online && state.repoExists;
+  note.archived = true;
+  note.archivedFrom = note.notebook;
+  note.pinned = false;
+  note.updated = new Date().toISOString();
+  const newPath = notePath(note);
+  const text = serializeNote(note);
+  state.notes = state.notes.filter(function (n) { return n.id !== note.id; });
+  state.archive.unshift(note);
+  if (state.selectedId === note.id) { state.selectedId = null; }
+  if (!online) {
+    queueOp({ kind: "put", path: newPath, content: text, noteId: note.id });
+    queueOp({ kind: "delete", path: oldPath, noteId: note.id });
+    note.sha = null;
   }
   saveCache();
   renderAll();
+  if (!online) { return Promise.resolve(); }
+  return chainNoteOp(note, async function () {
+    try {
+      note.sha = await storePutFile(newPath, text, null, "Archive note");
+      const oldFile = await storeGetFile(oldPath);
+      if (oldFile) { await storeDeleteFile(oldPath, oldFile.token, "Remove note from notebook"); }
+      saveCache();
+    } catch (err) {
+      toast("Archive move failed on " + storageDisplayName() + ": " + err.message, true);
+    }
+  });
+}
+
+/* Unarchive a note (v1.5): return it to the notebook it was archived
+   from, with restoreNote's fallback when that notebook is gone (the
+   first notebook that exists, creating Personal if there are none). */
+function unarchiveNote(note) {
+  const oldPath = notePath(note);
+  const online = state.online && state.repoExists;
+  let target = note.archivedFrom || note.notebook || "personal";
+  if (!state.notebooks.some(function (nb) { return nb.slug === target; })) {
+    if (!state.notebooks.length) { createNotebook("Personal"); }
+    target = state.notebooks[0].slug;
+  }
+  note.archived = false;
+  note.archivedFrom = null;
+  note.notebook = target;
+  note.updated = new Date().toISOString();
+  const newPath = notePath(note);
+  const text = serializeNote(note);
+  state.archive = state.archive.filter(function (n) { return n.id !== note.id; });
+  state.notes.unshift(note);
+  if (!online) {
+    queueOp({ kind: "put", path: newPath, content: text, noteId: note.id });
+    queueOp({ kind: "delete", path: oldPath, noteId: note.id });
+    note.sha = null;
+  }
+  saveCache();
+  renderAll();
+  if (!online) { return Promise.resolve(); }
+  return chainNoteOp(note, async function () {
+    try {
+      note.sha = await storePutFile(newPath, text, null, "Unarchive note");
+      const oldFile = await storeGetFile(oldPath);
+      if (oldFile) { await storeDeleteFile(oldPath, oldFile.token, "Remove note from archive"); }
+      saveCache();
+    } catch (err) {
+      toast("Unarchive failed on " + storageDisplayName() + ": " + err.message, true);
+    }
+  });
 }
 
 /* Build the first store through the neutral store layer: the Personal
-   notebook, the trash folder, index.json, and exactly one welcome note.
+   notebook, the trash and archive folders, index.json, and exactly one
+   welcome note.
    GitHub calls this after creating the private repository. Google Drive
    calls it when the store itself is empty (v1.4.3: no index.json and a
    missing or empty notebooks listing), so a store holding any data is
@@ -3301,14 +3534,18 @@ async function seedInitialStore() {
   state.notebooks = [personal];
   state.notes = [];
   state.trash = [];
+  state.archive = [];
 
-  /* v1.4.4: both folder markers are flagged fresh. Seeding only ever
+  /* v1.4.4: the folder markers are flagged fresh. Seeding only ever
      runs against a store that holds nothing (or a just created GitHub
      repository), so these files cannot exist yet, and the Drive
      driver may skip its existence check listing for them. */
   await storePutFile("notebooks/personal/.gitkeep", "", null,
     "Create notebooks folder", { fresh: true });
   await storePutFile("trash/.gitkeep", "", null, "Create trash folder",
+    { fresh: true });
+  /* v1.5: the archive folder marker, fresh for the same reason. */
+  await storePutFile("archive/.gitkeep", "", null, "Create archive folder",
     { fresh: true });
 
   const isGoogle = state.backend === BACKEND_GOOGLE;
@@ -3602,6 +3839,7 @@ function renderSidebar() {
   document.getElementById("countPinned").textContent =
     state.notes.filter(function (n) { return n.pinned; }).length || "";
   document.getElementById("countTrash").textContent = state.trash.length || "";
+  document.getElementById("countArchive").textContent = state.archive.length || "";
 
   document.getElementById("navAll").classList.toggle("active",
     state.view.kind === "all");
@@ -3609,6 +3847,8 @@ function renderSidebar() {
     state.view.kind === "pinned");
   document.getElementById("navTrash").classList.toggle("active",
     state.view.kind === "trash");
+  document.getElementById("navArchive").classList.toggle("active",
+    state.view.kind === "archive");
 
   /* Notebook rows, with rename and delete on hover. Delete is confirmed
      in the click handler and moves the notes to Trash, never destroys. */
@@ -3735,13 +3975,19 @@ function renderSidebar() {
 }
 
 /* The filtered, sorted note set for the middle pane.
-   Sort rule: pinned first, then updated newest first. In Trash there is
-   no pinning, so it is just newest first. Search matches title, body
-   text, and tags, all locally against the cache. */
+   Sort rule: pinned first, then updated newest first. In Trash and in
+   the Archive there is no pinning, so it is just newest first. Search
+   matches title, body text, and tags, all locally against the cache. */
 function visibleNotes() {
   let list;
   if (state.view.kind === "trash") {
     list = state.trash.slice();
+  } else if (state.view.kind === "archive") {
+    /* v1.5: the Archive view lists archived notes, mirroring Trash.
+       Because every other view reads state.notes, archived notes stay
+       out of All Notes, the notebook and tag views, Pinned, and
+       search everywhere except inside this view, like trashed notes. */
+    list = state.archive.slice();
   } else {
     list = state.notes.slice();
     if (state.view.kind === "pinned") {
@@ -3775,6 +4021,7 @@ function visibleNotes() {
 function viewTitle() {
   if (state.view.kind === "pinned") { return "Pinned"; }
   if (state.view.kind === "trash") { return "Trash"; }
+  if (state.view.kind === "archive") { return "Archive"; }
   if (state.view.kind === "notebook") {
     const nb = state.notebooks.find(function (n) { return n.slug === state.view.value; });
     return nb ? nb.name : "Notebook";
@@ -3807,6 +4054,8 @@ function renderNoteList() {
     empty.className = "empty-state";
     if (state.view.kind === "trash") {
       empty.innerHTML = "<div class=\"big\">Trash is empty</div>Notes you move to Trash will wait here until you restore them or delete them forever.";
+    } else if (state.view.kind === "archive") {
+      empty.innerHTML = "<div class=\"big\">Archive is empty</div>Notes you archive will wait here until you unarchive them or move them to Trash.";
     } else if (state.search) {
       empty.innerHTML = "<div class=\"big\">No matches</div>No notes match that search in this view.";
     } else {
@@ -3821,7 +4070,7 @@ function renderNoteList() {
     card.className = "note-card" + (note.id === state.selectedId ? " active" : "");
     const titleRow = document.createElement("div");
     titleRow.className = "card-title";
-    if (note.pinned && !note.trashed) {
+    if (note.pinned && !note.trashed && !note.archived) {
       const pin = document.createElement("span");
       pin.className = "pin-mark";
       pin.textContent = "PINNED";
@@ -3902,7 +4151,8 @@ function renderEditor() {
     document.getElementById("noteTags").value = note.tags.join(", ");
     document.getElementById("notePinned").checked = !!note.pinned;
     document.getElementById("noteBody").innerHTML = note.body || "";
-    setSaveState(note.trashed ? "In Trash" : "Saved");
+    setSaveState(note.trashed ? "In Trash" :
+      (note.archived ? "Archived" : "Saved"));
     /* v1.2: fill the attachment placeholders from the providers. This is
        async and fire and forget: text renders immediately, images and
        file cards pop in as each download lands. */
@@ -3911,9 +4161,12 @@ function renderEditor() {
     });
   }
 
-  /* Notebook picker options follow the notebook list. */
+  /* Notebook picker options follow the notebook list. A trashed or
+     archived note shows the notebook it came from, since that is
+     where Restore or Unarchive will put it back. */
   const picker = document.getElementById("noteNotebook");
-  const wanted = note.trashed ? (note.trashedFrom || note.notebook) : note.notebook;
+  const wanted = note.trashed ? (note.trashedFrom || note.notebook) :
+    (note.archived ? (note.archivedFrom || note.notebook) : note.notebook);
   if (picker.getAttribute("data-for") !== String(state.notebooks.length) + ":" + wanted) {
     picker.setAttribute("data-for", String(state.notebooks.length) + ":" + wanted);
     picker.innerHTML = "";
@@ -3926,16 +4179,23 @@ function renderEditor() {
     picker.value = wanted;
   }
 
-  /* Trash mode swaps the action buttons and locks editing. */
+  /* Trash mode swaps the action buttons and locks editing. Archive
+     mode (v1.5) does the same, with its own pair: Unarchive and Move
+     to Trash are shown, Restore and Delete Forever stay hidden, and
+     the Archive button only appears for a normal live note. */
   const inTrash = !!note.trashed;
+  const inArchive = !!note.archived;
+  const locked = inTrash || inArchive;
   document.getElementById("trashBtn").classList.toggle("hidden", inTrash);
+  document.getElementById("archiveBtn").classList.toggle("hidden", locked);
   document.getElementById("restoreBtn").classList.toggle("hidden", !inTrash);
+  document.getElementById("unarchiveBtn").classList.toggle("hidden", !inArchive);
   document.getElementById("deleteForeverBtn").classList.toggle("hidden", !inTrash);
-  document.getElementById("noteBody").contentEditable = inTrash ? "false" : "true";
-  document.getElementById("noteTitle").disabled = inTrash;
-  document.getElementById("noteTags").disabled = inTrash;
-  document.getElementById("notePinned").disabled = inTrash;
-  picker.disabled = inTrash;
+  document.getElementById("noteBody").contentEditable = locked ? "false" : "true";
+  document.getElementById("noteTitle").disabled = locked;
+  document.getElementById("noteTags").disabled = locked;
+  document.getElementById("notePinned").disabled = locked;
+  picker.disabled = locked;
 }
 renderEditor._forId = null;
 
@@ -4192,7 +4452,7 @@ function saveLinkEdit() {
 
 const autosave = debounce(async function () {
   const note = currentNote();
-  if (!note || note.trashed) { return; }
+  if (!note || note.trashed || note.archived) { return; }
   const previousPath = notePath(note);
   const previousNotebook = note.notebook;
   collectEditor(note);
@@ -4231,7 +4491,10 @@ const autosave = debounce(async function () {
 
 function markDirty() {
   const note = currentNote();
-  if (!note || note.trashed) { return; }
+  /* Trashed and archived notes are read only, so they never mark
+     dirty and never autosave (the editor fields are disabled for them
+     anyway; this is the second lock). */
+  if (!note || note.trashed || note.archived) { return; }
   setSaveState("Unsaved changes...");
   autosave();
 }
@@ -5845,7 +6108,7 @@ async function hydrateOneAttachment(note, el) {
     msg.className = "ss-att-msg";
     msg.textContent = "This attachment's details are missing from the note, so it cannot be loaded.";
     el.appendChild(msg);
-    if (!note.trashed) {
+    if (!note.trashed && !note.archived) {
       const actions = document.createElement("div");
       actions.className = "ss-att-actions";
       actions.appendChild(makeAttButton("Remove placeholder", function () {
@@ -5880,10 +6143,11 @@ async function hydrateOneAttachment(note, el) {
   actions.appendChild(makeAttButton("Download", function () {
     downloadAttachment(att);
   }));
-  /* Trashed notes are read only: Download still works, Remove does not
-     (restore the note first). This keeps Trash state consistent, since
-     a trashed note never autosaves. */
-  if (!note.trashed) {
+  /* Trashed and archived notes are read only: Download still works,
+     Remove does not (restore or unarchive the note first). This keeps
+     Trash and Archive state consistent, since such notes never
+     autosave. */
+  if (!note.trashed && !note.archived) {
     actions.appendChild(makeAttButton("Remove", function () {
       removeAttachment(note, att);
     }));
@@ -6113,6 +6377,10 @@ function startAttachFlow() {
     toast("Attachments cannot be added while a note is in Trash. Restore it first.", true);
     return;
   }
+  if (note.archived) {
+    toast("Attachments cannot be added while a note is archived. Unarchive it first.", true);
+    return;
+  }
   if (!state.online) {
     toast("Attachments need an internet connection: the file is uploaded to your storage provider. You appear to be offline.", true);
     return;
@@ -6130,6 +6398,10 @@ async function handleIncomingFiles(fileList) {
   }
   if (note.trashed) {
     toast("Attachments cannot be added while a note is in Trash. Restore it first.", true);
+    return;
+  }
+  if (note.archived) {
+    toast("Attachments cannot be added while a note is archived. Unarchive it first.", true);
     return;
   }
   if (!state.online) {
@@ -6446,6 +6718,11 @@ function wireEvents() {
     renderAll();
     setMobileView("list");
   });
+  document.getElementById("navArchive").addEventListener("click", function () {
+    state.view = { kind: "archive", value: null };
+    renderAll();
+    setMobileView("list");
+  });
 
   document.getElementById("addNotebookBtn").addEventListener("click", function () {
     const name = prompt("New notebook name");
@@ -6724,7 +7001,7 @@ function wireEvents() {
     }
   });
 
-  /* Trash actions. */
+  /* Trash and archive actions. */
   document.getElementById("trashBtn").addEventListener("click", function () {
     const note = currentNote();
     if (note) {
@@ -6738,6 +7015,26 @@ function wireEvents() {
     if (note) {
       restoreNote(note).then(function () {
         toast("Note restored.");
+        state.view = { kind: "notebook", value: note.notebook };
+        renderAll();
+        openNote(note.id);
+      }).catch(function (err) { toast(err.message, true); });
+    }
+  });
+  /* v1.5: Archive and Unarchive mirror Trash and Restore. */
+  document.getElementById("archiveBtn").addEventListener("click", function () {
+    const note = currentNote();
+    if (note) {
+      archiveNote(note).then(function () {
+        toast("Note archived.");
+      }).catch(function (err) { toast(err.message, true); });
+    }
+  });
+  document.getElementById("unarchiveBtn").addEventListener("click", function () {
+    const note = currentNote();
+    if (note) {
+      unarchiveNote(note).then(function () {
+        toast("Note unarchived.");
         state.view = { kind: "notebook", value: note.notebook };
         renderAll();
         openNote(note.id);
