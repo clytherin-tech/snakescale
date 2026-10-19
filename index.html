@@ -28,10 +28,29 @@
   notes are files, and there is no server and no shared database anywhere
   in this design.
 
-  BUILD STAMP: 2026-10-19-SSN-V143
-  Version: 1.4.3
+  BUILD STAMP: 2026-10-19-SSN-V144
+  Version: 1.4.4
 
   Revision history:
+    v1.4.4 2026-10-19 Faster note and notebook creation. Creating a note
+                      or a notebook used to wait on a chain of storage
+                      calls before anything appeared, which on Google
+                      Drive took a few seconds. The note or notebook now
+                      appears and opens immediately, and the upload runs
+                      in the background. Saves of one note are serialized
+                      per file path, so a background create can never be
+                      overtaken by the first autosave of an edit to the
+                      same note (on Drive that race could have created a
+                      duplicate file). Brand new files skip the existence
+                      check listing on Drive and go straight to the
+                      create call. Index writes are coalesced: a burst of
+                      changes collapses into at most one in flight write
+                      plus one follow up write carrying the final state,
+                      and any pending index write is flushed before
+                      first run seeding finishes and before a sync reads
+                      the library. Failure messages and the local data
+                      protection behind them are unchanged.
+                      Build stamp 2026-10-19-SSN-V144.
     v1.4.3 2026-10-19 Google backend load fix. Two bugs made the Drive
                       backend look empty after a successful sign in.
                       First, sync and library loading only ran when a
@@ -47,7 +66,6 @@
                       from the store itself: a store with no index.json
                       and no notebooks is seeded on connect, and a store
                       with any data never is.
-                      Build stamp 2026-10-19-SSN-V143.
     v1.4.2 2026-10-19 The publisher Google client ID is baked into the app.
                       No user is ever asked for a client ID again: the
                       Google sign in gate no longer has a client ID field
@@ -1273,8 +1291,8 @@ body.dark .ss-att-provider{color:#EAF3EC;}
 "use strict";
 
 /* ============================================================================
-   SnakeScale Notes v1.4.3: application script
-   BUILD STAMP: 2026-10-19-SSN-V143
+   SnakeScale Notes v1.4.4: application script
+   BUILD STAMP: 2026-10-19-SSN-V144
 
    How this script is organized:
      1. Constants and global state
@@ -1305,8 +1323,8 @@ body.dark .ss-att-provider{color:#EAF3EC;}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-19-SSN-V143";
-const APP_VERSION = "1.4.3";
+const APP_BUILD = "2026-10-19-SSN-V144";
+const APP_VERSION = "1.4.4";
 const API_BASE = "https://api.github.com";
 const API_VERSION_HEADER = "2022-11-28";
 /* v1.4: the two storage backends. "github" is the original repository
@@ -2250,12 +2268,19 @@ async function githubCreateDataRepo() {
      storeListDir(path)
        resolves to [{name, path, isDir}] or null when the folder does
        not exist.
-     storePutFile(path, text, expectedToken, message)
+     storePutFile(path, text, expectedToken, message, options)
        creates or replaces one text file and returns the new token. The
        optional message is GitHub's commit message; Drive ignores it.
        When expectedToken is not null and the remote file's current
        token differs, the write is refused with StoreConflict and no
-       bytes are changed.
+       bytes are changed. The optional options object (v1.4.4) carries
+       one flag, fresh: the caller promises the file does not exist yet
+       and no concurrency token is held. A fresh put lets the Drive
+       driver skip its existence check listing and go straight to the
+       create call. GitHub ignores the flag, because its put already
+       writes in one call. Only genuinely new files may use it: a brand
+       new note, a new notebook folder marker, and the first run seed
+       files. Renames and moves keep the checked path.
      storeDeleteFile(path, token, message)
        deletes one file. The optional message is again GitHub only.
 
@@ -2332,9 +2357,9 @@ async function storeListDir(path) {
     : githubStoreListDir(path);
 }
 
-async function storePutFile(path, text, expectedToken, message) {
+async function storePutFile(path, text, expectedToken, message, options) {
   return state.backend === BACKEND_GOOGLE
-    ? driveStorePutFile(path, text, expectedToken || null)
+    ? driveStorePutFile(path, text, expectedToken || null, options || {})
     : githubStorePutFile(path, text, expectedToken || null, message);
 }
 
@@ -2506,24 +2531,140 @@ function parseNoteFile(text, sha, fallbackId, trashed) {
    8. Sync engine
    -------------------------------------------------------------------------- */
 
-/* Save index.json from current state. Best effort: notes are the source
-   of truth and the index can always be rebuilt from the folders, so an
-   index save failure is logged to a toast but never blocks note saving. */
-async function saveIndex() {
-  const index = {
+/* ------------------------------------------------------------------------
+   index.json writes, coalesced (v1.4.4)
+
+   index.json is a cache of the notebook list, nothing more: the notes
+   and folders are the source of truth, and loadAllFromRepo already
+   rebuilds the index from folder listings whenever it is missing or
+   stale. Before v1.4.4 every saveIndex() call ran its own read plus
+   write round trip, so creating a notebook paid for the .gitkeep write
+   and then a full second write chain for the index. Now saveIndex()
+   only records the newest state and schedules a write:
+
+   - Calls are debounced by INDEX_WRITE_DEBOUNCE_MS, so a burst (three
+     notebooks created in a row, a rename storm, seeding) collapses into
+     a single write carrying the final state.
+   - Writes never overlap. A call that lands while a write is in flight
+     marks the state dirty, and exactly one follow up write runs with
+     the final state. A burst therefore costs at most one in flight
+     write plus one follow up.
+   - The final state is always written: the loop only stops once a
+     write has started from the newest state and no call arrived after
+     it.
+   - A failed write shows one toast per burst (from the write attempt
+     itself), never one per call, and never throws into callers: the
+     index heals on the next load, exactly as before.
+
+   Callers that need the index physically on disk before they proceed
+   await flushIndexWrites() instead: first run seeding (so the connect
+   flow's immediate sync reads the seeded index) and syncNow (so its
+   load never races a pending index write). A short debounce delay is
+   otherwise safe precisely because the index is rebuildable.
+   ------------------------------------------------------------------------ */
+const INDEX_WRITE_DEBOUNCE_MS = 800;
+let indexWriteTimer = null;     /* pending debounce timer, or null */
+let indexWritePromise = null;   /* the running write loop, or null */
+let indexWriteDirty = false;    /* state changed since the last write began */
+let indexFlushWaiters = [];     /* flushIndexWrites() resolvers awaiting idle */
+
+function buildIndexObject() {
+  return {
     version: 1,
     notebooks: state.notebooks,
     updated: new Date().toISOString()
   };
-  state.index = index;
+}
+
+/* Schedule an index write from current state. Synchronous on purpose:
+   state.index and the local cache update immediately, and the promise
+   returned resolves at once, so existing "await saveIndex()" callers
+   keep working at full speed while the storage write happens behind
+   the debounce. */
+function saveIndex() {
+  state.index = buildIndexObject();
+  saveCache();
+  indexWriteDirty = true;
+  if (indexWritePromise) {
+    /* A write is already running. It snapshots state when it starts,
+       so this call owes one follow up write; the running loop sees
+       the dirty flag and performs it. */
+    return Promise.resolve();
+  }
+  if (indexWriteTimer !== null) {
+    /* A write is already scheduled inside the debounce window; it
+       snapshots state when it starts, so it will carry this call's
+       state too. */
+    return Promise.resolve();
+  }
+  indexWriteTimer = setTimeout(function () {
+    indexWriteTimer = null;
+    runIndexWriteLoop();
+  }, INDEX_WRITE_DEBOUNCE_MS);
+  return Promise.resolve();
+}
+
+/* One physical index write, from a snapshot of current state. This is
+   the same read token, then write sequence saveIndex() always used.
+   Errors are reported once here and swallowed, exactly as the old
+   saveIndex swallowed them: the index is rebuilt on the next load. */
+async function writeIndexOnce() {
+  const snapshot = buildIndexObject();
+  state.index = snapshot;
   try {
     const existing = await storeGetFile("index.json");
-    await storePutFile("index.json", JSON.stringify(index, null, 2),
+    await storePutFile("index.json", JSON.stringify(snapshot, null, 2),
       existing ? existing.token : null, "Update index");
   } catch (err) {
-    /* offline or conflicted index: it will be rebuilt on the next load */
+    toast("Index update failed on " + storageDisplayName() + ": " +
+      err.message, true);
   }
   saveCache();
+}
+
+/* The write loop: serializes every physical write, and keeps writing
+   until a write has gone out with no newer state arriving behind it. */
+function runIndexWriteLoop() {
+  if (indexWritePromise) { return indexWritePromise; }
+  indexWritePromise = (async function () {
+    while (indexWriteDirty) {
+      indexWriteDirty = false;
+      await writeIndexOnce();
+    }
+  })();
+  indexWritePromise.then(function () {
+    indexWritePromise = null;
+    settleIndexFlushWaiters();
+  });
+  return indexWritePromise;
+}
+
+function settleIndexFlushWaiters() {
+  if (indexWriteTimer !== null || indexWritePromise || indexWriteDirty) {
+    return;
+  }
+  const waiters = indexFlushWaiters;
+  indexFlushWaiters = [];
+  waiters.forEach(function (resolve) { resolve(); });
+}
+
+/* Resolve once every index write scheduled so far has landed (or
+   failed safely). Forces a debounced write to start immediately
+   instead of waiting out the timer. */
+function flushIndexWrites() {
+  if (indexWriteTimer !== null) {
+    clearTimeout(indexWriteTimer);
+    indexWriteTimer = null;
+    runIndexWriteLoop();
+  } else if (!indexWritePromise && indexWriteDirty) {
+    runIndexWriteLoop();
+  }
+  if (!indexWritePromise && !indexWriteDirty && indexWriteTimer === null) {
+    return Promise.resolve();
+  }
+  return new Promise(function (resolve) {
+    indexFlushWaiters.push(resolve);
+  });
 }
 
 /* Rebuild the whole index from folder listings. Used on load when
@@ -2658,6 +2799,11 @@ async function syncNow(showToast) {
   refreshSyncPill();
   try {
     await flushQueue();
+    /* v1.4.4: a coalesced index write may still be pending (its
+       debounce is 800 ms). Flush it before the load reads index.json,
+       so the load can never race or be confused by a stale index the
+       app itself is about to replace. */
+    await flushIndexWrites();
     await loadAllFromRepo();
     renderAll();
     refreshSyncPill();
@@ -2671,6 +2817,34 @@ async function syncNow(showToast) {
   }
 }
 
+/* v1.4.4: saves of one note are serialized per file path.
+   Creating a note no longer waits for its upload (see
+   createNoteInRepo), so the first autosave of an edit can be requested
+   while the create is still in flight. On Google Drive that race was
+   dangerous: the second save would find no file yet and create a
+   second file with the same name, leaving a duplicate. To rule that
+   out, every saveNoteToRepo call for a path waits for the previous
+   save of the same path to finish, in call order. Different paths are
+   unaffected and still save in parallel. The chain tail stored here
+   never rejects, so one failed save cannot poison later saves of the
+   same note; each caller still receives its own result (or rejection)
+   through the promise this function returns. */
+const noteSaveChains = Object.create(null);
+
+function saveNoteToRepo(note, options) {
+  const path = notePath(note);
+  const previous = noteSaveChains[path] || Promise.resolve();
+  const run = previous.then(function () {
+    return saveNoteToRepoNow(note, options);
+  });
+  const tail = run.catch(function () { return null; });
+  noteSaveChains[path] = tail;
+  tail.then(function () {
+    if (noteSaveChains[path] === tail) { delete noteSaveChains[path]; }
+  });
+  return run;
+}
+
 /* Save one note to the repo, with the critical conflict rule:
    BEFORE writing, fetch the file fresh and compare its sha with the sha
    the editor loaded. If they differ, someone (or another device) changed
@@ -2679,8 +2853,10 @@ async function syncNow(showToast) {
    untouched, and a banner tells the user what happened. A 409 or 422 from
    the PUT is handled the same way. Nothing is ever silently overwritten.
    When offline, the write is queued instead and the note keeps a dirty
-   marker in the cache. */
-async function saveNoteToRepo(note, options) {
+   marker in the cache.
+   This is the worker behind saveNoteToRepo above, which serializes
+   calls per file path (v1.4.4). Callers use saveNoteToRepo. */
+async function saveNoteToRepoNow(note, options) {
   options = options || {};
   note.updated = new Date().toISOString();
   const path = notePath(note);
@@ -2701,8 +2877,15 @@ async function saveNoteToRepo(note, options) {
       }
       if (!fresh) { shaToUse = null; }
     }
+    /* v1.4.4: options.fresh (set only by createNoteInRepo for a brand
+       new note) is passed through to the store layer, where the Drive
+       driver uses it to skip its existence check listing and create
+       the file directly. The driver itself refuses the shortcut
+       whenever an expected token is held, so updates always stay on
+       the checked path. */
     const newSha = await storePutFile(path, text, shaToUse,
-      (shaToUse ? "Update note " : "Create note ") + note.id);
+      (shaToUse ? "Update note " : "Create note ") + note.id,
+      { fresh: !!options.fresh });
     note.sha = newSha;
     saveCache();
     return { saved: true };
@@ -2845,20 +3028,32 @@ async function createNotebook(name) {
   const slug = uniqueSlug(slugify(name), null);
   const nb = { slug: slug, name: String(name).trim(), created: new Date().toISOString() };
   state.notebooks.push(nb);
+  /* v1.4.4: the notebook appears immediately. Before this change the
+     list only re-rendered after the .gitkeep write AND the index write
+     had both completed, which on Google Drive took a few seconds of
+     staring at an unchanged sidebar. The state change is the truth the
+     user acts on, and it is already cached locally below, so the
+     storage writes now run in the background instead. */
+  saveCache();
+  renderAll();
   if (state.online && state.repoExists) {
-    try {
-      await storePutFile("notebooks/" + slug + "/.gitkeep", "", null,
-        "Create notebook " + slug);
-      await saveIndex();
-    } catch (err) {
-      toast("Notebook saved locally; " + storageDisplayName() +
-        " write failed: " + err.message, true);
-    }
+    /* Background writes, in the same order as before (folder marker,
+       then index). The .gitkeep put is flagged fresh: the slug was
+       just made unique, so the file cannot exist yet and the Drive
+       driver may skip its existence check listing. Failure handling is
+       unchanged from the blocking version: the same toast wording, and
+       the notebook itself is already safe in local state and cache,
+       the same protection the old try/catch relied on. */
+    storePutFile("notebooks/" + slug + "/.gitkeep", "", null,
+      "Create notebook " + slug, { fresh: true })
+      .then(function () { saveIndex(); })
+      .catch(function (err) {
+        toast("Notebook saved locally; " + storageDisplayName() +
+          " write failed: " + err.message, true);
+      });
   } else {
     queueOp({ kind: "put", path: "notebooks/" + slug + "/.gitkeep", content: "", noteId: null });
   }
-  saveCache();
-  renderAll();
   return nb;
 }
 
@@ -2979,14 +3174,31 @@ async function createNoteInRepo(notebookSlug) {
   }
   const note = makeNote(notebookSlug || state.notebooks[0].slug);
   state.notes.unshift(note);
-  try {
-    await saveNoteToRepo(note, { skipConflictCheck: true });
-  } catch (err) {
-    toast("Note created locally; save failed: " + err.message, true);
-  }
+  /* v1.4.4: the note opens immediately. Before this change the editor
+     waited for the full upload chain (on Drive: resolve the folder,
+     list it, upload the file), so a new note took a few seconds to
+     appear. The note is already in state and in the local cache, so
+     the upload now runs in the background. Failure handling matches
+     the old blocking version: saveNoteToRepo itself queues the write
+     when offline, when the Google sign in expired, and on conflict
+     paths, and any other failure surfaces with the same toast wording
+     as before. The fresh flag tells the Drive driver this file is
+     brand new, so it may skip its existence check listing. Per path
+     serialization inside saveNoteToRepo keeps a first autosave from
+     overtaking this create while it is still in flight. */
   saveCache();
   renderAll();
   openNote(note.id);
+  saveNoteToRepo(note, { skipConflictCheck: true, fresh: true })
+    .then(function () {
+      /* The background write assigned the note its storage token
+         (note.sha). Persist it, so later conflict checks compare
+         against the token this create returned. */
+      saveCache();
+    })
+    .catch(function (err) {
+      toast("Note created locally; save failed: " + err.message, true);
+    });
   return note;
 }
 
@@ -3090,9 +3302,14 @@ async function seedInitialStore() {
   state.notes = [];
   state.trash = [];
 
+  /* v1.4.4: both folder markers are flagged fresh. Seeding only ever
+     runs against a store that holds nothing (or a just created GitHub
+     repository), so these files cannot exist yet, and the Drive
+     driver may skip its existence check listing for them. */
   await storePutFile("notebooks/personal/.gitkeep", "", null,
-    "Create notebooks folder");
-  await storePutFile("trash/.gitkeep", "", null, "Create trash folder");
+    "Create notebooks folder", { fresh: true });
+  await storePutFile("trash/.gitkeep", "", null, "Create trash folder",
+    { fresh: true });
 
   const isGoogle = state.backend === BACKEND_GOOGLE;
   const welcomeBody = isGoogle
@@ -3117,10 +3334,17 @@ async function seedInitialStore() {
       "<p>Delete this note whenever you are ready. It goes to Trash first, " +
       "and only disappears for good when you choose Delete Forever.</p>";
   const welcome = makeNote("personal", "Welcome to SnakeScale Notes", welcomeBody);
+  /* v1.4.4: fresh, for the same reason as the folder markers above:
+     the welcome note's id was just generated into an empty store. */
   welcome.sha = await storePutFile(notePath(welcome), serializeNote(welcome),
-    null, "Create welcome note");
+    null, "Create welcome note", { fresh: true });
   state.notes = [welcome];
   await saveIndex();
+  /* v1.4.4: saveIndex() only schedules the coalesced index write now.
+     Seeding must not return until the seeded index is physically on
+     disk: the connect flow syncs immediately after seeding, and its
+     load reads index.json. Flush the pending write first. */
+  await flushIndexWrites();
   saveCache();
   return welcome;
 }
@@ -5212,7 +5436,8 @@ async function driveStoreListDir(path) {
   });
 }
 
-async function driveStorePutFile(path, text, expectedToken) {
+async function driveStorePutFile(path, text, expectedToken, options) {
+  options = options || {};
   const segments = splitStorePath(path);
   if (!segments.length) {
     throw new Error("Cannot write a file without a file name.");
@@ -5220,7 +5445,17 @@ async function driveStorePutFile(path, text, expectedToken) {
   const fileName = segments[segments.length - 1];
   const parentPath = segments.slice(0, -1).join("/");
   const parentId = await driveResolveFolder(parentPath, true);
-  const existing = await driveFindChild(parentId, fileName, false);
+  /* v1.4.4: a fresh put is the caller promising this file does not
+     exist yet (a brand new note, a new notebook marker, a seed file)
+     and holding no concurrency token for it. That promise lets this
+     driver skip the existence check listing, one full Drive round
+     trip, and go straight to the create below. The shortcut is taken
+     ONLY when the flag is set AND no expected token is held; any
+     caller holding a token, and every rename or move, keeps the
+     checked path, so the conflict rule is untouched. */
+  const existing = (options.fresh && expectedToken == null)
+    ? null
+    : await driveFindChild(parentId, fileName, false);
 
   if (existing) {
     /* Optimistic concurrency, the Drive half of the conflict rule: the
