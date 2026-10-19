@@ -28,10 +28,35 @@
   notes are files, and there is no server and no shared database anywhere
   in this design.
 
-  BUILD STAMP: 2026-10-19-SSN-V160
-  Version: 1.6.0
+  BUILD STAMP: 2026-10-19-SSN-V170
+  Version: 1.7.0
 
   Revision history:
+    v1.7.0 2026-10-19 Undoable attachment deletion, inline images, and
+                      image grips with a three dot menu. Removing an
+                      attachment, from the Remove button, the image
+                      menu, or the Delete and Backspace keys, now takes
+                      the block out of the note at once and opens a
+                      five second undo window: a toast at the top of
+                      the window names the file and offers an Undo
+                      button, and the cloud file is deleted only when
+                      the window closes. Undo, or the block coming back
+                      on its own, cancels the deletion outright; if the
+                      cloud delete cannot happen (offline, signed out,
+                      or an error) the block is restored and the
+                      attachment is kept. The old confirm and delete
+                      immediately flow, and the orphaned files that
+                      keyboard deletion used to leave behind, are both
+                      gone. Images now sit in the note as plain inline
+                      images, with no card frame and no name bar; their
+                      actions moved to a three dot menu that appears,
+                      together with four corner resize grips, when an
+                      image is clicked. A freshly pasted or dropped
+                      image can be selected, moved, and resized right
+                      away: insertion, hydration, and rendering now
+                      share one decoration pass, so a block has the
+                      same shape and behavior in all three moments.
+                      Build stamp 2026-10-19-SSN-V170.
     v1.6.0 2026-10-19 Loading screen, inline PDF previews, movable and
                       resizable attachments, checklist fixes, and a
                       sidebar version label. A branded loading overlay
@@ -57,7 +82,6 @@
                       item leaves the checklist, like other note apps).
                       The sidebar shows the app version at the very
                       bottom, read from the version built into the app.
-                      Build stamp 2026-10-19-SSN-V160.
     v1.5.1 2026-10-19 Three interface fixes from live testing. Toasts no
                       longer cover the editor action buttons in the lower
                       right: the toast stack now sits above the editor
@@ -736,6 +760,25 @@ body.dark .tag-chip{color:var(--accent);}
   background:var(--surface);border:1px solid var(--border);
   border-radius:var(--radius-card);box-shadow:0 10px 28px rgba(6,32,22,.28);
 }
+/* v1.7: the selected image's three dot menu. Like the link popup it
+   is position:fixed and lives OUTSIDE #noteBody, so it can never be
+   saved into a note; the script positions it at the image's menu
+   button and closes it under the same rules as the link popup. */
+#attMenu{
+  position:fixed;z-index:60;min-width:180px;padding:6px;
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius-card);box-shadow:0 10px 28px rgba(6,32,22,.28);
+  display:flex;flex-direction:column;gap:2px;
+}
+#attMenu.hidden{display:none;}
+.att-menu-item{
+  display:block;width:100%;text-align:left;border:none;background:none;
+  color:var(--text);font-size:14px;padding:8px 10px;border-radius:8px;
+  cursor:pointer;white-space:nowrap;
+}
+.att-menu-item:hover{background:var(--soft);}
+.att-menu-item.danger{color:var(--danger);}
+.att-menu-sep{height:1px;background:var(--border);margin:4px 2px;}
 /* The normal view is one row: clickable address, Edit, close. */
 #linkPopupView{display:flex;align-items:center;gap:8px;}
 #linkPopupUrl{
@@ -843,8 +886,8 @@ body.dark .ss-att-provider{color:#EAF3EC;}
 #noteBody.drag-over{outline:3px dashed var(--accent);outline-offset:-6px;}
 
 /* ---------- v1.6 attachments: drag to move, image resize, PDF preview --
-   Placeholders need position:relative so the resize handle can anchor
-   to the selected block. The drag affordances only appear on blocks
+   Placeholders need position:relative so the selection grips and
+   menu button can anchor to the selected block. The drag affordances only appear on blocks
    the script marked draggable (live notes only; Trash and Archive stay
    read only), and the selection outline plus handle are pure editor
    furniture: canonicalization rebuilds placeholders as empty shells on
@@ -857,17 +900,52 @@ body.dark .ss-att-provider{color:#EAF3EC;}
 #noteBody .ss-attachment.ss-selected{
   outline:2px solid var(--accent);outline-offset:1px;
 }
-.ss-resize-handle{
-  position:absolute;right:4px;bottom:4px;width:16px;height:16px;
-  border-radius:4px;background:var(--accent);
-  border:1px solid rgba(11,61,46,.55);
-  cursor:nwse-resize;touch-action:none;z-index:6;
+/* ---------- v1.7 attachments: corner grips and the image menu --------
+   A selected image (see the script) carries four small square grips,
+   one at each corner; the east grips widen, the west grips narrow,
+   and each grip wears the diagonal cursor that matches its corner.
+   The three dot button sits at the block's top right and opens the
+   shared #attMenu. All of it is editor furniture inside the block,
+   stripped by canonicalization on save like the rest of hydration. */
+.ss-grip{
+  position:absolute;width:11px;height:11px;border-radius:2px;
+  background:#fff;border:2px solid var(--accent);
+  touch-action:none;z-index:7;
+}
+.ss-grip[data-corner="nw"]{left:-6px;top:-6px;cursor:nwse-resize;}
+.ss-grip[data-corner="ne"]{right:-6px;top:-6px;cursor:nesw-resize;}
+.ss-grip[data-corner="sw"]{left:-6px;bottom:-6px;cursor:nesw-resize;}
+.ss-grip[data-corner="se"]{right:-6px;bottom:-6px;cursor:nwse-resize;}
+.ss-att-menu-btn{
+  position:absolute;top:4px;right:4px;z-index:7;
+  display:flex;align-items:center;gap:3px;
+  min-width:30px;height:24px;padding:0 8px;cursor:pointer;
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius-pill);box-shadow:0 2px 8px rgba(6,32,22,.18);
+}
+.ss-att-menu-btn:hover{border-color:var(--accent);}
+.ss-att-menu-btn .ss-dot{
+  width:4px;height:4px;border-radius:50%;background:var(--text);flex:none;
 }
 /* The inline PDF preview frame: full column width, tall enough to
    read a page, filled on demand by the Preview toggle. */
 .ss-att-pdf-frame{
   display:block;width:100%;height:480px;margin-top:8px;
   border:1px solid var(--border);border-radius:8px;background:#fff;
+}
+
+/* ---------- v1.7 attachments: images sit in line, without a card -----
+   An image attachment is presented as the image itself, in the flow
+   of the note text: no border, no card background, no padding frame,
+   and (because hydration appends no name bar for images) nothing
+   around it but the note. File attachments keep the card look from
+   the base .ss-attachment rule above. The only frame an image ever
+   shows is the selection outline while it is selected. */
+#noteBody .ss-attachment.ss-att-image{
+  padding:0;border:none;background:transparent;border-radius:0;
+}
+#noteBody .ss-attachment.ss-att-image img.ss-att-img{
+  margin-bottom:0;border-radius:4px;
 }
 
 /* ---------- v1.2 attachments: settings modal ---------- */
@@ -927,6 +1005,29 @@ body.dark .ss-att-provider{color:#EAF3EC;}
    so one value serves both: bottom:68px is the full footer plus 16px
    of clear space above it. */
 #toastBox{position:fixed;right:14px;bottom:68px;z-index:60;display:flex;flex-direction:column;gap:8px;max-width:min(92vw,380px);}
+/* v1.7: the attachment undo toasts live in their own box at the TOP
+   center of the window, above the app but below the modal dialogs
+   (z-index 80), because the undo window is short and the button must
+   be impossible to miss or to confuse with the bottom toast stack.
+   Each item lives exactly as long as its five second undo window. */
+#undoToastBox{
+  position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:70;
+  display:flex;flex-direction:column;gap:8px;align-items:center;
+  max-width:min(92vw,480px);pointer-events:none;
+}
+.undo-toast{
+  pointer-events:auto;display:flex;align-items:center;gap:12px;
+  background:var(--sidebar);color:#EAF3EC;border-radius:var(--radius-card);
+  padding:10px 14px;box-shadow:var(--shadow);font-size:14px;
+  border-left:4px solid var(--accent);
+}
+.undo-toast-text{word-break:break-word;}
+.undo-toast-btn{
+  flex:none;border:1px solid var(--accent);background:transparent;
+  color:#EAF3EC;border-radius:var(--radius-pill);padding:3px 12px;
+  font-weight:700;cursor:pointer;
+}
+.undo-toast-btn:hover{background:var(--secondary);}
 .toast{
   background:var(--sidebar);color:#EAF3EC;border-radius:var(--radius-card);
   padding:10px 14px;box-shadow:var(--shadow);font-size:14px;
@@ -1396,6 +1497,21 @@ body.dark .ss-att-provider{color:#EAF3EC;}
               </div>
             </div>
           </div>
+          <!-- v1.7: the selected image's action menu, a SIBLING of
+               #noteBody like the link popup, so it can never be saved
+               into a note. Buttons carry data-action values; one
+               delegated listener in the script runs them against the
+               image the menu was opened from. Hidden by default. -->
+          <div id="attMenu" class="hidden" role="menu" aria-label="Image options">
+            <button class="att-menu-item" type="button" data-action="open">Open</button>
+            <button class="att-menu-item" type="button" data-action="download">Download</button>
+            <div class="att-menu-sep"></div>
+            <button class="att-menu-item" type="button" data-action="small">Small (25%)</button>
+            <button class="att-menu-item" type="button" data-action="medium">Medium (50%)</button>
+            <button class="att-menu-item" type="button" data-action="large">Large (100%)</button>
+            <div class="att-menu-sep"></div>
+            <button class="att-menu-item danger" type="button" data-action="remove">Remove</button>
+          </div>
         </div>
       </div>
       <div class="editor-foot">
@@ -1477,12 +1593,17 @@ body.dark .ss-att-provider{color:#EAF3EC;}
 <!-- Toasts land here (bottom right). -->
 <div id="toastBox" aria-live="polite"></div>
 
+<!-- v1.7: attachment undo toasts land here (top center). Each item
+     carries the deleted file's name and an Undo button, and lives
+     exactly as long as its five second undo window. -->
+<div id="undoToastBox" aria-live="polite"></div>
+
 <script>
 "use strict";
 
 /* ============================================================================
-   SnakeScale Notes v1.6.0: application script
-   BUILD STAMP: 2026-10-19-SSN-V160
+   SnakeScale Notes v1.7.0: application script
+   BUILD STAMP: 2026-10-19-SSN-V170
 
    How this script is organized:
      1. Constants and global state
@@ -1513,8 +1634,8 @@ body.dark .ss-att-provider{color:#EAF3EC;}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-19-SSN-V160";
-const APP_VERSION = "1.6.0";
+const APP_BUILD = "2026-10-19-SSN-V170";
+const APP_VERSION = "1.7.0";
 const API_BASE = "https://api.github.com";
 const API_VERSION_HEADER = "2022-11-28";
 /* v1.4: the two storage backends. "github" is the original repository
@@ -2011,6 +2132,10 @@ function wipeDeviceKey() {
    localStorage so the app can reopen quickly after the next unlock, but
    they are only rendered after a successful unlock. */
 function lockApp() {
+  /* v1.7: locking cancels every pending attachment deletion WITHOUT
+     deleting anything. The records and the cloud files stay exactly
+     as they were; only the undo windows close (see the engine). */
+  cancelAllPendingAttachmentDeletes();
   state.token = null;
   state.username = null;
   /* v1.2: locking also drops the session vault key, every plaintext
@@ -2044,6 +2169,10 @@ async function signOutGoogle() {
     "any edits still waiting to sync, so sync first if the sync pill is " +
     "not green.");
   if (!ok) { return; }
+
+  /* v1.7: signing out cancels every pending attachment deletion
+     WITHOUT deleting anything, exactly like locking does. */
+  cancelAllPendingAttachmentDeletes();
 
   let googleToken = state.providerTokens.google || null;
   if (!googleToken) {
@@ -4403,8 +4532,13 @@ function renderEditor() {
        refers to a link in the previous note. */
     hideLinkPopup();
     /* v1.6: an image selection (and its resize handle) belongs to the
-       previous note's DOM, which is about to be replaced. */
+       previous note's DOM, which is about to be replaced. v1.7: the
+       image menu closes with it (deselectAttachment closes it), and
+       the attachment body guard goes up so the keyboard deletion
+       reconciliation can never mistake a note swap for a mass
+       deletion while the new body is being built. */
     deselectAttachment();
+    attachBodyGuard = true;
     /* v1.2: the previous note's image blob URLs are released before the
        editor switches, so long sessions do not accumulate them. */
     revokeAttachmentUrls();
@@ -4416,12 +4550,24 @@ function renderEditor() {
        existed, so they get the bullet free styling and Enter
        behavior of new ones. */
     normalizeChecklists(document.getElementById("noteBody"));
+    /* v1.7: freshly rendered placeholders get the shared decoration
+       (the inline image class, the draggable flag) immediately, not
+       only when hydration reaches them one by one. */
+    document.getElementById("noteBody")
+      .querySelectorAll(".ss-attachment").forEach(function (el) {
+        const att = (note.attachments || []).find(function (a) {
+          return a.id === el.getAttribute("data-attachment-id");
+        });
+        decorateAttachmentPlaceholder(note, el, att || null);
+      });
     setSaveState(note.trashed ? "In Trash" :
       (note.archived ? "Archived" : "Saved"));
     /* v1.2: fill the attachment placeholders from the providers. This is
        async and fire and forget: text renders immediately, images and
-       file cards pop in as each download lands. */
-    hydrateAttachments(note).catch(function (err) {
+       file cards pop in as each download lands. v1.7: the same pass
+       then restores any undo stashed blocks and takes the body
+       snapshot the deletion reconciliation compares against. */
+    finishNoteOpenAttachments(note).catch(function (err) {
       console.warn("Attachment hydration failed:", err);
     });
   }
@@ -6491,6 +6637,40 @@ function makeAttButton(label, handler) {
   return b;
 }
 
+/* v1.7: an attachment record counts as an image by its mime type,
+   the same test hydration has always used. */
+function isImageAttachment(att) {
+  return !!att && (att.mime || "").indexOf("image/") === 0;
+}
+
+/* v1.7: the ONE decoration pass for attachment placeholders. Every
+   placeholder, however it got into the body, ends up with the same
+   runtime shape: the shell attributes (contenteditable false, the
+   attachment id), the inline image presentation class when its
+   record is an image (see the ss-att-image CSS), and the draggable
+   flag in live notes. The upload flow calls it when a placeholder is
+   born, hydration calls it before filling a block, and rendering
+   calls it on a freshly rendered body. Before v1.7 each of those
+   moments decorated by hand and they drifted apart: the upload path
+   built one shape and hydration another, so a freshly pasted image
+   was not the DOM the selection handler expected, and it could not
+   be selected, moved, or resized until the note was reopened. The
+   saved placeholder is untouched by this: canonicalization still
+   rebuilds the plain shell, and this pass reapplies the runtime
+   shape from the record every time. */
+function decorateAttachmentPlaceholder(note, el, att) {
+  if (!el) { return; }
+  el.setAttribute("contenteditable", "false");
+  if (att && att.id) { el.setAttribute("data-attachment-id", att.id); }
+  if (isImageAttachment(att)) { el.classList.add("ss-att-image"); }
+  else { el.classList.remove("ss-att-image"); }
+  if (note && !note.trashed && !note.archived) {
+    el.setAttribute("draggable", "true");
+  } else {
+    el.removeAttribute("draggable");
+  }
+}
+
 async function hydrateAttachments(note) {
   const bodyEl = document.getElementById("noteBody");
   if (!bodyEl || renderEditor._forId !== note.id) { return; }
@@ -6510,12 +6690,15 @@ async function hydrateOneAttachment(note, el) {
      the block, and reapply it to the hydrated <img> below so the
      image comes back at the width the user chose. */
   const savedWidth = el.style && el.style.width ? el.style.width : "";
-  /* v1.6: placeholders in a live note are draggable, so an attachment
-     can be moved within the note (wired in wireEvents). Trashed and
-     archived notes are read only and never get the attribute. */
-  if (!note.trashed && !note.archived) {
-    el.setAttribute("draggable", "true");
-  }
+  /* v1.7: every placeholder passes through the one decoration
+     function, so an element built by the upload flow, an element
+     rebuilt here, and an element decorated at render all carry the
+     same classes and flags: the inline image presentation for image
+     records, and the draggable flag for live notes. Before v1.7 the
+     upload path decorated its own element by hand and the versions
+     drifted apart, which is why a freshly pasted image could not be
+     selected, moved, or resized until the note was reopened. */
+  decorateAttachmentPlaceholder(note, el, att);
   el.innerHTML = "";
   if (!att) {
     const msg = document.createElement("div");
@@ -6534,9 +6717,57 @@ async function hydrateOneAttachment(note, el) {
     return;
   }
 
-  const isImage = (att.mime || "").indexOf("image/") === 0;
+  const isImage = isImageAttachment(att);
   const driver = providers[att.provider];
   const status = driver ? await driver.getStatus() : { connected: false };
+
+  /* v1.7: an image attachment is just the image. No name bar, no
+     provider chip, no buttons row under it: file cards carry those,
+     and an image's actions (Open, Download, sizes, Remove) live on
+     the three dot menu that appears when the image is selected. When
+     the image cannot be shown, a plain message stands in its place;
+     the block can still be selected and deleted like any other. */
+  if (isImage) {
+    if (driver && status.connected) {
+      const loading = document.createElement("div");
+      loading.className = "ss-att-msg";
+      loading.textContent = "Loading image...";
+      el.appendChild(loading);
+      try {
+        const blob = await driver.download(att.fileId);
+        if (!el.isConnected) { return; }   /* editor moved on meanwhile */
+        const url = URL.createObjectURL(blob);
+        state.objectUrls.push(url);
+        const img = document.createElement("img");
+        img.className = "ss-att-img";
+        img.alt = att.name;
+        img.src = url;
+        /* The block owns dragging; a natively draggable image inside
+           it would start the browser's own image drag instead. */
+        img.setAttribute("draggable", "false");
+        /* v1.6: swapping in the blob URL must not lose a saved resize
+           width; reapply it to the fresh <img>. */
+        if (savedWidth) { img.style.width = savedWidth; }
+        el.innerHTML = "";
+        el.appendChild(img);
+      } catch (err) {
+        if (!el.isConnected) { return; }
+        el.innerHTML = "";
+        const fail = document.createElement("div");
+        fail.className = "ss-att-msg";
+        fail.textContent = "This image could not be loaded: " + err.message;
+        el.appendChild(fail);
+      }
+      return;
+    }
+    const note1 = document.createElement("div");
+    note1.className = "ss-att-msg";
+    note1.textContent = driver
+      ? "Sign in with " + providerLabel(att.provider) + " (Attachments settings) to view this image."
+      : "The storage provider for this image is not available in this version.";
+    el.appendChild(note1);
+    return;
+  }
 
   const head = document.createElement("div");
   const nameSpan = document.createElement("span");
@@ -6580,51 +6811,7 @@ async function hydrateOneAttachment(note, el) {
     actions.appendChild(previewBtn);
   }
 
-  if (isImage && driver && status.connected) {
-    const loading = document.createElement("div");
-    loading.className = "ss-att-msg";
-    loading.textContent = "Loading image...";
-    el.appendChild(loading);
-    try {
-      const blob = await driver.download(att.fileId);
-      if (!el.isConnected) { return; }   /* editor moved on meanwhile */
-      const url = URL.createObjectURL(blob);
-      state.objectUrls.push(url);
-      const img = document.createElement("img");
-      img.className = "ss-att-img";
-      img.alt = att.name;
-      img.src = url;
-      /* v1.6: swapping in the blob URL must not lose a saved resize
-         width; reapply it to the fresh <img>. */
-      if (savedWidth) { img.style.width = savedWidth; }
-      el.innerHTML = "";
-      el.appendChild(img);
-      el.appendChild(head);
-      el.appendChild(meta);
-      el.appendChild(actions);
-    } catch (err) {
-      if (!el.isConnected) { return; }
-      el.innerHTML = "";
-      el.appendChild(head);
-      const fail = document.createElement("div");
-      fail.className = "ss-att-msg";
-      fail.textContent = "This image could not be loaded: " + err.message;
-      el.appendChild(fail);
-      el.appendChild(meta);
-      el.appendChild(actions);
-    }
-    return;
-  }
-
   el.appendChild(head);
-  if (isImage && !status.connected) {
-    const note1 = document.createElement("div");
-    note1.className = "ss-att-msg";
-    note1.textContent = driver
-      ? "Sign in with " + providerLabel(att.provider) + " (Attachments settings) to view this image."
-      : "The storage provider for this image is not available in this version.";
-    el.appendChild(note1);
-  }
   el.appendChild(meta);
   el.appendChild(actions);
 }
@@ -6800,37 +6987,132 @@ function clearAttachmentDrag() {
   }
 }
 
-/* Image selection for resizing. Exactly one block can be selected;
-   the handle lives inside the selected block and, like all hydrated
-   content, is stripped by canonicalization on save. */
+/* Image selection: corner grips, a three dot menu, and resizing.
+   Exactly one block can be selected; the grips and the menu button
+   live inside the selected block and, like all hydrated content, are
+   stripped by canonicalization on save. v1.7 replaces the single
+   bottom right handle of v1.6 with four corner grips (the layout in
+   the reference screenshot Chris supplied) and adds a three dot menu
+   button at the block's top right corner. The menu itself is one
+   shared element, #attMenu, that lives outside #noteBody next to the
+   link popup, so it can never be saved into a note either. */
 let selectedAttachmentEl = null;
+
+/* The attachment the open #attMenu refers to: the note, the record,
+   and the placeholder element, kept in variables like the link
+   popup's target, so the menu always acts on the image it was opened
+   from. Cleared whenever the menu closes. */
+let attMenuNote = null;
+let attMenuAtt = null;
+let attMenuEl = null;
 
 function selectAttachment(el) {
   if (selectedAttachmentEl === el) { return; }
   deselectAttachment();
   selectedAttachmentEl = el;
   el.classList.add("ss-selected");
-  const handle = document.createElement("div");
-  handle.className = "ss-resize-handle";
-  handle.title = "Drag to resize the image";
-  handle.setAttribute("aria-hidden", "true");
-  handle.addEventListener("pointerdown", startAttachmentResize);
-  el.appendChild(handle);
+  /* Four corner grips; dragging any of them resizes the image. */
+  ["nw", "ne", "sw", "se"].forEach(function (corner) {
+    const grip = document.createElement("div");
+    grip.className = "ss-grip";
+    grip.setAttribute("data-corner", corner);
+    grip.title = "Drag to resize the image";
+    grip.setAttribute("aria-hidden", "true");
+    grip.addEventListener("pointerdown", function (ev) {
+      startAttachmentResize(ev, corner);
+    });
+    el.appendChild(grip);
+  });
+  /* The three dot menu button at the block's top right corner. Its
+     dots are plain spans styled by CSS, so no icon font or special
+     glyph is needed. mousedown is swallowed like the attachment card
+     buttons, so opening the menu never moves the editor caret. */
+  const menuBtn = document.createElement("button");
+  menuBtn.type = "button";
+  menuBtn.className = "ss-att-menu-btn";
+  menuBtn.title = "Image options";
+  menuBtn.setAttribute("aria-label", "Image options");
+  for (let i = 0; i < 3; i++) {
+    const dot = document.createElement("span");
+    dot.className = "ss-dot";
+    menuBtn.appendChild(dot);
+  }
+  menuBtn.addEventListener("mousedown", function (ev) { ev.preventDefault(); });
+  menuBtn.addEventListener("click", function (ev) {
+    ev.preventDefault();
+    ev.stopPropagation();
+    const note = currentNote();
+    if (!note || note.trashed || note.archived) { return; }
+    const attId = el.getAttribute("data-attachment-id");
+    const att = (note.attachments || []).find(function (a) {
+      return a.id === attId;
+    });
+    if (!att) { return; }
+    const menu = document.getElementById("attMenu");
+    if (attMenuEl === el && menu && !menu.classList.contains("hidden")) {
+      closeAttMenu();
+      return;
+    }
+    attMenuNote = note;
+    attMenuAtt = att;
+    attMenuEl = el;
+    showAttMenu(menuBtn);
+  });
+  el.appendChild(menuBtn);
 }
 
 function deselectAttachment() {
+  closeAttMenu();
   if (!selectedAttachmentEl) { return; }
   selectedAttachmentEl.classList.remove("ss-selected");
-  const handle = selectedAttachmentEl.querySelector(".ss-resize-handle");
-  if (handle) { handle.remove(); }
+  selectedAttachmentEl.querySelectorAll(".ss-grip, .ss-att-menu-btn")
+    .forEach(function (n) { n.remove(); });
   selectedAttachmentEl = null;
 }
 
-/* Dragging the handle resizes live (width only, so the aspect ratio
-   is preserved), bounded below so the image cannot vanish and above
-   by the editor column width. The note is marked dirty once, on
-   release, not on every pointer move. */
-function startAttachmentResize(ev) {
+/* Show the shared image menu under its button, clamped into the
+   viewport the way the link popup is. The caller unhides it first
+   only through here, so the size measured is the size on screen. */
+function showAttMenu(anchor) {
+  const menu = document.getElementById("attMenu");
+  if (!menu || !anchor) { return; }
+  menu.classList.remove("hidden");
+  const rect = anchor.getBoundingClientRect();
+  const width = menu.offsetWidth;
+  const height = menu.offsetHeight;
+  let left = Math.min(rect.right - width, window.innerWidth - width - 8);
+  left = Math.max(8, left);
+  let top = rect.bottom + 6;
+  if (top + height > window.innerHeight - 8) {
+    top = Math.max(8, rect.top - height - 6);
+  }
+  menu.style.left = left + "px";
+  menu.style.top = top + "px";
+}
+
+function closeAttMenu() {
+  const menu = document.getElementById("attMenu");
+  if (menu) { menu.classList.add("hidden"); }
+  attMenuNote = null;
+  attMenuAtt = null;
+  attMenuEl = null;
+}
+
+/* The resize width rule, kept pure and side effect free so it can be
+   unit tested on its own: east side grips (ne, se) add the pointer's
+   horizontal travel to the starting width, west side grips (nw, sw)
+   subtract it, and the result is clamped so the image can neither
+   vanish nor exceed the editor column. Only the width is ever set,
+   so the aspect ratio is preserved by the image's automatic height. */
+function resizedImageWidth(startWidth, dx, corner, maxWidth) {
+  const signed = (corner === "ne" || corner === "se") ? dx : -dx;
+  const next = Math.round(startWidth + signed);
+  return Math.max(40, Math.min(maxWidth, next));
+}
+
+/* Dragging any grip resizes the image live. The note is marked dirty
+   once, on release, not on every pointer move. */
+function startAttachmentResize(ev, corner) {
   ev.preventDefault();
   ev.stopPropagation();
   const el = selectedAttachmentEl;
@@ -6842,9 +7124,8 @@ function startAttachmentResize(ev) {
   const startWidth = img.getBoundingClientRect().width || 200;
   const maxWidth = bodyEl && bodyEl.clientWidth ? bodyEl.clientWidth : startWidth;
   function onMove(e2) {
-    const next = Math.round(startWidth + (e2.clientX - startX));
-    const clamped = Math.max(40, Math.min(maxWidth, next));
-    img.style.width = clamped + "px";
+    img.style.width =
+      resizedImageWidth(startWidth, e2.clientX - startX, corner, maxWidth) + "px";
   }
   function onUp() {
     document.removeEventListener("pointermove", onMove);
@@ -6853,6 +7134,74 @@ function startAttachmentResize(ev) {
   }
   document.addEventListener("pointermove", onMove);
   document.addEventListener("pointerup", onUp);
+}
+
+/* Open one attachment in a new browser tab through its provider,
+   following the same guards as the Download path below: the bytes
+   are fetched with the user's own sign in and shown from a
+   temporary object URL, revoked a minute later (a fresh tab needs
+   time to load it; the note itself keeps no reference to it). */
+async function openAttachment(att) {
+  if (!state.online) {
+    toast("Opening an attachment needs an internet connection. You appear to be offline.", true);
+    return;
+  }
+  const driver = providers[att.provider];
+  if (!driver) {
+    toast("Unknown storage provider for this attachment.", true);
+    return;
+  }
+  const status = await driver.getStatus();
+  if (!status.connected) {
+    openAttachSettings("Sign in with " + providerLabel(att.provider) +
+      " to open \"" + att.name + "\".");
+    return;
+  }
+  try {
+    const blob = await driver.download(att.fileId);
+    const url = URL.createObjectURL(blob);
+    window.open(url, "_blank", "noopener");
+    setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
+  } catch (err) {
+    toast("Open failed: " + err.message, true);
+  }
+}
+
+/* One click in the shared image menu. Size presets set the image
+   width as a share of the editor column width; the width lands on
+   the <img> style exactly like a grip drag, so canonicalization
+   carries it into the saved note the same way. Remove routes
+   through the undoable deletion engine (see the attachments
+   section below) and drops the selection, since the block is
+   leaving the note. */
+function runAttMenuAction(action) {
+  const note = attMenuNote;
+  const att = attMenuAtt;
+  const el = attMenuEl;
+  closeAttMenu();
+  if (!note || !att) { return; }
+  if (action === "open") {
+    openAttachment(att).catch(function (err) { toast(err.message, true); });
+    return;
+  }
+  if (action === "download") {
+    downloadAttachment(att).catch(function (err) { toast(err.message, true); });
+    return;
+  }
+  if (action === "small" || action === "medium" || action === "large") {
+    if (!el) { return; }
+    const img = el.querySelector("img.ss-att-img");
+    const bodyEl = document.getElementById("noteBody");
+    if (!img || !bodyEl || !bodyEl.clientWidth) { return; }
+    const pct = action === "small" ? 25 : (action === "medium" ? 50 : 100);
+    img.style.width = Math.round(bodyEl.clientWidth * pct / 100) + "px";
+    markDirty();
+    return;
+  }
+  if (action === "remove") {
+    deselectAttachment();
+    scheduleAttachmentDelete(note, att);
+  }
 }
 
 /* Download one attachment through its provider and hand it to the
@@ -6889,46 +7238,460 @@ async function downloadAttachment(att) {
   }
 }
 
-/* Remove one attachment: delete the cloud file FIRST, and only when that
-   succeeds remove the metadata and the placeholder and let autosave
-   persist the change. Any failure keeps the attachment untouched, so a
-   note never points at a deleted file nor loses track of a live one. */
-async function removeAttachment(note, att) {
-  const ok = confirm("Remove \"" + att.name + "\" from this note AND delete " +
-    "the file from " + providerLabel(att.provider) + "? This cannot be undone.");
-  if (!ok) { return; }
-  if (!state.online) {
-    toast("Removing an attachment needs an internet connection, because the cloud file is deleted too. You appear to be offline.", true);
+/* ----- v1.7: undoable attachment deletion ------------------------------
+   Removing an attachment used to be a cliff edge: the Remove button
+   asked for confirmation, deleted the cloud file immediately, and
+   that was that. Deleting the block from the note text with the
+   Delete or Backspace key was the opposite problem: nothing happened
+   to the cloud file at all, so it stayed in the user's storage
+   forever, pointed at by a metadata record whose block was gone.
+
+   Now every removal path runs through one engine:
+     - scheduleAttachmentDelete takes the block out of the note right
+       away and opens a five second undo window, announced by a toast
+       at the TOP of the window (its own box, #undoToastBox, separate
+       from the bottom #toastBox) naming the file and offering Undo.
+     - The metadata record stays in note.attachments for the whole
+       window. That is what makes Undo and failure recovery exact:
+       the note's saved shape does not change until the cloud delete
+       has actually succeeded, and filename search and attachment
+       counts keep treating the record normally meanwhile.
+     - When the timer fires, the cloud file is deleted first; only
+       then is the record dropped and the note persisted. If the app
+       is offline, the provider is signed out, or the delete fails,
+       the block is restored exactly as Undo would restore it, and an
+       error toast says the attachment was kept.
+     - Undo (or the block reappearing on its own, for example through
+       the editor's own Ctrl+Z) cancels the pending delete: the timer
+       is cleared and the toast dismissed, and for Undo the captured
+       block is also reinserted where it was and rehydrated.
+     - Locking the app or signing out cancels every pending deletion
+       WITHOUT deleting anything: the block is already out of the
+       note body (and that body state is what the lock flow saves),
+       but the record stays in the note and the file stays in the
+       cloud, so the two never disagree about a file that exists. */
+const PENDING_DELETE_MS = 5000;
+
+/* Pending entries, keyed by note id + "|" + attachment id. An entry
+   holds everything needed to finish the deletion or to take it
+   back: { key, note, att, html, anchorId, toastEl, timer }. */
+const pendingAttachmentDeletes = new Map();
+
+function pendingDeleteKey(note, att) {
+  return note.id + "|" + att.id;
+}
+
+/* The attachment id of the NEXT placeholder still in the body after
+   the given element, so a restore can go back in front of the same
+   neighbor it sat in front of when it was removed. */
+function followingAttachmentId(el) {
+  let sib = el ? el.nextElementSibling : null;
+  while (sib) {
+    if (sib.classList && sib.classList.contains("ss-attachment")) {
+      return sib.getAttribute("data-attachment-id");
+    }
+    sib = sib.nextElementSibling;
+  }
+  return null;
+}
+
+/* Build a placeholder element from a captured outerHTML string when
+   it still describes this attachment; otherwise build the canonical
+   empty shell for the record (figure for images, div for files),
+   which hydration fills in either way. Editor furniture that may
+   ride along in a capture (grips, the menu button, a PDF preview
+   box) is stripped, and so are transient drag and selection
+   classes. */
+function attachmentElementFromHtml(html, att) {
+  if (html) {
+    const holder = document.createElement("div");
+    holder.innerHTML = html;
+    const el = holder.firstElementChild;
+    if (el && el.classList && el.classList.contains("ss-attachment") &&
+        el.getAttribute("data-attachment-id") === att.id) {
+      el.querySelectorAll(".ss-grip, .ss-att-menu-btn, .ss-att-preview")
+        .forEach(function (n) { n.remove(); });
+      el.classList.remove("ss-selected", "ss-dragging",
+        "ss-drop-before", "ss-drop-after");
+      return el;
+    }
+  }
+  const el = document.createElement(isImageAttachment(att) ? "figure" : "div");
+  el.setAttribute("class", "ss-attachment");
+  el.setAttribute("data-attachment-id", att.id);
+  el.setAttribute("contenteditable", "false");
+  return el;
+}
+
+/* Put an attachment block back into a note: into the live body when
+   the note is open (in front of its old neighbor when that neighbor
+   is still around, at the end of the body otherwise), followed by
+   hydration so the block is live again. When the note is not open,
+   the captured HTML is stashed on the note object (a runtime only
+   field, never serialized) and the next openNote puts the block
+   back at the end of the body instead; see
+   finishNoteOpenAttachments. */
+function restoreAttachmentPlaceholder(note, entry) {
+  const att = entry.att;
+  if (currentNote() !== note || note.trashed || note.archived) {
+    note._restoredAttachmentHtml = note._restoredAttachmentHtml || {};
+    note._restoredAttachmentHtml[att.id] = entry.html || null;
     return;
   }
+  const bodyEl = document.getElementById("noteBody");
+  if (!bodyEl) { return; }
+  if (bodyEl.querySelector(
+      ".ss-attachment[data-attachment-id=\"" + att.id + "\"]")) {
+    return;   /* already back: the user undid the edit themselves */
+  }
+  const el = attachmentElementFromHtml(entry.html, att);
+  decorateAttachmentPlaceholder(note, el, att);
+  let anchor = null;
+  if (entry.anchorId) {
+    anchor = bodyEl.querySelector(
+      ".ss-attachment[data-attachment-id=\"" + entry.anchorId + "\"]");
+  }
+  if (anchor) { bodyEl.insertBefore(el, anchor); }
+  else { bodyEl.appendChild(el); }
+  /* Keep the deletion reconciliation's snapshot honest about the
+     restored block, so deleting it again later is noticed. */
+  attachSnapshotIds.add(att.id);
+  if (attachSnapshotOrder.indexOf(att.id) === -1) {
+    attachSnapshotOrder.push(att.id);
+  }
+  attachSnapshotHtml.set(att.id, el.outerHTML);
+  hydrateOneAttachment(note, el).catch(function (err) {
+    console.warn("Attachment restore hydration failed:", err);
+  });
+  markDirty();
+}
+
+/* The top toast for one pending deletion: the words Attachment
+   deleted, the file name, and an Undo button. It lives exactly as
+   long as its undo window; the firing and cancel paths remove it.
+   Multiple pending deletions stack independently in the same box. */
+function showUndoToast(entry) {
+  const box = document.getElementById("undoToastBox");
+  if (!box) { return; }
+  const el = document.createElement("div");
+  el.className = "undo-toast";
+  const text = document.createElement("span");
+  text.className = "undo-toast-text";
+  text.textContent = "Attachment deleted: " + entry.att.name;
+  el.appendChild(text);
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "undo-toast-btn";
+  btn.textContent = "Undo";
+  btn.addEventListener("click", function () {
+    undoAttachmentDelete(entry.key);
+  });
+  el.appendChild(btn);
+  box.appendChild(el);
+  entry.toastEl = el;
+}
+
+function dismissUndoToast(entry) {
+  if (entry.toastEl && entry.toastEl.parentNode) {
+    entry.toastEl.parentNode.removeChild(entry.toastEl);
+  }
+  entry.toastEl = null;
+}
+
+/* Start the undo window for one attachment. The block leaves the
+   note immediately: the capture happens first, from the live element
+   when the block is on screen, or from the caller supplied capture
+   (the keyboard reconciliation passes the body snapshot's last known
+   HTML for a block that is already out of the DOM). The record stays
+   in note.attachments until the timer fires. */
+function scheduleAttachmentDelete(note, att, captured) {
+  const key = pendingDeleteKey(note, att);
+  if (pendingAttachmentDeletes.has(key)) {
+    return pendingAttachmentDeletes.get(key);
+  }
+  const entry = {
+    key: key, note: note, att: att,
+    html: null, anchorId: null, toastEl: null, timer: null
+  };
+  if (captured && (captured.html || captured.anchorId)) {
+    entry.html = captured.html || null;
+    entry.anchorId = captured.anchorId || null;
+  } else if (currentNote() === note) {
+    const bodyEl = document.getElementById("noteBody");
+    const el = bodyEl ? bodyEl.querySelector(
+      ".ss-attachment[data-attachment-id=\"" + att.id + "\"]") : null;
+    if (el) {
+      entry.html = el.outerHTML;
+      entry.anchorId = followingAttachmentId(el);
+      if (selectedAttachmentEl === el) { deselectAttachment(); }
+      el.remove();
+    }
+  }
+  pendingAttachmentDeletes.set(key, entry);
+  showUndoToast(entry);
+  entry.timer = setTimeout(function () {
+    firePendingAttachmentDelete(key).catch(function (err) {
+      console.warn("Attachment deletion failed:", err);
+    });
+  }, PENDING_DELETE_MS);
+  /* The block leaving the note is an edit like any other; autosave
+     persists the body without it while the record (and the file)
+     still exist, which is exactly the state Undo expects to find. */
+  if (currentNote() === note) { markDirty(); }
+  return entry;
+}
+
+/* Take a pending deletion back: clear the timer, dismiss the toast,
+   and put the block back where it was. */
+function undoAttachmentDelete(key) {
+  const entry = pendingAttachmentDeletes.get(key);
+  if (!entry) { return; }
+  if (entry.timer) { clearTimeout(entry.timer); }
+  pendingAttachmentDeletes.delete(key);
+  dismissUndoToast(entry);
+  restoreAttachmentPlaceholder(entry.note, entry);
+}
+
+/* Cancel a pending deletion WITHOUT restoring anything: used when
+   the block reappeared in the body on its own (the editor's own
+   Ctrl+Z, noticed by the reconciliation below), and on lock or sign
+   out, where the note body already carries the removal and only the
+   cloud delete must not happen. */
+function cancelPendingAttachmentDelete(key) {
+  const entry = pendingAttachmentDeletes.get(key);
+  if (!entry) { return; }
+  if (entry.timer) { clearTimeout(entry.timer); }
+  pendingAttachmentDeletes.delete(key);
+  dismissUndoToast(entry);
+}
+
+function cancelAllPendingAttachmentDeletes() {
+  Array.from(pendingAttachmentDeletes.keys()).forEach(function (key) {
+    cancelPendingAttachmentDelete(key);
+  });
+}
+
+/* Remove one attachment block from a note's stored body text. The
+   stored body is canonical (empty placeholder shells), so this is a
+   small DOM walk, used when a pending deletion fires for a note
+   that is not currently open and its body string still carries the
+   block. */
+function stripAttachmentFromBodyText(note, attId) {
+  if (!note.body || note.body.indexOf(attId) === -1) { return; }
+  const holder = document.createElement("div");
+  holder.innerHTML = note.body;
+  const el = holder.querySelector(
+    ".ss-attachment[data-attachment-id=\"" + attId + "\"]");
+  if (el) { el.remove(); note.body = holder.innerHTML; }
+}
+
+/* The undo window closed: delete the cloud file, and only then drop
+   the record and persist the note. Every failure path restores the
+   block and keeps the record, with the same protective wording the
+   old immediate flow used: the attachment was kept. The guards that
+   used to run before the old immediate delete (the provider must
+   exist, the app must be online, the provider must be signed in)
+   run here instead, at firing time, so the removal itself always
+   feels instant. */
+async function firePendingAttachmentDelete(key) {
+  const entry = pendingAttachmentDeletes.get(key);
+  if (!entry) { return; }
+  pendingAttachmentDeletes.delete(key);
+  dismissUndoToast(entry);
+  const note = entry.note;
+  const att = entry.att;
   const driver = providers[att.provider];
+  function restoreWithError(message) {
+    restoreAttachmentPlaceholder(note, entry);
+    toast(message, true);
+  }
   if (!driver) {
-    toast("Unknown storage provider for this attachment.", true);
+    restoreWithError("The cloud file for \"" + att.name +
+      "\" could not be deleted (unknown storage provider), so the attachment was kept.");
     return;
   }
-  const status = await driver.getStatus();
-  if (!status.connected) {
-    openAttachSettings("Sign in with " + providerLabel(att.provider) +
-      " to delete the cloud copy of \"" + att.name + "\". The attachment was kept.");
+  if (!state.online) {
+    restoreWithError("The cloud file for \"" + att.name +
+      "\" could not be deleted while offline, so the attachment was kept.");
+    return;
+  }
+  let status = null;
+  try { status = await driver.getStatus(); } catch (e) { status = null; }
+  if (!status || !status.connected) {
+    restoreWithError("The cloud file for \"" + att.name +
+      "\" could not be deleted because " + providerLabel(att.provider) +
+      " is not signed in, so the attachment was kept.");
     return;
   }
   try {
     await driver.delete(att.fileId);
   } catch (err) {
-    toast("The cloud file could not be deleted, so the attachment was kept: " + err.message, true);
+    restoreWithError("The cloud file could not be deleted, so the attachment was kept: " +
+      err.message);
     return;
   }
   note.attachments = (note.attachments || []).filter(function (a) {
     return a.id !== att.id;
   });
+  if (currentNote() === note) {
+    /* Autosave persists the record drop alongside the body, which
+       already lost the block when the window opened. */
+    markDirty();
+  } else {
+    /* The note is not open: make sure its stored body no longer
+       carries the block either, then save it through the per note
+       operation chain like every other background write. */
+    stripAttachmentFromBodyText(note, att.id);
+    try {
+      await saveNoteToRepo(note);
+    } catch (err) {
+      toast("The cloud file for \"" + att.name +
+        "\" was deleted, but the note could not be saved: " + err.message, true);
+    }
+    saveCache();
+  }
+}
+
+/* Remove one attachment (the Remove button on a file card, and the
+   image menu's Remove item): the undoable engine above does the
+   work. The block leaves the note at once and the cloud delete
+   waits out the undo window. The old confirm() dialog and immediate
+   delete are gone; Undo is the confirmation now. The name and
+   signature are unchanged for the existing caller in hydration. */
+function removeAttachment(note, att) {
+  scheduleAttachmentDelete(note, att);
+}
+
+/* ----- v1.7: watching the note body for keyboard deleted blocks -------
+   The Delete and Backspace keys edit the body directly, so no
+   attachment code runs when a block disappears that way. This
+   reconciliation pass closes the gap for the open, editable note:
+   it remembers which attachment blocks the body held, and what each
+   one looked like, and after each burst of body input it compares.
+   A block that vanished and is not already pending enters the
+   undoable deletion engine with its last known HTML as the restore
+   capture, anchored to the next surviving block. A block that came
+   back while its deletion was pending (the editor's own Ctrl+Z)
+   cancels that deletion. The pass never runs while a note is being
+   opened or rendered (the guard flag renderEditor raises), and
+   never for Trash or Archive, which are read only. */
+let attachBodyGuard = true;
+let attachSnapshotIds = new Set();
+let attachSnapshotOrder = [];
+let attachSnapshotHtml = new Map();
+
+function snapshotAttachmentBody(note) {
+  if (!note || renderEditor._forId !== note.id || currentNote() !== note) {
+    return;
+  }
+  attachSnapshotIds = new Set();
+  attachSnapshotOrder = [];
+  attachSnapshotHtml = new Map();
   const bodyEl = document.getElementById("noteBody");
   if (bodyEl) {
-    const el = bodyEl.querySelector(
-      ".ss-attachment[data-attachment-id=\"" + att.id + "\"]");
-    if (el) { el.remove(); }
+    bodyEl.querySelectorAll(".ss-attachment[data-attachment-id]")
+      .forEach(function (el) {
+        const id = el.getAttribute("data-attachment-id");
+        attachSnapshotIds.add(id);
+        attachSnapshotOrder.push(id);
+        attachSnapshotHtml.set(id, el.outerHTML);
+      });
   }
-  markDirty();
-  toast("Attachment removed and the cloud file deleted.");
+  attachBodyGuard = false;
+}
+
+function checkAttachmentBody() {
+  const note = currentNote();
+  if (!note || note.trashed || note.archived) { return; }
+  if (attachBodyGuard) { return; }
+  if (renderEditor._forId !== note.id) { return; }
+  const bodyEl = document.getElementById("noteBody");
+  if (!bodyEl) { return; }
+  const present = new Map();
+  bodyEl.querySelectorAll(".ss-attachment[data-attachment-id]")
+    .forEach(function (el) {
+      present.set(el.getAttribute("data-attachment-id"), el);
+    });
+  /* Present blocks: refresh their restore captures, and cancel any
+     pending deletion whose block has come back on its own. */
+  present.forEach(function (el, id) {
+    attachSnapshotHtml.set(id, el.outerHTML);
+    const key = pendingDeleteKey(note, { id: id });
+    if (pendingAttachmentDeletes.has(key)) {
+      cancelPendingAttachmentDelete(key);
+    }
+  });
+  /* Missing blocks that were here at the last pass and are not
+     already pending: schedule their undoable deletion, anchored to
+     the next block after them (in the last known order) that is
+     still present. */
+  attachSnapshotOrder.forEach(function (id, idx) {
+    if (present.has(id) || !attachSnapshotIds.has(id)) { return; }
+    const key = pendingDeleteKey(note, { id: id });
+    if (pendingAttachmentDeletes.has(key)) { return; }
+    const att = (note.attachments || []).find(function (a) {
+      return a.id === id;
+    });
+    if (!att) { return; }
+    let anchorId = null;
+    for (let j = idx + 1; j < attachSnapshotOrder.length; j++) {
+      if (present.has(attachSnapshotOrder[j])) {
+        anchorId = attachSnapshotOrder[j];
+        break;
+      }
+    }
+    scheduleAttachmentDelete(note, att, {
+      html: attachSnapshotHtml.get(id) || null,
+      anchorId: anchorId
+    });
+  });
+  /* The snapshot becomes this pass's present set; captures for
+     blocks that are neither present nor pending are dropped. */
+  attachSnapshotIds = new Set(present.keys());
+  attachSnapshotOrder = Array.from(present.keys());
+  attachSnapshotHtml.forEach(function (html, id) {
+    if (!present.has(id) &&
+        !pendingAttachmentDeletes.has(pendingDeleteKey(note, { id: id }))) {
+      attachSnapshotHtml.delete(id);
+    }
+  });
+}
+
+const queueAttachmentBodyCheck = debounce(checkAttachmentBody, 400);
+
+/* After a note opens, in place of the bare hydration call render
+   used before: hydrate its blocks, put back any blocks whose undo
+   was stashed while the note was closed, then take the body
+   snapshot the keyboard reconciliation compares against. */
+async function finishNoteOpenAttachments(note) {
+  await hydrateAttachments(note);
+  await insertRestoredAttachments(note);
+  snapshotAttachmentBody(note);
+}
+
+async function insertRestoredAttachments(note) {
+  const stash = note._restoredAttachmentHtml;
+  if (!stash) { return; }
+  delete note._restoredAttachmentHtml;
+  if (note.trashed || note.archived) { return; }
+  if (currentNote() !== note || renderEditor._forId !== note.id) { return; }
+  const bodyEl = document.getElementById("noteBody");
+  if (!bodyEl) { return; }
+  let inserted = false;
+  for (const attId of Object.keys(stash)) {
+    const att = (note.attachments || []).find(function (a) {
+      return a.id === attId;
+    });
+    if (!att) { continue; }
+    if (bodyEl.querySelector(
+        ".ss-attachment[data-attachment-id=\"" + attId + "\"]")) { continue; }
+    const el = attachmentElementFromHtml(stash[attId], att);
+    decorateAttachmentPlaceholder(note, el, att);
+    bodyEl.appendChild(el);
+    inserted = true;
+    await hydrateOneAttachment(note, el);
+  }
+  if (inserted) { markDirty(); }
 }
 
 /* Delete Forever helper: best effort deletion of a note's cloud files.
@@ -7109,9 +7872,11 @@ async function uploadOneAttachment(note, providerName, driver, file) {
   el.setAttribute("class", "ss-attachment");
   el.setAttribute("data-attachment-id", attId);
   el.setAttribute("contenteditable", "false");
-  /* v1.6: draggable from birth, like hydrated placeholders in a live
-     note, so a just attached file can be moved right away. */
-  el.setAttribute("draggable", "true");
+  /* v1.7: decorated by the shared decoration function, with the
+     file's type standing in for the record that does not exist yet,
+     so the block is born with the inline image class and the
+     draggable flag already in place, exactly like a hydrated one. */
+  decorateAttachmentPlaceholder(note, el, { id: attId, mime: file.type || "" });
   const uploading = document.createElement("div");
   uploading.className = "ss-att-msg";
   uploading.textContent = "Uploading " + file.name + "...";
@@ -7447,6 +8212,13 @@ function wireEvents() {
     document.getElementById(id).addEventListener("change", markDirty);
   });
   document.getElementById("noteBody").addEventListener("input", markDirty);
+  /* v1.7: the same body input events feed the attachment deletion
+     reconciliation, which notices blocks removed with the Delete or
+     Backspace keys. A separate listener; the markDirty one above is
+     untouched. */
+  document.getElementById("noteBody").addEventListener("input", function () {
+    queueAttachmentBodyCheck();
+  });
 
   /* Checklist toggling: a click on a checkbox inside the body flips the
      done style on its list item and saves. The change event from the
@@ -7533,6 +8305,30 @@ function wireEvents() {
     hideLinkPopup();
   });
 
+  /* v1.7: the image menu's items run through one delegated listener;
+     the menu remembers which attachment it was opened from. */
+  document.getElementById("attMenu").addEventListener("click", function (ev) {
+    const target = ev.target;
+    const btn = target && target.closest ?
+      target.closest("button[data-action]") : null;
+    if (!btn) { return; }
+    runAttMenuAction(btn.getAttribute("data-action"));
+  });
+
+  /* v1.7: clicking anywhere else closes the image menu, mirroring
+     the link popup's rule. Clicks inside the menu itself, and on a
+     menu button (which toggles the menu for its own image), are
+     excluded. */
+  document.addEventListener("click", function (ev) {
+    const menu = document.getElementById("attMenu");
+    if (!menu || menu.classList.contains("hidden")) { return; }
+    const target = ev.target;
+    if (!target || !target.closest) { return; }
+    if (target.closest("#attMenu")) { return; }
+    if (target.closest(".ss-att-menu-btn")) { return; }
+    closeAttMenu();
+  });
+
   /* v1.3.1: Escape closes the popup, and scrolling the editor closes it
      too, since its fixed position is tied to where the link was. */
   document.addEventListener("keydown", function (ev) {
@@ -7540,6 +8336,11 @@ function wireEvents() {
   });
   document.querySelector(".editor-scroll").addEventListener("scroll", function () {
     hideLinkPopup();
+  });
+  /* v1.7: scrolling the editor closes the image menu too, since its
+     fixed position is tied to where the image was. */
+  document.querySelector(".editor-scroll").addEventListener("scroll", function () {
+    closeAttMenu();
   });
 
   /* Toolbar buttons. mousedown is prevented so the text selection in the
@@ -7623,7 +8424,8 @@ function wireEvents() {
     const note = currentNote();
     if (!note || note.trashed || note.archived) { return; }
     if (ev.target && ev.target.closest &&
-        ev.target.closest(".ss-resize-handle")) {
+        (ev.target.closest(".ss-grip") ||
+         ev.target.closest(".ss-att-menu-btn"))) {
       ev.preventDefault();
       return;
     }
@@ -7664,19 +8466,39 @@ function wireEvents() {
   noteBodyEl.addEventListener("click", function (ev) {
     const target = ev.target;
     if (target && target.closest &&
-        target.closest(".ss-resize-handle")) { return; }
+        (target.closest(".ss-grip") ||
+         target.closest(".ss-att-menu-btn"))) { return; }
     const note = currentNote();
     const holder = attachmentHolderOf(target);
-    const img = holder ? holder.querySelector("img.ss-att-img") : null;
-    if (holder && img && target === img &&
-        note && !note.trashed && !note.archived) {
-      selectAttachment(holder);
-      return;
+    /* v1.7: selection resolves through the holder and its record,
+       not through the exact element the click landed on. The v1.6
+       handler required the target to be the hydrated <img> itself,
+       which is one of the ways a freshly inserted image (whose DOM
+       had not been through note reopen hydration) slipped past it.
+       A click anywhere on an image block that is not a button or a
+       link now selects the block. */
+    if (holder && note && !note.trashed && !note.archived) {
+      const attId = holder.getAttribute("data-attachment-id");
+      const att = (note.attachments || []).find(function (a) {
+        return a.id === attId;
+      });
+      if (att && isImageAttachment(att) &&
+          !(target && target.closest &&
+            target.closest("button, a"))) {
+        selectAttachment(holder);
+        return;
+      }
     }
     deselectAttachment();
   });
   document.addEventListener("keydown", function (ev) {
     if (ev.key === "Escape") { deselectAttachment(); }
+  });
+  /* v1.7: Escape closes the image menu as well (deselecting above
+     already closes it; this covers a menu open with its selection
+     somehow already gone). */
+  document.addEventListener("keydown", function (ev) {
+    if (ev.key === "Escape") { closeAttMenu(); }
   });
 
   /* v1.6 checklist Enter behavior (see handleChecklistEnter in the
