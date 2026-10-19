@@ -24,10 +24,31 @@
   belongs to the user. Notebooks are folders, notes are files, and there is
   no server and no shared database anywhere in this design.
 
-  BUILD STAMP: 2026-10-19-SSN-V121
-  Version: 1.2.1
+  BUILD STAMP: 2026-10-19-SSN-V13
+  Version: 1.3
 
   Revision history:
+    v1.3  2026-10-19  Formatting toolbar rebuild. The one row of text
+                      buttons is now a grouped bar modeled on a modern
+                      editor toolbar: an Insert menu (attach, link,
+                      checklist, divider, date and time), a text style
+                      dropdown (normal, headings 1 to 3, quote, code
+                      block), font family and font size pickers, text
+                      color and highlight color palettes with custom
+                      color support, bold, italic, underline, and
+                      strikethrough, list buttons, the Attach button, and
+                      a More menu (alignment, indent, outdent, remove
+                      formatting). Fonts, sizes, and colors are saved as
+                      inline CSS styles on spans inside the note body,
+                      never as font tags, so formatted notes render the
+                      same from GitHub on any device. Editor selection
+                      is preserved across every toolbar control.
+                      Build stamp 2026-10-19-SSN-V13.
+    v1.2.1 2026-10-19 Attach button file picker fix: the picker change
+                      handler now copies the selected files into a plain
+                      array before clearing the input, because clearing
+                      the input also empties its live FileList and left
+                      the upload flow with nothing to upload.
     v1.2  2026-10-19  Attachments and images. Notes can now carry files and
                       images stored in the user's own Google Drive or
                       pCloud account (the user picks the provider in the
@@ -44,7 +65,7 @@
                       the same password vault key as the GitHub token
                       (session key kept in memory only). Apple iCloud Drive
                       is not supported by web apps and stays deferred.
-                      Build stamp 2026-10-19-SSN-V121.
+                      Build stamp 2026-10-19-SSN-V12.
     v1.1  2026-10-19  Look and layout polish only. Rebuilt the tile S logo
                       as a cleaner vector with a brighter lower gradient,
                       added an inline SVG favicon, gave the setup, lock, and
@@ -351,7 +372,7 @@ body.dark .tag-chip{color:var(--accent);}
 }
 .pin-toggle{display:flex;align-items:center;gap:6px;font-size:13.5px;font-weight:600;padding-bottom:9px;}
 .toolbar{
-  display:flex;flex-wrap:wrap;gap:6px;padding:9px 8px;
+  display:flex;flex-wrap:wrap;gap:6px;padding:9px 8px;align-items:center;
   border:1px solid var(--border);border-radius:var(--radius-card);
   margin-bottom:14px;position:sticky;top:0;background:var(--surface);z-index:3;
   box-shadow:0 1px 5px rgba(11,61,46,.07);
@@ -359,19 +380,71 @@ body.dark .tag-chip{color:var(--accent);}
 .toolbar button{
   position:relative;background:var(--bg);border:1px solid var(--border);
   border-radius:var(--radius-button);min-width:36px;min-height:36px;
-  padding:5px 8px;font-size:13.5px;font-weight:600;
+  padding:5px 8px;font-size:13.5px;font-weight:600;color:var(--text);
   transition:background-color var(--motion),border-color var(--motion),
     color var(--motion);
 }
 .toolbar button:hover{border-color:var(--secondary);background:var(--soft);}
-/* Visual groups: text emphasis, headings, lists, then the reset action.
-   The separator is decorative only and does not alter button order. */
-.toolbar button:nth-child(4),.toolbar button:nth-child(6),
-.toolbar button:nth-child(9){margin-left:10px;}
-.toolbar button:nth-child(4)::before,.toolbar button:nth-child(6)::before,
-.toolbar button:nth-child(9)::before{
-  content:"";position:absolute;left:-10px;top:7px;bottom:7px;width:1px;
-  background:var(--border);
+/* v1.3 toolbar groups: Insert, style and fonts, colors and emphasis,
+   lists, then Attach and More. Groups wrap as units and are separated
+   by a thin divider, in light and dark mode alike (all colors come from
+   the shared palette variables). */
+.tb-group{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+.tb-group + .tb-group{
+  border-left:1px solid var(--border);padding-left:10px;margin-left:4px;
+}
+.toolbar select{
+  min-height:36px;max-width:150px;background:var(--bg);color:var(--text);
+  border:1px solid var(--border);border-radius:var(--radius-button);
+  padding:5px 6px;font-size:13.5px;font-weight:600;
+}
+.toolbar select:hover{border-color:var(--secondary);}
+.toolbar select:focus{
+  border-color:var(--secondary);outline:none;
+  box-shadow:0 0 0 3px rgba(87,167,115,.22);
+}
+/* v1.3 dropdown menus (Insert, More) and color palettes hang below
+   their button. keepMenuInViewport in the script nudges a menu back
+   inside the viewport on narrow screens. */
+.tb-menu-wrap{position:relative;display:inline-flex;}
+.tb-menu{
+  position:absolute;top:calc(100% + 6px);left:0;min-width:200px;
+  max-width:86vw;max-height:70vh;overflow-y:auto;z-index:30;
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius-card);box-shadow:var(--shadow);
+  padding:6px;display:flex;flex-direction:column;gap:2px;
+}
+.tb-menu.right{left:auto;right:0;}
+.tb-menu button{
+  display:flex;align-items:center;justify-content:flex-start;width:100%;
+  min-height:36px;text-align:left;background:transparent;
+  border:1px solid transparent;padding:6px 9px;
+}
+.tb-menu button:hover{background:var(--soft);border-color:var(--border);}
+/* v1.3 color buttons: a letter over a small bar that always shows the
+   last used color, so the current choice is visible at a glance. */
+.tb-color-btn{display:flex;flex-direction:column;align-items:center;
+  justify-content:center;gap:2px;padding:3px 9px 4px;line-height:1.1;}
+.tb-color-glyph{font-weight:800;font-size:14px;}
+.tb-hl-glyph{background:#FFF3A3;border-radius:3px;padding:0 3px;color:#10231A;}
+.tb-color-bar{display:block;width:18px;height:4px;border-radius:2px;
+  border:1px solid rgba(0,0,0,.18);}
+#textColorBar{background:#14532D;}
+#highlightBar{background:#FFF3A3;}
+.tb-swatches{
+  display:grid;grid-template-columns:repeat(6,26px);gap:5px;padding:4px;
+}
+.tb-swatches .swatch{
+  width:26px;height:26px;min-width:26px;min-height:26px;padding:0;
+  border-radius:6px;border:1px solid var(--border);
+}
+.tb-custom-row{
+  display:flex;align-items:center;gap:8px;padding:5px 9px;
+  font-size:13px;font-weight:600;color:var(--text);
+}
+.tb-custom-row input[type="color"]{
+  width:42px;height:30px;padding:0;border:1px solid var(--border);
+  border-radius:6px;background:var(--bg);cursor:pointer;
 }
 #noteBody{
   outline:none;min-height:300px;font-size:15.5px;line-height:1.6;padding:6px 2px;
@@ -398,13 +471,24 @@ body.dark .tag-chip{color:var(--accent);}
 }
 body.dark #conflictBanner{background:#3A2F10;color:#FFE1A8;}
 
-/* v1.2: the Attach button sits in its own toolbar group, matching the
-   separator treatment the other toolbar groups already use. */
-.toolbar button.attach-btn{margin-left:10px;}
-.toolbar button.attach-btn::before{
-  content:"";position:absolute;left:-10px;top:7px;bottom:7px;width:1px;
-  background:var(--border);
+/* v1.3: the Attach button sits in its own toolbar group (see .tb-group
+   above); the v1.2 separator hack for it is gone. */
+
+/* ---------- v1.3 note body: styles for the new block formats ----------
+   Quote, code block, heading 3, and dividers can now be created from
+   the toolbar, so they get deliberate styling in both themes. */
+#noteBody h3{font-size:16.5px;margin:10px 0 4px;}
+#noteBody blockquote{
+  margin:10px 0;padding:6px 14px;border-left:3px solid var(--accent);
+  color:var(--muted);
 }
+#noteBody pre{
+  background:var(--bg);border:1px solid var(--border);
+  border-radius:8px;padding:10px 12px;overflow-x:auto;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  font-size:13.5px;line-height:1.5;
+}
+#noteBody hr{border:none;border-top:2px solid var(--border);margin:14px 0;}
 
 /* ---------- v1.2 attachments: upload progress panel ---------- */
 #uploadPanel{
@@ -747,20 +831,101 @@ body.dark .ss-att-provider{color:#EAF3EC;}
             </label>
           </div>
 
-          <!-- Formatting toolbar. Every button calls document.execCommand on
-               the contenteditable body. Checklist inserts a list whose items
-               carry a real checkbox input. -->
+          <!-- Formatting toolbar. v1.3 restyled it into labeled groups
+               modeled on a modern editor bar: an Insert menu, a text
+               style dropdown, font family and size pickers, text and
+               highlight color palettes, emphasis buttons, list buttons,
+               the Attach button, and a More menu for alignment, indent,
+               and remove formatting. Every control preserves the editor
+               selection: the range is saved as the user edits and again
+               when a control is touched, then restored before the
+               command runs (see wireToolbar in the script). Checklist
+               inserts a list whose items carry a real checkbox input. -->
           <div class="toolbar" id="toolbar">
-            <button type="button" data-cmd="bold" title="Bold"><b>B</b></button>
-            <button type="button" data-cmd="italic" title="Italic"><i>I</i></button>
-            <button type="button" data-cmd="underline" title="Underline"><u>U</u></button>
-            <button type="button" data-cmd="h1" title="Heading 1">H1</button>
-            <button type="button" data-cmd="h2" title="Heading 2">H2</button>
-            <button type="button" data-cmd="ul" title="Bullet list">Bullets</button>
-            <button type="button" data-cmd="ol" title="Numbered list">1. List</button>
-            <button type="button" data-cmd="checklist" title="Checklist">Checklist</button>
-            <button type="button" data-cmd="clear" title="Clear formatting">Clear</button>
-            <button type="button" id="attachBtn" class="attach-btn" title="Attach files or images (stored in your Google Drive or pCloud)">Attach</button>
+            <!-- Group 1: Insert menu -->
+            <div class="tb-group">
+              <span class="tb-menu-wrap">
+                <button type="button" id="insertBtn" title="Insert into the note" aria-haspopup="true">+ Insert &#9662;</button>
+                <div class="tb-menu hidden" id="insertMenu" role="menu">
+                  <button type="button" data-insert="attach">Attach file or image</button>
+                  <button type="button" data-insert="link">Link</button>
+                  <button type="button" data-insert="checklist">Checklist</button>
+                  <button type="button" data-insert="divider">Divider</button>
+                  <button type="button" data-insert="datetime">Date and time</button>
+                </div>
+              </span>
+            </div>
+            <!-- Group 2: text style, font family, font size -->
+            <div class="tb-group">
+              <select id="styleSelect" title="Text style" aria-label="Text style">
+                <option value="P">Aa Normal text</option>
+                <option value="H1">Heading 1</option>
+                <option value="H2">Heading 2</option>
+                <option value="H3">Heading 3</option>
+                <option value="BLOCKQUOTE">Quote</option>
+                <option value="PRE">Code block</option>
+              </select>
+              <select id="fontFamilySelect" title="Font family" aria-label="Font family">
+                <option value="sans">Sans Serif</option>
+                <option value="serif">Serif</option>
+                <option value="mono">Monospace</option>
+                <option value="hand">Handwriting</option>
+              </select>
+              <select id="fontSizeSelect" title="Font size" aria-label="Font size">
+                <option value="">Size</option>
+                <option value="10">10 pt</option>
+                <option value="12">12 pt</option>
+                <option value="14">14 pt</option>
+                <option value="16">16 pt</option>
+                <option value="18">18 pt</option>
+                <option value="24">24 pt</option>
+                <option value="32">32 pt</option>
+              </select>
+            </div>
+            <!-- Group 3: colors and emphasis -->
+            <div class="tb-group">
+              <span class="tb-menu-wrap">
+                <button type="button" id="textColorBtn" class="tb-color-btn" title="Text color" aria-haspopup="true"><span class="tb-color-glyph">A</span><span class="tb-color-bar" id="textColorBar"></span></button>
+                <div class="tb-menu hidden" id="textColorMenu" role="menu">
+                  <div class="tb-swatches" id="textColorSwatches"></div>
+                  <button type="button" id="textColorDefault">Default color</button>
+                  <label class="tb-custom-row">Custom <input type="color" id="textColorCustom" value="#14532D"></label>
+                </div>
+              </span>
+              <button type="button" data-cmd="bold" title="Bold"><b>B</b></button>
+              <button type="button" data-cmd="italic" title="Italic"><i>I</i></button>
+              <button type="button" data-cmd="underline" title="Underline"><u>U</u></button>
+              <button type="button" data-cmd="strike" title="Strikethrough"><s>S</s></button>
+              <span class="tb-menu-wrap">
+                <button type="button" id="highlightBtn" class="tb-color-btn" title="Highlight color" aria-haspopup="true"><span class="tb-color-glyph tb-hl-glyph">A</span><span class="tb-color-bar" id="highlightBar"></span></button>
+                <div class="tb-menu hidden" id="highlightMenu" role="menu">
+                  <div class="tb-swatches" id="highlightSwatches"></div>
+                  <button type="button" id="highlightNone">No highlight</button>
+                  <label class="tb-custom-row">Custom <input type="color" id="highlightCustom" value="#FFF3A3"></label>
+                </div>
+              </span>
+            </div>
+            <!-- Group 4: lists -->
+            <div class="tb-group">
+              <button type="button" data-cmd="ul" title="Bullet list">Bullets</button>
+              <button type="button" data-cmd="ol" title="Numbered list">1. List</button>
+              <button type="button" data-cmd="checklist" title="Checklist">Checklist</button>
+            </div>
+            <!-- Group 5: Attach and the More menu -->
+            <div class="tb-group">
+              <button type="button" id="attachBtn" class="attach-btn" title="Attach files or images (stored in your Google Drive or pCloud)">Attach</button>
+              <span class="tb-menu-wrap">
+                <button type="button" id="moreBtn" title="More formatting options" aria-haspopup="true">More &#9662;</button>
+                <div class="tb-menu right hidden" id="moreMenu" role="menu">
+                  <button type="button" data-more="alignLeft">Align left</button>
+                  <button type="button" data-more="alignCenter">Align center</button>
+                  <button type="button" data-more="alignRight">Align right</button>
+                  <button type="button" data-more="indent">Indent</button>
+                  <button type="button" data-more="outdent">Outdent</button>
+                  <button type="button" data-more="clear">Remove formatting</button>
+                </div>
+              </span>
+            </div>
           </div>
 
           <!-- v1.2 upload progress: shows the active upload and how many
@@ -853,8 +1018,8 @@ body.dark .ss-att-provider{color:#EAF3EC;}
 "use strict";
 
 /* ============================================================================
-   SnakeScale Notes v1.2.1: application script
-   BUILD STAMP: 2026-10-19-SSN-V121
+   SnakeScale Notes v1.3: application script
+   BUILD STAMP: 2026-10-19-SSN-V13
 
    How this script is organized:
      1. Constants and global state
@@ -883,8 +1048,8 @@ body.dark .ss-att-provider{color:#EAF3EC;}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-19-SSN-V121";
-const APP_VERSION = "1.2.1";
+const APP_BUILD = "2026-10-19-SSN-V13";
+const APP_VERSION = "1.3";
 const API_BASE = "https://api.github.com";
 const API_VERSION_HEADER = "2022-11-28";
 
@@ -2709,12 +2874,23 @@ function markDirty() {
    for contenteditable in current browsers, and it keeps v1.0 dependency
    free. The checklist command inserts a <ul> whose items start with a
    checkbox input; clicking a checkbox toggles the done style on its <li>
-   (handled in the body click listener below). */
+   (handled in the body click listener below).
+
+   v1.3: the h1 and h2 commands stay as internal cases (the text style
+   dropdown now drives formatBlock directly with the chosen tag), a
+   strike case joins the emphasis commands, and clear now routes to the
+   extended remove formatting helper below, which also unwraps the
+   custom styled spans the v1.3 font and color controls create. Every
+   command first restores the saved editor selection (see the selection
+   preservation block below), because toolbar controls steal focus. */
 function runToolbarCommand(cmd) {
   const body = document.getElementById("noteBody");
+  restoreFormatSelection();
   body.focus();
   if (cmd === "bold" || cmd === "italic" || cmd === "underline") {
     document.execCommand(cmd, false, null);
+  } else if (cmd === "strike") {
+    document.execCommand("strikeThrough", false, null);
   } else if (cmd === "h1") {
     document.execCommand("formatBlock", false, "H1");
   } else if (cmd === "h2") {
@@ -2727,10 +2903,508 @@ function runToolbarCommand(cmd) {
     document.execCommand("insertHTML", false,
       "<ul><li><input type=\"checkbox\"> New item</li></ul><p></p>");
   } else if (cmd === "clear") {
-    document.execCommand("removeFormat", false, null);
-    document.execCommand("formatBlock", false, "P");
+    clearFormattingExtended();
   }
   markDirty();
+}
+
+/* --------------------------------------------------------------------------
+   v1.3 formatting engine: selection preservation, styled span helpers,
+   color palettes, dropdown menus, and the Insert and More actions.
+
+   Persistence rule (the reason for the custom helpers): anything the
+   toolbar applies must survive as inline CSS styles inside the saved
+   note body HTML, so a formatted note renders identically from GitHub
+   on any device. That means styled spans such as
+   <span style="font-size: 14pt"> and never <font> tags. wireToolbar
+   switches the editor to styleWithCSS mode so the foreColor and
+   hiliteColor commands emit styled spans too. Font size cannot use the
+   execCommand fontSize command (it only accepts legacy sizes 1 to 7),
+   so size and family share one tested helper that wraps the selected
+   text nodes in a span carrying the exact CSS value.
+   -------------------------------------------------------------------------- */
+
+/* Font stacks behind the family picker keys. The generic families at
+   the end of each stack keep the app dependency free: no web fonts are
+   downloaded, every device uses its own closest match. */
+const FONT_STACKS = {
+  sans: "-apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, " +
+        "\"Helvetica Neue\", Arial, sans-serif",
+  serif: "Georgia, \"Times New Roman\", Times, serif",
+  mono: "ui-monospace, SFMono-Regular, Menlo, Consolas, " +
+        "\"Liberation Mono\", monospace",
+  hand: "\"Segoe Script\", \"Bradley Hand\", \"Comic Sans MS\", cursive"
+};
+
+/* Shared swatch palette for the text color and highlight popups: the
+   neutrals, the four Deep Forest greens, then the accent hues. */
+const TB_COLORS = [
+  { name: "Black", value: "#000000" },
+  { name: "Dark gray", value: "#444444" },
+  { name: "Gray", value: "#888888" },
+  { name: "White", value: "#FFFFFF" },
+  { name: "Deep forest", value: "#0B3D2E" },
+  { name: "Forest green", value: "#14532D" },
+  { name: "Leaf green", value: "#2E7D4F" },
+  { name: "Accent green", value: "#57A773" },
+  { name: "Red", value: "#C0392B" },
+  { name: "Orange", value: "#E67E22" },
+  { name: "Blue", value: "#2471A3" },
+  { name: "Purple", value: "#7D3C98" }
+];
+
+/* ----- selection preservation -------------------------------------------
+   savedFormatRange is the formatting counterpart of the attachment
+   caret memory above. A document level selectionchange listener keeps
+   it current whenever the caret or selection is inside the note body,
+   and the toolbar also saves on mousedown and focusin as a backstop.
+   Restoring it before a command runs is what lets dropdowns, menus,
+   and color popups work without losing the user's selected text. */
+let savedFormatRange = null;
+
+function saveFormatSelection() {
+  const bodyEl = document.getElementById("noteBody");
+  const sel = window.getSelection();
+  if (sel && sel.rangeCount && bodyEl.contains(sel.anchorNode)) {
+    savedFormatRange = sel.getRangeAt(0).cloneRange();
+  }
+}
+
+/* Put the saved selection back into the editor and focus the body.
+   Returns false (leaving focus in the body with no selection) when
+   there is no usable saved range, for example after the note changed. */
+function restoreFormatSelection() {
+  const bodyEl = document.getElementById("noteBody");
+  bodyEl.focus();
+  if (savedFormatRange &&
+      bodyEl.contains(savedFormatRange.startContainer) &&
+      bodyEl.contains(savedFormatRange.endContainer)) {
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(savedFormatRange.cloneRange());
+    return true;
+  }
+  return false;
+}
+
+/* ----- styled span helpers ----------------------------------------------
+   wrapRangeTextWithSpan wraps every text node touched by the range in
+   its own span carrying the given CSS properties. Wrapping per text
+   node (splitting boundary nodes first) is the robust route: unlike
+   surroundContents it also works when the selection crosses paragraph
+   or list boundaries, and it deliberately skips attachment
+   placeholders, whose markup is managed by the attachment code. */
+function wrapRangeTextWithSpan(range, styleProps) {
+  const bodyEl = document.getElementById("noteBody");
+  const walker = document.createTreeWalker(bodyEl, NodeFilter.SHOW_TEXT, null);
+  const targets = [];
+  let node = walker.nextNode();
+  while (node) {
+    const parent = node.parentElement;
+    const inAttachment = parent && parent.closest(".ss-attachment");
+    if (!inAttachment && node.nodeValue.length &&
+        range.intersectsNode(node)) {
+      targets.push(node);
+    }
+    node = walker.nextNode();
+  }
+  let firstSpan = null;
+  let lastSpan = null;
+  targets.forEach(function (textNode) {
+    let start = 0;
+    let end = textNode.nodeValue.length;
+    if (textNode === range.startContainer) { start = range.startOffset; }
+    if (textNode === range.endContainer) { end = range.endOffset; }
+    if (start >= end) { return; }
+    let mid = textNode;
+    if (start > 0) { mid = textNode.splitText(start); }
+    if (end - start < mid.nodeValue.length) { mid.splitText(end - start); }
+    const span = document.createElement("span");
+    Object.keys(styleProps).forEach(function (key) {
+      span.style[key] = styleProps[key];
+    });
+    mid.parentNode.replaceChild(span, mid);
+    span.appendChild(mid);
+    if (!firstSpan) { firstSpan = span; }
+    lastSpan = span;
+  });
+  return { first: firstSpan, last: lastSpan };
+}
+
+/* After wrapping, put the selection back over the wrapped text so the
+   user sees exactly what changed and can keep formatting it. */
+function reselectWrapped(wrapped) {
+  if (!wrapped.first || !wrapped.last) { return; }
+  const sel = window.getSelection();
+  const range = document.createRange();
+  range.setStart(wrapped.first, 0);
+  range.setEnd(wrapped.last, wrapped.last.childNodes.length);
+  sel.removeAllRanges();
+  sel.addRange(range);
+}
+
+/* Collapsed caret case for the span helpers: insert a span holding a
+   zero width space and park the caret right after it, so the text the
+   user types next inherits the span's styles. */
+function insertStyledCaretSpan(styleProps) {
+  const bodyEl = document.getElementById("noteBody");
+  const sel = window.getSelection();
+  if (!sel || !sel.rangeCount) { return; }
+  const range = sel.getRangeAt(0);
+  if (!bodyEl.contains(range.commonAncestorContainer)) { return; }
+  const span = document.createElement("span");
+  Object.keys(styleProps).forEach(function (key) {
+    span.style[key] = styleProps[key];
+  });
+  span.appendChild(document.createTextNode("\u200B"));
+  range.insertNode(span);
+  const inner = document.createRange();
+  inner.setStart(span.firstChild, 1);
+  inner.collapse(true);
+  sel.removeAllRanges();
+  sel.addRange(inner);
+}
+
+/* Apply CSS properties to the current selection, whichever of the two
+   shapes it has. Shared by font family, font size, and the default
+   color reset, so all three behave identically. */
+function applySpanStyle(styleProps) {
+  restoreFormatSelection();
+  const bodyEl = document.getElementById("noteBody");
+  const sel = window.getSelection();
+  if (!sel || !sel.rangeCount) { return; }
+  const range = sel.getRangeAt(0);
+  if (!bodyEl.contains(range.commonAncestorContainer)) { return; }
+  if (range.collapsed) {
+    insertStyledCaretSpan(styleProps);
+  } else {
+    reselectWrapped(wrapRangeTextWithSpan(range, styleProps));
+  }
+  markDirty();
+}
+
+function applyFontFamily(key) {
+  const stack = FONT_STACKS[key];
+  if (!stack) { return; }
+  applySpanStyle({ fontFamily: stack });
+}
+
+function applyFontSize(pt) {
+  if (!pt) { return; }
+  applySpanStyle({ fontSize: pt + "pt" });
+}
+
+/* ----- colors -------------------------------------------------------------
+   Text color goes through foreColor (styled spans, thanks to
+   styleWithCSS) with the span helper as a fallback. The Default color
+   reset cannot be an execCommand value, so it wraps the selection in a
+   span with color: inherit, which renders in the note's own text color
+   on every device and stays removable by Remove formatting. */
+function applyTextColor(value) {
+  restoreFormatSelection();
+  if (value === "inherit") {
+    applySpanStyle({ color: "inherit" });
+  } else {
+    let ok = false;
+    try { ok = document.execCommand("foreColor", false, value); }
+    catch (err) { ok = false; }
+    if (!ok) { applySpanStyle({ color: value }); }
+  }
+  document.getElementById("textColorBar").style.background =
+    value === "inherit" ? "" : value;
+  closeToolbarMenus();
+  markDirty();
+}
+
+/* Highlight: hiliteColor is the modern command name; backColor is the
+   older alias some engines still use, and the span helper is the final
+   fallback. "No highlight" passes transparent, which clears the visual
+   highlight while keeping the text itself untouched. */
+function applyHighlight(value) {
+  restoreFormatSelection();
+  let ok = false;
+  try { ok = document.execCommand("hiliteColor", false, value); }
+  catch (err) { ok = false; }
+  if (!ok) {
+    try { ok = document.execCommand("backColor", false, value); }
+    catch (err) { ok = false; }
+  }
+  if (!ok) { applySpanStyle({ backgroundColor: value }); }
+  document.getElementById("highlightBar").style.background =
+    value === "transparent" ? "" : value;
+  closeToolbarMenus();
+  markDirty();
+}
+
+/* ----- remove formatting (extended) ---------------------------------------
+   Starts with the classic behavior (removeFormat plus formatBlock P),
+   then unwraps the spans our own font, size, color, and highlight
+   helpers created inside the selection: removeFormat alone leaves
+   those spans in place in most engines, which would make the toolbar's
+   own formatting impossible to fully clear. */
+function clearFormattingExtended() {
+  const bodyEl = document.getElementById("noteBody");
+  restoreFormatSelection();
+  document.execCommand("removeFormat", false, null);
+  const sel = window.getSelection();
+  if (sel && sel.rangeCount) {
+    const range = sel.getRangeAt(0);
+    if (!range.collapsed && bodyEl.contains(range.commonAncestorContainer)) {
+      const spans = [];
+      bodyEl.querySelectorAll("span").forEach(function (s) {
+        spans.push(s);
+      });
+      spans.forEach(function (s) {
+        if (s.closest(".ss-attachment")) { return; }
+        if (range.intersectsNode(s)) {
+          const parent = s.parentNode;
+          while (s.firstChild) { parent.insertBefore(s.firstChild, s); }
+          parent.removeChild(s);
+        }
+      });
+    }
+  }
+  document.execCommand("formatBlock", false, "P");
+}
+
+/* ----- dropdown menus ---------------------------------------------------- */
+const TB_MENU_IDS = ["insertMenu", "textColorMenu", "highlightMenu", "moreMenu"];
+
+function closeToolbarMenus() {
+  TB_MENU_IDS.forEach(function (id) {
+    document.getElementById(id).classList.add("hidden");
+  });
+}
+
+/* Open one menu and close the rest. The clicked button already saved
+   the selection (toolbar mousedown backstop), so focus can stay with
+   the menu until an item is chosen. */
+function toggleToolbarMenu(id) {
+  const menu = document.getElementById(id);
+  const willOpen = menu.classList.contains("hidden");
+  closeToolbarMenus();
+  if (willOpen) {
+    menu.classList.remove("hidden");
+    keepMenuInViewport(menu);
+  }
+}
+
+/* Menus are anchored to their button, which can sit near the right
+   edge once the toolbar wraps. If a freshly opened menu would spill
+   past the viewport, shift it back inside with a negative margin. */
+function keepMenuInViewport(menu) {
+  menu.style.marginLeft = "0px";
+  const rect = menu.getBoundingClientRect();
+  const vw = window.innerWidth;
+  if (rect.right > vw - 8) {
+    menu.style.marginLeft = "-" + Math.ceil(rect.right - (vw - 8)) + "px";
+  } else if (rect.left < 8) {
+    menu.style.marginLeft = Math.ceil(8 - rect.left) + "px";
+  }
+}
+
+/* ----- Insert and More actions ------------------------------------------- */
+function runInsertAction(kind) {
+  closeToolbarMenus();
+  if (kind === "attach") {
+    /* The Attach button's own handler performs the note, trash, and
+       offline checks and captures the caret, exactly as a direct click
+       does, so the menu simply clicks it. */
+    document.getElementById("attachBtn").click();
+    return;
+  }
+  restoreFormatSelection();
+  if (kind === "link") {
+    const sel = window.getSelection();
+    if (!sel || !sel.rangeCount || sel.getRangeAt(0).collapsed) {
+      toast("Select the text to turn into a link first.", true);
+      return;
+    }
+    const url = prompt("Link address (https://...)");
+    if (!url) { return; }
+    /* The prompt stole focus and may have disturbed the selection, so
+       restore the saved range again before creating the link. */
+    restoreFormatSelection();
+    document.execCommand("createLink", false, url.trim());
+  } else if (kind === "checklist") {
+    document.execCommand("insertHTML", false,
+      "<ul><li><input type=\"checkbox\"> New item</li></ul><p></p>");
+  } else if (kind === "divider") {
+    document.execCommand("insertHorizontalRule", false, null);
+  } else if (kind === "datetime") {
+    const text = new Date().toLocaleString(undefined, {
+      year: "numeric", month: "long", day: "numeric",
+      hour: "numeric", minute: "2-digit"
+    });
+    document.execCommand("insertText", false, text);
+  }
+  markDirty();
+}
+
+function runMoreAction(kind) {
+  closeToolbarMenus();
+  restoreFormatSelection();
+  if (kind === "alignLeft") {
+    document.execCommand("justifyLeft", false, null);
+  } else if (kind === "alignCenter") {
+    document.execCommand("justifyCenter", false, null);
+  } else if (kind === "alignRight") {
+    document.execCommand("justifyRight", false, null);
+  } else if (kind === "indent") {
+    document.execCommand("indent", false, null);
+  } else if (kind === "outdent") {
+    document.execCommand("outdent", false, null);
+  } else if (kind === "clear") {
+    clearFormattingExtended();
+  }
+  markDirty();
+}
+
+/* ----- style dropdown follows the caret (best effort) ----------------------
+   When the caret sits inside a heading, quote, or code block, the
+   style dropdown shows that block type, so the current format is
+   visible instead of silently remembered. Plain paragraphs, divs, and
+   list items all read as Normal text. */
+function updateStyleSelectFromCaret() {
+  const bodyEl = document.getElementById("noteBody");
+  const sel = window.getSelection();
+  if (!sel || !sel.rangeCount || !bodyEl.contains(sel.anchorNode)) { return; }
+  let el = sel.anchorNode.nodeType === 1 ? sel.anchorNode : sel.anchorNode.parentNode;
+  const select = document.getElementById("styleSelect");
+  while (el && el !== bodyEl) {
+    const tag = el.tagName;
+    if (tag === "H1" || tag === "H2" || tag === "H3" ||
+        tag === "BLOCKQUOTE" || tag === "PRE") {
+      select.value = tag;
+      return;
+    }
+    if (tag === "P" || tag === "DIV" || tag === "LI") {
+      select.value = "P";
+      return;
+    }
+    el = el.parentNode;
+  }
+  select.value = "P";
+}
+const syncStyleSelect = debounce(updateStyleSelectFromCaret, 120);
+
+/* ----- swatch construction -------------------------------------------------
+   Swatch buttons are built from TB_COLORS so both palettes stay in
+   sync. A mousedown on a swatch saves the editor selection first (and
+   stops the editor losing it), then the click applies the color. */
+function buildSwatches(containerId, onPick) {
+  const box = document.getElementById(containerId);
+  TB_COLORS.forEach(function (c) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "swatch";
+    b.title = c.name;
+    b.style.background = c.value;
+    b.addEventListener("mousedown", function (ev) {
+      ev.preventDefault();
+      saveFormatSelection();
+    });
+    b.addEventListener("click", function () { onPick(c.value); });
+    box.appendChild(b);
+  });
+}
+
+/* ----- toolbar wiring (called once from wireEvents) ------------------------
+   Complements the generic data-cmd button loop: that loop still wires
+   the plain command buttons, while everything with a menu, a select,
+   or a palette is wired here. */
+function wireToolbar() {
+  /* Styled spans instead of font tags for the color commands. */
+  try { document.execCommand("styleWithCSS", false, true); }
+  catch (err) { /* very old engines ignore this; the span helpers
+                   still cover family, size, and color fallbacks */ }
+
+  const toolbarEl = document.getElementById("toolbar");
+
+  /* Selection backstops: any touch of a toolbar control saves the
+     editor selection before the control can steal focus. */
+  toolbarEl.addEventListener("mousedown", saveFormatSelection);
+  toolbarEl.addEventListener("focusin", saveFormatSelection);
+
+  /* Keep the saved range and the style dropdown current while the
+     user edits. The caret sync is debounced so fast typing and quick
+     click sequences do not thrash the dropdown. */
+  document.addEventListener("selectionchange", function () {
+    saveFormatSelection();
+    syncStyleSelect();
+  });
+
+  /* Menu toggles. */
+  document.getElementById("insertBtn").addEventListener("click", function () {
+    toggleToolbarMenu("insertMenu");
+  });
+  document.getElementById("textColorBtn").addEventListener("click", function () {
+    toggleToolbarMenu("textColorMenu");
+  });
+  document.getElementById("highlightBtn").addEventListener("click", function () {
+    toggleToolbarMenu("highlightMenu");
+  });
+  document.getElementById("moreBtn").addEventListener("click", function () {
+    toggleToolbarMenu("moreMenu");
+  });
+
+  /* Clicking anywhere outside the toolbar closes open menus, and so
+     does Escape. Clicks inside the toolbar are handled by their own
+     controls. */
+  document.addEventListener("click", function (ev) {
+    if (!ev.target.closest("#toolbar")) { closeToolbarMenus(); }
+  });
+  document.addEventListener("keydown", function (ev) {
+    if (ev.key === "Escape") { closeToolbarMenus(); }
+  });
+
+  /* Insert and More menu items. */
+  document.querySelectorAll("#insertMenu button[data-insert]").forEach(
+    function (btn) {
+      btn.addEventListener("click", function () {
+        runInsertAction(btn.getAttribute("data-insert"));
+      });
+    });
+  document.querySelectorAll("#moreMenu button[data-more]").forEach(
+    function (btn) {
+      btn.addEventListener("click", function () {
+        runMoreAction(btn.getAttribute("data-more"));
+      });
+    });
+
+  /* Text style dropdown. The chosen value stays selected afterward,
+     so what was applied is always visible. */
+  document.getElementById("styleSelect").addEventListener("change",
+    function (ev) {
+      restoreFormatSelection();
+      document.execCommand("formatBlock", false, ev.target.value);
+      markDirty();
+    });
+
+  /* Font pickers. The selects keep showing the applied choice. */
+  document.getElementById("fontFamilySelect").addEventListener("change",
+    function (ev) {
+      applyFontFamily(ev.target.value);
+    });
+  document.getElementById("fontSizeSelect").addEventListener("change",
+    function (ev) {
+      if (ev.target.value) { applyFontSize(ev.target.value); }
+    });
+
+  /* Color palettes and the preset reset actions. */
+  buildSwatches("textColorSwatches", applyTextColor);
+  buildSwatches("highlightSwatches", applyHighlight);
+  document.getElementById("textColorDefault").addEventListener("click",
+    function () { applyTextColor("inherit"); });
+  document.getElementById("highlightNone").addEventListener("click",
+    function () { applyHighlight("transparent"); });
+
+  /* Custom color inputs apply when the picker is committed (the
+     change event), not on every intermediate input tick. */
+  document.getElementById("textColorCustom").addEventListener("change",
+    function (ev) { applyTextColor(ev.target.value); });
+  document.getElementById("highlightCustom").addEventListener("change",
+    function (ev) { applyHighlight(ev.target.value); });
 }
 
 /* --------------------------------------------------------------------------
@@ -3958,6 +4632,11 @@ function wireEvents() {
       runToolbarCommand(btn.getAttribute("data-cmd"));
     });
   });
+
+  /* v1.3: the grouped toolbar's menus, selects, and color palettes are
+     wired separately (the generic loop above only owns the plain
+     data-cmd command buttons). */
+  wireToolbar();
 
   /* v1.2 Attach button and its hidden file picker. The caret is captured
      before the picker opens, because the picker steals focus. */
