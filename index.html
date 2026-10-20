@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#0B3D2E">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2064%20108'%3E%3Cdefs%3E%3ClinearGradient%20id='g'%20x1='1'%20y1='0'%20x2='0'%20y2='1'%3E%3Cstop%20offset='0'%20stop-color='%2357A773'/%3E%3Cstop%20offset='.38'%20stop-color='%232E7D4F'/%3E%3Cstop%20offset='1'%20stop-color='%2314532D'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect%20x='0'%20y='0'%20width='20'%20height='20'%20rx='5'%20fill='url(%23g)'/%3E%3Crect%20x='22'%20y='0'%20width='20'%20height='20'%20rx='5'%20fill='url(%23g)'/%3E%3Crect%20x='44'%20y='0'%20width='20'%20height='20'%20rx='5'%20fill='url(%23g)'/%3E%3Crect%20x='0'%20y='22'%20width='20'%20height='20'%20rx='5'%20fill='url(%23g)'/%3E%3Crect%20x='0'%20y='44'%20width='20'%20height='20'%20rx='5'%20fill='url(%23g)'/%3E%3Crect%20x='22'%20y='44'%20width='20'%20height='20'%20rx='5'%20fill='url(%23g)'/%3E%3Crect%20x='44'%20y='44'%20width='20'%20height='20'%20rx='5'%20fill='url(%23g)'/%3E%3Crect%20x='44'%20y='66'%20width='20'%20height='20'%20rx='5'%20fill='url(%23g)'/%3E%3Crect%20x='0'%20y='88'%20width='20'%20height='20'%20rx='5'%20fill='url(%23g)'/%3E%3Crect%20x='22'%20y='88'%20width='20'%20height='20'%20rx='5'%20fill='url(%23g)'/%3E%3Crect%20x='44'%20y='88'%20width='20'%20height='20'%20rx='5'%20fill='url(%23g)'/%3E%3Cpath%20d='M13%2020%20L20%2013%20L13%2013%20Z'%20fill='%23FFFFFF'%20fill-opacity='.28'/%3E%3Cpath%20d='M35%2020%20L42%2013%20L35%2013%20Z'%20fill='%23FFFFFF'%20fill-opacity='.28'/%3E%3Cpath%20d='M57%2020%20L64%2013%20L57%2013%20Z'%20fill='%23FFFFFF'%20fill-opacity='.28'/%3E%3Cpath%20d='M13%2042%20L20%2035%20L13%2035%20Z'%20fill='%23FFFFFF'%20fill-opacity='.28'/%3E%3Cpath%20d='M13%2064%20L20%2057%20L13%2057%20Z'%20fill='%23FFFFFF'%20fill-opacity='.28'/%3E%3Cpath%20d='M35%2064%20L42%2057%20L35%2057%20Z'%20fill='%23FFFFFF'%20fill-opacity='.28'/%3E%3Cpath%20d='M57%2064%20L64%2057%20L57%2057%20Z'%20fill='%23FFFFFF'%20fill-opacity='.28'/%3E%3Cpath%20d='M57%2086%20L64%2079%20L57%2079%20Z'%20fill='%23FFFFFF'%20fill-opacity='.28'/%3E%3Cpath%20d='M13%20108%20L20%20101%20L13%20101%20Z'%20fill='%23FFFFFF'%20fill-opacity='.28'/%3E%3Cpath%20d='M35%20108%20L42%20101%20L35%20101%20Z'%20fill='%23FFFFFF'%20fill-opacity='.28'/%3E%3Cpath%20d='M57%20108%20L64%20101%20L57%20101%20Z'%20fill='%23FFFFFF'%20fill-opacity='.28'/%3E%3C/svg%3E">
-<meta name="description" content="SnakeScale Notes: a free, open source notes app. Your notes live in your own Google Drive or private GitHub repository.">
+<meta name="description" content="SnakeScale Notes: a free, open source notes app. Your notes live in your own Google Drive.">
 <title>SnakeScale Notes</title>
 <!--
   ============================================================================
@@ -16,22 +16,55 @@
   web fonts, and no CDN dependencies, so this file works offline (after the
   first load) and from any static host, including GitHub Pages.
 
-  Data model in one paragraph: every user chooses their own storage. A
-  Google Drive user signs in with Google and notes are stored as Markdown
-  files with a small front matter block inside a SnakeScale Notes folder in
-  that user's Drive. Google sign in is that user's only sign in: there is
-  no SnakeScale app password for the Drive backend. A random device key,
-  kept only on that device, encrypts local provider tokens and the local
-  note cache. A GitHub user connects a private repository with a personal
-  access token protected by the original app password vault in the browser
-  (WebCrypto, PBKDF2 plus AES-GCM). In both backends notebooks are folders,
-  notes are files, and there is no server and no shared database anywhere
-  in this design.
+  Data model in one paragraph: every user's notes live in their own
+  Google Drive, in a folder named SnakeScale Notes. The user signs in
+  with Google; that is the only sign in there is, and there is no
+  SnakeScale app password. Notes are stored as Markdown files with a
+  small front matter block: notebooks are folders inside the notes
+  folder, notes are files, and attachments live in an attachments
+  subfolder of the same folder. A random device key, kept only on
+  that device, encrypts the Google token store and the local note
+  cache. There is no server and no shared database anywhere in this
+  design.
 
-  BUILD STAMP: 2026-10-20-SSN-V183
-  Version: 1.8.3
+  BUILD STAMP: 2026-10-20-SSN-V200
+  Version: 2.0.0
 
   Revision history:
+    v2.0.0 2026-10-20 Google Drive is the only data store, and notes
+                      and attachments share one folder. The GitHub
+                      notes backend and the pCloud attachment provider
+                      are removed, with everything that existed only
+                      for them: the GitHub sync driver and its data
+                      repository settings, the app password vault and
+                      its lock screen (nobody has a SnakeScale app
+                      password anymore), the pCloud driver and its
+                      OAuth return handshake, and every storage choice
+                      in setup and settings. Sign in with Google is
+                      the only sign in, exactly as Drive users already
+                      knew it: the token lives in memory, and the
+                      random device key encrypts the provider token
+                      store and the local note cache. Attachments move
+                      into the notes folder itself: they now live in
+                      an "attachments" subfolder of the SnakeScale
+                      Notes folder, beside notebooks, trash, archive,
+                      and index.json, instead of a separate top level
+                      SnakeScale Notes Attachments folder. Files from
+                      the old folder keep working (attachment records
+                      point at Drive file IDs, and reads fetch by ID),
+                      and a one time, best effort consolidation moves
+                      them into the new subfolder on the first connect
+                      after this upgrade; the old folder is left in
+                      place for its owner to remove. Settings or
+                      storage left by older versions are tolerated:
+                      they are normalized to Google on load and the
+                      obsolete records are removed, while a Google
+                      user's settings, cache, queue, and notes are
+                      untouched. Attachment records that name the
+                      removed pCloud provider render the existing
+                      provider not available message and never break
+                      the note around them. Build stamp
+                      2026-10-20-SSN-V200.
     v1.8.3 2026-10-20 pCloud attachment display fix. Live testing of
                       v1.8.2 showed pCloud sign in completing and
                       uploads saving, but an attached image never
@@ -54,7 +87,7 @@
                       driver for true byte consumers, and no saved
                       note can contain a pCloud address, as before,
                       because saves rebuild placeholders as empty
-                      shells. Build stamp 2026-10-20-SSN-V183.
+                      shells.
     v1.8.2 2026-10-20 pCloud sign in fix. The Sign in with pCloud
                       button sent the browser to an authorize address
                       spelled with an underscore where pCloud's
@@ -547,38 +580,6 @@ body.dark .gate-brand .wordmark{color:#EAF3EC;}
 .gate-card code{background:var(--surface);padding:1px 5px;border-radius:4px;font-size:12.5px;}
 .gate-card ol{padding-left:20px;margin:8px 0;}
 .gate-card li{margin:4px 0;}
-
-/* v1.4 setup storage choice. The selected card is deliberately obvious:
-   a filled surface, a strong accent edge, a ring, and a Selected badge
-   all change together, so the active backend is never only remembered. */
-.storage-choice-grid{
-  display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:14px 0;
-}
-.storage-choice{
-  width:100%;text-align:left;background:var(--surface);color:var(--text);
-  border:1px solid var(--border);border-radius:var(--radius-card);
-  padding:13px;box-shadow:inset 3px 0 0 transparent;
-  transition:border-color var(--motion),box-shadow var(--motion),
-    background-color var(--motion);
-}
-.storage-choice:hover{border-color:var(--secondary);}
-.storage-choice.selected{
-  border-color:var(--accent);background:var(--bg);
-  box-shadow:inset 4px 0 0 var(--accent),0 0 0 2px rgba(87,167,115,.28);
-}
-.storage-choice-title{
-  display:flex;align-items:center;justify-content:space-between;gap:8px;
-  font-size:15px;font-weight:800;margin-bottom:5px;
-}
-.storage-choice-badge{
-  flex:0 0 auto;font-size:10.5px;font-weight:800;letter-spacing:.4px;
-  text-transform:uppercase;color:var(--muted);
-}
-.storage-choice.selected .storage-choice-badge{color:var(--secondary);}
-.storage-choice p{font-size:13px;color:var(--muted);margin:0;}
-@media (max-width:560px){
-  .storage-choice-grid{grid-template-columns:1fr;}
-}
 
 /* ---------- app frame: three panes ---------- */
 #app{display:flex;height:100vh;height:100dvh;overflow:hidden;}
@@ -1366,12 +1367,12 @@ body.dark .ss-att-provider{color:#EAF3EC;}
 </div>
 
 <!-- ==========================================================================
-     SCREEN: first time setup
-     Shown when this device still needs a storage setup. A GitHub user
-     pastes a personal access token and picks an app password; the token is
-     encrypted with that password and only the encrypted blob is saved. A
-     Google Drive user sees no password fields and continues to Google sign
-     in. No Google vault is ever created.
+     SCREEN: first time setup (v2.0)
+     Shown on a device that has never connected. SnakeScale has exactly
+     one storage story: the user's own Google Drive, reached with Sign
+     in with Google. There is no storage choice, no token to paste, and
+     no app password to invent. The one button creates this device's
+     local encryption key and continues to the Google sign in gate.
      ========================================================================== -->
 <div id="setupScreen" class="gate hidden">
   <div class="gate-card">
@@ -1381,112 +1382,34 @@ body.dark .ss-att-provider{color:#EAF3EC;}
     </div>
     <h1>Set up SnakeScale Notes</h1>
     <p>
-      SnakeScale has no server and no account of its own. First choose where
-      your notes will live. You can change this choice only by resetting
-      SnakeScale on this device; there is no migration tool yet.
+      SnakeScale has no server and no account of its own. Your notes live
+      in your own Google Drive, in a folder named <strong>SnakeScale
+      Notes</strong>, and attachments live in an <strong>attachments</strong>
+      subfolder of that same folder.
     </p>
-
-    <!-- v1.4: storage is the first setup decision. These are real buttons
-         with aria-pressed state, and the selected card gets the obvious
-         selected treatment from the stylesheet. -->
-    <div class="storage-choice-grid" role="group" aria-label="Choose where your notes live">
-      <button class="storage-choice selected" id="setupBackendGoogle" type="button" aria-pressed="true">
-        <span class="storage-choice-title">Google Drive <span class="storage-choice-badge" data-choice-badge>Selected</span></span>
-        <p>Recommended. Sign in with Google and store notes and attachments in your own Drive. No GitHub account is needed.</p>
-      </button>
-      <button class="storage-choice" id="setupBackendGithub" type="button" aria-pressed="false">
-        <span class="storage-choice-title">GitHub <span class="storage-choice-badge" data-choice-badge>Advanced</span></span>
-        <p>For power users who want a private repository and full Git version history. Requires a GitHub account and token.</p>
-      </button>
-    </div>
-
-    <div id="setupGoogleHelp">
-      <p>
-        With Google Drive, Sign in with Google is the only sign in. There is
-        no SnakeScale app password. Continue to the Google sign in step and
-        approve access; SnakeScale then connects Drive and creates your first
-        notebook and welcome note. Local copies on this device are encrypted
-        with a device key, which is not a login.
-      </p>
-    </div>
-    <div id="setupGithubHelp" class="hidden">
-      <p>
-        Your notes will live in a <strong>private GitHub repository that you
-        own</strong>. The token is stored in this browser only, encrypted with
-        the app password you choose here.
-      </p>
-      <ol>
-        <li>On GitHub, open Settings, then Developer settings, then Personal access tokens.</li>
-        <li>Create a token with the <code>repo</code> scope (classic token), or a fine grained token with Contents read and write access on your notes data repository.</li>
-        <li>Paste the token below and choose an app password. You will type that password each time you unlock the app on this device.</li>
-      </ol>
-    </div>
-
+    <p>
+      Sign in with Google is the only sign in. There is no SnakeScale app
+      password. Continue to the Google sign in step and approve access;
+      SnakeScale then connects Drive and creates your first notebook and
+      welcome note. Local copies on this device are encrypted with a
+      random device key kept only on this device, which is not a login.
+    </p>
     <form id="setupForm" autocomplete="off">
-      <div id="setupGithubFields" class="hidden">
-        <div class="field">
-          <label for="setupToken">GitHub personal access token</label>
-          <input id="setupToken" type="password" placeholder="ghp_... or github_pat_..." autocomplete="off">
-        </div>
-        <div class="field">
-          <label for="setupRepo">Data repository name</label>
-          <input id="setupRepo" type="text" value="snakescale-notes-data" autocomplete="off">
-          <div class="hint">If this repository does not exist yet, SnakeScale will offer to create it as a private repository in the next step.</div>
-        </div>
-      </div>
-      <div id="setupPasswordFields" class="hidden">
-        <div class="field">
-          <label for="setupPassword">App password</label>
-          <input id="setupPassword" type="password" autocomplete="new-password">
-        </div>
-        <div class="field">
-          <label for="setupPassword2">App password again</label>
-          <input id="setupPassword2" type="password" autocomplete="new-password">
-        </div>
-      </div>
       <button class="btn primary block" id="setupSubmitBtn" type="submit">Continue to Google sign in</button>
       <div id="setupError" class="error-text"></div>
     </form>
   </div>
 </div>
 
-<!-- ==========================================================================
-     SCREEN: lock / unlock
-     Shown on later visits when a vault exists but the app is locked. The
-     password re-derives the encryption key and decrypts the token in memory.
-     A wrong password fails the AES-GCM integrity check and shows an error.
-     ========================================================================== -->
-<div id="lockScreen" class="gate hidden">
-  <div class="gate-card">
-    <div class="gate-brand">
-      <span class="logo-slot"></span>
-      <span class="wordmark">SnakeScale Notes</span>
-    </div>
-    <h1>Unlock SnakeScale Notes</h1>
-    <p id="lockIntro">Type your app password to decrypt your GitHub token on this device.</p>
-    <form id="lockForm" autocomplete="off">
-      <div class="field">
-        <label for="lockPassword">App password</label>
-        <input id="lockPassword" type="password" autocomplete="current-password">
-      </div>
-      <button class="btn primary block" type="submit">Unlock</button>
-      <div id="lockError" class="error-text"></div>
-    </form>
-    <p class="hint" id="lockResetHint">
-      Forgot the password? The encrypted vault cannot be recovered without it.
-      Use the reset button below to clear the vault on this device and set up
-      again. Your notes in GitHub are not affected.
-    </p>
-    <button id="resetVaultBtn" class="btn danger small" type="button">Reset vault on this device</button>
-  </div>
-</div>
 
 <!-- ==========================================================================
-     SCREEN: repository connect
-     Shown after unlock when the data repository cannot be found. Offers a
-     one click create (private repository, auto_init true) and then builds the
-     initial folder structure, the default Personal notebook, and one welcome
-     note. This only happens on first connect.
+     SCREEN: Google sign in gate (the "repo" screen in the code)
+     Shown whenever this device is set up but not currently signed in:
+     after setup, on a returning visit when no live token or silent
+     renewal is available, and after sign out. Sign in with Google is
+     the only step here; on success the connect flow loads the
+     SnakeScale Notes folder from Drive, seeding the first notebook
+     and welcome note when the store is brand new.
      ========================================================================== -->
 <div id="repoScreen" class="gate hidden">
   <div class="gate-card">
@@ -1494,29 +1417,25 @@ body.dark .ss-att-provider{color:#EAF3EC;}
       <span class="logo-slot"></span>
       <span class="wordmark">SnakeScale Notes</span>
     </div>
-    <h1 id="connectScreenTitle">Connect your data repository</h1>
-    <p id="repoScreenText">Checking your GitHub account...</p>
-    <div id="repoActions" class="hidden">
-      <button id="createRepoBtn" class="btn accent block" type="button">Create the data repository (private)</button>
-      <div class="hint">Creates a private repository with the folder layout SnakeScale needs, a default notebook called Personal, and one welcome note.</div>
-    </div>
-    <!-- v1.4.1: this connect gate is the Google sign in screen for Drive
-         users. There is no app password before or after it.
-         v1.4.2: there is no client ID field here anymore either. The
-         publisher Google client ID ships inside the app (a public
+    <h1 id="connectScreenTitle">Sign in with Google</h1>
+    <p id="repoScreenText">Sign in with Google to load your notes from Google Drive.</p>
+    <!-- v2.0: this gate is the only sign in screen. There is no app
+         password before or after it, and no client ID field either:
+         the publisher Google client ID ships inside the app (a public
          identifier, see PUBLISHER_GOOGLE_CLIENT_ID in the script), so
          the only thing a user ever does on this screen is click the
          sign in button. -->
+
     <div id="googleConnectPanel" class="provider-card hidden">
       <h3>Sign in with Google</h3>
       <div class="provider-status">Google sign in is the only sign in for Google Drive storage. Notes and attachments use the same sign in. Google sign ins expire after about an hour; signing in again takes one click.</div>
       <button id="googleBackendConnectBtn" class="btn primary block" type="button">Sign in with Google</button>
-      <div class="hint">Your notes go in a folder named SnakeScale Notes in your own Google Drive. Attachments keep using the separate SnakeScale Notes Attachments folder.</div>
+      <div class="hint">Your notes go in a folder named SnakeScale Notes in your own Google Drive. Attachments live in the attachments subfolder of that same folder.</div>
     </div>
     <div id="repoError" class="error-text"></div>
     <div style="margin-top:14px;display:flex;gap:6px;">
       <button id="repoRetryBtn" class="btn small" type="button">Check again</button>
-      <button id="repoLockBtn" class="btn small" type="button">Lock app</button>
+      <button id="repoLockBtn" class="btn small" type="button">Sign out</button>
     </div>
   </div>
 </div>
@@ -1575,17 +1494,12 @@ body.dark .ss-att-provider{color:#EAF3EC;}
       <div class="sync-pill" id="syncPill" data-state="idle"><span class="sync-dot" aria-hidden="true"></span><span class="sync-label">Not synced yet</span></div>
       <div class="user-line" id="footUser">Not connected</div>
       <div class="repo-line" id="footRepo"></div>
-      <div class="field" id="storageSettingsField" style="margin-bottom:8px;">
-        <label for="repoNameInput" style="color:#BFD6C4;">Data repository</label>
-        <input id="repoNameInput" type="text" style="background:#0A2E21;color:#EAF3EC;border-color:#2A5240;">
-        <div class="hint" style="color:#9DB8A6;">Change and press Save, then the app reconnects to that repository.</div>
-      </div>
       <div class="foot-buttons">
-        <button class="btn small" id="saveRepoBtn" type="button">Save repo</button>
+      <div class="foot-buttons">
         <button class="btn small" id="syncNowBtn" type="button">Sync now</button>
         <button class="btn small" id="attachSettingsBtn" type="button">Attachments</button>
         <button class="btn small" id="themeBtn" type="button">Dark mode</button>
-        <button class="btn small" id="lockBtn" type="button">Lock</button>
+        <button class="btn small" id="lockBtn" type="button">Sign out</button>
       </div>
       <!-- v1.6: the running app's version, written from APP_VERSION
            by the script at boot. Never hard code a version here. -->
@@ -1675,7 +1589,7 @@ body.dark .ss-att-provider{color:#EAF3EC;}
     <div id="noNote" class="no-note">
       <div class="big">No note selected</div>
       <p>Pick a note from the list, or press New Note to start writing.</p>
-      <p id="noNoteStorageLine">Everything you write is saved to your own private GitHub repository as plain Markdown files, so your notes are never locked inside this app.</p>
+      <p id="noNoteStorageLine">Everything you write is saved to the SnakeScale Notes folder in your own Google Drive as plain Markdown files, so your notes are never locked inside this app.</p>
     </div>
 
     <!-- The editor itself. -->
@@ -1877,34 +1791,23 @@ body.dark .ss-att-provider{color:#EAF3EC;}
 </div>
 
 <!-- ==========================================================================
-     v1.2: Attachments settings dialog
-     Attachments live in the user's own Google Drive or pCloud account, not
-     in GitHub. Signing in uses OAuth: the user clicks a sign in button and
-     approves access on the provider's own site. The client ID fields below
-     are NOT something end users ever fill in with a developer app of
-     their own: the publisher client IDs belong to Chris, the app owner,
-     who registers one app with each provider, once, for free (see
-     ATTACHMENT_PROVIDERS_SETUP.md). v1.4.2 update: the Google publisher
-     client ID is baked into the app (PUBLISHER_GOOGLE_CLIENT_ID), so the
-     Google field below is only an advanced override for testing and for
-     forks, and Google sign in never depends on it being filled in. The
-     pCloud ID is not baked in yet because the publisher pCloud app is
-     still pending, so its field still works the test build way.
+     v2.0: Attachments settings dialog
+     Attachments live in the user's own Google Drive, in the attachments
+     subfolder of the same SnakeScale Notes folder that holds the notes.
+     Signing in uses OAuth: the user clicks Sign in with Google and
+     approves access on Google's own site. The Google client ID field
+     below is NOT something end users fill in with a developer app of
+     their own: the publisher client ID belongs to Chris, the app owner,
+     is baked into the app (PUBLISHER_GOOGLE_CLIENT_ID), and the field
+     is only an advanced override for testing and for forks (see
+     ATTACHMENT_PROVIDERS_SETUP.md).
      ========================================================================== -->
+
 <div id="attachModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="attachModalTitle">
   <div class="modal-card">
     <h2 id="attachModalTitle">Attachments</h2>
-    <p class="modal-sub">Images and files are stored in your own cloud account, in a folder named <strong>SnakeScale Notes Attachments</strong>. Your note files only keep a small reference to each attachment. You sign in with OAuth on the provider's own site; SnakeScale never sees your Google or pCloud password.</p>
+    <p class="modal-sub">Images and files are stored in your own Google Drive, in the <strong>attachments</strong> subfolder of the <strong>SnakeScale Notes</strong> folder that holds your notes. Your note files only keep a small reference to each attachment. You sign in with Google on Google's own site; SnakeScale never sees your Google password.</p>
     <div id="attachModalMsg" class="modal-msg hidden"></div>
-
-    <div class="field">
-      <label for="attachDefaultProvider">Default storage provider for new attachments</label>
-      <select id="attachDefaultProvider">
-        <option value="none">None selected</option>
-        <option value="google">Google Drive</option>
-        <option value="pcloud">pCloud</option>
-      </select>
-    </div>
 
     <div class="provider-card" id="googleCard">
       <h3><span class="status-dot" id="googleDot"></span>Google Drive</h3>
@@ -1915,17 +1818,6 @@ body.dark .ss-att-provider{color:#EAF3EC;}
       </div>
       <button class="btn small" id="googleConnectBtn" type="button">Sign in with Google</button>
       <div class="provider-hint" id="googleHint">SnakeScale ships with the publisher Google client ID built in, so sign in works with nothing to fill in here. This field is an advanced override for testing, and for forks of SnakeScale that registered their own Google OAuth client. Clearing it returns to the built in ID. End users never register a developer app.</div>
-    </div>
-
-    <div class="provider-card" id="pcloudCard">
-      <h3><span class="status-dot" id="pcloudDot"></span>pCloud</h3>
-      <div class="provider-status" id="pcloudStatus">Not signed in.</div>
-      <div class="field">
-        <label for="pcloudClientId">pCloud client ID (publisher ID, test build only)</label>
-        <input type="text" id="pcloudClientId" placeholder="Paste the publisher pCloud client ID" autocomplete="off">
-      </div>
-      <button class="btn small" id="pcloudConnectBtn" type="button">Sign in with pCloud</button>
-      <div class="provider-hint hidden" id="pcloudHint">This test build needs the publisher pCloud client ID before sign in can work. The app owner creates the pCloud app once (free) and shares the ID for pasting here. End users of the finished app will never register a developer app or see this field; they will only click Sign in with pCloud, which sends them to pCloud to approve access. Setup steps are in ATTACHMENT_PROVIDERS_SETUP.md.</div>
     </div>
 
     <p class="provider-hint">Apple note: iCloud Drive cannot be used directly by web apps, so Apple attachment storage is deferred to a possible future release.</p>
@@ -1948,30 +1840,29 @@ body.dark .ss-att-provider{color:#EAF3EC;}
 "use strict";
 
 /* ============================================================================
-   SnakeScale Notes v1.8.3: application script
-   BUILD STAMP: 2026-10-20-SSN-V183
+   SnakeScale Notes v2.0.0: application script
+   BUILD STAMP: 2026-10-20-SSN-V200
 
    How this script is organized:
      1. Constants and global state
      2. Small utilities (escaping, base64 with UTF-8 safety, ids, slugs)
      3. The logo (inline SVG, injected into every .logo-slot)
-     4. The vault (token encryption with WebCrypto: PBKDF2 plus AES-GCM)
-     5. Local cache and the offline edit queue (localStorage)
-     6. Storage backends: the GitHub driver, the backend neutral store
-        dispatch layer, and (with the Google code in section 11) the
-        Google Drive notes driver
+     4. The device key (the local encryption key: WebCrypto AES-GCM)
+     5. Settings, local cache, and the offline edit queue (localStorage)
+     6. The store dispatch layer over the Google Drive notes driver
+        (the driver itself lives with the Google code in section 11)
      7. Note file format: front matter parse and serialize
      8. Sync engine: load everything, save with conflict protection,
         notebooks, trash, and the index.json rebuild
      9. Rendering: sidebar, tags, note list, editor
     10. Editor behavior: toolbar, checklists, autosave
-    11. Attachments: provider drivers (Google Drive, pCloud), upload flow,
+    11. Attachments: the Google Drive provider, upload flow,
         placeholder hydration, removal, and the settings dialog
     12. Screen flow and event wiring, then boot
 
    Note body storage note (v1.0 decision): the editor is rich text, so the
    body of each .md file is stored as HTML below the front matter block. The
-   file is still a plain text .md file in the user's own repository, the
+   file is still a plain text .md file in the user's own Google Drive, the
    front matter is plain key and value lines, and the HTML body keeps
    checklists and formatting intact. A future version can add a Markdown
    export without changing the storage layout.
@@ -1980,44 +1871,42 @@ body.dark .ss-att-provider{color:#EAF3EC;}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-20-SSN-V183";
-const APP_VERSION = "1.8.3";
-const API_BASE = "https://api.github.com";
-const API_VERSION_HEADER = "2022-11-28";
-/* v1.4: the two storage backends. "github" is the original repository
-   backend. "google" stores the same note files in Google Drive. */
-const BACKEND_GITHUB = "github";
-const BACKEND_GOOGLE = "google";
-/* The Drive folder that holds the complete notes layout. This is separate
-   from ATTACH_ROOT_NAME below, which remains the attachments folder. */
-const NOTES_ROOT_NAME = "SnakeScale Notes";
-/* v1.4 wrote this fixed, non-secret marker into a password vault for
-   Google backend users. v1.4.1 never creates that vault. The constant is
-   kept only so the legacy lock fallback can recognize an old marker if a
-   settings record is missing; normal Google routing ignores and removes
-   the old vault before showing the Google sign in gate. The marker grants
-   no access to anything and is never sent to Google. */
-const GOOGLE_BACKEND_VAULT_MARKER = "snakescale-notes-backend:google-drive:v1";
+const APP_BUILD = "2026-10-20-SSN-V200";
+const APP_VERSION = "2.0.0";
+/* The Drive folder that holds the complete notes layout: notebook
+   folders, trash, archive, index.json, and (since v2.0) the
+   attachments subfolder. */
 
-/* localStorage keys. The GitHub vault holds ONLY its encrypted token blob.
-   The device key is a separate Google backend record described below. */
-const LS_VAULT = "snakescale.vault.v1";
+const NOTES_ROOT_NAME = "SnakeScale Notes";
+/* v2.0 legacy cleanup: builds before v2.0 kept the GitHub token in an
+   app password vault under this localStorage key (and v1.4 wrote a
+   fixed marker vault there for Google users). No vault exists in
+   v2.0; the key is named only so boot can delete the obsolete
+   record. See cleanupLegacyStorage in section 5. */
+const LS_LEGACY_VAULT = "snakescale.vault.v1";
+
+/* localStorage keys. */
 const LS_CACHE = "snakescale.cache.v1";
 const LS_QUEUE = "snakescale.queue.v1";
 const LS_SETTINGS = "snakescale.settings.v1";
-/* v1.4.1: the Google backend device key. This random AES-GCM key is kept
-   on this device so it can encrypt provider tokens and the Google note
-   cache at rest across reloads. It is not a credential and it is not a
-   login: anyone using the unlocked browser profile can still use the app,
+/* The device key. This random AES-GCM key is kept on this device so
+   it can encrypt the Google token store and the local note cache at
+   rest across reloads. It is not a credential and it is not a login:
+   anyone using the unlocked browser profile can still use the app,
    so the key only scrambles local copies against casual snooping. */
 const LS_DEVICE_KEY = "snakescale.deviceKey.v1";
-/* v1.2: provider OAuth tokens, AES-GCM encrypted under the same vault
-   key as the GitHub token (see section 11). Only ciphertext lives here. */
+/* Provider OAuth tokens (in v2.0, just the Google token), AES-GCM
+   encrypted under the device key (see section 11). Only ciphertext
+   lives here. */
 const LS_PROVIDERS = "snakescale.providerTokens.v1";
-/* v1.2: sessionStorage key for the pCloud OAuth return handshake. */
-const SS_PCLOUD_OAUTH = "snakescale.pcloud.oauth";
-/* v1.2 attachment constants. */
+/* Attachment constants. ATTACH_ROOT_NAME is the pre-v2.0 top level
+   attachments folder name. v2.0 creates no such folder; the name is
+   kept only so the one time consolidation can find the legacy
+   folder and move its files into the notes folder (see
+   maybeConsolidateLegacyAttachments in section 11). New attachments
+   live in the ATTACH_SUBFOLDER_NAME subfolder of the notes root. */
 const ATTACH_ROOT_NAME = "SnakeScale Notes Attachments";
+const ATTACH_SUBFOLDER_NAME = "attachments";
 const ATTACH_MAX_BYTES = 100 * 1024 * 1024; /* 100 MB per file cap */
 const GOOGLE_DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file";
 /* v1.4.2: the publisher Google OAuth client ID, baked into the app.
@@ -2036,32 +1925,31 @@ const GOOGLE_DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file";
 const PUBLISHER_GOOGLE_CLIENT_ID =
   "548143299601-n4i6nh3kc0j889ddq44jcmn163okbr1v.apps.googleusercontent.com";
 
-/* The in-memory app state. The plaintext token lives ONLY in state.token
-   while the app is unlocked; locking the app sets it back to null. */
+/* The in-memory app state. The Google access token lives ONLY in
+   state.providerTokens.google while the app is signed in; signing
+   out sets it back to null. There is no app password and no second
+   token of any kind. */
 const state = {
-  backend: BACKEND_GOOGLE,  // v1.4: fresh setup recommendation; loadSettings
-                            // forces "github" for any stored pre-v1.4 settings
-  backendExplicit: false,   // true only when stored settings name a backend
-  token: null,              // GitHub token; memory only, never stored plainly.
-                            // Google users have no app token or app password.
-  sessionKey: null,         // Encryption CryptoKey in memory: derived from the
-                            // GitHub app password, or the Google device key
-  providerTokens: { google: null, pcloud: null }, // v1.2: plaintext provider tokens, memory only
-  pendingPcloud: null,      // v1.2: pCloud OAuth return captured before unlock, memory only
-  objectUrls: [],           // v1.2: blob URLs created for the open note, revoked on switch/lock
-  attach: {                 // v1.2: attachment config, NOT secret, saved in settings
-    defaultProvider: "none",  // none | google | pcloud
+  sessionKey: null,         // Encryption CryptoKey in memory: the device
+                            // key from section 4, loaded or created at
+                            // sign in and dropped on sign out
+  providerTokens: { google: null }, // plaintext Google token, memory only
+  objectUrls: [],           // v1.2: blob URLs created for the open note,
+                            // revoked on note switch and sign out
+  attach: {                 // v1.2: attachment config, NOT secret, saved
+                            // in settings
+    defaultProvider: "google", // v2.0: Google is the only provider. The
+                            // field remains so older settings load into
+                            // a known shape; loadSettings pins any other
+                            // stored value back to "google"
     googleClientId: "",
-    pcloudClientId: "",
-    googleFolderId: null,
-    pcloudFolderId: null,
-    pcloudHost: "",
-    pcloudUserId: "",
-    googleExpiresAt: 0
+    googleFolderId: null,   // the attachments subfolder of the notes root
+    googleExpiresAt: 0,
+    legacyConsolidated: false // v2.0: true once the one time move of
+                            // pre-v2.0 attachments into the notes folder
+                            // has run on this device profile
   },
-  username: null,           // GitHub login of the token owner (GitHub only)
-  repo: "snakescale-notes-data", // data repository name (owner is username)
-  repoExists: false,        // true after the selected storage store is ready
+  repoExists: false,        // true after the Drive store is ready
   notebooks: [],            // [{slug, name, created}]
   notes: [],                // note objects, see parseNoteFile for the shape
   trash: [],                // note objects with trashed = true
@@ -2088,8 +1976,8 @@ const state = {
   syncing: false,           // true while a sync or save is in flight
   online: navigator.onLine, // browser online flag, kept current by events
   cacheGeneration: 0,       // v1.4.1: invalidates an in-flight encrypted
-                            // Google cache write when the user signs out
-  cacheWritePromise: null   // v1.4.1: latest encrypted Google cache write
+                            // cache write when the user signs out
+  cacheWritePromise: null   // v1.4.1: latest encrypted cache write
 };
 
 /* The note object shape used everywhere in this app:
@@ -2103,17 +1991,17 @@ const state = {
      pinned:    boolean,
      body:      string,   HTML body (attachment placeholders only, no binaries)
      attachments: [object],  v1.2 metadata: {id, provider, fileId, name,
-                    storageName, mime, size, created}; binaries live with
-                    the provider, never in GitHub
+                    storageName, mime, size, created}; binaries live
+                    with the provider, never in the notes store
      sha:       string|null,  storage sync token of the file as last loaded
-                    (a GitHub blob sha, or a Google Drive revision token)
+                    (a Google Drive revision token)
      trashed:   boolean,
      trashedFrom: string|null  notebook slug the note was trashed from
      archived:  boolean,       (v1.5)
      archivedFrom: string|null notebook slug the note was archived from
    }
    A note sits in exactly one of the three lists at a time: state.notes,
-   state.trash, or state.archive. The repo path is derived, never stored
+   state.trash, or state.archive. The store path is derived, never stored
    on the object:
      live note:  notebooks/<slug>/<id>.md
      trashed:    trash/<id>.md
@@ -2145,34 +2033,8 @@ function htmlToText(html) {
   return (div.textContent || "").replace(/\s+/g, " ").trim();
 }
 
-/* UTF-8 safe base64 encode. GitHub wants base64 of the raw file bytes, and
-   note bodies can contain any Unicode, so encode through TextEncoder first
-   instead of calling btoa on the string directly (btoa throws on non Latin1
-   characters). */
-function base64EncodeUtf8(text) {
-  const bytes = new TextEncoder().encode(text);
-  let binary = "";
-  const chunkSize = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize));
-  }
-  return btoa(binary);
-}
-
-/* UTF-8 safe base64 decode, the mirror of base64EncodeUtf8. GitHub returns
-   file contents base64 encoded, sometimes with line breaks, so strip all
-   whitespace before decoding. */
-function base64DecodeUtf8(base64) {
-  const clean = String(base64 || "").replace(/\s/g, "");
-  const binary = atob(clean);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  return new TextDecoder().decode(bytes);
-}
-
-/* Base64 for raw byte arrays, used by the vault for salt, iv, ciphertext. */
+/* Base64 for raw byte arrays, used for the device key and for the
+   encrypted token and cache records (iv and ciphertext). */
 function bytesToBase64(bytes) {
   let binary = "";
   for (let i = 0; i < bytes.length; i++) {
@@ -2347,97 +2209,18 @@ function injectLogos() {
 }
 
 /* --------------------------------------------------------------------------
-   4. The vault: token encryption with WebCrypto
-   Pattern mirrored from Chris's Project Manager app: the secret (here the
-   GitHub token) is encrypted under a key derived from the user's app
-   password with PBKDF2 (SHA-256, 210000 iterations, random 16 byte salt),
-   using AES-GCM 256 with a random 12 byte iv. localStorage keeps only
-   {salt, iv, ciphertext} as base64. The plaintext token is NEVER stored.
-   AES-GCM is authenticated, so a wrong password fails decryption cleanly,
-   which is exactly how the lock screen detects a bad password.
-   -------------------------------------------------------------------------- */
-const PBKDF2_ITERATIONS = 210000;
-
-async function deriveKeyFromPassword(password, saltBytes) {
-  const baseKey = await crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(password),
-    "PBKDF2",
-    false,
-    ["deriveKey"]
-  );
-  return crypto.subtle.deriveKey(
-    { name: "PBKDF2", salt: saltBytes, iterations: PBKDF2_ITERATIONS, hash: "SHA-256" },
-    baseKey,
-    { name: "AES-GCM", length: 256 },
-    false,
-    ["encrypt", "decrypt"]
-  );
-}
-
-/* Encrypt the token and save the vault blob. Returns nothing; throws on
-   any crypto failure so the setup screen can show the error. */
-async function vaultCreate(token, password) {
-  const salt = crypto.getRandomValues(new Uint8Array(16));
-  const iv = crypto.getRandomValues(new Uint8Array(12));
-  const key = await deriveKeyFromPassword(password, salt);
-  /* v1.2: keep the derived key in memory for this session so provider
-     OAuth tokens (Google, pCloud) can be encrypted under the very same
-     key. The key itself is never written anywhere; locking drops it. */
-  state.sessionKey = key;
-  const cipher = await crypto.subtle.encrypt(
-    { name: "AES-GCM", iv: iv },
-    key,
-    new TextEncoder().encode(token)
-  );
-  const blob = {
-    v: 1,
-    salt: bytesToBase64(salt),
-    iv: bytesToBase64(iv),
-    data: bytesToBase64(new Uint8Array(cipher))
-  };
-  localStorage.setItem(LS_VAULT, JSON.stringify(blob));
-}
-
-function vaultExists() {
-  return !!localStorage.getItem(LS_VAULT);
-}
-
-/* Decrypt the token with the given password. Throws when the password is
-   wrong (AES-GCM integrity check) or the stored blob is damaged. */
-async function vaultUnlock(password) {
-  const raw = localStorage.getItem(LS_VAULT);
-  if (!raw) { throw new Error("No vault found on this device."); }
-  const blob = JSON.parse(raw);
-  const salt = base64ToBytes(blob.salt);
-  const iv = base64ToBytes(blob.iv);
-  const key = await deriveKeyFromPassword(password, salt);
-  const plain = await crypto.subtle.decrypt(
-    { name: "AES-GCM", iv: iv },
-    key,
-    base64ToBytes(blob.data)
-  );
-  /* v1.2: decryption succeeded, so this key is the right one. Retain it
-     in memory only, for provider token encryption during this session. */
-  state.sessionKey = key;
-  return new TextDecoder().decode(plain);
-}
-
-function vaultWipe() {
-  localStorage.removeItem(LS_VAULT);
-}
-
-/* --------------------------------------------------------------------------
-   v1.4.1 device key: Google backend only
-   Google users have no app password, so there is no password from which to
-   derive the session encryption key. Instead, setup creates one random
-   AES-GCM key for this device. Its raw bytes live in localStorage beside
-   the data it encrypts. Read that sentence carefully: this key is NOT a
-   login and does NOT protect notes from someone using the unlocked
-   browser profile. It only keeps provider tokens and the local Google
-   note cache scrambled at rest, so a casual look at local storage does not
-   reveal readable tokens or note text. Google sign in remains the actual
-   sign in and the actual access control for the Drive files.
+   4. The device key: local encryption with WebCrypto (AES-GCM)
+   Before v2.0 this section also held an app password vault (PBKDF2
+   plus AES-GCM) that encrypted the GitHub token. The GitHub backend
+   and the app password are gone: Sign in with Google is the only
+   sign in, the token lives in memory only, and what remains here
+   is the random device key that Google users have had since
+   v1.4.1. The key encrypts the provider token store (section 11)
+   and the local note cache (section 5) at rest on this device. It
+   is generated on this device, never typed by the user, and never
+   leaves the device. It is NOT a login: anyone using the unlocked
+   browser profile can still use the app, so the key only
+   scrambles local copies against casual snooping.
    -------------------------------------------------------------------------- */
 function deviceKeyExists() {
   return !!localStorage.getItem(LS_DEVICE_KEY);
@@ -2471,7 +2254,7 @@ async function loadDeviceKey() {
   } catch (e) {
     /* A damaged device key cannot decrypt anything written under it.
        Remove it and let the caller create a fresh key; the user will
-       simply sign in to the providers again. */
+       simply sign in with Google again. */
     localStorage.removeItem(LS_DEVICE_KEY);
     state.sessionKey = null;
     return false;
@@ -2488,42 +2271,19 @@ function wipeDeviceKey() {
   localStorage.removeItem(LS_DEVICE_KEY);
 }
 
-/* Lock the app: drop the in-memory token and username, go back to the lock
-   screen (or to setup if the vault itself was wiped). Cached notes stay in
-   localStorage so the app can reopen quickly after the next unlock, but
-   they are only rendered after a successful unlock. */
-function lockApp() {
-  /* v1.7: locking cancels every pending attachment deletion WITHOUT
-     deleting anything. The records and the cloud files stay exactly
-     as they were; only the undo windows close (see the engine). */
-  cancelAllPendingAttachmentDeletes();
-  state.token = null;
-  state.username = null;
-  /* v1.2: locking also drops the session vault key, every plaintext
-     provider token, any pending pCloud OAuth capture, and the blob URLs
-     of the note that was open. Encrypted provider tokens stay in
-     localStorage, unreadable until the next unlock. */
-  state.sessionKey = null;
-  state.providerTokens = { google: null, pcloud: null };
-  state.pendingPcloud = null;
-  revokeAttachmentUrls();
-  /* v1.3.1: locking closes any open link popup. */
-  hideLinkPopup();
-  showScreen(vaultExists() ? "lock" : "setup");
-}
-
-/* v1.4.1: Google backend sign out. This is deliberately different from
-   GitHub locking. Signing out drops the Google access token, revokes it
-   when the Google library is already loaded, and clears this device's
-   encrypted provider token store, note cache, offline queue, legacy
-   marker vault, and device key. Settings stay, so the gate still knows
-   that this device uses Google Drive and still has the publisher client
-   ID. The notes themselves stay in the user's Google Drive. */
-async function signOutGoogle() {
-  if (state.backend !== BACKEND_GOOGLE) {
-    lockApp();
-    return;
-  }
+/* Sign out, the only sign out there is (v2.0). There is no lock to
+   fall back to anymore: signing out is the full Google sign out
+   Drive users have had since v1.4.1, and it is what the sidebar
+   button and the gate button both run. It revokes the Google
+   token with Google when GIS is loaded (best effort), then wipes
+   this device's copies: the encrypted provider token store, the
+   encrypted note cache, the offline queue, any legacy vault
+   record left by an older build, and the device key itself.
+   Settings survive, because they hold no secrets: theme, the
+   attachment bookkeeping, and the remembered list sort. The notes
+   themselves are untouched in Google Drive; signing in again
+   reloads them. */
+async function signOut() {
   const ok = confirm(
     "Sign out of SnakeScale on this device? Your notes stay safe in " +
     "Google Drive. Local copies on this device will be cleared, including " +
@@ -2532,7 +2292,10 @@ async function signOutGoogle() {
   if (!ok) { return; }
 
   /* v1.7: signing out cancels every pending attachment deletion
-     WITHOUT deleting anything, exactly like locking does. */
+     WITHOUT deleting anything (see cancelAllPendingAttachmentDeletes
+     in section 11). The attachment block is already out of the note
+     body, but the record stays in the note and the file stays in
+     Drive, so nothing is lost by leaving. */
   cancelAllPendingAttachmentDeletes();
 
   let googleToken = state.providerTokens.google || null;
@@ -2541,8 +2304,8 @@ async function signOutGoogle() {
     catch (e) { googleToken = null; }
   }
 
-  /* Stop any encrypted cache write already in flight from recreating the
-     cache after the wipe below. */
+  /* Stop any encrypted cache write already in flight from recreating
+     the cache after the wipe below. */
   state.cacheGeneration++;
   if (state.cacheWritePromise) {
     try { await state.cacheWritePromise; } catch (e) { /* already handled */ }
@@ -2555,11 +2318,8 @@ async function signOutGoogle() {
     catch (e) { /* Revoke is best effort; the local token is dropped below. */ }
   }
 
-  state.token = null;
-  state.username = null;
   state.sessionKey = null;
-  state.providerTokens = { google: null, pcloud: null };
-  state.pendingPcloud = null;
+  state.providerTokens = { google: null };
   state.repoExists = false;
   state.notebooks = [];
   state.notes = [];
@@ -2575,7 +2335,7 @@ async function signOutGoogle() {
   localStorage.removeItem(LS_PROVIDERS);
   localStorage.removeItem(LS_CACHE);
   localStorage.removeItem(LS_QUEUE);
-  vaultWipe();
+  localStorage.removeItem(LS_LEGACY_VAULT);
   wipeDeviceKey();
   saveSettings();
   showGoogleConnectScreen(
@@ -2583,77 +2343,54 @@ async function signOutGoogle() {
     "notes from Google Drive again.");
 }
 
-/* One handler for the button GitHub calls Lock and Google calls Sign out.
-   GitHub goes through the original lockApp unchanged. */
-function lockOrSignOut() {
-  if (state.backend === BACKEND_GOOGLE) {
-    signOutGoogle().catch(function (err) { toast(err.message, true); });
-  } else {
-    lockApp();
-  }
-}
 
 /* --------------------------------------------------------------------------
    5. Settings, local cache, and the offline edit queue
-   Settings are not secret (repo name, theme), so they live in plain JSON.
+   Settings are not secret (theme, attachment bookkeeping), so they live
+   in plain JSON.
    The cache mirrors notebooks, notes, trash, and the archive so the app
    opens and reads fully offline. The queue holds file operations made while offline (or
    while a save failed) and is flushed on reconnect or Sync now.
    -------------------------------------------------------------------------- */
-/* v1.4: normalize a stored backend value. Only the exact string "google"
-   selects Drive. Everything else, including a missing value in settings
-   written before v1.4, selects GitHub. That one rule is what guarantees
-   that every existing vault keeps its original behavior after upgrade. */
-function normalizeBackend(value) {
-  return value === BACKEND_GOOGLE ? BACKEND_GOOGLE : BACKEND_GITHUB;
+/* Human readable name for the one storage service, used in status
+   messages. v2.0 has exactly one store; the helper remains so the
+   sync engine's messages keep their established wording. */
+function storageDisplayName() {
+  return "Google Drive";
 }
 
-/* Human readable storage name for status messages. GitHub messages keep
-   their established wording by using this helper with the same label. */
-function storageDisplayName() {
-  return state.backend === BACKEND_GOOGLE ? "Google Drive" : "GitHub";
-}
 
 function loadSettings() {
   const raw = localStorage.getItem(LS_SETTINGS);
   let s = {};
-  let hasStoredSettings = false;
   try {
-    if (raw) {
-      s = JSON.parse(raw) || {};
-      hasStoredSettings = true;
-    }
+    if (raw) { s = JSON.parse(raw) || {}; }
   } catch (e) {
-    /* A damaged settings record is still an existing installation record.
-       Fall back to GitHub, the pre-v1.4 behavior, rather than silently
-       pointing the app at an empty Drive store. */
-    hasStoredSettings = !!raw;
+    /* A damaged settings record falls back to defaults rather than
+       failing the boot. Obsolete fields in any stored record (a
+       backend choice, a data repository name, pCloud bookkeeping
+       from before v2.0) are simply never read here, and the next
+       saveSettings writes the current shape without them. */
     s = {};
   }
-  if (hasStoredSettings) {
-    /* Stored settings from before v1.4 have no backend field. The
-       normalize rule above turns that absence into "github". */
-    state.backendExplicit = s.backend !== undefined;
-    state.backend = normalizeBackend(s.backend);
-  } else {
-    state.backendExplicit = false;
-    /* No settings at all means a fresh device. Setup recommends Google,
-       and setSetupBackend presents it as the selected card. */
-    state.backend = BACKEND_GOOGLE;
-  }
-  if (s.repo) { state.repo = s.repo; }
   if (s.dark) { document.body.classList.add("dark"); }
-  /* v1.2: attachment config rides along in the same settings object.
-     None of it is secret: client IDs are public identifiers, folder IDs
-     and expiry times are bookkeeping. Tokens are NEVER stored here. */
+  /* Attachment config rides along in the same settings object. None
+     of it is secret: the client ID override is a public identifier,
+     and folder IDs and expiry times are bookkeeping. Tokens are
+     NEVER stored here. Only keys that exist in the current shape
+     are copied, so pre-v2.0 pCloud fields drop away on their own. */
   if (s.attach) {
     Object.keys(state.attach).forEach(function (k) {
       if (s.attach[k] !== undefined) { state.attach[k] = s.attach[k]; }
     });
   }
-  /* v1.8: the remembered list sort. Only the shapes the sort menu can
-     produce are accepted; anything else leaves the default in place
-     (Date Updated, newest first, the pre-v1.8 list order). */
+  /* v2.0: Google is the only attachment provider. A stored value
+     naming anything else (an old "pcloud" or "none") is pinned
+     back to Google. */
+  state.attach.defaultProvider = "google";
+  /* v1.8: the remembered list sort. Only the shapes the sort menu
+     can produce are accepted; anything else leaves the default in
+     place (Date Updated, newest first, the pre-v1.8 list order). */
   if (s.listSort) {
     if (["title", "created", "updated"].indexOf(s.listSort.field) >= 0) {
       state.listSort.field = s.listSort.field;
@@ -2663,52 +2400,65 @@ function loadSettings() {
     }
   }
 }
+
+
 function saveSettings() {
   localStorage.setItem(LS_SETTINGS, JSON.stringify({
-    backend: state.backend,
-    repo: state.repo,
     dark: document.body.classList.contains("dark"),
     attach: state.attach,
     listSort: state.listSort   // v1.8: the remembered notes list sort
   }));
 }
 
-/* Setup screen storage cards. Selecting a card updates the form
-   immediately: GitHub token and app password fields exist only for the
-   GitHub choice, while Drive users see the sign in only explanation and
-   no password fields at all. The submit label names the next step that
-   will actually happen for the selected backend. */
-function setSetupBackend(backend) {
-  state.backend = normalizeBackend(backend);
-  const isGoogle = state.backend === BACKEND_GOOGLE;
-  const googleCard = document.getElementById("setupBackendGoogle");
-  const githubCard = document.getElementById("setupBackendGithub");
-  if (!googleCard || !githubCard) { return; }
-  googleCard.classList.toggle("selected", isGoogle);
-  githubCard.classList.toggle("selected", !isGoogle);
-  googleCard.setAttribute("aria-pressed", isGoogle ? "true" : "false");
-  githubCard.setAttribute("aria-pressed", !isGoogle ? "true" : "false");
-  googleCard.querySelector("[data-choice-badge]").textContent =
-    isGoogle ? "Selected" : "Recommended";
-  githubCard.querySelector("[data-choice-badge]").textContent =
-    !isGoogle ? "Selected" : "Advanced";
-  document.getElementById("setupGoogleHelp").classList.toggle("hidden", !isGoogle);
-  document.getElementById("setupGithubHelp").classList.toggle("hidden", isGoogle);
-  document.getElementById("setupGithubFields").classList.toggle("hidden", isGoogle);
-  document.getElementById("setupPasswordFields").classList.toggle("hidden", isGoogle);
-  document.getElementById("setupSubmitBtn").textContent = isGoogle
-    ? "Continue to Google sign in"
-    : "Encrypt token and continue";
+/* v2.0 legacy cleanup, run once by boot before routing. Builds
+   before v2.0 could leave three kinds of record behind: the app
+   password vault (or the v1.4 marker vault) under LS_LEGACY_VAULT,
+   settings naming the GitHub backend, and a plaintext cache
+   snapshot naming the GitHub backend. The vault record is deleted
+   outright: no vault exists anymore. When either stored record
+   names GitHub, the cache and the offline queue are deleted too,
+   because they describe a store this build can no longer read.
+   Dropping the queue matters most: its path based operations must
+   never be flushed into the Google Drive store by a later sync.
+   The GitHub era notes themselves are not touched (they live in
+   their owner's repository, outside this build's reach).
+   A Google user's records fail both backend tests (their cache is
+   the encrypted format, which carries no plaintext backend field),
+   so their settings, cache, queue, and device key pass through
+   completely untouched. Returns true when any legacy artifact was
+   found, which boot routing treats as "a returning device". */
+function cleanupLegacyStorage() {
+  let found = false;
+  if (localStorage.getItem(LS_LEGACY_VAULT)) {
+    localStorage.removeItem(LS_LEGACY_VAULT);
+    found = true;
+  }
+  let settingsSayGithub = false;
+  try {
+    const s = JSON.parse(localStorage.getItem(LS_SETTINGS) || "null");
+    if (s && s.backend === "github") { settingsSayGithub = true; }
+  } catch (e) { /* a damaged record carries no signal */ }
+  let cacheSayGithub = false;
+  try {
+    const c = JSON.parse(localStorage.getItem(LS_CACHE) || "null");
+    if (c && !c.encrypted && c.backend === "github") {
+      cacheSayGithub = true;
+    }
+  } catch (e) { /* a damaged record carries no signal */ }
+  if (settingsSayGithub || cacheSayGithub) {
+    found = true;
+    localStorage.removeItem(LS_CACHE);
+    localStorage.removeItem(LS_QUEUE);
+  }
+  return found;
 }
 
-/* One cache snapshot shape for both storage paths below. GitHub keeps the
-   original plain JSON cache. Google encrypts this same snapshot under the
-   device key before it reaches localStorage. */
+/* One cache snapshot shape. The snapshot is encrypted under the
+   device key before it reaches localStorage (see storeEncryptedCache
+   below); the Drive store is always the source of truth. */
+
 function cacheSnapshot() {
   return {
-    backend: state.backend,
-    username: state.username,
-    repo: state.repo,
     notebooks: state.notebooks,
     notes: state.notes,
     trash: state.trash,
@@ -2719,24 +2469,19 @@ function cacheSnapshot() {
 }
 
 function applyCacheSnapshot(c) {
-  state.username = c.username || null;
-  /* Settings, already loaded before the cache, are authoritative for
-     the backend. The cached value is only a last resort for a device
-     whose settings record has disappeared. */
-  if (c.backend && !localStorage.getItem(LS_SETTINGS)) {
-    state.backend = normalizeBackend(c.backend);
-  }
-  if (c.repo) { state.repo = c.repo; }
   state.notebooks = c.notebooks || [];
   state.notes = c.notes || [];
   state.trash = c.trash || [];
   /* v1.5: caches written before archiving existed have no archive
      list; they load as an empty archive, exactly like old note files
-     load as unarchived. */
+     load as unarchived. Snapshots written before v2.0 also carry
+     store bookkeeping fields this build no longer keeps; they are
+     ignored here. */
   state.archive = c.archive || [];
   state.index = c.index || null;
   return true;
 }
+
 
 /* v1.4.1: encrypt one Google cache snapshot with AES-GCM under the device
    key. The generation check is the sign out guard: if the user signs out
@@ -2749,13 +2494,11 @@ async function storeEncryptedCache(snapshot, key, generation) {
     key,
     new TextEncoder().encode(JSON.stringify(snapshot))
   );
-  if (generation !== state.cacheGeneration ||
-      state.backend !== BACKEND_GOOGLE || state.sessionKey !== key) {
+  if (generation !== state.cacheGeneration || state.sessionKey !== key) {
     return;
   }
   localStorage.setItem(LS_CACHE, JSON.stringify({
     v: 2,
-    backend: BACKEND_GOOGLE,
     encrypted: "AES-GCM",
     iv: bytesToBase64(iv),
     data: bytesToBase64(new Uint8Array(cipher))
@@ -2764,7 +2507,7 @@ async function storeEncryptedCache(snapshot, key, generation) {
 
 function saveCache() {
   const snapshot = cacheSnapshot();
-  if (state.backend === BACKEND_GOOGLE && state.sessionKey) {
+  if (state.sessionKey) {
     const key = state.sessionKey;
     const generation = state.cacheGeneration;
     state.cacheWritePromise = storeEncryptedCache(snapshot, key, generation)
@@ -2793,11 +2536,12 @@ function loadCache() {
   }
 }
 
-/* Google cache reads are asynchronous in v1.4.1 because WebCrypto
-   decryption is asynchronous. A v1.4 plaintext Google cache is accepted
-   once through loadCache and is rewritten encrypted on the next save. */
-async function loadCacheForBackend() {
-  if (state.backend !== BACKEND_GOOGLE || !state.sessionKey) {
+/* Cache reads are asynchronous because WebCrypto decryption is
+   asynchronous. A plaintext cache written by a very old build is
+   accepted once through loadCache or the plain branch below and is
+   rewritten encrypted on the next save. */
+async function loadCacheWithKey() {
+  if (!state.sessionKey) {
     return loadCache();
   }
   let c = null;
@@ -2839,239 +2583,68 @@ function queueOp(op) {
 }
 
 /* --------------------------------------------------------------------------
-   6. GitHub API wrapper
-   Every request uses the same headers the spec requires: Bearer token,
-   the github+json accept header, and the pinned API version header.
-   Errors are thrown as Error objects whose message is the GitHub message,
-   so callers can show readable toasts. A 404 is flagged on err.status so
-   the connect flow can tell "repo missing" apart from real failures.
-   -------------------------------------------------------------------------- */
-async function gh(path, options) {
-  options = options || {};
-  const headers = {
-    "Authorization": "Bearer " + state.token,
-    "Accept": "application/vnd.github+json",
-    "X-GitHub-Api-Version": API_VERSION_HEADER
-  };
-  if (options.body) { headers["Content-Type"] = "application/json"; }
-  let res;
-  try {
-    res = await fetch(API_BASE + path, {
-      method: options.method || "GET",
-      headers: headers,
-      body: options.body ? JSON.stringify(options.body) : undefined
-    });
-  } catch (networkErr) {
-    const err = new Error("Network error. You appear to be offline.");
-    err.offline = true;
-    throw err;
-  }
-  if (res.status === 204) { return null; }
-  let data = null;
-  const text = await res.text();
-  if (text) {
-    try { data = JSON.parse(text); } catch (e) { data = null; }
-  }
-  if (!res.ok) {
-    const msg = (data && data.message) ? data.message : ("GitHub error " + res.status);
-    const err = new Error(msg);
-    err.status = res.status;
-    throw err;
-  }
-  return data;
-}
+   6. The store dispatch layer
+   Every note operation in the app (sync, queue flush, notebooks,
+   trash, archive, index rebuilds) talks to this small neutral
+   surface, never to a driver directly:
 
-function repoPath(p) {
-  return "/repos/" + encodeURIComponent(state.username) + "/" +
-    encodeURIComponent(state.repo) + "/contents/" + p;
-}
-
-/* GET one file. Returns {content, sha} or null when the file is missing. */
-async function ghGetFile(path) {
-  try {
-    const data = await gh(repoPath(path.split("/").map(encodeURIComponent).join("/")));
-    if (!data || data.type !== "file") { return null; }
-    return { content: base64DecodeUtf8(data.content || ""), sha: data.sha };
-  } catch (err) {
-    if (err.status === 404) { return null; }
-    throw err;
-  }
-}
-
-/* GET a directory listing. Returns an array of entries, or null when the
-   folder does not exist yet (a fresh repo has no notebooks/ folder). */
-async function ghListDir(path) {
-  try {
-    const data = await gh(repoPath(path.split("/").map(encodeURIComponent).join("/")));
-    return Array.isArray(data) ? data : [];
-  } catch (err) {
-    if (err.status === 404) { return null; }
-    throw err;
-  }
-}
-
-/* Create or update one file. Pass the current sha when updating; omit it
-   for a brand new file. Returns the new sha. Status 409 or 422 from GitHub
-   here almost always means the sha was stale, which the caller treats as
-   a conflict (keep both copies). */
-async function ghPutFile(path, textContent, sha, message) {
-  const body = {
-    message: message || ("Update " + path),
-    content: base64EncodeUtf8(textContent)
-  };
-  if (sha) { body.sha = sha; }
-  const data = await gh(repoPath(path.split("/").map(encodeURIComponent).join("/")), {
-    method: "PUT",
-    body: body
-  });
-  return data && data.content ? data.content.sha : null;
-}
-
-/* Delete one file by path and sha. */
-async function ghDeleteFile(path, sha, message) {
-  await gh(repoPath(path.split("/").map(encodeURIComponent).join("/")), {
-    method: "DELETE",
-    body: { message: message || ("Delete " + path), sha: sha }
-  });
-}
-
-/* GitHub account and repository operations used by the connect flow.
-   These helpers keep every direct GitHub request inside this driver
-   section. The sync engine below talks only to the neutral store layer. */
-async function githubCurrentUser() {
-  return gh("/user");
-}
-
-async function githubGetDataRepo() {
-  return gh("/repos/" + encodeURIComponent(state.username) + "/" +
-    encodeURIComponent(state.repo));
-}
-
-async function githubCreateDataRepo() {
-  return gh("/user/repos", {
-    method: "POST",
-    body: {
-      name: state.repo,
-      description: "SnakeScale Notes data. Notes stored as Markdown files.",
-      private: true,
-      auto_init: true
-    }
-  });
-}
-
-/* --------------------------------------------------------------------------
-   6B. Backend neutral storage dispatch (new in v1.4)
-   The sync engine was written against four file operations. v1.4 keeps
-   exactly that surface, but gives every operation a backend neutral
-   result shape:
-
-     storeGetFile(path)
-       resolves to {text, token} or null. The token is the optimistic
-       concurrency marker: a GitHub blob sha, or a Google Drive head
-       revision marker.
-     storeListDir(path)
-       resolves to [{name, path, isDir}] or null when the folder does
-       not exist.
+     storeGetFile(path)                         -> {text, token} | null
+     storeListDir(path)                         -> [{name, path, isDir}]
      storePutFile(path, text, expectedToken, message, options)
-       creates or replaces one text file and returns the new token. The
-       optional message is GitHub's commit message; Drive ignores it.
-       When expectedToken is not null and the remote file's current
-       token differs, the write is refused with StoreConflict and no
-       bytes are changed. The optional options object (v1.4.4) carries
-       one flag, fresh: the caller promises the file does not exist yet
-       and no concurrency token is held. A fresh put lets the Drive
-       driver skip its existence check listing and go straight to the
-       create call. GitHub ignores the flag, because its put already
-       writes in one call. Only genuinely new files may use it: a brand
-       new note, a new notebook folder marker, and the first run seed
-       files. Renames and moves keep the checked path.
+                                                -> token string
      storeDeleteFile(path, token, message)
-       deletes one file. The optional message is again GitHub only.
 
-   The note object's existing sha field stores this token on either
-   backend. That keeps the established data structures and conflict code
-   unchanged while making the token's meaning backend neutral.
+   Paths are store relative ("notebooks/<slug>/<id>.md", "index.json",
+   "trash/<id>.md", "archive/<id>.md"). The token is the optimistic
+   concurrency marker: for the Google Drive driver (section 11) it
+   is a head revision marker. A write whose expectedToken no longer
+   matches the stored file throws StoreConflict and the caller
+   applies the keep both copies rule; a write never silently
+   overwrites a changed file. options.fresh tells the driver the
+   caller promises the file does not exist yet, which lets it skip
+   its existence check. The message parameter is accepted so the
+   sync engine's call shape stays the one it has always used;
+   Drive has no commit messages, so it is not used.
+
+   Until v2.0 a second driver (GitHub) sat behind this surface.
+   v2.0 has exactly one store, Google Drive, so the four functions
+   below call the Drive driver directly. The surface itself is
+   unchanged, which is why the sync engine did not have to change.
    -------------------------------------------------------------------------- */
 class StoreConflict extends Error {
   constructor(path) {
-    super("The file changed in storage before this write could save: " + path);
+    super("The file changed in storage before this save finished: " + path);
     this.name = "StoreConflict";
-    this.code = "STORE_CONFLICT";
-    this.isStoreConflict = true;
     this.path = path;
   }
 }
 
 function isStoreConflict(err) {
-  return !!(err && (err.isStoreConflict || err.code === "STORE_CONFLICT" ||
-    err.name === "StoreConflict"));
+  return !!err && (err.name === "StoreConflict" || err instanceof StoreConflict);
 }
 
-/* Split a store path into clean segments. This helper is deliberately
-   pure so it can be tested outside the browser. */
 function splitStorePath(path) {
   return String(path || "").split("/").filter(function (part) {
     return part.length > 0;
   });
 }
 
-async function githubStoreGetFile(path) {
-  const file = await ghGetFile(path);
-  return file ? { text: file.content, token: file.sha } : null;
-}
-
-async function githubStoreListDir(path) {
-  const entries = await ghListDir(path);
-  if (!entries) { return null; }
-  return entries.map(function (entry) {
-    return {
-      name: entry.name,
-      path: entry.path || path + "/" + entry.name,
-      isDir: entry.type === "dir"
-    };
-  });
-}
-
-async function githubStorePutFile(path, text, expectedToken, message) {
-  try {
-    return await ghPutFile(path, text, expectedToken || null, message);
-  } catch (err) {
-    /* GitHub reports a stale sha as 409 or 422. Translate both into the
-       one backend neutral conflict signal the sync engine understands. */
-    if (err.status === 409 || err.status === 422) {
-      throw new StoreConflict(path);
-    }
-    throw err;
-  }
-}
-
-async function githubStoreDeleteFile(path, token, message) {
-  await ghDeleteFile(path, token, message);
-}
-
 async function storeGetFile(path) {
-  return state.backend === BACKEND_GOOGLE
-    ? driveStoreGetFile(path)
-    : githubStoreGetFile(path);
+  return driveStoreGetFile(path);
 }
 
 async function storeListDir(path) {
-  return state.backend === BACKEND_GOOGLE
-    ? driveStoreListDir(path)
-    : githubStoreListDir(path);
+  return driveStoreListDir(path);
 }
 
 async function storePutFile(path, text, expectedToken, message, options) {
-  return state.backend === BACKEND_GOOGLE
-    ? driveStorePutFile(path, text, expectedToken || null, options || {})
-    : githubStorePutFile(path, text, expectedToken || null, message);
+  return driveStorePutFile(path, text, expectedToken || null, options || {});
 }
 
 async function storeDeleteFile(path, token, message) {
-  return state.backend === BACKEND_GOOGLE
-    ? driveStoreDeleteFile(path, token || null)
-    : githubStoreDeleteFile(path, token, message);
+  return driveStoreDeleteFile(path, token || null);
 }
+
 
 /* --------------------------------------------------------------------------
    7. Note file format
@@ -3096,8 +2669,9 @@ async function storeDeleteFile(path, token, message) {
    The v1.2 attachments line is a single line JSON array of small objects:
    {id, provider, fileId, name, storageName, mime, size, created}. JSON
    string escaping guarantees the value stays on one line. The attachment
-   BINARIES never live in GitHub; they sit in the user's Google Drive or
-   pCloud folder, and this line only carries the provider file references.
+   BINARIES never live in the notes store; they sit in the attachments
+   subfolder of the user's SnakeScale Notes folder in Google Drive,
+   and this line only carries the provider file references.
    Notes written before v1.2 have no attachments line and parse as an
    empty array, so old data loads unchanged.
    -------------------------------------------------------------------------- */
@@ -3470,9 +3044,8 @@ async function loadAllFromRepo() {
   /* v1.5: the archive folder loads exactly like the trash folder.
      Stores created before archiving have no archive folder at all;
      the listing then comes back null and the archive is simply empty.
-     The folder materializes on the first archive (a put creates the
-     path on GitHub, and the Drive driver creates folders on the way
-     to a file). */
+     The folder materializes on the first archive (the Drive driver
+     creates folders on the way to a file). */
   const archive = [];
   const archiveEntries = await storeListDir("archive");
   for (const entry of (archiveEntries || [])) {
@@ -3512,26 +3085,22 @@ function googleSignInLiveInMemory() {
   return Date.now() <= state.attach.googleExpiresAt - 30000;
 }
 
-/* v1.4.3: may a sync or a library load run against the selected store
-   right now? The store must be connected (state.repoExists), and the
-   selected backend must hold whatever proves sign in on that backend:
-   the GitHub token for the GitHub backend, a live in memory Google
-   sign in for the Drive backend. Before v1.4.3 the guards read
-   state.token directly. Drive users never have one (their only sign in
-   is Google, since v1.4.1 removed their app password vault), so sync
-   silently never ran for them: they signed in to an empty app and
-   their Drive library never loaded on any browser, even though their
-   notes were being saved to Drive all along. */
+/* May a sync or a library load run against the store right now?
+   Readiness is two facts: the Drive store is connected
+   (state.repoExists), and a Google sign in is live in memory
+   (googleSignInLiveInMemory above). This is the rule the v1.4.3
+   fix established, kept as is: a stored or expired token is not
+   readiness, only the live in memory sign in is. */
 function storeSyncReady() {
   if (!state.repoExists) { return false; }
-  if (state.backend === BACKEND_GOOGLE) { return googleSignInLiveInMemory(); }
-  return !!state.token;
+  return googleSignInLiveInMemory();
 }
 
-/* Full sync: flush queued offline edits first, then reload from the repo,
-   then re-render. Used by Sync now and automatically after unlock.
-   Skipped unless storeSyncReady() says the selected backend is signed
-   in and its store is connected. */
+
+/* Full sync: flush queued offline edits first, then reload from the
+   store, then re-render. Used by Sync now and automatically after
+   sign in. Skipped unless storeSyncReady() says the store is
+   connected and a Google sign in is live. */
 async function syncNow(showToast) {
   if (!storeSyncReady()) { return; }
   if (state.syncing) { return; }
@@ -3786,9 +3355,9 @@ function findNoteById(id) {
 
 /* --------------------------------------------------------------------------
    Notebook operations
-   GitHub has no real folders, so a notebook exists as soon as a file sits
-   under notebooks/<slug>/. Creating a notebook writes a .gitkeep file and
-   updates index.json. Renaming moves every note file to the new folder.
+   A notebook exists as soon as a file sits under notebooks/<slug>/.
+   Creating a notebook writes a .gitkeep file and updates index.json.
+   Renaming moves every note file to the new folder.
    Deleting a notebook moves its notes to Trash (never destroys them),
    after a confirm in the UI layer.
    -------------------------------------------------------------------------- */
@@ -3858,7 +3427,7 @@ async function renameNotebook(slug, newName) {
   }
   /* Move the folder marker too. A notebook created in the app carries a
      .gitkeep; leaving it behind would keep the old folder alive in store
-     listings (a real folder on Drive, a path folder on GitHub) and the
+     listings (a real folder on Drive) and the
      old notebook would reappear on the next load. The new marker also
      materializes the renamed folder when the notebook has no notes. */
   if (state.online && state.repoExists) {
@@ -4188,13 +3757,12 @@ function unarchiveNote(note) {
 
 /* Build the first store through the neutral store layer: the Personal
    notebook, the trash and archive folders, index.json, and exactly one
-   welcome note.
-   GitHub calls this after creating the private repository. Google Drive
-   calls it when the store itself is empty (v1.4.3: no index.json and a
-   missing or empty notebooks listing), so a store holding any data is
-   never seeded, returning Drive users never get a second welcome note,
-   and an interrupted first attempt is repaired on the next connect
-   instead of staying empty forever. */
+   welcome note. Seeding runs only when the store itself is empty
+   (v1.4.3: no index.json and a missing or empty notebooks listing),
+   so a store holding any data is never seeded, returning users never
+   get a second welcome note, and an interrupted first attempt is
+   repaired on the next connect instead of staying empty forever. */
+
 async function seedInitialStore() {
   const personal = {
     slug: "personal",
@@ -4207,9 +3775,9 @@ async function seedInitialStore() {
   state.archive = [];
 
   /* v1.4.4: the folder markers are flagged fresh. Seeding only ever
-     runs against a store that holds nothing (or a just created GitHub
-     repository), so these files cannot exist yet, and the Drive
-     driver may skip its existence check listing for them. */
+     runs against a store that holds nothing, so these files cannot
+     exist yet, and the Drive driver may skip its existence check
+     listing for them. */
   await storePutFile("notebooks/personal/.gitkeep", "", null,
     "Create notebooks folder", { fresh: true });
   await storePutFile("trash/.gitkeep", "", null, "Create trash folder",
@@ -4218,28 +3786,18 @@ async function seedInitialStore() {
   await storePutFile("archive/.gitkeep", "", null, "Create archive folder",
     { fresh: true });
 
-  const isGoogle = state.backend === BACKEND_GOOGLE;
-  const welcomeBody = isGoogle
-    ? "<p>Welcome to <b>SnakeScale Notes</b>. This note lives in your own " +
-      "Google Drive, in the SnakeScale Notes folder, as a plain Markdown " +
-      "file, and so do all of your other notes.</p>" +
-      "<p>A few things to try:</p>" +
-      "<ul><li>Make a notebook with the + button next to Notebooks.</li>" +
-      "<li>Add tags to a note, then use the Tags list to filter.</li>" +
-      "<li>Pin this note and it stays at the top of the list.</li>" +
-      "<li>Use the Checklist button in the toolbar for to do lists.</li></ul>" +
-      "<p>Delete this note whenever you are ready. It goes to Trash first, " +
-      "and only disappears for good when you choose Delete Forever.</p>"
-    : "<p>Welcome to <b>SnakeScale Notes</b>. This note lives in your own " +
-      "private GitHub repository, as a plain Markdown file, and so do all " +
-      "of your other notes.</p>" +
-      "<p>A few things to try:</p>" +
-      "<ul><li>Make a notebook with the + button next to Notebooks.</li>" +
-      "<li>Add tags to a note, then use the Tags list to filter.</li>" +
-      "<li>Pin this note and it stays at the top of the list.</li>" +
-      "<li>Use the Checklist button in the toolbar for to do lists.</li></ul>" +
-      "<p>Delete this note whenever you are ready. It goes to Trash first, " +
-      "and only disappears for good when you choose Delete Forever.</p>";
+  const welcomeBody =
+    "<p>Welcome to <b>SnakeScale Notes</b>. This note lives in your own " +
+    "Google Drive, in the SnakeScale Notes folder, as a plain Markdown " +
+    "file, and so do all of your other notes.</p>" +
+    "<p>A few things to try:</p>" +
+    "<ul><li>Make a notebook with the + button next to Notebooks.</li>" +
+    "<li>Add tags to a note, then use the Tags list to filter.</li>" +
+    "<li>Pin this note and it stays at the top of the list.</li>" +
+    "<li>Use the Checklist button in the toolbar for to do lists.</li></ul>" +
+    "<p>Delete this note whenever you are ready. It goes to Trash first, " +
+    "and only disappears for good when you choose Delete Forever.</p>";
+
   const welcome = makeNote("personal", "Welcome to SnakeScale Notes", welcomeBody);
   /* v1.4.4: fresh, for the same reason as the folder markers above:
      the welcome note's id was just generated into an empty store. */
@@ -4256,7 +3814,7 @@ async function seedInitialStore() {
   return welcome;
 }
 
-/* The Google sign in gate. This is the Drive backend's sign in screen:
+/* The Google sign in gate: the app's only sign in screen.
    it appears after setup, on a returning visit when no live token or
    silent renewal is available, and after sign out. There is no unlock
    step before or after it. It is not a settings corner: signing in is the
@@ -4270,7 +3828,6 @@ function showGoogleConnectScreen(message) {
     "Sign in with Google to load the SnakeScale Notes folder in your " +
     "Google Drive. This is the only sign in for Drive storage, and the " +
     "same sign in also covers attachments.";
-  document.getElementById("repoActions").classList.add("hidden");
   document.getElementById("repoLockBtn").textContent = "Sign out";
   /* v1.4.2: the panel is just text plus the sign in button now. The
      publisher client ID is built into the app, so there is no field
@@ -4283,7 +3840,7 @@ function showGoogleConnectScreen(message) {
   hideLoading();
 }
 
-async function connectGoogleAndLoad() {
+async function connectAndLoad() {
   showLoading("Connecting to Google Drive...");
   const repoError = document.getElementById("repoError");
   repoError.textContent = "";
@@ -4300,19 +3857,20 @@ async function connectGoogleAndLoad() {
     return;
   }
 
-  /* A Drive notes user has already chosen Google as the attachment
-     destination by choosing this backend, unless they deliberately picked
-     another default in the Attachments dialog. Fill only the untouched
-     "none" value; never override a real choice. */
-  if (!state.attach.defaultProvider || state.attach.defaultProvider === "none") {
+  /* v2.0: Google is the only attachment provider. Settings written
+     by an older build may still carry another value in this field;
+     pin it to Google. */
+  if (state.attach.defaultProvider !== "google") {
     state.attach.defaultProvider = "google";
     saveSettings();
   }
-
-  state.username = "Google Drive";
   try {
     await driveEnsureNotesRoot();
     state.repoExists = true;
+    /* v2.0: the one time, best effort consolidation of pre-v2.0
+       attachments into the notes folder. It swallows its own
+       errors, so it can neither block nor fail this connect. */
+    await maybeConsolidateLegacyAttachments();
     setLoadingStatus("Loading your notes...");
     /* v1.4.3: first run seeding is decided from the store itself, not
        from whether this visit happened to create the notes root
@@ -4336,7 +3894,7 @@ async function connectGoogleAndLoad() {
       state.selectedId = welcome.id;
     }
     /* v1.6 background population: when this device holds a cache for
-       the Drive backend, paint the app from it now, still under the
+       the Google store, paint the app from it now, still under the
        loading overlay. The sync below then replaces the state with
        the fresh library and re renders, and only then does the
        overlay fade. A device with no cache simply waits for the sync,
@@ -4344,7 +3902,7 @@ async function connectGoogleAndLoad() {
        seeding decision above already read the store itself, and the
        sync still owns the final state, so conflict, queue, and
        seeding behavior are unchanged. */
-    if (await loadCacheForBackend()) { renderAll(); }
+    if (await loadCacheWithKey()) { renderAll(); }
     showScreen("app");
     await syncNow(false);
     hideLoading();
@@ -4360,7 +3918,7 @@ async function connectGoogleAndLoad() {
         "one click. Your notes and any queued edits are still safe.");
       return;
     }
-    if (await loadCacheForBackend()) {
+    if (await loadCacheWithKey()) {
       state.repoExists = true;
       showScreen("app");
       renderAll();
@@ -4377,119 +3935,6 @@ async function connectGoogleAndLoad() {
 }
 
 /* --------------------------------------------------------------------------
-   Connect flow
-   After sign in or unlock, dispatch by the stored backend. GitHub verifies the token
-   with GET /user, shows the username, then looks for the data repo. A 404
-   opens the repo screen with the one click create button. Any other
-   failure shows a toast and falls back to the local cache so the user can
-   still read their notes. Google Drive has its own branch above.
-   -------------------------------------------------------------------------- */
-async function connectAndLoad() {
-  if (state.backend === BACKEND_GOOGLE) {
-    await connectGoogleAndLoad();
-    return;
-  }
-  showLoading("Connecting to GitHub...");
-  document.getElementById("connectScreenTitle").textContent =
-    "Connect your data repository";
-  document.getElementById("repoLockBtn").textContent = "Lock app";
-  document.getElementById("googleConnectPanel").classList.add("hidden");
-  const repoText = document.getElementById("repoScreenText");
-  const repoError = document.getElementById("repoError");
-  repoError.textContent = "";
-  try {
-    const user = await githubCurrentUser();
-    state.username = user.login;
-  } catch (err) {
-    if (loadCache() && state.username) {
-      state.repoExists = true;
-      showScreen("app");
-      renderAll();
-      hideLoading();
-      toast("Could not reach GitHub (" + err.message + "). Showing your cached notes.", true);
-      refreshSyncPill();
-      return;
-    }
-    showScreen("repo");
-    hideLoading();
-    repoText.textContent = "GitHub did not accept the token.";
-    repoError.textContent = err.message +
-      " Check that the token has the repo scope, then try again.";
-    document.getElementById("repoActions").classList.add("hidden");
-    return;
-  }
-
-  document.getElementById("footUser").textContent = "@" + state.username;
-  document.getElementById("footRepo").textContent = state.repo;
-
-  let repoInfo = null;
-  try {
-    repoInfo = await githubGetDataRepo();
-  } catch (err) {
-    if (err.status !== 404) {
-      repoError.textContent = err.message;
-    }
-  }
-  if (!repoInfo) {
-    state.repoExists = false;
-    showScreen("repo");
-    hideLoading();
-    repoText.innerHTML = "Signed in as <strong>" + escapeHtml(state.username) +
-      "</strong>. The data repository <strong>" + escapeHtml(state.repo) +
-      "</strong> does not exist in your account yet.";
-    document.getElementById("repoActions").classList.remove("hidden");
-    return;
-  }
-  state.repoExists = true;
-  setLoadingStatus("Loading your notes...");
-  /* v1.6 background population, the GitHub twin of the Drive flow in
-     connectGoogleAndLoad: paint the cached library under the overlay
-     first (the unlock handler loads the plain GitHub cache into state
-     before connecting, and re applying the snapshot here is harmless),
-     then let the sync replace it with the fresh library. */
-  if (loadCache()) { renderAll(); }
-  showScreen("app");
-  await syncNow(false);
-  hideLoading();
-}
-
-/* Create the data repo and the first structure. Runs only on first
-   connect, from the repo screen button. Creates the private repo with
-   auto_init (so it has an initial commit and the contents API works
-   immediately), then the notebooks and trash folders, the default Personal
-   notebook, index.json, and exactly one welcome note. */
-async function createRepoAndSeed() {
-  const repoError = document.getElementById("repoError");
-  repoError.textContent = "";
-  const btn = document.getElementById("createRepoBtn");
-  btn.disabled = true;
-  btn.textContent = "Creating...";
-  /* v1.6: creating the repo and seeding it is a connect flow, so the
-     loading overlay covers it and always comes back down, success or
-     failure (the finally below). */
-  showLoading("Creating your data repository...");
-  try {
-    await githubCreateDataRepo();
-    state.repoExists = true;
-
-    const welcome = await seedInitialStore();
-
-    showScreen("app");
-    document.getElementById("footUser").textContent = "@" + state.username;
-    document.getElementById("footRepo").textContent = state.repo;
-    renderAll();
-    openNote(welcome.id);
-    toast("Repository created. Welcome to SnakeScale Notes.");
-  } catch (err) {
-    repoError.textContent = "Create failed: " + err.message;
-  } finally {
-    hideLoading();
-    btn.disabled = false;
-    btn.textContent = "Create the data repository (private)";
-  }
-}
-
-/* --------------------------------------------------------------------------
    9. Rendering
    All user text is placed with textContent or through escapeHtml. Note
    titles, tags, and notebook names are never injected as raw HTML. The one
@@ -4502,8 +3947,8 @@ async function createRepoAndSeed() {
    The loading overlay is plain HTML at the top of the body, so it is
    already on screen before this script runs; these helpers only steer
    it. showLoading is called when a connect flow starts from a gate
-   screen (GitHub unlock, the Google sign in button, the silent
-   renewal attempt inside prepareGoogleGate, repo creation), and
+   screen (the Google sign in button, the silent renewal attempt
+   inside prepareGoogleGate), and
    setLoadingStatus marks the steps the user cares about. hideLoading
    fades the overlay out once the destination screen is fully
    presented: gate screens hide it as they become interactive, and
@@ -4553,27 +3998,15 @@ function renderAppVersion() {
 
 function showScreen(name) {
   document.getElementById("setupScreen").classList.toggle("hidden", name !== "setup");
-  document.getElementById("lockScreen").classList.toggle("hidden", name !== "lock");
   document.getElementById("repoScreen").classList.toggle("hidden", name !== "repo");
   document.getElementById("app").classList.toggle("hidden", name !== "app");
-  if (name === "setup") { setSetupBackend(state.backend); }
-  if (name === "lock") {
-    /* v1.4.1: the lock screen belongs to the GitHub password vault only.
-       Google routing never sends a Drive user here, so this wording no
-       longer needs a Google variant. */
-    document.getElementById("lockIntro").textContent =
-      "Type your app password to decrypt your GitHub token on this device.";
-    document.getElementById("lockResetHint").textContent =
-      "Forgot the password? The encrypted token cannot be recovered without it. " +
-      "Use the reset button below to clear the vault on this device and set up " +
-      "again with a new token. Your notes in GitHub are not affected.";
-  }
   if (name === "app" && !document.body.classList.contains("view-list") &&
       !document.body.classList.contains("view-nav") &&
       !document.body.classList.contains("view-editor")) {
     document.body.classList.add("view-list");
   }
 }
+
 
 function renderAll() {
   renderSidebar();
@@ -4678,32 +4111,23 @@ function renderSidebar() {
     tagNav.appendChild(btn);
   });
 
-  const repoInput = document.getElementById("repoNameInput");
-  if (document.activeElement !== repoInput) { repoInput.value = state.repo; }
-  /* v1.4: the sidebar storage section follows the selected backend. The
-     GitHub repository rename controls are hidden for Drive users, whose
-     footer states the actual storage location in words instead. */
-  const isGoogle = state.backend === BACKEND_GOOGLE;
-  document.getElementById("storageSettingsField").classList.toggle("hidden", isGoogle);
-  document.getElementById("saveRepoBtn").classList.toggle("hidden", isGoogle);
-  document.getElementById("footUser").textContent = isGoogle
-    ? "Google Drive"
-    : (state.username ? "@" + state.username : "Not connected");
-  document.getElementById("footRepo").textContent = isGoogle
-    ? "Notes live in the SnakeScale Notes folder in your Google Drive"
-    : state.repo;
+  document.getElementById("footUser").textContent = "Google Drive";
+  document.getElementById("footRepo").textContent =
+    "Notes live in the SnakeScale Notes folder in your Google Drive";
   const noNoteStorageLine = document.getElementById("noNoteStorageLine");
   if (noNoteStorageLine) {
-    noNoteStorageLine.textContent = isGoogle
-      ? "Everything you write is saved to the SnakeScale Notes folder in your own Google Drive as plain Markdown files, so your notes are never locked inside this app."
-      : "Everything you write is saved to your own private GitHub repository as plain Markdown files, so your notes are never locked inside this app.";
+    noNoteStorageLine.textContent =
+      "Everything you write is saved to the SnakeScale Notes folder in " +
+      "your own Google Drive as plain Markdown files, so your notes are " +
+      "never locked inside this app.";
   }
   document.getElementById("themeBtn").textContent =
     document.body.classList.contains("dark") ? "Light mode" : "Dark mode";
-  /* v1.4.1: one button, two honest labels. GitHub locks its password
-     vault; Google signs out because Google sign in is its only sign in. */
-  document.getElementById("lockBtn").textContent = isGoogle ? "Sign out" : "Lock";
+  /* v2.0: the button is Sign out for everyone; there is no lock
+     screen and no app password anymore. */
+  document.getElementById("lockBtn").textContent = "Sign out";
 }
+
 
 /* --------------------------------------------------------------------------
    v1.8: the notes list toolbar: filters, sorting, panels, and the
@@ -5085,9 +4509,7 @@ async function deleteNotesForever(notes) {
 /* The storage phrase the permanent delete confirmations use, the
    same one the single Delete Forever built for itself. */
 function storageDeletePhrase() {
-  return state.backend === BACKEND_GOOGLE
-    ? "SnakeScale Notes folder in Google Drive"
-    : "GitHub repository";
+  return "SnakeScale Notes folder in Google Drive";
 }
 
 /* The attachment sentence the permanent delete confirmations add
@@ -6230,7 +5652,7 @@ function handleChecklistEnter() {
 
    Persistence rule (the reason for the custom helpers): anything the
    toolbar applies must survive as inline CSS styles inside the saved
-   note body HTML, so a formatted note renders identically from GitHub
+   note body HTML, so a formatted note renders identically from Drive
    on any device. That means styled spans such as
    <span style="font-size: 14pt"> and never <font> tags. wireToolbar
    switches the editor to styleWithCSS mode so the foreColor and
@@ -6723,35 +6145,41 @@ function wireToolbar() {
 
 /* --------------------------------------------------------------------------
    11. Attachments: storage providers, upload flow, hydration, settings
-   --------------------------------------------------------------------------
-   Design in one paragraph: binaries never enter GitHub. A note stores
-   small attachment metadata in its front matter (section 7) and clean
-   placeholder elements in its body. The bytes live in ONE folder named
-   "SnakeScale Notes Attachments" inside the user's own Google Drive or
-   pCloud account. Both providers are reached with OAuth sign in: the
-   user clicks "Sign in with Google" or "Sign in with pCloud" and
-   approves access on the provider's own site. SnakeScale never sees the
-   user's provider password. The client IDs that make those buttons work
-   belong to the PUBLISHER (Chris, the app owner), who registers one app
-   with each provider, once, for free. End users never register anything.
-   v1.4.2: the Google publisher ID is baked into the app (see
-   PUBLISHER_GOOGLE_CLIENT_ID and effectiveGoogleClientId below), so the
-   Google field in the Attachments dialog is only an advanced override.
-   The pCloud publisher ID is still pasted into the dialog because that
-   app registration is still pending.
+   Design in one paragraph: binaries never enter the notes store. A
+   note stores small attachment metadata in its front matter
+   (section 7) and clean placeholder elements in its body. The bytes
+   live in an "attachments" subfolder of the same SnakeScale Notes
+   folder that holds the notes, in the user's own Google Drive
+   (before v2.0 they lived in a separate top level folder; see the
+   one time consolidation in the connect flow). Google is the only
+   provider: the user clicks Sign in with Google and approves access
+   on Google's own site, and that one sign in covers notes and
+   attachments alike. SnakeScale never sees the user's Google
+   password. The client ID that makes the button work belongs to
+   the PUBLISHER (Chris, the app owner), who registered one app
+   with Google, once, for free; it is baked into the app (see
+   PUBLISHER_GOOGLE_CLIENT_ID and effectiveGoogleClientId below),
+   and the field in the Attachments dialog is only an advanced
+   override. End users never register anything.
 
-   Token safety: provider OAuth tokens are encrypted with AES-GCM under
-   state.sessionKey, and localStorage holds only ciphertext. For the
-   GitHub backend that key is derived from the app password at unlock.
-   For the Google backend it is the random device key described in
-   section 4, which is not a login and does not lock the browser profile.
-   Google's browser token flow hands out short lived access tokens (about
-   an hour) and NO refresh token, so expiry is tracked and the user simply
-   signs in again. GitHub locking, or Google signing out, drops every
-   plaintext token from memory.
+   Token safety: the Google OAuth token is encrypted with AES-GCM
+   under state.sessionKey, the random device key from section 4,
+   and localStorage holds only ciphertext. That key is not a login
+   and does not lock the browser profile. Google's browser token
+   flow hands out short lived access tokens (about an hour) and NO
+   refresh token, so expiry is tracked and the user simply signs
+   in again. Signing out drops every plaintext token from memory.
+
+   Attachment records written by older versions can name a provider
+   this build no longer has (pCloud, removed in v2.0). Those records
+   resolve to no driver in the registry below, and every consumer
+   treats a missing driver as "that provider is not available",
+   which renders the graceful not available message on the record
+   instead of an error; the note around it opens, edits, and saves
+   normally.
    -------------------------------------------------------------------------- */
+/* ----- provider token store (encrypted under the device key) ------- */
 
-/* ----- provider token vault (encrypted under the session vault key) -- */
 function loadProviderTokenBlob() {
   try { return JSON.parse(localStorage.getItem(LS_PROVIDERS) || "{}"); }
   catch (e) { return {}; }
@@ -6905,18 +6333,17 @@ async function googleConnect(options) {
      is the same either way, an empty prompt that lets Google decide
      whether an interaction is needed.
      v1.4.2: every GIS token client in the app is created here (the
-     notes backend sign in, the silent renewal, and the attachments
+     notes sign in, the silent renewal, and the attachments
      provider all funnel through googleConnect), and the client ID
      always comes from effectiveGoogleClientId(). No code reads a
      client ID field directly anymore: the sign in gate has no field at
      all, and the Attachments dialog field only feeds the settings
      override that the helper consults. */
   const clientId = effectiveGoogleClientId();
-  /* A Drive backend user may reach sign in right after signing out, when
-     the old device key was wiped with everything else. Recreate the local
-     encryption key before any token is stored. GitHub users already have
-     their password derived key and never take this branch. */
-  if (state.backend === BACKEND_GOOGLE && !state.sessionKey) {
+  /* A user may reach sign in right after signing out, when the old
+     device key was wiped with everything else. Recreate the local
+     encryption key before any token is stored. */
+  if (!state.sessionKey) {
     await loadOrCreateDeviceKey();
   }
   await loadGisScript();
@@ -6941,9 +6368,11 @@ async function googleConnect(options) {
   resetDriveNotesCache();               /* v1.4: notes folders too */
   saveSettings();
   await storeProviderToken("google", resp.access_token);
-  /* Prove the token works and prepare the folder right away, so a bad
-     grant fails here with a clear message instead of at first upload. */
-  await googleEnsureRootFolder();
+  /* v2.0: the attachments folder is NOT prepared here. It is created
+     lazily, on the first attachment upload or by the one time legacy
+     consolidation in the connect flow, so a sign in by itself never
+     creates folders. The notes connect flow proves this token works
+     against Drive right away when it resolves the notes root. */
 }
 
 /* v1.4.1: one silent renewal attempt for a returning Drive user. GIS is
@@ -7030,41 +6459,85 @@ async function gdriveJson(url, options) {
   return res.json();
 }
 
-/* Find or create the one attachments folder. The folder ID is cached in
-   settings; a cached ID is revalidated once because the user could have
-   deleted the folder in Drive between sessions. */
-async function googleEnsureRootFolder() {
+/* Find or create the attachments folder: the "attachments" child of
+   the SnakeScale Notes root. v2.0 layout: attachments share the one
+   notes folder instead of living in a separate top level folder.
+   The notes root and the child are resolved through the notes Drive
+   driver (driveEnsureNotesRoot, driveResolveFolder, and their
+   shared cache), never through a second independent lookup, so
+   there is exactly one root resolution and one root. The resolved
+   subfolder ID is also cached in settings; a cached ID is
+   revalidated once, including a parent check, because the user
+   could have deleted or moved the folder in Drive between
+   sessions, and because a cache written before v2.0 points at the
+   OLD top level folder, whose parent is not the notes root. */
+async function googleEnsureAttachmentsFolder() {
+  const rootId = await driveEnsureNotesRoot();
   if (state.attach.googleFolderId) {
     try {
       const info = await gdriveJson(
         "https://www.googleapis.com/drive/v3/files/" +
-        encodeURIComponent(state.attach.googleFolderId) + "?fields=id,trashed");
-      if (info && !info.trashed) { return info.id; }
+        encodeURIComponent(state.attach.googleFolderId) +
+        "?fields=" + encodeURIComponent("id,trashed,mimeType,parents"));
+      if (info && !info.trashed &&
+          info.mimeType === DRIVE_FOLDER_MIME &&
+          (info.parents || []).indexOf(rootId) >= 0) {
+        driveCache.folderIds[ATTACH_SUBFOLDER_NAME] = info.id;
+        return info.id;
+      }
     } catch (e) { /* fall through and resolve the folder again */ }
     state.attach.googleFolderId = null;
   }
-  const q = "name = '" + ATTACH_ROOT_NAME +
-    "' and mimeType = 'application/vnd.google-apps.folder' and trashed = false";
-  const list = await gdriveJson(
-    "https://www.googleapis.com/drive/v3/files?q=" + encodeURIComponent(q) +
-    "&fields=" + encodeURIComponent("files(id,name)"));
-  if (list && list.files && list.files.length) {
-    state.attach.googleFolderId = list.files[0].id;
-    saveSettings();
-    return list.files[0].id;
-  }
-  const created = await gdriveJson("https://www.googleapis.com/drive/v3/files", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      name: ATTACH_ROOT_NAME,
-      mimeType: "application/vnd.google-apps.folder"
-    })
-  });
-  state.attach.googleFolderId = created.id;
+  const folderId = await driveResolveFolder(ATTACH_SUBFOLDER_NAME, true);
+  state.attach.googleFolderId = folderId;
   saveSettings();
-  return created.id;
+  return folderId;
 }
+
+/* v2.0 one time consolidation: before v2.0, attachments lived in a
+   top level folder named "SnakeScale Notes Attachments". Attachment
+   records reference Drive file IDs and every read fetches by ID, so
+   files in the old folder keep working exactly where they sit. This
+   pass simply tidies up: when the legacy folder exists, each file
+   in it is moved into the notes folder's attachments subfolder by
+   updating its parents. It runs at most once per profile (the
+   settings flag is set and saved before any work happens), every
+   failure is ignored (a failed move is harmless), the legacy folder
+   itself is deliberately left in place for its owner to remove,
+   and the whole pass is wrapped so it can never block or fail the
+   connect flow that calls it. */
+async function maybeConsolidateLegacyAttachments() {
+  if (state.attach.legacyConsolidated) { return; }
+  state.attach.legacyConsolidated = true;
+  saveSettings();
+  try {
+    const q = "name = '" + driveEscapeQueryValue(ATTACH_ROOT_NAME) +
+      "' and mimeType = '" + DRIVE_FOLDER_MIME +
+      "' and 'root' in parents and trashed = false";
+    const data = await gdriveJson(
+      "https://www.googleapis.com/drive/v3/files?q=" +
+      encodeURIComponent(q) + "&fields=" +
+      encodeURIComponent("files(id,name)"));
+    if (!data.files || !data.files.length) { return; }
+    const legacyId = data.files[0].id;
+    const targetId = await googleEnsureAttachmentsFolder();
+    if (legacyId === targetId) { return; }
+    const children = await driveListChildren(legacyId);
+    for (const child of children) {
+      if (child.mimeType === DRIVE_FOLDER_MIME) { continue; }
+      try {
+        await gdriveJson(
+          "https://www.googleapis.com/drive/v3/files/" +
+          encodeURIComponent(child.id) +
+          "?addParents=" + encodeURIComponent(targetId) +
+          "&removeParents=" + encodeURIComponent(legacyId) +
+          "&fields=id,parents",
+          { method: "PATCH" });
+      } catch (e) { /* one failed move is harmless; keep going */ }
+    }
+  } catch (e) { /* consolidation is best effort, always */ }
+}
+
 
 /* Resumable upload, per Google's protocol: one POST opens a session,
    then the bytes go up in 8 MiB chunks (a multiple of the required
@@ -7072,7 +6545,7 @@ async function googleEnsureRootFolder() {
    says how many bytes Google actually holds, which is where the next
    chunk starts. A 200 or 201 carries the finished file resource. */
 async function googleUpload(file, storageName, onProgress) {
-  const folderId = await googleEnsureRootFolder();
+  const folderId = await googleEnsureAttachmentsFolder();
   const token = await getGoogleAccessToken();
   let initRes;
   try {
@@ -7173,24 +6646,28 @@ async function googleDelete(fileId) {
 }
 
 /* ----- Google Drive NOTES driver (new in v1.4) ---------------------------
-   This driver implements the neutral store operations from section 6B
-   on Google Drive. The layout mirrors the GitHub repository exactly:
+   This driver implements the neutral store operations from section 6
+   on Google Drive. The layout:
 
      SnakeScale Notes/
        index.json
        notebooks/<slug>/<noteId>.md
        notebooks/<slug>/.gitkeep
        trash/<noteId>.md
+       archive/<noteId>.md
+       attachments/<attachment files>
 
-   The root folder is separate from the attachments folder above. Every
-   file and folder here is created by this app, so the drive.file scope
-   can see the whole tree. All calls use getGoogleAccessToken through
+   Attachments live in an attachments subfolder of this same root
+   folder (see googleEnsureAttachmentsFolder above). Every file and
+   folder here is created by this app, so the drive.file scope can
+   see the whole tree. All calls use getGoogleAccessToken through
    gdriveFetch and gdriveJson: the notes driver and the attachments
    driver share one Google sign in and one encrypted token.
 
-   Drive has real folders where GitHub has only paths. The one semantic
-   gap is that an empty Drive folder continues to exist after its last
-   file is deleted, while a GitHub folder disappears. driveStoreDeleteFile
+   Drive has real folders, not just paths. The one semantic gap is
+   that an empty Drive folder continues to exist after its last file
+   is deleted, where a purely path based store would lose the folder
+   with the file. driveStoreDeleteFile
    closes that gap for notebook folders by removing a notebook folder
    once it is empty, which keeps folder listings equivalent.
    -------------------------------------------------------------------------- */
@@ -7320,7 +6797,7 @@ async function driveEnsureNotesRoot() {
 
 /* Resolve a store folder path to a Drive folder ID, creating each missing
    folder when create is true. Returns null for a missing folder when
-   create is false, matching the GitHub driver's missing folder result. */
+   create is false. */
 async function driveResolveFolder(path, create) {
   if (!path) { return driveEnsureNotesRoot(); }
   if (driveCache.folderIds[path]) { return driveCache.folderIds[path]; }
@@ -7485,7 +6962,7 @@ async function driveStoreDeleteFile(path, token) {
 
   /* Close the real folder gap described at the top of this driver: when
      a notebook folder under notebooks/ becomes empty, remove the folder
-     itself, as GitHub's path based folders effectively do. The index
+     itself, the way a purely path based store would lose it. The index
      still names the notebook, so an intentionally empty notebook keeps
      working; this only stops deleted or renamed folders reappearing in
      folder listings. */
@@ -7506,258 +6983,16 @@ async function driveStoreDeleteFile(path, token) {
     }
   }
 }
-/* ----- pCloud driver ----------------------------------------------------
-   Sign in uses pCloud's OAuth 2.0 token (implicit) flow, which pCloud
-   documents as appropriate for pure client side JavaScript apps: the
-   browser is sent to the authorize address documented at
-   docs.pcloud.com (methods, OAuth 2.0, authorize),
-   https://my.pcloud.com/oauth2/authorize, the user approves, and
-   pCloud redirects back to the app URL with the access token in the
-   fragment. v1.8.2 fixed that address: earlier builds spelled the
-   path with an underscore in place of the slash, which is not a real
-   pCloud page, so the browser quietly landed in the user's drive
-   with no consent screen and sign in never happened.
-   boot() captures that fragment BEFORE any screen routing (see
-   capturePcloudReturn). The account may live in the US or EU data
-   region; the redirect returns the right API hostname, which is stored
-   and used for every later call.                                     */
-function pcloudApiBase() {
-  return "https://" + (state.attach.pcloudHost || "api.pcloud.com");
-}
-
-function pcloudConnect() {
-  const clientId = (document.getElementById("pcloudClientId").value || "").trim();
-  state.attach.pcloudClientId = clientId;
-  saveSettings();
-  if (!clientId) {
-    document.getElementById("pcloudHint").classList.remove("hidden");
-    document.getElementById("pcloudClientId").focus();
-    throw new Error("Paste the publisher pCloud client ID first. It comes from a one time setup by the app owner (see ATTACHMENT_PROVIDERS_SETUP.md). End users never register a developer app.");
-  }
-  const oauthState = bytesToBase64(crypto.getRandomValues(new Uint8Array(16)));
-  sessionStorage.setItem(SS_PCLOUD_OAUTH,
-    JSON.stringify({ state: oauthState, ts: Date.now() }));
-  const redirectUri = window.location.origin + window.location.pathname;
-  window.location.href = "https://my.pcloud.com/oauth2/authorize" +
-    "?client_id=" + encodeURIComponent(clientId) +
-    "&response_type=token" +
-    "&redirect_uri=" + encodeURIComponent(redirectUri) +
-    "&state=" + encodeURIComponent(oauthState);
-  /* The page navigates away. capturePcloudReturn picks the result up
-     on the way back in. */
-}
-
-/* Runs first inside boot(), before screen routing. When pCloud sends the
-   browser back with a token in the URL fragment, capture it into memory,
-   verify the anti forgery state value, and scrub the fragment from the
-   address bar and history. The token is only written to storage later,
-   by finalizePendingPcloud, once an encryption key exists (after GitHub
-   unlock, GitHub setup, or Google sign in under the device key). */
-function capturePcloudReturn() {
-  if (!window.location.hash ||
-      window.location.hash.indexOf("access_token=") < 0) { return; }
-  const params = new URLSearchParams(window.location.hash.slice(1));
-  const token = params.get("access_token");
-  const returnedState = params.get("state");
-  let expected = null;
-  try {
-    expected = JSON.parse(sessionStorage.getItem(SS_PCLOUD_OAUTH) || "null");
-  } catch (e) { expected = null; }
-  sessionStorage.removeItem(SS_PCLOUD_OAUTH);
-  try {
-    window.history.replaceState(null, "",
-      window.location.pathname + window.location.search);
-  } catch (e) { /* fragment scrub is best effort */ }
-  if (!token || !expected || expected.state !== returnedState) { return; }
-  /* The token flow returns the account id as "uid" (the parameter
-     pCloud documents); "userid" is read as a fallback only. */
-  state.pendingPcloud = {
-    token: token,
-    userId: params.get("uid") || params.get("userid") || "",
-    locationId: params.get("locationid") || "",
-    hostname: params.get("hostname") || "api.pcloud.com"
-  };
-}
-
-/* After GitHub setup or unlock, or after a Google sign in, the session
-   encryption key exists, so the pending pCloud token can finally be
-   encrypted and stored. Called from those three completion paths. */
-async function finalizePendingPcloud() {
-  const pending = state.pendingPcloud;
-  if (!pending) { return; }
-  state.pendingPcloud = null;
-  try {
-    await storeProviderToken("pcloud", pending.token);
-    state.attach.pcloudHost = pending.hostname || "api.pcloud.com";
-    state.attach.pcloudUserId = pending.userId || "";
-    state.attach.pcloudFolderId = null;
-    saveSettings();
-    toast("Signed in with pCloud. Attachments can now use your pCloud account.");
-  } catch (err) {
-    toast("pCloud sign in could not be saved: " + err.message, true);
-  }
-}
-
-async function pcloudGetStatus() {
-  const token = await getProviderToken("pcloud");
-  return token ? { connected: true } : { connected: false, reason: "signed-out" };
-}
-
-function pcloudDisconnect() {
-  clearProviderToken("pcloud");
-  state.attach.pcloudHost = "";
-  state.attach.pcloudUserId = "";
-  state.attach.pcloudFolderId = null;
-  saveSettings();
-}
-
-/* One pCloud API call. pCloud answers JSON with a result field: 0 means
-   success, anything else carries a human readable error string, which is
-   surfaced verbatim so failures are understandable. */
-async function pcloudCall(method, params) {
-  const token = await getProviderToken("pcloud");
-  if (!token) { throw new Error("Sign in with pCloud first (Attachments settings)."); }
-  const qs = new URLSearchParams(
-    Object.assign({ access_token: token }, params || {}));
-  let res;
-  try {
-    res = await fetch(pcloudApiBase() + "/" + method + "?" + qs.toString());
-  } catch (e) {
-    throw new Error("Network error talking to pCloud. You appear to be offline.");
-  }
-  let data = null;
-  try { data = await res.json(); } catch (e) { data = null; }
-  if (!data) {
-    throw new Error("pCloud returned an unreadable response for " + method + ".");
-  }
-  if (data.result !== 0) {
-    throw new Error(data.error || ("pCloud error " + data.result));
-  }
-  return data;
-}
-
-async function pcloudEnsureRootFolder() {
-  if (state.attach.pcloudFolderId) { return state.attach.pcloudFolderId; }
-  const data = await pcloudCall("createfolderifnotexists",
-    { path: "/" + ATTACH_ROOT_NAME });
-  const folderId = data && data.metadata ? data.metadata.folderid : null;
-  if (folderId === null || folderId === undefined) {
-    throw new Error("pCloud did not return the attachments folder ID.");
-  }
-  state.attach.pcloudFolderId = folderId;
-  saveSettings();
-  return folderId;
-}
-
-/* pCloud upload is one multipart POST. XMLHttpRequest is used on
-   purpose: fetch has no upload progress events in most browsers, and
-   this endpoint accepts the browser file control style directly. Form
-   fields are appended with the parameters BEFORE the file, which the
-   pCloud documentation asks for. */
-async function pcloudUpload(file, storageName, onProgress) {
-  const token = await getProviderToken("pcloud");
-  if (!token) { throw new Error("Sign in with pCloud first (Attachments settings)."); }
-  const folderId = await pcloudEnsureRootFolder();
-  return new Promise(function (resolve, reject) {
-    const form = new FormData();
-    form.append("access_token", token);
-    form.append("folderid", String(folderId));
-    form.append("nopartial", "1");
-    form.append("file", file, storageName);
-    const xhr = new XMLHttpRequest();
-    xhr.open("POST", pcloudApiBase() + "/uploadfile");
-    xhr.upload.addEventListener("progress", function (ev) {
-      if (ev.lengthComputable && onProgress) {
-        onProgress(Math.round(ev.loaded / ev.total * 100));
-      }
-    });
-    xhr.addEventListener("load", function () {
-      let data = null;
-      try { data = JSON.parse(xhr.responseText); } catch (e) { data = null; }
-      if (!data) {
-        reject(new Error("pCloud returned an unreadable upload response."));
-        return;
-      }
-      if (data.result !== 0) {
-        reject(new Error(data.error || ("pCloud error " + data.result)));
-        return;
-      }
-      const meta = data.metadata && data.metadata[0];
-      if (!meta || meta.fileid === undefined) {
-        reject(new Error("pCloud upload finished but returned no file ID."));
-        return;
-      }
-      resolve({ fileId: String(meta.fileid) });
-    });
-    xhr.addEventListener("error", function () {
-      reject(new Error("Network error during the pCloud upload. If this keeps happening, pCloud may be blocking browser uploads from this site."));
-    });
-    xhr.send(form);
-  });
-}
-
-/* pCloud file access starts with getfilelink, which returns a
-   temporary address for the file on one of pCloud's file hosts.
-   This helper performs that call, validates the answer, and builds
-   the full address. Every pCloud read path starts here; what each
-   one does with the address differs (see pcloudDownload below and
-   the getDisplayUrl note on the provider registry). */
-async function pcloudFileUrl(fileId) {
-  const data = await pcloudCall("getfilelink", { fileid: fileId });
-  if (!data.hosts || !data.hosts.length || !data.path) {
-    throw new Error("pCloud did not return a download link for this file.");
-  }
-  return "https://" + data.hosts[0] + data.path;
-}
-
-/* pCloud byte downloads fetch the bytes from the temporary file
-   address. Live testing (v1.8.2, 2026-10-20) confirmed what this
-   comment long suspected: pCloud's file hosts send no cross origin
-   permission headers, so a browser fetch of the address is blocked
-   and this function throws. That is exactly why DISPLAY never uses
-   this path for pCloud (displaying a resource, an image, a frame,
-   or a navigation, needs no such permission; only reading bytes
-   does), and why the driver registry exposes getDisplayUrl for
-   pCloud below. This byte path stays for any true byte consumer
-   and keeps its honest error messages. */
-async function pcloudDownload(fileId) {
-  const url = await pcloudFileUrl(fileId);
-  let res;
-  try {
-    res = await fetch(url);
-  } catch (e) {
-    throw new Error("pCloud sent a download link, but the browser could not fetch the file from it. pCloud's file host may be blocking cross origin downloads from web apps.");
-  }
-  if (!res.ok) {
-    throw new Error("pCloud sent a download link, but the file host answered with status " + res.status + ", so the file was not downloaded.");
-  }
-  return res.blob();
-}
-
-async function pcloudDelete(fileId) {
-  try {
-    await pcloudCall("deletefile", { fileid: fileId });
-  } catch (err) {
-    /* Deleting a file that is already gone is success for our purposes. */
-    if (/not found|no such/i.test(err.message)) { return; }
-    throw err;
-  }
-}
-
 /* ----- provider registry ----------------------------------------------
-   One consistent internal shape over both services. Everything above
-   this line that touches attachments goes through this table, never
-   through provider specific code directly.
-
-   Optional capability (v1.8.3): getDisplayUrl(fileId) returns an
-   address the browser may DISPLAY directly (an image source, a
-   frame source, or a navigation target) without reading its bytes.
-   Only pCloud provides it: its file hosts refuse cross origin byte
-   reads, but displaying their temporary addresses works fine.
-   Google Drive has no getDisplayUrl on purpose; its authenticated
-   byte download works, and the blob path stays its only path.
-   Consumers test for the capability's presence, never for the
-   provider's name. */
+   One consistent internal shape over the attachment services.
+   Everything that touches attachments goes through this table,
+   never through provider specific code directly. v2.0 has exactly
+   one provider, Google Drive. Attachment records written by older
+   versions can name a provider that is no longer here (pCloud);
+   those lookups return undefined, and every consumer treats a
+   missing driver as "that provider is not available", which is
+   what renders the graceful not available message on those records
+   instead of an error. */
 const providers = {
   google: {
     label: "Google Drive",
@@ -7767,18 +7002,9 @@ const providers = {
     upload: googleUpload,
     download: googleDownload,
     delete: googleDelete
-  },
-  pcloud: {
-    label: "pCloud",
-    getStatus: pcloudGetStatus,
-    connect: pcloudConnect,
-    disconnect: pcloudDisconnect,
-    upload: pcloudUpload,
-    download: pcloudDownload,
-    getDisplayUrl: pcloudFileUrl,
-    delete: pcloudDelete
   }
 };
+
 
 function providerLabel(name) {
   return providers[name] ? providers[name].label : String(name || "storage provider");
@@ -7786,13 +7012,13 @@ function providerLabel(name) {
 
 /* ----- placeholder hydration -------------------------------------------
    When a note opens, each canonical placeholder in the body is filled
-   with live content: the real image for image attachments (through an
-   authenticated provider download and a blob URL, or, for a driver
-   with a display address such as pCloud since v1.8.3, straight from
-   that address), or a file card for everything else. Hydration
-   writes ONLY into the live DOM; the save path canonicalizes
-   placeholders back to empty shells, so nothing hydrated is ever
-   persisted. */
+   with live content: the real image for image attachments (through
+   the authenticated Google Drive download and a blob URL), or a file
+   card for everything else. A record whose provider is not in the
+   registry (a pre-v2.0 pCloud record) gets a plain not available
+   message instead of content. Hydration writes ONLY into the live
+   DOM; the save path canonicalizes placeholders back to empty
+   shells, so nothing hydrated is ever persisted. */
 function makeAttButton(label, handler) {
   const b = document.createElement("button");
   b.type = "button";
@@ -7968,30 +7194,15 @@ async function hydrateOneAttachment(note, el) {
       loading.textContent = "Loading image...";
       el.appendChild(loading);
       try {
-        /* v1.8.3: two ways to show an image. A driver with
-           getDisplayUrl (pCloud) hands back a temporary address
-           and the image loads straight from it: displaying needs
-           no cross origin byte permission, and there is no object
-           URL to track or revoke. Any other driver (Google) goes
-           through the authenticated byte download and a blob URL,
-           exactly as before. */
-        let url;
-        let isObjectUrl = false;
-        if (typeof driver.getDisplayUrl === "function") {
-          url = await driver.getDisplayUrl(att.fileId);
-        } else {
-          const blob = await driver.download(att.fileId);
-          url = URL.createObjectURL(blob);
-          isObjectUrl = true;
-        }
+        const blob = await driver.download(att.fileId);
+        const url = URL.createObjectURL(blob);
         if (!el.isConnected) {
-          /* Editor moved on meanwhile. A blob URL nobody will
-             display is revoked at once; a display address needs
-             no cleanup at all. */
-          if (isObjectUrl) { URL.revokeObjectURL(url); }
+          /* Editor moved on meanwhile; a blob URL nobody will
+             display is revoked at once. */
+          URL.revokeObjectURL(url);
           return;
         }
-        if (isObjectUrl) { state.objectUrls.push(url); }
+        state.objectUrls.push(url);
         const img = document.createElement("img");
         img.className = "ss-att-img";
         img.alt = att.name;
@@ -8078,14 +7289,12 @@ async function hydrateOneAttachment(note, el) {
    will only render a blob in a frame when its type says PDF), and
    shows the blob in an iframe inside the placeholder, in the spot
    where the attachment sits in the note. The object URL joins
-   state.objectUrls, so it is revoked on note switch and lock exactly
-   like image URLs; collapsing the preview revokes it immediately.
-   Preview state is editor only: canonicalizeAttachmentPlaceholders
-   rebuilds placeholders as empty shells on save, so the iframe, the
-   preview box, and the blob URL can never reach the saved file.
-   v1.8.3: a driver with getDisplayUrl (pCloud) skips the byte
-   download entirely and frames its temporary file address instead;
-   the same shell rebuild keeps that address out of saves too. */
+   state.objectUrls, so it is revoked on note switch and sign out
+   exactly like image URLs; collapsing the preview revokes it
+   immediately. Preview state is editor only:
+   canonicalizeAttachmentPlaceholders rebuilds placeholders as empty
+   shells on save, so the iframe, the preview box, and the blob URL
+   can never reach the saved file. */
 function isPdfAttachment(att) {
   if (!att) { return false; }
   if ((att.mime || "").toLowerCase() === "application/pdf") { return true; }
@@ -8095,10 +7304,8 @@ function isPdfAttachment(att) {
 async function togglePdfPreview(note, att, el, btn) {
   const existing = el.querySelector(".ss-att-preview");
   if (existing) {
-    /* v1.8.3: a direct address preview (pCloud) holds its address
-       in the frame itself; blank the frame before the box goes
-       away so it stops loading from the provider at once. The blob
-       path's address is an object URL and is revoked just below. */
+    /* Blank the frame before the box goes away so it stops loading
+       at once; the preview's object URL is revoked just below. */
     const oldFrame = existing.querySelector("iframe");
     if (oldFrame) { oldFrame.src = "about:blank"; }
     if (existing._pdfUrl) {
@@ -8122,25 +7329,6 @@ async function togglePdfPreview(note, att, el, btn) {
   btn.disabled = true;
   btn.textContent = "Loading...";
   try {
-    /* v1.8.3: a driver with getDisplayUrl (pCloud) frames its
-       temporary file address directly; displaying it in a frame
-       needs no byte permission. Its box records no _pdfUrl, so
-       collapsing has no object URL to revoke on this path. Other
-       drivers keep the blob path below, unchanged. */
-    if (typeof driver.getDisplayUrl === "function") {
-      const directUrl = await driver.getDisplayUrl(att.fileId);
-      if (!el.isConnected) { return; }   /* editor moved on meanwhile */
-      const directBox = document.createElement("div");
-      directBox.className = "ss-att-preview";
-      const directFrame = document.createElement("iframe");
-      directFrame.className = "ss-att-pdf-frame";
-      directFrame.title = att.name;
-      directFrame.src = directUrl;
-      directBox.appendChild(directFrame);
-      el.appendChild(directBox);
-      btn.textContent = "Hide preview";
-      return;
-    }
     const blob = await driver.download(att.fileId);
     if (!el.isConnected) { return; }   /* editor moved on meanwhile */
     const pdfBlob = blob && blob.type === "application/pdf"
@@ -8436,10 +7624,8 @@ function startAttachmentResize(ev, corner) {
 }
 
 /* Open one attachment in a new browser tab through its provider,
-   following the same guards as the Download path below. A driver
-   with a display address (pCloud, see the registry) hands that
-   address to the new tab directly; any other driver fetches the
-   bytes with the user's own sign in and shows them from a
+   following the same guards as the Download path below. The bytes
+   are fetched with the user's own sign in and shown from a
    temporary object URL, revoked a minute later (a fresh tab needs
    time to load it; the note itself keeps no reference to it). */
 async function openAttachment(att) {
@@ -8459,14 +7645,6 @@ async function openAttachment(att) {
     return;
   }
   try {
-    /* v1.8.3: the display address goes straight to the new tab.
-       Navigating to it needs no byte permission, which is the
-       whole reason this path exists (see pcloudDownload). */
-    if (typeof driver.getDisplayUrl === "function") {
-      const directUrl = await driver.getDisplayUrl(att.fileId);
-      window.open(directUrl, "_blank", "noopener");
-      return;
-    }
     const blob = await driver.download(att.fileId);
     const url = URL.createObjectURL(blob);
     window.open(url, "_blank", "noopener");
@@ -8531,9 +7709,7 @@ function runAttMenuAction(action) {
 }
 
 /* Download one attachment through its provider and hand it to the
-   browser as a normal file download under its original name. A
-   driver with a display address (pCloud) takes the anchor path
-   noted inside instead of the byte path. */
+   browser as a normal file download under its original name. */
 async function downloadAttachment(att) {
   if (!state.online) {
     toast("Downloads need an internet connection. You appear to be offline.", true);
@@ -8552,25 +7728,6 @@ async function downloadAttachment(att) {
   }
   try {
     toast("Downloading " + att.name + "...");
-    /* v1.8.3: a driver with getDisplayUrl (pCloud) downloads by
-       pointing a temporary anchor at the temporary file address,
-       so the browser fetches the file itself and no byte read is
-       needed. Honest limit: browsers ignore the download
-       attribute on a cross origin address, so whether the file
-       saves to disk or opens for viewing is the file host's
-       choice; that is the best a web app can do without byte
-       access. Other drivers keep the blob path below, which
-       always saves under the attachment's own name. */
-    if (typeof driver.getDisplayUrl === "function") {
-      const directUrl = await driver.getDisplayUrl(att.fileId);
-      const linkEl = document.createElement("a");
-      linkEl.href = directUrl;
-      linkEl.download = att.name;
-      document.body.appendChild(linkEl);
-      linkEl.click();
-      linkEl.remove();
-      return;
-    }
     const blob = await driver.download(att.fileId);
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -8612,9 +7769,9 @@ async function downloadAttachment(att) {
        the editor's own Ctrl+Z) cancels the pending delete: the timer
        is cleared and the toast dismissed, and for Undo the captured
        block is also reinserted where it was and rehydrated.
-     - Locking the app or signing out cancels every pending deletion
-       WITHOUT deleting anything: the block is already out of the
-       note body (and that body state is what the lock flow saves),
+     - Signing out cancels every pending deletion WITHOUT deleting
+       anything: the block is already out of the note body (and
+       that body state is what the sign out flow saves),
        but the record stays in the note and the file stays in the
        cloud, so the two never disagree about a file that exists. */
 const PENDING_DELETE_MS = 5000;
@@ -9182,8 +8339,8 @@ async function handleIncomingFiles(fileList) {
     return;
   }
   const providerName = state.attach.defaultProvider;
-  if (!providerName || providerName === "none" || !providers[providerName]) {
-    openAttachSettings("Choose a default storage provider and sign in before adding attachments.");
+  if (!providerName || !providers[providerName]) {
+    openAttachSettings("Sign in with Google before adding attachments.");
     return;
   }
   const driver = providers[providerName];
@@ -9257,19 +8414,16 @@ async function uploadOneAttachment(note, providerName, driver, file) {
 }
 
 /* ----- Attachments settings dialog ---------------------------------------
-   The dialog is where the default provider is chosen and where each
-   provider is signed in or out. Connection state must be impossible to
-   miss (Chris's standing UI rule): each card gets a filled accent edge
-   and a green status dot when signed in, the status line says so in
-   words, and the button flips between Sign in and Sign out.          */
+   The dialog shows the one Google connection: its state must be
+   impossible to miss (Chris's standing UI rule): the card gets a
+   filled accent edge and a green status dot when signed in, the
+   status line says so in words, and the button flips between Sign
+   in and Sign out.                                                    */
 function openAttachSettings(message) {
-  /* v1.4.2: the Google field shows the effective client ID, which is
-     the built in publisher ID unless an override was saved, so what the
+  /* The Google field shows the effective client ID, which is the
+     built in publisher ID unless an override was saved, so what the
      user sees is always the ID sign in will actually use. */
   document.getElementById("googleClientId").value = effectiveGoogleClientId();
-  document.getElementById("pcloudClientId").value = state.attach.pcloudClientId || "";
-  document.getElementById("attachDefaultProvider").value =
-    state.attach.defaultProvider || "none";
   const msg = document.getElementById("attachModalMsg");
   if (message) {
     msg.textContent = message;
@@ -9282,182 +8436,59 @@ function openAttachSettings(message) {
   refreshAttachDialog();
 }
 
+
 function closeAttachSettings() {
   document.getElementById("attachModal").classList.add("hidden");
 }
 
 async function refreshAttachDialog() {
-  document.getElementById("attachDefaultProvider").value =
-    state.attach.defaultProvider || "none";
-
   const g = await providers.google.getStatus();
   document.getElementById("googleCard").classList.toggle("connected", g.connected);
   document.getElementById("googleDot").className =
     "status-dot" + (g.connected ? " on" : "");
   document.getElementById("googleStatus").textContent = g.connected
-    ? "Signed in. New files go to the \"" + ATTACH_ROOT_NAME + "\" folder in your Drive. Google sign ins expire after about an hour; signing in again takes one click."
+    ? "Signed in. New files go to the attachments subfolder of the \"" + NOTES_ROOT_NAME + "\" folder in your Drive, beside your notes. Google sign ins expire after about an hour; signing in again takes one click."
     : (g.reason === "expired"
         ? "Your Google sign in expired. Sign in with Google again to use Drive attachments."
         : "Not signed in.");
   document.getElementById("googleConnectBtn").textContent =
     g.connected ? "Sign out of Google" : "Sign in with Google";
-
-  const p = await providers.pcloud.getStatus();
-  document.getElementById("pcloudCard").classList.toggle("connected", p.connected);
-  document.getElementById("pcloudDot").className =
-    "status-dot" + (p.connected ? " on" : "");
-  document.getElementById("pcloudStatus").textContent = p.connected
-    ? "Signed in" + (state.attach.pcloudUserId ? " as user " + state.attach.pcloudUserId : "") +
-      " on " + (state.attach.pcloudHost || "api.pcloud.com") +
-      ". New files go to the \"" + ATTACH_ROOT_NAME + "\" folder in your pCloud."
-    : "Not signed in.";
-  document.getElementById("pcloudConnectBtn").textContent =
-    p.connected ? "Sign out of pCloud" : "Sign in with pCloud";
 }
+
 
 /* --------------------------------------------------------------------------
    12. Screen flow and event wiring
    -------------------------------------------------------------------------- */
 function wireEvents() {
-  /* v1.4: storage choice cards. The form below reads state.backend, so
-     these buttons only present and update that one choice. */
-  document.getElementById("setupBackendGoogle").addEventListener("click", function () {
-    setSetupBackend(BACKEND_GOOGLE);
-  });
-  document.getElementById("setupBackendGithub").addEventListener("click", function () {
-    setSetupBackend(BACKEND_GITHUB);
-  });
-
-  /* Setup form. The Google branch comes FIRST and returns before any
-     GitHub field is read: a Drive user has no token, no repository name,
-     and (since v1.4.1) no app password, so this path must never touch
-     those inputs. It creates the device key, saves the backend choice,
-     and hands the user to the Google sign in gate, where the sign in
-     itself finishes setup. The GitHub branch below is the original
-     v1.0 setup flow, unchanged. */
+  /* Setup form (v2.0): there is nothing to fill in. Submitting
+     creates this device's local encryption key, saves the (Google
+     only) settings shape, clears any legacy vault artifact left by
+     an older build, and hands the user to the Google sign in gate,
+     where the sign in itself finishes setup. */
   document.getElementById("setupForm").addEventListener("submit", async function (ev) {
     ev.preventDefault();
     const errEl = document.getElementById("setupError");
     errEl.textContent = "";
-    if (state.backend === BACKEND_GOOGLE) {
-      try {
-        state.token = null;
-        state.repoExists = false;
-        /* A fresh Google setup gets a fresh device key. Any old marker
-           vault from v1.4 is removed rather than carried forward: no
-           vault is ever created for a Google user from here on. */
-        vaultWipe();
-        await createDeviceKey();
-        saveSettings();
-        /* If this setup follows a pCloud sign in redirect, the device
-           key now exists, so the pending token can be encrypted. */
-        await finalizePendingPcloud();
-        showGoogleConnectScreen(
-          "One step left: sign in with Google. SnakeScale will create " +
-          "the SnakeScale Notes folder in your Drive and your first " +
-          "notebook and welcome note.");
-      } catch (err) {
-        errEl.textContent = "Setup failed: " + err.message;
-      }
-      return;
-    }
-    const token = document.getElementById("setupToken").value.trim();
-    const repo = document.getElementById("setupRepo").value.trim() || "snakescale-notes-data";
-    const pw = document.getElementById("setupPassword").value;
-    const pw2 = document.getElementById("setupPassword2").value;
-    if (!token) { errEl.textContent = "Paste your GitHub token first."; return; }
-    if (pw.length < 6) { errEl.textContent = "Use an app password of at least 6 characters."; return; }
-    if (pw !== pw2) { errEl.textContent = "The two passwords do not match."; return; }
     try {
-      await vaultCreate(token, pw);
-      state.token = token;
-      state.repo = repo;
+      state.repoExists = false;
+      localStorage.removeItem(LS_LEGACY_VAULT);
+      await createDeviceKey();
       saveSettings();
-      document.getElementById("repoNameInput").value = repo;
-      /* v1.2: if this setup follows a pCloud sign in redirect, the vault
-         key now exists, so the pending token can be encrypted and kept. */
-      await finalizePendingPcloud();
-      await connectAndLoad();
+      showGoogleConnectScreen(
+        "One step left: sign in with Google. SnakeScale will create " +
+        "the SnakeScale Notes folder in your Drive and your first " +
+        "notebook and welcome note.");
     } catch (err) {
       errEl.textContent = "Setup failed: " + err.message;
     }
   });
 
-  /* Lock form: decrypt, then connect. A wrong password throws from
-     vaultUnlock and is reported here without clearing anything. */
-  document.getElementById("lockForm").addEventListener("submit", async function (ev) {
-    ev.preventDefault();
-    const errEl = document.getElementById("lockError");
-    errEl.textContent = "";
-    const pw = document.getElementById("lockPassword").value;
-    try {
-      state.token = await vaultUnlock(pw);
-      loadSettings();
-      /* Last resort backend identification for a vault whose settings
-         record is missing entirely: a Google vault contains the fixed
-         non-secret marker, while a legacy GitHub vault contains a real
-         GitHub token. Explicit stored settings always win over this. */
-      if (!state.backendExplicit) {
-        state.backend = state.token === GOOGLE_BACKEND_VAULT_MARKER
-          ? BACKEND_GOOGLE : BACKEND_GITHUB;
-      }
-      if (state.backend === BACKEND_GOOGLE) {
-        /* v1.4.1 legacy transition: this password prompt existed only
-           because the settings record was missing and the marker could
-           not be identified before unlock. The password is not kept as
-           part of the Google flow: drop the marker vault, replace the
-           password derived key with the device key, and continue to the
-           Google gate from here. */
-        vaultWipe();
-        state.token = null;
-        state.sessionKey = null;
-        await loadOrCreateDeviceKey();
-        await loadCacheForBackend();
-      } else {
-        loadCache();
-      }
-      /* v1.2: complete any pCloud sign in that redirected back here. */
-      await finalizePendingPcloud();
-      await connectAndLoad();
-    } catch (err) {
-      errEl.textContent = "That password did not unlock the vault. Try again.";
-    }
-  });
 
-  document.getElementById("resetVaultBtn").addEventListener("click", function () {
-    const isGoogle = state.backend === BACKEND_GOOGLE;
-    const ok = confirm(isGoogle
-      ? "Clear the old Google setup on this device? You will set up again and sign in with Google again. There is no app password for Google Drive storage. Notes in Google Drive are not affected."
-      : "Clear the encrypted vault on this device? You will set up again with a token and a new password. Notes in GitHub are not affected.");
-    if (ok) {
-      vaultWipe();
-      state.cacheGeneration++;
-      state.cacheWritePromise = null;
-      localStorage.removeItem(LS_CACHE);
-      localStorage.removeItem(LS_QUEUE);
-      /* Encrypted provider tokens and the Google device key belong to
-         the setup being cleared, so they go too. */
-      localStorage.removeItem(LS_PROVIDERS);
-      wipeDeviceKey();
-      state.sessionKey = null;
-      state.providerTokens = { google: null, pcloud: null };
-      showScreen("setup");
-    }
-  });
-
-  /* Repo and storage connect screen buttons. */
-  document.getElementById("createRepoBtn").addEventListener("click", function () {
-    createRepoAndSeed().catch(function (err) {
-      document.getElementById("repoError").textContent = err.message;
-    });
-  });
-  /* The Google sign in gate button. v1.4.2: there is no client ID field
-     on this screen anymore; googleConnect resolves the built in
-     publisher ID (or a saved advanced override) itself. On success any
-     pending pCloud return is finalized under the device key (v1.4.1:
-     Google users have no unlock step where this used to happen), then
-     the normal connect flow runs: first run seeding for a brand new
-     Drive root, or a normal load. */
+  /* The Google sign in gate button. There is no client ID field on
+     this screen; googleConnect resolves the built in publisher ID
+     (or a saved advanced override) itself. On success the normal
+     connect flow runs: first run seeding for a brand new Drive
+     root, or a normal load. */
   document.getElementById("googleBackendConnectBtn").addEventListener("click", async function () {
     const errEl = document.getElementById("repoError");
     errEl.textContent = "";
@@ -9466,7 +8497,6 @@ function wireEvents() {
     btn.textContent = "Signing in...";
     try {
       await providers.google.connect();
-      await finalizePendingPcloud();
       await connectAndLoad();
     } catch (err) {
       errEl.textContent = err.message;
@@ -9478,7 +8508,9 @@ function wireEvents() {
   document.getElementById("repoRetryBtn").addEventListener("click", function () {
     connectAndLoad().catch(function (err) { toast(err.message, true); });
   });
-  document.getElementById("repoLockBtn").addEventListener("click", lockOrSignOut);
+  document.getElementById("repoLockBtn").addEventListener("click", function () {
+    signOut().catch(function (err) { toast(err.message, true); });
+  });
 
   /* Sidebar: view switching. */
   document.getElementById("navAll").addEventListener("click", function () {
@@ -9615,15 +8647,7 @@ function wireEvents() {
       renderNoteList();
     }, 150));
 
-  /* Sidebar footer: repo rename, sync, theme, lock. */
-  document.getElementById("saveRepoBtn").addEventListener("click", async function () {
-    const next = document.getElementById("repoNameInput").value.trim();
-    if (!next || next === state.repo) { return; }
-    state.repo = next;
-    state.repoExists = false;
-    saveSettings();
-    await connectAndLoad();
-  });
+  /* Sidebar footer: sync, theme, sign out. */
   document.getElementById("syncNowBtn").addEventListener("click", function () {
     syncNow(true);
   });
@@ -9632,7 +8656,9 @@ function wireEvents() {
     saveSettings();
     renderSidebar();
   });
-  document.getElementById("lockBtn").addEventListener("click", lockOrSignOut);
+  document.getElementById("lockBtn").addEventListener("click", function () {
+    signOut().catch(function (err) { toast(err.message, true); });
+  });
 
   /* Mobile bar. */
   document.getElementById("mobileNavBtn").addEventListener("click", function () { setMobileView("nav"); });
@@ -9955,17 +8981,8 @@ function wireEvents() {
   document.getElementById("attachModal").addEventListener("click", function (ev) {
     if (ev.target === ev.currentTarget) { closeAttachSettings(); }
   });
-  document.getElementById("attachDefaultProvider").addEventListener("change", function (ev) {
-    state.attach.defaultProvider = ev.target.value;
-    saveSettings();
-    refreshAttachDialog();
-  });
   document.getElementById("googleClientId").addEventListener("change", function (ev) {
     state.attach.googleClientId = ev.target.value.trim();
-    saveSettings();
-  });
-  document.getElementById("pcloudClientId").addEventListener("change", function (ev) {
-    state.attach.pcloudClientId = ev.target.value.trim();
     saveSettings();
   });
   document.getElementById("googleConnectBtn").addEventListener("click", async function () {
@@ -9977,11 +8994,11 @@ function wireEvents() {
       } else {
         await providers.google.connect();
         toast("Signed in with Google. Attachments can now use your Google Drive.");
-        /* v1.4: when Google is also the notes backend, a fresh sign in is
-           the moment queued edits can finally flush. syncNow flushes the
-           queue before reloading, so reconnecting never loses an edit
-           that was preserved while the token was expired. */
-        if (state.backend === BACKEND_GOOGLE && state.repoExists) {
+        /* A fresh sign in is the moment queued edits can finally
+           flush. syncNow flushes the queue before reloading, so
+           reconnecting never loses an edit that was preserved
+           while the token was expired. */
+        if (state.repoExists) {
           await syncNow(false);
         }
       }
@@ -9990,23 +9007,7 @@ function wireEvents() {
     }
     refreshAttachDialog();
   });
-  document.getElementById("pcloudConnectBtn").addEventListener("click", async function () {
-    try {
-      const status = await providers.pcloud.getStatus();
-      if (status.connected) {
-        providers.pcloud.disconnect();
-        toast("Signed out of pCloud.");
-        refreshAttachDialog();
-      } else {
-        /* On success this navigates to pCloud and back; it only returns
-           here when something failed before the redirect. */
-        providers.pcloud.connect();
-      }
-    } catch (err) {
-      toast(err.message, true);
-      refreshAttachDialog();
-    }
-  });
+
 
   /* Trash and archive actions. */
   document.getElementById("trashBtn").addEventListener("click", function () {
@@ -10058,9 +9059,7 @@ function wireEvents() {
     const atts = note.attachments || [];
     let confirmText = "Delete \"" + (note.title || "Untitled note") +
       "\" forever? This removes the file from your " +
-      (state.backend === BACKEND_GOOGLE
-        ? "SnakeScale Notes folder in Google Drive"
-        : "GitHub repository") +
+      storageDeletePhrase() +
       " and cannot be undone from inside the app.";
     if (atts.length) {
       confirmText += " Its " + atts.length + " attachment file(s) will also be " +
@@ -10092,8 +9091,8 @@ function wireEvents() {
   window.addEventListener("online", function () {
     state.online = true;
     refreshSyncPill();
-    /* v1.4.3: backend aware readiness, so a Drive user coming back
-       online auto syncs too (this used to require a GitHub token). */
+    /* Readiness is storeSyncReady(): a connected store plus a live
+       Google sign in in memory, so coming back online auto syncs. */
     if (storeSyncReady()) { syncNow(false); }
   });
   window.addEventListener("offline", function () {
@@ -10103,45 +9102,42 @@ function wireEvents() {
 }
 
 /* --------------------------------------------------------------------------
-   Boot routing (v1.4.1)
+   Boot routing (v2.0)
    initialScreenFor is a pure decision function: it reads nothing and
    changes nothing, so it can be tested on its own. Its rules are the
    whole sign in model in one place:
-     Google backend: a live token already in this session goes straight
-       to the app. A returning device (device key present) goes to the
-       Google sign in gate. A legacy v1.4 marker vault ALSO goes to the
-       gate, never to a password prompt. No vault and no device key means
-       a first run and goes to setup.
-     GitHub backend (and any unset backend, which normalizes to GitHub):
-       a vault goes to the lock screen, no vault goes to setup.
+     A live Google token already in this session goes straight to
+       the app.
+     A returning device (a device key, saved settings, or any legacy
+       artifact from an older build) goes to the Google sign in
+       gate.
+     Anything else is a first run and goes to setup.
+   There is no lock screen and no password anywhere in this model:
+   Google sign in is the only sign in.
    -------------------------------------------------------------------------- */
 function initialScreenFor(input) {
-  const backend = normalizeBackend(input && input.backend);
-  if (backend === BACKEND_GOOGLE) {
-    if (input && input.hasLiveToken) { return "app"; }
-    if (input && (input.hasDeviceKey || input.hasVault)) {
-      return "googleGate";
-    }
-    return "setup";
+  if (input && input.hasLiveToken) { return "app"; }
+  if (input && (input.hasDeviceKey || input.hasSettings ||
+      input.hasLegacyArtifacts)) {
+    return "googleGate";
   }
-  return input && input.hasVault ? "lock" : "setup";
+  return "setup";
 }
 
-/* Prepare the Google gate for a returning Drive user: remove any legacy
-   v1.4 marker vault (Drive users never unlock a vault again), load or
-   create the device key, then try to enter without bothering the user:
-   first a token that is still live, then one silent GIS renewal. Only
-   when both fail does the gate itself appear, and it appears quietly:
-   no error toast is raised for a background renewal that did not work. */
+/* Prepare the Google gate for a returning user: load or create the
+   device key, then try to enter without bothering the user: first a
+   token that is still live, then one silent GIS renewal. Only when
+   both fail does the gate itself appear, and it appears quietly: no
+   error toast is raised for a background renewal that did not work.
+   (Legacy artifacts were already cleaned by boot before this runs.) */
 async function prepareGoogleGate() {
-  /* v1.6: boot lands here with the loading overlay already up; keep
-     it up (with an honest status) through the silent sign in attempt.
+  /* Boot lands here with the loading overlay already up; keep it up
+     (with an honest status) through the silent sign in attempt.
      Every exit from this function either hands over to
      connectAndLoad, which manages the overlay from there, or shows
      the Google gate, which hides it. */
   showLoading("Checking your Google sign in...");
   try {
-    vaultWipe();
     await loadOrCreateDeviceKey();
   } catch (e) {
     showGoogleConnectScreen();
@@ -10153,12 +9149,10 @@ async function prepareGoogleGate() {
   try { status = await providers.google.getStatus(); }
   catch (e) { status = null; }
   if (status && status.connected) {
-    await finalizePendingPcloud();
     await connectAndLoad();
     return;
   }
   if (await googleTrySilentSignIn()) {
-    await finalizePendingPcloud();
     await connectAndLoad();
     return;
   }
@@ -10167,38 +9161,27 @@ async function prepareGoogleGate() {
 
 /* --------------------------------------------------------------------------
    Boot
-   Order matters: logos first (they appear on every screen), then saved
-   settings (theme and storage choice), then event wiring, then the
-   starting route from initialScreenFor. GitHub follows the original
-   rule: setup when there is no vault, lock when there is one, and its
-   note cache is loaded only after a successful unlock. Google has no
-   lock screen at all: returning users go through prepareGoogleGate.
+   Order matters: logos first (they appear on every screen), then
+   saved settings (theme, attachment bookkeeping, list sort), then
+   the legacy cleanup for records left by builds before v2.0, then
+   event wiring, then the starting route from initialScreenFor.
+   Returning users go through prepareGoogleGate; there is no lock
+   screen to route to.
    -------------------------------------------------------------------------- */
 async function boot() {
-  /* v1.2: a pCloud OAuth redirect may have landed here with a token in
-     the URL fragment. Capture and scrub it before anything renders. */
-  capturePcloudReturn();
   injectLogos();
   renderAppVersion();
   loadSettings();
+  const foundLegacy = cleanupLegacyStorage();
   wireEvents();
-  /* Small diagnostic hook: the build stamp is searchable in the file, and
-     also visible in the console for support. */
+  /* Small diagnostic hook: the build stamp is searchable in the file,
+     and also visible in the console for support. */
   console.log("SnakeScale Notes v" + APP_VERSION + " build " + APP_BUILD);
 
-  const hasVault = vaultExists();
-  /* Stored settings that name a backend are authoritative. With no
-     explicit backend, an existing vault is treated as a GitHub vault
-     (the pre-v1.4 default), never guessed to be Google from its mere
-     presence; a device with no vault at all keeps the fresh setup
-     recommendation already in state.backend. */
-  const routingBackend = state.backendExplicit
-    ? state.backend
-    : (hasVault ? undefined : state.backend);
   const start = initialScreenFor({
-    backend: routingBackend,
-    hasVault: hasVault,
     hasDeviceKey: deviceKeyExists(),
+    hasSettings: !!localStorage.getItem(LS_SETTINGS),
+    hasLegacyArtifacts: foundLegacy,
     hasLiveToken: !!state.providerTokens.google
   });
   if (start === "googleGate") {
@@ -10211,16 +9194,14 @@ async function boot() {
     return;
   }
   showScreen(start);
-  /* v1.6: setup and lock are interactive the moment they are shown,
-     so the boot loading overlay comes down here. The googleGate and
-     app routes manage the overlay inside their own flows. */
+  /* Setup is interactive the moment it is shown, so the boot
+     loading overlay comes down here. The googleGate and app
+     routes manage the overlay inside their own flows. */
   hideLoading();
-  if (start === "lock") {
-    document.getElementById("lockPassword").focus();
-  }
 }
 
 document.addEventListener("DOMContentLoaded", boot);
+
 </script>
 </body>
 </html>
