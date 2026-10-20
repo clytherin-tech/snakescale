@@ -27,10 +27,43 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-20-SSN-V200
-  Version: 2.0.0
+  BUILD STAMP: 2026-10-20-SSN-V210
+  Version: 2.1.0
 
   Revision history:
+    v2.1.0 2026-10-20 Export, import, note links, and more insert
+                      items. The open note can now be exported from a
+                      new Export menu in the editor footer: as a plain
+                      text file (the title first, then the body as
+                      plain text, with ballot box lines for checklist
+                      items and markers kept on lists), as a real Word
+                      .docx file built in the page with no library (a
+                      hand written stored zip with a CRC32 in code, and
+                      word/document.xml built by walking the note body:
+                      headings, bold, italic, underline,
+                      strikethrough, lists, checklists as ballot box
+                      lines, web links as text plus URL, tables, code,
+                      and bracketed attachment lines), or as a PDF
+                      through a clean print view the browser saves.
+                      Notes can be imported with a new Import button in
+                      the notes list toolbar (.txt, .docx, and .pdf,
+                      several at once): text files split into
+                      paragraphs, .docx files are unzipped and
+                      converted in the page (deflated entries use
+                      DecompressionStream), and PDFs become a note with
+                      the file attached through the Google upload flow.
+                      The Insert menu gains Link to Note (a picker
+                      inserts an ssnote: link that navigates inside the
+                      app, with Trash, Archive, and missing target
+                      toasts), Table, Code Block, and Inline Code. The
+                      sidebar footer loses its Google Drive storage
+                      line and description text, and the Attachments
+                      button and its settings dialog are removed now
+                      that attachments ride the main Google sign in;
+                      the baked in publisher client ID and any stored
+                      override keep working through
+                      effectiveGoogleClientId(). Build stamp
+                      2026-10-20-SSN-V210.
     v2.0.0 2026-10-20 Google Drive is the only data store, and notes
                       and attachments share one folder. The GitHub
                       notes backend and the pCloud attachment provider
@@ -314,8 +347,8 @@
                       at all, and every Google sign in (notes storage,
                       silent renewal, attachments) takes the ID from one
                       helper that uses the built in publisher ID unless
-                      an advanced override was saved in the Attachments
-                      settings dialog (kept for testing and for forks).
+                      an advanced override was saved in the app
+                      settings (kept for testing and for forks).
     v1.4.1 2026-10-19 Google Drive sign in only. The Drive backend no longer
                       asks for or creates an app password vault. A device
                       key replaces the password derived session key for
@@ -388,8 +421,8 @@
                       the upload flow with nothing to upload.
     v1.2  2026-10-19  Attachments and images. Notes can now carry files and
                       images stored in the user's own Google Drive or
-                      pCloud account (the user picks the provider in the
-                      new Attachments settings dialog). Attachment binaries
+                      pCloud account (the user picks the provider in a
+                      new attachments dialog). Attachment binaries
                       never enter GitHub: the note file stores only small
                       metadata in a new front matter line, attachments:,
                       holding a JSON array of provider references, and the
@@ -653,8 +686,6 @@ body.dark .gate-brand .wordmark{color:#EAF3EC;}
 .sidebar-foot{
   margin-top:auto;padding:16px;border-top:1px solid #1D4A38;font-size:13px;
 }
-.sidebar-foot .user-line{font-weight:700;color:#fff;word-break:break-all;}
-.sidebar-foot .repo-line{color:#BFD6C4;word-break:break-all;margin-bottom:8px;}
 .foot-buttons{display:flex;flex-wrap:wrap;gap:6px;}
 .foot-buttons .btn{background:#0A2E21;border-color:#2A5240;color:#EAF3EC;}
 .foot-buttons .btn:hover{border-color:var(--accent);}
@@ -912,6 +943,10 @@ body.dark .tag-chip{color:var(--accent);}
    their button. keepMenuInViewport in the script nudges a menu back
    inside the viewport on narrow screens. */
 .tb-menu-wrap{position:relative;display:inline-flex;}
+/* v2.1.0: a menu that opens UPWARD from its wrap, for menus anchored in
+   the editor footer (the Export menu), where a downward menu would
+   fall off the bottom of the screen. */
+.tb-menu.up{top:auto;bottom:calc(100% + 6px);}
 .tb-menu{
   position:absolute;top:calc(100% + 6px);left:0;min-width:200px;
   max-width:86vw;max-height:70vh;overflow-y:auto;z-index:30;
@@ -959,6 +994,39 @@ body.dark .tag-chip{color:var(--accent);}
 #noteBody h2{font-size:19px;margin:12px 0 5px;}
 #noteBody ul,#noteBody ol{padding-left:24px;}
 #noteBody li.done{color:var(--muted);text-decoration:line-through;}
+/* v2.1.0: links to other notes (href "ssnote:<id>", class ss-note-link)
+   read as internal links: accent color and an underline. The accent
+   variable exists in both themes, so this holds in dark mode too. */
+#noteBody a.ss-note-link{color:var(--accent);text-decoration:underline;}
+/* v2.1.0: inserted tables (class ss-table): collapsed borders from the
+   theme border variable, cell padding, a soft header background, and
+   full width so the table spans the note column. */
+#noteBody table.ss-table{border-collapse:collapse;width:100%;margin:12px 0;}
+#noteBody table.ss-table th,
+#noteBody table.ss-table td{border:1px solid var(--border);
+  padding:6px 10px;text-align:left;vertical-align:top;}
+#noteBody table.ss-table th{background:var(--soft);}
+/* v2.1.0: the Link to Note picker (a modal in the app's modal style).
+   The results list scrolls; each row is a full width button with the
+   note title on one line and a muted notebook and date line under it.
+   The modal text input gets the same field styling as modal selects. */
+.modal .field input[type="text"]{
+  width:100%;padding:8px 10px;border:1px solid var(--border);
+  border-radius:var(--radius-button);background:var(--surface);
+  color:var(--text);
+}
+.note-link-list{display:flex;flex-direction:column;gap:4px;
+  max-height:320px;overflow-y:auto;}
+.note-link-row{display:block;width:100%;text-align:left;
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius-button);padding:8px 10px;cursor:pointer;
+  color:var(--text);}
+.note-link-row:hover{border-color:var(--accent);background:var(--soft);}
+.note-link-row .nl-title{display:block;font-size:14px;font-weight:600;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.note-link-row .nl-meta{display:block;font-size:12px;color:var(--muted);
+  margin-top:2px;}
+.note-link-empty{font-size:13px;color:var(--muted);margin:6px 0;}
 /* v1.6 checklists: a checklist is a list of checkboxes, not a bulleted
    list, so its items never show a bullet or marker in front of the
    checkbox. Toolbars have tagged new checklists with the ss-checklist
@@ -1082,10 +1150,21 @@ body.dark #conflictBanner{background:#3A2F10;color:#FFE1A8;}
   color:var(--muted);
 }
 #noteBody pre{
-  background:var(--bg);border:1px solid var(--border);
+  background:var(--soft);border:1px solid var(--border);
   border-radius:8px;padding:10px 12px;overflow-x:auto;
   font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
   font-size:13.5px;line-height:1.5;
+}
+/* v2.1.0: the code element inside a pre is just the pre's text (the
+   Insert menu's code block wraps one); it must not pick up the inline
+   code chip styling below. */
+#noteBody pre code{font:inherit;background:none;border:none;padding:0;}
+/* v2.1.0: inline code (class ss-inline-code, from the Insert menu):
+   monospace in a soft chip so it stands out inside a sentence. */
+#noteBody code.ss-inline-code{
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  background:var(--soft);border:1px solid var(--border);
+  border-radius:5px;padding:0 4px;font-size:.92em;
 }
 #noteBody hr{border:none;border-top:2px solid var(--border);margin:14px 0;}
 
@@ -1230,11 +1309,6 @@ body.dark .ss-att-provider{color:#EAF3EC;}
 }
 .modal-card h2{margin:0 0 4px;font-size:20px;}
 .modal-card .modal-sub{color:var(--muted);font-size:14px;margin:0 0 14px;}
-.modal-msg{
-  border:1px solid var(--border);border-left:4px solid var(--accent);
-  background:var(--surface);border-radius:var(--radius-button);
-  padding:8px 12px;font-size:14px;margin-bottom:14px;
-}
 .provider-card{
   border:1px solid var(--border);border-radius:var(--radius-card);
   background:var(--surface);padding:14px;margin:12px 0;
@@ -1492,12 +1566,9 @@ body.dark .ss-att-provider{color:#EAF3EC;}
 
     <div class="sidebar-foot">
       <div class="sync-pill" id="syncPill" data-state="idle"><span class="sync-dot" aria-hidden="true"></span><span class="sync-label">Not synced yet</span></div>
-      <div class="user-line" id="footUser">Not connected</div>
-      <div class="repo-line" id="footRepo"></div>
       <div class="foot-buttons">
       <div class="foot-buttons">
         <button class="btn small" id="syncNowBtn" type="button">Sync now</button>
-        <button class="btn small" id="attachSettingsBtn" type="button">Attachments</button>
         <button class="btn small" id="themeBtn" type="button">Dark mode</button>
         <button class="btn small" id="lockBtn" type="button">Sign out</button>
       </div>
@@ -1512,16 +1583,20 @@ body.dark .ss-att-provider{color:#EAF3EC;}
     <div class="list-head">
       <h2 id="listTitle">All Notes</h2>
       <div class="sub" id="listSub"></div>
-      <!-- v1.8: the notes list toolbar. Four icon buttons, right
+      <!-- v1.8: the notes list toolbar. Five icon buttons, right
            aligned; their text lives in the title tooltips and the
            aria labels. The three panels (filters, sort, notebook
            menu) are list pane chrome: they live here in the list
            header, far outside #noteBody, so they can never be saved
            into a note. v1.8.1: the notebook menu is view aware (its
            items change in Trash and in the Archive), and the button
-           tooltip follows it. -->
+           tooltip follows it. v2.1.0 adds the Import button: a
+           plain button with no panel; the hidden file input it opens
+           sits right beside it inside this toolbar. -->
       <div class="list-toolbar" id="listToolbar">
         <button type="button" class="list-tb-btn" id="listNewNoteBtn" title="New note" aria-label="New note"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false"><path d="M8 2.8v10.4M2.8 8h10.4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" fill="none"/></svg></button>
+        <button type="button" class="list-tb-btn" id="listImportBtn" title="Import notes (.txt, .docx, .pdf)" aria-label="Import notes"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false"><path d="M8 2.2v7.6M5.6 7.4L8 9.8l2.4-2.4M2.8 12.2v1.6h10.4v-1.6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg></button>
+        <input type="file" id="importFileInput" accept=".txt,.docx,.pdf" multiple hidden>
         <div class="list-tb-wrap">
           <button type="button" class="list-tb-btn" id="listFilterBtn" title="Filters" aria-label="Filters" aria-haspopup="true"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false"><path d="M2 2.8h12L9.6 8.1v4.3L6.4 14V8.1L2 2.8z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/></svg></button>
           <div id="filterPanel" class="list-panel hidden" role="dialog" aria-label="Filters">
@@ -1629,8 +1704,12 @@ body.dark .ss-att-provider{color:#EAF3EC;}
                 <div class="tb-menu hidden" id="insertMenu" role="menu">
                   <button type="button" data-insert="attach">Attach file or image</button>
                   <button type="button" data-insert="link">Link</button>
+                  <button type="button" data-insert="noteLink">Link to note</button>
                   <button type="button" data-insert="divider">Divider</button>
                   <button type="button" data-insert="datetime">Date and time</button>
+                  <button type="button" data-insert="table">Table</button>
+                  <button type="button" data-insert="codeBlock">Code block</button>
+                  <button type="button" data-insert="inlineCode">Inline code</button>
                 </div>
               </span>
             </div>
@@ -1778,6 +1857,14 @@ body.dark .ss-att-provider{color:#EAF3EC;}
         <span id="saveState">No changes</span>
         <span class="editor-hint">Links: Ctrl+click (Cmd+click on Mac) opens a link, or click it to open or edit it.</span>
         <div class="editor-actions">
+          <span class="tb-menu-wrap export-wrap">
+            <button class="btn small" id="exportBtn" type="button" aria-haspopup="true">Export &#9662;</button>
+            <div class="tb-menu up hidden" id="exportMenu" role="menu">
+              <button type="button" data-export="txt">Text (.txt)</button>
+              <button type="button" data-export="docx">Word (.docx)</button>
+              <button type="button" data-export="pdf">PDF (print)</button>
+            </div>
+          </span>
           <button class="btn small" id="editorBackBtn" type="button">Back to list</button>
           <button class="btn small danger" id="trashBtn" type="button">Move to Trash</button>
           <button class="btn small" id="archiveBtn" type="button">Archive</button>
@@ -1791,39 +1878,25 @@ body.dark .ss-att-provider{color:#EAF3EC;}
 </div>
 
 <!-- ==========================================================================
-     v2.0: Attachments settings dialog
-     Attachments live in the user's own Google Drive, in the attachments
-     subfolder of the same SnakeScale Notes folder that holds the notes.
-     Signing in uses OAuth: the user clicks Sign in with Google and
-     approves access on Google's own site. The Google client ID field
-     below is NOT something end users fill in with a developer app of
-     their own: the publisher client ID belongs to Chris, the app owner,
-     is baked into the app (PUBLISHER_GOOGLE_CLIENT_ID), and the field
-     is only an advanced override for testing and for forks (see
-     ATTACHMENT_PROVIDERS_SETUP.md).
+     v2.1.0: Link to Note picker
+     Opened from Insert, Link to Note. The search input filters the
+     live note list the script renders into noteLinkResults; each row
+     is a button showing the note title, its notebook name, and its
+     updated date. Picking a row inserts an ssnote: link at the caret
+     captured before this modal opened. Like every modal, it lives
+     outside #noteBody, so it can never be saved into a note.
      ========================================================================== -->
-
-<div id="attachModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="attachModalTitle">
+<div id="noteLinkModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="noteLinkTitle">
   <div class="modal-card">
-    <h2 id="attachModalTitle">Attachments</h2>
-    <p class="modal-sub">Images and files are stored in your own Google Drive, in the <strong>attachments</strong> subfolder of the <strong>SnakeScale Notes</strong> folder that holds your notes. Your note files only keep a small reference to each attachment. You sign in with Google on Google's own site; SnakeScale never sees your Google password.</p>
-    <div id="attachModalMsg" class="modal-msg hidden"></div>
-
-    <div class="provider-card" id="googleCard">
-      <h3><span class="status-dot" id="googleDot"></span>Google Drive</h3>
-      <div class="provider-status" id="googleStatus">Not signed in.</div>
-      <div class="field">
-        <label for="googleClientId">Google client ID (built in; change only for testing)</label>
-        <input type="text" id="googleClientId" placeholder="Built in publisher Google client ID" autocomplete="off">
-      </div>
-      <button class="btn small" id="googleConnectBtn" type="button">Sign in with Google</button>
-      <div class="provider-hint" id="googleHint">SnakeScale ships with the publisher Google client ID built in, so sign in works with nothing to fill in here. This field is an advanced override for testing, and for forks of SnakeScale that registered their own Google OAuth client. Clearing it returns to the built in ID. End users never register a developer app.</div>
+    <h2 id="noteLinkTitle">Link to a note</h2>
+    <p class="modal-sub">Pick the note this link should open. The link is inserted where your cursor was in the current note.</p>
+    <div class="field">
+      <label for="noteLinkSearch">Search notes</label>
+      <input type="text" id="noteLinkSearch" placeholder="Type to filter by title" autocomplete="off">
     </div>
-
-    <p class="provider-hint">Apple note: iCloud Drive cannot be used directly by web apps, so Apple attachment storage is deferred to a possible future release.</p>
-
+    <div class="note-link-list" id="noteLinkResults"></div>
     <div class="modal-foot">
-      <button class="btn" id="attachDoneBtn" type="button">Done</button>
+      <button class="btn" id="noteLinkCancelBtn" type="button">Cancel</button>
     </div>
   </div>
 </div>
@@ -1840,8 +1913,8 @@ body.dark .ss-att-provider{color:#EAF3EC;}
 "use strict";
 
 /* ============================================================================
-   SnakeScale Notes v2.0.0: application script
-   BUILD STAMP: 2026-10-20-SSN-V200
+   SnakeScale Notes v2.1.0: application script
+   BUILD STAMP: 2026-10-20-SSN-V210
 
    How this script is organized:
      1. Constants and global state
@@ -1855,9 +1928,10 @@ body.dark .ss-att-provider{color:#EAF3EC;}
      8. Sync engine: load everything, save with conflict protection,
         notebooks, trash, and the index.json rebuild
      9. Rendering: sidebar, tags, note list, editor
-    10. Editor behavior: toolbar, checklists, autosave
+    10. Editor behavior: toolbar, checklists, autosave, note links,
+        export, and import
     11. Attachments: the Google Drive provider, upload flow,
-        placeholder hydration, removal, and the settings dialog
+        placeholder hydration, and removal
     12. Screen flow and event wiring, then boot
 
    Note body storage note (v1.0 decision): the editor is rich text, so the
@@ -1871,8 +1945,8 @@ body.dark .ss-att-provider{color:#EAF3EC;}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-20-SSN-V200";
-const APP_VERSION = "2.0.0";
+const APP_BUILD = "2026-10-20-SSN-V210";
+const APP_VERSION = "2.1.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -1918,7 +1992,7 @@ const GOOGLE_DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file";
    origin), so anyone who views this value gains no access to anything
    with it. Forks of SnakeScale must register their own OAuth client in
    Google Cloud and replace this value, or use the advanced override
-   field in the Attachments settings dialog. Every Google sign in in
+   saved in the app settings. Every Google sign in in
    this app resolves its client ID through effectiveGoogleClientId(),
    which prefers a saved override and otherwise returns this constant,
    so no end user is ever asked for a client ID. */
@@ -4111,9 +4185,11 @@ function renderSidebar() {
     tagNav.appendChild(btn);
   });
 
-  document.getElementById("footUser").textContent = "Google Drive";
-  document.getElementById("footRepo").textContent =
-    "Notes live in the SnakeScale Notes folder in your Google Drive";
+  /* v2.1.0: the sidebar foot no longer prints the Google Drive
+     storage line or the storage description here (the footUser and
+     footRepo elements were removed from the markup). The sync pill
+     above and the foot buttons below carry the state the user needs,
+     and the sidebar header already shows the signed in account. */
   const noNoteStorageLine = document.getElementById("noNoteStorageLine");
   if (noNoteStorageLine) {
     noNoteStorageLine.textContent =
@@ -5180,6 +5256,1378 @@ function saveLinkEdit() {
   toast("Link updated.");
 }
 
+
+/* ----- v2.1.0: note links (Insert, Link to Note) -------------------------
+   A note link is an ordinary anchor whose href is "ssnote:<noteId>" and
+   whose class is ss-note-link. It is inserted at the caret the user had
+   BEFORE the picker modal opened: runInsertAction restores the saved
+   formatting selection, openNoteLinkPicker reads it (for the label) and
+   captures it with captureCaret(), the same caret memory the attachment
+   flows use, and picking a note restores that range and inserts the
+   anchor into it. Clicking a note link never shows the web link popup:
+   the note body's link click listener resolves ssnote: hrefs FIRST (see
+   wireEvents), ahead of both the Ctrl+click path and the popup path. */
+
+const SSNOTE_HREF_PREFIX = "ssnote:";
+
+/* The note id a note link points at, or null when the anchor is not a
+   note link. Reads the RAW href attribute on purpose: the resolved
+   anchor.href property would rewrite "ssnote:abc" into an absolute URL
+   string and hide the scheme this check depends on. */
+function noteLinkIdOf(anchor) {
+  if (!anchor || !anchor.getAttribute) { return null; }
+  const href = anchor.getAttribute("href") || "";
+  if (href.indexOf(SSNOTE_HREF_PREFIX) !== 0) { return null; }
+  const id = href.slice(SSNOTE_HREF_PREFIX.length).trim();
+  return id ? id : null;
+}
+
+/* While the picker is open: the caret range to insert at, and the label
+   decided at open time (the selected text, or empty when the caret was
+   collapsed, in which case the target note's title becomes the label). */
+let noteLinkPending = null;
+
+function openNoteLinkPicker() {
+  const host = currentNote();
+  if (!host) {
+    toast("Open a note first, then insert a link to another note.", true);
+    return;
+  }
+  if (host.trashed || host.archived) {
+    toast("Links cannot be inserted while a note is in Trash or the Archive.", true);
+    return;
+  }
+  const bodyEl = document.getElementById("noteBody");
+  /* runInsertAction has just restored the saved selection, so the live
+     selection IS the user's caret. Read the label from it first, then
+     capture it with the attachment caret memory before the modal takes
+     focus away from the editor. */
+  const sel = window.getSelection();
+  let label = "";
+  if (sel && sel.rangeCount) {
+    const range = sel.getRangeAt(0);
+    if (!range.collapsed && bodyEl.contains(range.commonAncestorContainer)) {
+      label = range.toString().trim();
+    }
+  }
+  captureCaret();
+  noteLinkPending = { range: savedCaretRange, label: label };
+  const search = document.getElementById("noteLinkSearch");
+  search.value = "";
+  renderNoteLinkResults("");
+  document.getElementById("noteLinkModal").classList.remove("hidden");
+  search.focus();
+}
+
+function closeNoteLinkPicker() {
+  document.getElementById("noteLinkModal").classList.add("hidden");
+  noteLinkPending = null;
+}
+
+/* The picker's results: live notes only (state.notes never holds Trash
+   or Archive notes), minus the note being edited, most recently
+   updated first, filtered by the search text against the title. Each
+   row shows the title, its notebook's name, and its updated date. */
+function renderNoteLinkResults(filterText) {
+  const box = document.getElementById("noteLinkResults");
+  box.innerHTML = "";
+  const host = currentNote();
+  const needle = (filterText || "").trim().toLowerCase();
+  const matches = state.notes.filter(function (note) {
+    if (host && note.id === host.id) { return false; }
+    if (!needle) { return true; }
+    return (note.title || "").toLowerCase().indexOf(needle) >= 0;
+  }).slice().sort(function (a, b) {
+    return String(b.updated || "").localeCompare(String(a.updated || ""));
+  });
+  if (!matches.length) {
+    const empty = document.createElement("p");
+    empty.className = "note-link-empty";
+    empty.textContent = needle
+      ? "No notes match that search."
+      : "There are no other notes to link to yet.";
+    box.appendChild(empty);
+    return;
+  }
+  matches.forEach(function (note) {
+    const nb = state.notebooks.find(function (b) {
+      return b.slug === note.notebook;
+    });
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = "note-link-row";
+    const titleEl = document.createElement("span");
+    titleEl.className = "nl-title";
+    titleEl.textContent = note.title || "Untitled note";
+    const metaEl = document.createElement("span");
+    metaEl.className = "nl-meta";
+    metaEl.textContent = (nb ? nb.name : "Notebook") + ", updated " +
+      formatDate(note.updated);
+    row.appendChild(titleEl);
+    row.appendChild(metaEl);
+    row.addEventListener("click", function () { pickNoteLinkTarget(note); });
+    box.appendChild(row);
+  });
+}
+
+/* Insert the chosen link at the caret captured when the picker opened,
+   then close the picker. The label is the text that was selected when
+   the picker opened, or the target note's title when nothing was
+   selected. Falls back to appending at the end of the body when the
+   captured range is no longer usable, the same fallback the
+   attachment placeholder inserter uses. */
+function pickNoteLinkTarget(target) {
+  const pending = noteLinkPending;
+  closeNoteLinkPicker();
+  const bodyEl = document.getElementById("noteBody");
+  bodyEl.focus();
+  const anchor = document.createElement("a");
+  anchor.setAttribute("href", SSNOTE_HREF_PREFIX + target.id);
+  anchor.setAttribute("class", "ss-note-link");
+  anchor.textContent = (pending && pending.label) ||
+    target.title || "Untitled note";
+  let placed = false;
+  const range = pending && pending.range;
+  if (range && bodyEl.contains(range.startContainer)) {
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+    const live = sel.getRangeAt(0);
+    live.deleteContents();
+    live.insertNode(anchor);
+    live.setStartAfter(anchor);
+    live.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(live);
+    placed = true;
+  }
+  if (!placed) { bodyEl.appendChild(anchor); }
+  markDirty();
+}
+
+/* Does the current list view contain this live note? Mirrors the view
+   kinds visibleNotes() understands. A note link click switches the
+   list to All Notes when the answer is no, so the user sees where
+   they landed; openNote then re-renders the list in that view. */
+function listViewContainsNote(note) {
+  const view = state.view;
+  if (!view || view.kind === "all") { return true; }
+  if (view.kind === "pinned") { return !!note.pinned; }
+  if (view.kind === "notebook") { return note.notebook === view.value; }
+  if (view.kind === "tag") {
+    return (note.tags || []).indexOf(view.value) >= 0;
+  }
+  return false;
+}
+
+/* Follow a note link: open the target when it is a live note, and say
+   plainly what happened when it is not. Trash and Archive are checked
+   in their own state lists; anything else no longer exists. */
+function followNoteLink(noteId) {
+  const live = state.notes.find(function (n) { return n.id === noteId; });
+  if (live) {
+    if (!listViewContainsNote(live)) {
+      state.view = { kind: "all", value: null };
+    }
+    openNote(noteId);
+    return;
+  }
+  if (state.trash.some(function (n) { return n.id === noteId; })) {
+    toast("That note is in Trash.");
+    return;
+  }
+  if (state.archive.some(function (n) { return n.id === noteId; })) {
+    toast("That note is in the Archive.");
+    return;
+  }
+  toast("That note no longer exists.", true);
+}
+
+/* ----- v2.1.0: Insert menu block items (table, code block) ---------------
+   insertBlockAtCaret follows the same restore, delete, insert pattern
+   as insertPlaceholderAtCaret: runInsertAction already restored the
+   saved selection, so this reads the LIVE range, deletes what it
+   covers, and inserts the block there (appending to the body when
+   there is no usable caret). A following empty paragraph is inserted
+   after the block so typing can continue past it. */
+function insertBlockAtCaret(block, followingEl) {
+  const bodyEl = document.getElementById("noteBody");
+  bodyEl.focus();
+  const sel = window.getSelection();
+  let placed = false;
+  if (sel && sel.rangeCount) {
+    const range = sel.getRangeAt(0);
+    if (bodyEl.contains(range.commonAncestorContainer)) {
+      range.deleteContents();
+      range.insertNode(block);
+      placed = true;
+    }
+  }
+  if (!placed) { bodyEl.appendChild(block); }
+  if (followingEl) { block.after(followingEl); }
+  return block;
+}
+
+function emptyFollowParagraph() {
+  const p = document.createElement("p");
+  p.appendChild(document.createElement("br"));
+  return p;
+}
+
+/* Put the caret at a child offset inside an element or text node. */
+function placeCaretIn(node, offset) {
+  const sel = window.getSelection();
+  const range = document.createRange();
+  range.setStart(node, offset || 0);
+  range.collapse(true);
+  sel.removeAllRanges();
+  sel.addRange(range);
+}
+
+/* Insert, Table: a starter table (class ss-table) with a header row of
+   three header cells and two body rows of three cells each, an empty
+   paragraph after it, and the caret in the first header cell. The
+   cells carry a <br> so they are clickable and typeable while empty. */
+function insertStarterTable() {
+  function cell(tag) {
+    const c = document.createElement(tag);
+    c.appendChild(document.createElement("br"));
+    return c;
+  }
+  const table = document.createElement("table");
+  table.setAttribute("class", "ss-table");
+  const thead = document.createElement("thead");
+  const headRow = document.createElement("tr");
+  for (let i = 0; i < 3; i++) { headRow.appendChild(cell("th")); }
+  thead.appendChild(headRow);
+  table.appendChild(thead);
+  const tbody = document.createElement("tbody");
+  for (let r = 0; r < 2; r++) {
+    const row = document.createElement("tr");
+    for (let c = 0; c < 3; c++) { row.appendChild(cell("td")); }
+    tbody.appendChild(row);
+  }
+  table.appendChild(tbody);
+  insertBlockAtCaret(table, emptyFollowParagraph());
+  const firstCell = table.querySelector("th");
+  if (firstCell) { placeCaretIn(firstCell, 0); }
+}
+
+/* Insert, Code Block: a pre.ss-code-block holding a code element, an
+   empty paragraph after it, and the caret inside the code. Text that
+   was selected becomes the code content. The styling is shared with
+   the bare pre the Aa style menu makes (see the #noteBody pre rule),
+   so the two code block routes look identical. */
+function insertCodeBlock() {
+  const bodyEl = document.getElementById("noteBody");
+  const sel = window.getSelection();
+  let selectedText = "";
+  if (sel && sel.rangeCount) {
+    const range = sel.getRangeAt(0);
+    if (!range.collapsed &&
+        bodyEl.contains(range.commonAncestorContainer)) {
+      selectedText = range.toString();
+    }
+  }
+  const pre = document.createElement("pre");
+  pre.setAttribute("class", "ss-code-block");
+  const code = document.createElement("code");
+  code.textContent = selectedText;
+  pre.appendChild(code);
+  insertBlockAtCaret(pre, emptyFollowParagraph());
+  if (selectedText && code.firstChild) {
+    placeCaretIn(code.firstChild, code.firstChild.length);
+  } else {
+    placeCaretIn(code, 0);
+  }
+}
+
+/* Insert, Inline Code: wrap the selection in code.ss-inline-code,
+   using the extract and reinsert approach (extractContents pulls the
+   selected fragment out, the code element wraps it, and it goes back
+   in at the same spot), the same trick the selection wrappers use.
+   With no selection, an empty code element is inserted holding a
+   zero width space (written as an escape below) so the caret has a
+   text node to sit in; the space renders as nothing if it survives. */
+function insertInlineCode() {
+  const bodyEl = document.getElementById("noteBody");
+  const sel = window.getSelection();
+  if (!sel || !sel.rangeCount) { return; }
+  const range = sel.getRangeAt(0);
+  if (!bodyEl.contains(range.commonAncestorContainer)) { return; }
+  const code = document.createElement("code");
+  code.setAttribute("class", "ss-inline-code");
+  if (range.collapsed) {
+    code.appendChild(document.createTextNode("\u200B"));
+    range.insertNode(code);
+    placeCaretIn(code.firstChild, 1);
+  } else {
+    const frag = range.extractContents();
+    code.appendChild(frag);
+    range.insertNode(code);
+    const after = document.createRange();
+    after.setStartAfter(code);
+    after.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(after);
+  }
+}
+
+/* ----- v2.1.0: export the open note --------------------------------------
+   Three formats from the Export menu in the editor footer. All three
+   start from the note as it stands on screen: collectEditor folds the
+   live editor back into the note object first, so unsaved typing is
+   exported too. */
+
+/* Download a Blob under a file name: the same anchor pattern
+   downloadAttachment uses. */
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+}
+
+/* The export file name base: the note title through sanitizeFileName
+   (the same sanitizer attachment storage names use), with any
+   trailing dots trimmed, falling back to "note". */
+function exportFileBase(note) {
+  const clean = sanitizeFileName(note.title || "Untitled note")
+    .replace(/\.+$/, "").trim();
+  return clean || "note";
+}
+
+function currentExportNote() {
+  const note = currentNote();
+  if (!note) {
+    toast("Open a note to export it.", true);
+    return null;
+  }
+  collectEditor(note);
+  return note;
+}
+
+/* The body of a note as plain text, line by line. Built for export:
+   blocks become lines, list markers survive ("- " for bullets, "1. "
+   counting for numbered lists, two spaces of indent per nesting
+   level), checklist items become ballot box lines (the U+2610 and
+   U+2611 characters), web links keep their address in parentheses,
+   note links show their label only, images and files become bracketed
+   lines with the attachment name, tables become tab separated rows,
+   and code blocks stay literal. Attachment placeholders are resolved
+   through the note's attachment records, exactly like hydration. */
+function noteBodyToPlainText(html, note) {
+  const holder = document.createElement("div");
+  holder.innerHTML = html || "";
+  const attById = {};
+  (note.attachments || []).forEach(function (att) { attById[att.id] = att; });
+  const lines = [];
+  let cur = "";
+  function endLine() { lines.push(cur); cur = ""; }
+  function attachmentLine(el) {
+    if (cur.trim()) { endLine(); }
+    const att = attById[el.getAttribute("data-attachment-id")];
+    const name = att ? att.name : "attachment";
+    lines.push(att && isImageAttachment(att)
+      ? "[Image: " + name + "]"
+      : "[Attachment: " + name + "]");
+  }
+  function inlineNode(node) {
+    if (node.nodeType === 3) { cur += node.nodeValue; return; }
+    if (node.nodeType !== 1) { return; }
+    if (node.classList && node.classList.contains("ss-attachment")) {
+      attachmentLine(node);
+      return;
+    }
+    const tag = node.tagName;
+    if (tag === "BR") { endLine(); return; }
+    if (tag === "INPUT") { return; }
+    if (tag === "IMG") {
+      cur += "[Image: " + (node.getAttribute("alt") || "image") + "]";
+      return;
+    }
+    if (tag === "A") {
+      const start = cur.length;
+      node.childNodes.forEach(inlineNode);
+      const href = node.getAttribute("href") || "";
+      if (/^(https?:|mailto:)/i.test(href) &&
+          cur.slice(start).trim() !== href) {
+        cur += " (" + href + ")";
+      }
+      return;
+    }
+    node.childNodes.forEach(inlineNode);
+  }
+  function isCheckedItem(li) {
+    const box = li.querySelector("input[type=\"checkbox\"]");
+    return li.classList.contains("done") ||
+      !!(box && (box.checked || box.hasAttribute("checked")));
+  }
+  function listLines(listEl, depth) {
+    const indent = "  ".repeat(depth);
+    const ordered = listEl.tagName === "OL";
+    const checklist = listEl.classList.contains("ss-checklist") ||
+      !!listEl.querySelector(":scope > li input[type=\"checkbox\"]");
+    let num = 0;
+    Array.prototype.forEach.call(listEl.children, function (li) {
+      if (li.tagName !== "LI") { return; }
+      num++;
+      let prefix;
+      if (checklist) { prefix = isCheckedItem(li) ? "\u2611 " : "\u2610 "; }
+      else if (ordered) { prefix = num + ". "; }
+      else { prefix = "- "; }
+      cur = indent + prefix;
+      /* The item's own content goes on the prefixed line; nested
+         lists render after it, one level deeper. The checkbox input
+         itself contributes nothing (inlineNode skips INPUT). */
+      Array.prototype.forEach.call(li.childNodes, function (child) {
+        if (child.nodeType === 1 &&
+            (child.tagName === "UL" || child.tagName === "OL")) { return; }
+        inlineNode(child);
+      });
+      endLine();
+      Array.prototype.forEach.call(li.children, function (child) {
+        if (child.tagName === "UL" || child.tagName === "OL") {
+          listLines(child, depth + 1);
+        }
+      });
+    });
+  }
+  function blockNode(node) {
+    if (node.nodeType === 3) {
+      if (node.nodeValue && node.nodeValue.trim()) {
+        cur += node.nodeValue;
+        endLine();
+      }
+      return;
+    }
+    if (node.nodeType !== 1) { return; }
+    if (node.classList && node.classList.contains("ss-attachment")) {
+      attachmentLine(node);
+      return;
+    }
+    const tag = node.tagName;
+    if (tag === "UL" || tag === "OL") { listLines(node, 0); return; }
+    if (tag === "TABLE") {
+      node.querySelectorAll("tr").forEach(function (tr) {
+        const cells = [];
+        tr.querySelectorAll("th, td").forEach(function (cell) {
+          cells.push((cell.textContent || "").replace(/\s+/g, " ").trim());
+        });
+        if (cells.length) { lines.push(cells.join("\t")); }
+      });
+      return;
+    }
+    if (tag === "PRE") {
+      const text = (node.textContent || "").replace(/\n$/, "");
+      text.split("\n").forEach(function (line) { lines.push(line); });
+      return;
+    }
+    if (tag === "HR") { lines.push("---"); return; }
+    if (tag === "P" || tag === "DIV" || tag === "BLOCKQUOTE" ||
+        tag === "LI" || /^H[1-6]$/.test(tag)) {
+      node.childNodes.forEach(inlineNode);
+      endLine();
+      return;
+    }
+    /* Anything else at block level: render its children as blocks. */
+    node.childNodes.forEach(blockNode);
+  }
+  holder.childNodes.forEach(blockNode);
+  if (cur.trim()) { endLine(); }
+  return lines.join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/^\n+|\n+$/g, "");
+}
+
+function exportNoteTxt() {
+  const note = currentExportNote();
+  if (!note) { return; }
+  const text = noteBodyToPlainText(note.body, note);
+  const out = (note.title || "Untitled note") + "\n\n" + text + "\n";
+  downloadBlob(new Blob([out], { type: "text/plain;charset=utf-8" }),
+    exportFileBase(note) + ".txt");
+  toast("Exported as text.");
+}
+
+/* ----- v2.1.0: Word (.docx) export ---------------------------------------
+   A real .docx with no library: the OOXML parts are plain strings,
+   and the package is a stored (uncompressed) zip written by hand
+   below. word/document.xml is built by walking the note body DOM with
+   the same shape as the plain text walker: paragraphs and headings
+   become Word paragraphs (headings use the Heading1 to Heading3
+   styles from word/styles.xml), runs carry bold, italic, underline,
+   and strikethrough, lists become literal prefixed paragraphs with an
+   indent (simpler and more reliable than authoring a numbering
+   definition, and Word shows the marker as text), checklists become
+   lines starting with the ballot box characters U+2610 (unchecked)
+   and U+2611 (checked), web links become their text plus the URL in
+   parentheses, note links degrade to their label, tables become a
+   simple Word table, code becomes monospace runs, and attachments
+   become bracketed name lines (no embedded media in this round). All
+   text passes through xmlEscapeText before it enters the XML. */
+
+function xmlEscapeText(text) {
+  return String(text)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+/* One Word run. fmt flags: b bold, i italic, u underline, s
+   strikethrough, code monospace (Consolas). Spaces are preserved. */
+function docxRun(text, fmt) {
+  let rpr = "";
+  if (fmt.b) { rpr += "<w:b/>"; }
+  if (fmt.i) { rpr += "<w:i/>"; }
+  if (fmt.u) { rpr += "<w:u w:val=\"single\"/>"; }
+  if (fmt.s) { rpr += "<w:strike/>"; }
+  if (fmt.code) {
+    rpr += "<w:rFonts w:ascii=\"Consolas\" w:hAnsi=\"Consolas\"/>";
+  }
+  return "<w:r>" + (rpr ? "<w:rPr>" + rpr + "</w:rPr>" : "") +
+    "<w:t xml:space=\"preserve\">" + xmlEscapeText(text) + "</w:t></w:r>";
+}
+
+function docxBreakRun() {
+  return "<w:r><w:br/></w:r>";
+}
+
+/* Collect the runs of an inline subtree into out. Formatting
+   accumulates down the tree: b from B and STRONG, i from I and EM, u
+   from U, s from S, STRIKE, and DEL, code from CODE, and bold, italic,
+   underline, and strikethrough from span inline styles (the editor's
+   own formatting spans). Web links append their URL in parentheses;
+   note links contribute their label only. */
+function docxInlineRuns(node, fmt, out) {
+  node.childNodes.forEach(function (child) {
+    if (child.nodeType === 3) {
+      if (child.nodeValue) { out.push(docxRun(child.nodeValue, fmt)); }
+      return;
+    }
+    if (child.nodeType !== 1) { return; }
+    if (child.classList && child.classList.contains("ss-attachment")) {
+      return; /* placeholders render as their own block line */
+    }
+    const tag = child.tagName;
+    if (tag === "BR") { out.push(docxBreakRun()); return; }
+    if (tag === "INPUT") { return; }
+    const next = { b: fmt.b, i: fmt.i, u: fmt.u, s: fmt.s, code: fmt.code };
+    if (tag === "B" || tag === "STRONG") { next.b = true; }
+    if (tag === "I" || tag === "EM") { next.i = true; }
+    if (tag === "U") { next.u = true; }
+    if (tag === "S" || tag === "STRIKE" || tag === "DEL") { next.s = true; }
+    if (tag === "CODE") { next.code = true; }
+    if (tag === "SPAN" && child.style) {
+      const wgt = child.style.fontWeight;
+      if (wgt === "bold" || wgt === "700" ||
+          parseInt(wgt, 10) >= 600) { next.b = true; }
+      if (child.style.fontStyle === "italic") { next.i = true; }
+      const deco = child.style.textDecoration || "";
+      if (deco.indexOf("underline") >= 0) { next.u = true; }
+      if (deco.indexOf("line-through") >= 0) { next.s = true; }
+    }
+    if (tag === "A") {
+      docxInlineRuns(child, next, out);
+      const href = child.getAttribute("href") || "";
+      if (/^(https?:|mailto:)/i.test(href)) {
+        out.push(docxRun(" (" + href + ")", fmt));
+      }
+      return;
+    }
+    docxInlineRuns(child, next, out);
+  });
+}
+
+function docxPara(styleId, runsXml, indentTwips) {
+  let ppr = "";
+  if (styleId) { ppr += "<w:pStyle w:val=\"" + styleId + "\"/>"; }
+  if (indentTwips) { ppr += "<w:ind w:left=\"" + indentTwips + "\"/>"; }
+  return "<w:p>" + (ppr ? "<w:pPr>" + ppr + "</w:pPr>" : "") +
+    runsXml + "</w:p>";
+}
+
+function buildWordDocumentXml(note) {
+  const holder = document.createElement("div");
+  holder.innerHTML = note.body || "";
+  const attById = {};
+  (note.attachments || []).forEach(function (att) { attById[att.id] = att; });
+  const blocks = [];
+  /* The note title leads the document, in the Title style. */
+  blocks.push(docxPara("Title",
+    docxRun(note.title || "Untitled note",
+      { b: false, i: false, u: false, s: false, code: false })));
+  function runsOf(el) {
+    const out = [];
+    docxInlineRuns(el,
+      { b: false, i: false, u: false, s: false, code: false }, out);
+    return out.join("");
+  }
+  function attachmentPara(el) {
+    const att = attById[el.getAttribute("data-attachment-id")];
+    const name = att ? att.name : "attachment";
+    const label = att && isImageAttachment(att)
+      ? "[Image: " + name + "]" : "[Attachment: " + name + "]";
+    blocks.push(docxPara(null, docxRun(label,
+      { b: false, i: false, u: false, s: false, code: false })));
+  }
+  function listParas(listEl, depth) {
+    const ordered = listEl.tagName === "OL";
+    const checklist = listEl.classList.contains("ss-checklist") ||
+      !!listEl.querySelector(":scope > li input[type=\"checkbox\"]");
+    let num = 0;
+    Array.prototype.forEach.call(listEl.children, function (li) {
+      if (li.tagName !== "LI") { return; }
+      num++;
+      let prefix;
+      if (checklist) {
+        const box = li.querySelector("input[type=\"checkbox\"]");
+        const checked = li.classList.contains("done") ||
+          !!(box && (box.checked || box.hasAttribute("checked")));
+        prefix = checked ? "\u2611 " : "\u2610 ";
+      } else if (ordered) { prefix = num + ". "; }
+      else { prefix = "\u2022 "; }
+      /* The item's own runs, skipping nested lists (they follow as
+         their own paragraphs, one indent deeper). */
+      const itemHolder = document.createElement("div");
+      Array.prototype.forEach.call(li.childNodes, function (child) {
+        if (child.nodeType === 1 &&
+            (child.tagName === "UL" || child.tagName === "OL")) { return; }
+        itemHolder.appendChild(child.cloneNode(true));
+      });
+      const emptyFmt = { b: false, i: false, u: false, s: false, code: false };
+      blocks.push(docxPara(null,
+        docxRun(prefix, emptyFmt) + runsOf(itemHolder), depth * 360));
+      Array.prototype.forEach.call(li.children, function (child) {
+        if (child.tagName === "UL" || child.tagName === "OL") {
+          listParas(child, depth + 1);
+        }
+      });
+    });
+  }
+  function tableXml(table) {
+    let rows = "";
+    table.querySelectorAll("tr").forEach(function (tr) {
+      let cells = "";
+      tr.querySelectorAll("th, td").forEach(function (cell) {
+        cells += "<w:tc><w:tcPr><w:tcW w:w=\"0\" w:type=\"auto\"/></w:tcPr>" +
+          docxPara(null, runsOf(cell)) + "</w:tc>";
+      });
+      rows += "<w:tr>" + cells + "</w:tr>";
+    });
+    const border = " w:val=\"single\" w:sz=\"4\" w:space=\"0\" w:color=\"BFBFBF\"";
+    return "<w:tbl><w:tblPr><w:tblW w:w=\"0\" w:type=\"auto\"/>" +
+      "<w:tblBorders>" +
+      "<w:top" + border + "/><w:left" + border + "/>" +
+      "<w:bottom" + border + "/><w:right" + border + "/>" +
+      "<w:insideH" + border + "/><w:insideV" + border + "/>" +
+      "</w:tblBorders></w:tblPr>" + rows + "</w:tbl>";
+  }
+  function blockNode(node) {
+    if (node.nodeType === 3) {
+      if (node.nodeValue && node.nodeValue.trim()) {
+        blocks.push(docxPara(null, docxRun(node.nodeValue.trim(),
+          { b: false, i: false, u: false, s: false, code: false })));
+      }
+      return;
+    }
+    if (node.nodeType !== 1) { return; }
+    if (node.classList && node.classList.contains("ss-attachment")) {
+      attachmentPara(node);
+      return;
+    }
+    const tag = node.tagName;
+    if (tag === "P" || tag === "LI") {
+      blocks.push(docxPara(null, runsOf(node)));
+    } else if (tag === "DIV") {
+      /* A div flattens its inline content into one paragraph. */
+      blocks.push(docxPara(null, runsOf(node)));
+    } else if (tag === "H1" || tag === "H2" || tag === "H3") {
+      blocks.push(docxPara("Heading" + tag.slice(1), runsOf(node)));
+    } else if (tag === "H4" || tag === "H5" || tag === "H6") {
+      blocks.push(docxPara("Heading3", runsOf(node)));
+    } else if (tag === "BLOCKQUOTE") {
+      blocks.push(docxPara("Quote", runsOf(node)));
+    } else if (tag === "UL" || tag === "OL") {
+      listParas(node, 0);
+    } else if (tag === "TABLE") {
+      blocks.push(tableXml(node));
+    } else if (tag === "PRE") {
+      const text = (node.textContent || "").replace(/\n$/, "");
+      text.split("\n").forEach(function (line) {
+        blocks.push(docxPara(null, docxRun(line,
+          { b: false, i: false, u: false, s: false, code: true })));
+      });
+    } else if (tag === "HR") {
+      blocks.push("<w:p><w:pPr><w:pBdr>" +
+        "<w:bottom w:val=\"single\" w:sz=\"6\" w:space=\"1\" w:color=\"BFBFBF\"/>" +
+        "</w:pBdr></w:pPr></w:p>");
+    } else {
+      node.childNodes.forEach(blockNode);
+    }
+  }
+  holder.childNodes.forEach(blockNode);
+  return "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n" +
+    "<w:document xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\">" +
+    "<w:body>" + blocks.join("") +
+    "<w:sectPr><w:pgSz w:w=\"12240\" w:h=\"15840\"/>" +
+    "<w:pgMar w:top=\"1440\" w:right=\"1440\" w:bottom=\"1440\" " +
+    "w:left=\"1440\" w:header=\"720\" w:footer=\"720\" w:gutter=\"0\"/>" +
+    "</w:sectPr></w:body></w:document>";
+}
+
+/* The static OOXML parts: content types, the package relationship to
+   the document, the document's relationship to its styles, and a
+   minimal style set (defaults plus Normal, Title, Heading1 to
+   Heading3, and Quote) so Word opens the file without complaint. */
+const WORD_CONTENT_TYPES_XML =
+  "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n" +
+  "<Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\">" +
+  "<Default Extension=\"rels\" ContentType=\"application/vnd.openxmlformats-package.relationships+xml\"/>" +
+  "<Default Extension=\"xml\" ContentType=\"application/xml\"/>" +
+  "<Override PartName=\"/word/document.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml\"/>" +
+  "<Override PartName=\"/word/styles.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml\"/>" +
+  "</Types>";
+const WORD_ROOT_RELS_XML =
+  "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n" +
+  "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">" +
+  "<Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument\" Target=\"word/document.xml\"/>" +
+  "</Relationships>";
+const WORD_DOC_RELS_XML =
+  "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n" +
+  "<Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">" +
+  "<Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles\" Target=\"styles.xml\"/>" +
+  "</Relationships>";
+const WORD_STYLES_XML =
+  "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n" +
+  "<w:styles xmlns:w=\"http://schemas.openxmlformats.org/wordprocessingml/2006/main\">" +
+  "<w:docDefaults><w:rPrDefault><w:rPr>" +
+  "<w:rFonts w:ascii=\"Calibri\" w:hAnsi=\"Calibri\" w:cs=\"Calibri\"/>" +
+  "<w:sz w:val=\"22\"/><w:szCs w:val=\"22\"/>" +
+  "</w:rPr></w:rPrDefault></w:docDefaults>" +
+  "<w:style w:type=\"paragraph\" w:default=\"1\" w:styleId=\"Normal\">" +
+  "<w:name w:val=\"Normal\"/><w:qFormat/></w:style>" +
+  "<w:style w:type=\"paragraph\" w:styleId=\"Title\">" +
+  "<w:name w:val=\"Title\"/><w:basedOn w:val=\"Normal\"/><w:qFormat/>" +
+  "<w:rPr><w:b/><w:sz w:val=\"52\"/></w:rPr></w:style>" +
+  "<w:style w:type=\"paragraph\" w:styleId=\"Heading1\">" +
+  "<w:name w:val=\"heading 1\"/><w:basedOn w:val=\"Normal\"/><w:qFormat/>" +
+  "<w:rPr><w:b/><w:sz w:val=\"32\"/></w:rPr></w:style>" +
+  "<w:style w:type=\"paragraph\" w:styleId=\"Heading2\">" +
+  "<w:name w:val=\"heading 2\"/><w:basedOn w:val=\"Normal\"/><w:qFormat/>" +
+  "<w:rPr><w:b/><w:sz w:val=\"28\"/></w:rPr></w:style>" +
+  "<w:style w:type=\"paragraph\" w:styleId=\"Heading3\">" +
+  "<w:name w:val=\"heading 3\"/><w:basedOn w:val=\"Normal\"/><w:qFormat/>" +
+  "<w:rPr><w:b/><w:sz w:val=\"24\"/></w:rPr></w:style>" +
+  "<w:style w:type=\"paragraph\" w:styleId=\"Quote\">" +
+  "<w:name w:val=\"Quote\"/><w:basedOn w:val=\"Normal\"/><w:qFormat/>" +
+  "<w:rPr><w:i/><w:color w:val=\"595959\"/></w:rPr></w:style>" +
+  "</w:styles>";
+
+/* CRC32 (the standard zip polynomial), computed once into a table. */
+const ZIP_CRC_TABLE = (function () {
+  const table = new Int32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) {
+      c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+    }
+    table[n] = c;
+  }
+  return table;
+})();
+
+function zipCrc32(bytes) {
+  let crc = -1;
+  for (let i = 0; i < bytes.length; i++) {
+    crc = (crc >>> 8) ^ ZIP_CRC_TABLE[(crc ^ bytes[i]) & 0xFF];
+  }
+  return (crc ^ -1) >>> 0;
+}
+
+/* Write entries as a stored (method 0, uncompressed) zip: a local
+   header and the raw bytes per entry, then the central directory,
+   then the end record. Stored entries keep this writer small, every
+   unzipper reads them, and Word accepts them. The DOS date is a
+   fixed 2026-10-20 so the bytes are deterministic, and file names
+   are flagged UTF-8. */
+function buildStoredZip(entries) {
+  const encoder = new TextEncoder();
+  const dosDate = ((2026 - 1980) << 9) | (10 << 5) | 20;
+  const chunks = [];
+  const central = [];
+  let offset = 0;
+  entries.forEach(function (entry) {
+    const nameBytes = encoder.encode(entry.name);
+    const data = typeof entry.data === "string"
+      ? encoder.encode(entry.data) : entry.data;
+    const crc = zipCrc32(data);
+    const local = new DataView(new ArrayBuffer(30));
+    local.setUint32(0, 0x04034b50, true);
+    local.setUint16(4, 20, true);
+    local.setUint16(6, 0x0800, true);
+    local.setUint16(8, 0, true);
+    local.setUint16(10, 0, true);
+    local.setUint16(12, dosDate, true);
+    local.setUint32(14, crc, true);
+    local.setUint32(18, data.length, true);
+    local.setUint32(22, data.length, true);
+    local.setUint16(26, nameBytes.length, true);
+    local.setUint16(28, 0, true);
+    chunks.push(new Uint8Array(local.buffer), nameBytes, data);
+    const cen = new DataView(new ArrayBuffer(46));
+    cen.setUint32(0, 0x02014b50, true);
+    cen.setUint16(4, 20, true);
+    cen.setUint16(6, 20, true);
+    cen.setUint16(8, 0x0800, true);
+    cen.setUint16(10, 0, true);
+    cen.setUint16(12, 0, true);
+    cen.setUint16(14, dosDate, true);
+    cen.setUint32(16, crc, true);
+    cen.setUint32(20, data.length, true);
+    cen.setUint32(24, data.length, true);
+    cen.setUint16(28, nameBytes.length, true);
+    cen.setUint32(42, offset, true);
+    central.push(new Uint8Array(cen.buffer), nameBytes);
+    offset += 30 + nameBytes.length + data.length;
+  });
+  let centralSize = 0;
+  central.forEach(function (c) { centralSize += c.length; });
+  const end = new DataView(new ArrayBuffer(22));
+  end.setUint32(0, 0x06054b50, true);
+  end.setUint16(8, entries.length, true);
+  end.setUint16(10, entries.length, true);
+  end.setUint32(12, centralSize, true);
+  end.setUint32(16, offset, true);
+  const all = chunks.concat(central).concat([new Uint8Array(end.buffer)]);
+  let total = 0;
+  all.forEach(function (c) { total += c.length; });
+  const out = new Uint8Array(total);
+  let at = 0;
+  all.forEach(function (c) { out.set(c, at); at += c.length; });
+  return out;
+}
+
+function buildDocxBytes(note) {
+  return buildStoredZip([
+    { name: "[Content_Types].xml", data: WORD_CONTENT_TYPES_XML },
+    { name: "_rels/.rels", data: WORD_ROOT_RELS_XML },
+    { name: "word/document.xml", data: buildWordDocumentXml(note) },
+    { name: "word/styles.xml", data: WORD_STYLES_XML },
+    { name: "word/_rels/document.xml.rels", data: WORD_DOC_RELS_XML }
+  ]);
+}
+
+function exportNoteDocx() {
+  const note = currentExportNote();
+  if (!note) { return; }
+  const bytes = buildDocxBytes(note);
+  downloadBlob(new Blob([bytes], {
+    type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+  }), exportFileBase(note) + ".docx");
+  toast("Exported as a Word document.");
+}
+
+/* ----- v2.1.0: PDF export through a print view ---------------------------
+   The print document is generated by ONE named function that returns
+   the whole standalone HTML string, so it is unit testable and the
+   print view never depends on the app window's live state. The body
+   HTML passed in comes from currentPrintableBodyHtml. The generated
+   document prints itself on load; the user picks Save as PDF in the
+   browser's print dialog. */
+function buildPrintDocument(note, bodyHtml) {
+  const title = escapeHtml(note.title || "Untitled note");
+  return "<!DOCTYPE html>\n<html><head><meta charset=\"UTF-8\">" +
+    "<title>" + title + "</title>" +
+    "<style>" +
+    "body{font-family:Georgia,'Times New Roman',serif;color:#10231A;" +
+    "max-width:720px;margin:40px auto;padding:0 24px;line-height:1.55;}" +
+    "h1{font-size:26px;margin:0 0 18px;}" +
+    "h2{font-size:21px;}h3{font-size:17px;}" +
+    "img{max-width:100%;height:auto;}" +
+    "pre{background:#F0F3EC;border:1px solid #C9D6C9;border-radius:8px;" +
+    "padding:10px 12px;overflow-x:auto;font-size:13px;}" +
+    "code{font-family:Consolas,Menlo,monospace;}" +
+    "table{border-collapse:collapse;width:100%;}" +
+    "th,td{border:1px solid #C9D6C9;padding:6px 10px;text-align:left;}" +
+    "th{background:#EFF4EE;}" +
+    "a{color:#14532D;}" +
+    ".ss-attachment{border:1px solid #C9D6C9;border-radius:8px;" +
+    "padding:10px 12px;margin:12px 0;}" +
+    "@media print{body{margin:0 auto;}}" +
+    "</style></head><body>" +
+    "<h1>" + title + "</h1>" +
+    (bodyHtml || "") +
+    "<script>window.addEventListener('load',function(){" +
+    "setTimeout(function(){window.print();},60);});</scr" + "ipt>" +
+    "</body></html>";
+}
+
+/* A clone of the live note body for the print view. Images keep the
+   sources hydration gave them (blob URLs resolve in the print window
+   because it is same origin), while editor only chrome is stripped:
+   attachment action buttons and menus, resize grips, and previews of
+   not yet loaded files never belong on paper. */
+function currentPrintableBodyHtml() {
+  const bodyEl = document.getElementById("noteBody");
+  const clone = bodyEl.cloneNode(true);
+  clone.querySelectorAll(
+    ".ss-att-actions, .ss-att-menu-btn, .ss-grip, .ss-att-preview, button"
+  ).forEach(function (el) { el.remove(); });
+  return clone.innerHTML;
+}
+
+function exportNotePdf() {
+  const note = currentExportNote();
+  if (!note) { return; }
+  const win = window.open("", "_blank");
+  if (!win) {
+    toast("The print window was blocked by the browser. Allow popups " +
+      "for this site, then choose Export, PDF again, and pick " +
+      "Save as PDF in the print dialog.", true);
+    return;
+  }
+  win.document.open();
+  win.document.write(buildPrintDocument(note, currentPrintableBodyHtml()));
+  win.document.close();
+  try { win.focus(); } catch (err) { /* focus is best effort */ }
+}
+
+/* ----- v2.1.0: import notes ----------------------------------------------
+   The Import button in the notes list toolbar opens a file picker
+   (.txt, .docx, .pdf; multiple files). Every file becomes a note in
+   the current notebook; in the All Notes, Pinned, tag, Trash, and
+   Archive views the default notebook is used, the same fallback the
+   toolbar New Note button uses. Each note is created through the
+   instant path the New Note button uses: it exists locally at once
+   and its upload runs in the background. A failing file never stops
+   the batch: every failure is named in the closing summary toast. */
+
+/* Blob reads with a FileReader fallback, so the import works in any
+   browser, not only ones with the newer Blob text methods. */
+function readBlobText(blob) {
+  if (typeof blob.text === "function") { return blob.text(); }
+  return new Promise(function (resolve, reject) {
+    const reader = new FileReader();
+    reader.onload = function () { resolve(String(reader.result || "")); };
+    reader.onerror = function () {
+      reject(reader.error || new Error("the file could not be read"));
+    };
+    reader.readAsText(blob);
+  });
+}
+
+function readBlobArrayBuffer(blob) {
+  if (typeof blob.arrayBuffer === "function") { return blob.arrayBuffer(); }
+  return new Promise(function (resolve, reject) {
+    const reader = new FileReader();
+    reader.onload = function () { resolve(reader.result); };
+    reader.onerror = function () {
+      reject(reader.error || new Error("the file could not be read"));
+    };
+    reader.readAsArrayBuffer(blob);
+  });
+}
+
+function importTargetNotebookSlug() {
+  if (state.view.kind === "notebook") { return state.view.value; }
+  return state.notebooks.length ? state.notebooks[0].slug : null;
+}
+
+function titleFromFileName(name) {
+  const base = String(name || "Imported note")
+    .replace(/\.[^.]*$/, "").trim();
+  return base || "Imported note";
+}
+
+/* Create one imported note instantly, exactly like the toolbar New
+   Note does: local first (unshift, cache, render), upload in the
+   background as a fresh note (no conflict check against a file that
+   cannot exist yet), cache again once its file id lands. */
+function createImportedNote(notebookSlug, title, bodyHtml) {
+  const note = makeNote(notebookSlug, title, bodyHtml);
+  state.notes.unshift(note);
+  saveCache();
+  renderAll();
+  saveNoteToRepo(note, { skipConflictCheck: true, fresh: true })
+    .then(function () { saveCache(); })
+    .catch(function (err) {
+      toast("Note \"" + title + "\" was imported and saved on this " +
+        "device, but its upload failed: " + err.message, true);
+    });
+  return note;
+}
+
+/* Plain text to note body HTML: paragraphs split on blank lines,
+   single newlines become line breaks inside the paragraph, and every
+   character is escaped before it becomes markup. */
+function textToNoteBodyHtml(text) {
+  const normalized = String(text || "").replace(/\r\n?/g, "\n");
+  const paras = normalized.split(/\n\s*\n/)
+    .map(function (p) { return p.trim(); })
+    .filter(function (p) { return p.length; });
+  if (!paras.length) { return "<p><br></p>"; }
+  return paras.map(function (p) {
+    return "<p>" + escapeHtml(p).replace(/\n/g, "<br>") + "</p>";
+  }).join("");
+}
+
+/* Read a zip into a name to bytes map. Both header passes are parsed
+   by hand: the central directory gives the entry list, and each
+   entry's local header gives where its data actually starts. Stored
+   entries are read directly; deflated entries are inflated with the
+   browser's DecompressionStream("deflate-raw"). When that API is
+   unavailable, a deflated entry fails with a clear error while the
+   rest of the batch continues. Scope: single disk zips without zip64,
+   which covers .docx files, ours and Word's alike. */
+async function readZipEntries(arrayBuffer) {
+  const bytes = new Uint8Array(arrayBuffer);
+  const view = new DataView(arrayBuffer);
+  let eocd = -1;
+  const scanFloor = Math.max(0, bytes.length - 22 - 65535);
+  for (let i = bytes.length - 22; i >= scanFloor; i--) {
+    if (view.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
+  }
+  if (eocd < 0) { throw new Error("not a valid zip file"); }
+  const count = view.getUint16(eocd + 10, true);
+  let off = view.getUint32(eocd + 16, true);
+  const decoder = new TextDecoder();
+  const entries = new Map();
+  for (let n = 0; n < count; n++) {
+    if (off + 46 > bytes.length ||
+        view.getUint32(off, true) !== 0x02014b50) { break; }
+    const method = view.getUint16(off + 10, true);
+    const compSize = view.getUint32(off + 20, true);
+    const nameLen = view.getUint16(off + 28, true);
+    const extraLen = view.getUint16(off + 30, true);
+    const commentLen = view.getUint16(off + 32, true);
+    const localOff = view.getUint32(off + 42, true);
+    const name = decoder.decode(
+      bytes.subarray(off + 46, off + 46 + nameLen));
+    if (localOff + 30 <= bytes.length &&
+        view.getUint32(localOff, true) === 0x04034b50) {
+      const localNameLen = view.getUint16(localOff + 26, true);
+      const localExtraLen = view.getUint16(localOff + 28, true);
+      const start = localOff + 30 + localNameLen + localExtraLen;
+      const compressed = bytes.subarray(start, start + compSize);
+      if (method === 0) {
+        entries.set(name, compressed.slice());
+      } else if (method === 8) {
+        entries.set(name, await inflateRawBytes(compressed));
+      } else {
+        throw new Error("unsupported zip compression method " + method);
+      }
+    }
+    off += 46 + nameLen + extraLen + commentLen;
+  }
+  return entries;
+}
+
+async function inflateRawBytes(bytes) {
+  if (typeof DecompressionStream === "undefined") {
+    throw new Error("this browser cannot open compressed .docx files " +
+      "(no DecompressionStream support)");
+  }
+  const source = new ReadableStream({
+    start: function (controller) {
+      controller.enqueue(bytes);
+      controller.close();
+    }
+  });
+  const stream = source.pipeThrough(new DecompressionStream("deflate-raw"));
+  const buffer = await new Response(stream).arrayBuffer();
+  return new Uint8Array(buffer);
+}
+
+/* word/document.xml to editor HTML. Scope, stated honestly: the
+   subset our own exporter writes, plus typical simple Word files.
+   Paragraphs, runs with bold and italic (underline, strikethrough,
+   and monospace runs are kept too), the Heading1 to Heading3 and
+   Title styles, simple lists (numbering definition paragraphs, and
+   the literal bullet, number, and ballot box prefixes our exporter
+   writes, regrouped into real lists), simple tables, and hyperlinks
+   when the relationships part resolves them. Anything fancier (text
+   boxes, fields, tracked changes, embedded images) is skipped, never
+   fatal. A Title paragraph whose text equals the note title (from
+   the file name) is dropped: our exporter writes the title into the
+   document, and it should not come back as a body heading. */
+function docxXmlToHtml(xmlText, relsXmlText, expectedTitle) {
+  const doc = new DOMParser().parseFromString(xmlText, "application/xml");
+  if (!doc || !doc.documentElement ||
+      doc.documentElement.localName === "parsererror" ||
+      doc.querySelector("parsererror")) {
+    throw new Error("the file's document.xml could not be parsed");
+  }
+  const rels = {};
+  if (relsXmlText) {
+    const relDoc = new DOMParser().parseFromString(relsXmlText, "application/xml");
+    Array.prototype.forEach.call(
+      relDoc.getElementsByTagName("Relationship"), function (rel) {
+        rels[rel.getAttribute("Id")] = rel.getAttribute("Target");
+      });
+  }
+  function kids(el, localName) {
+    return Array.prototype.filter.call(el.children, function (c) {
+      return c.localName === localName;
+    });
+  }
+  function firstKid(el, localName) {
+    const found = kids(el, localName);
+    return found.length ? found[0] : null;
+  }
+  function runFlag(rPr, name) {
+    if (!rPr) { return false; }
+    const el = firstKid(rPr, name);
+    if (!el) { return false; }
+    const v = el.getAttribute("w:val");
+    return v !== "false" && v !== "0" && v !== "off";
+  }
+  function runHtml(r) {
+    let text = "";
+    Array.prototype.forEach.call(r.children, function (part) {
+      if (part.localName === "t") { text += part.textContent; }
+      else if (part.localName === "br" || part.localName === "cr") {
+        text += "\n";
+      } else if (part.localName === "tab") { text += " "; }
+    });
+    if (!text) { return ""; }
+    let html = escapeHtml(text).replace(/\n/g, "<br>");
+    const rPr = firstKid(r, "rPr");
+    let code = false;
+    if (rPr) {
+      const fonts = firstKid(rPr, "rFonts");
+      const fontName = fonts
+        ? (fonts.getAttribute("w:ascii") || "") : "";
+      code = /consolas|courier|mono/i.test(fontName);
+    }
+    if (code) {
+      html = "<code class=\"ss-inline-code\">" + html + "</code>";
+    } else {
+      if (runFlag(rPr, "strike")) { html = "<s>" + html + "</s>"; }
+      if (runFlag(rPr, "u")) { html = "<u>" + html + "</u>"; }
+      if (runFlag(rPr, "i")) { html = "<em>" + html + "</em>"; }
+      if (runFlag(rPr, "b")) { html = "<strong>" + html + "</strong>"; }
+    }
+    return html;
+  }
+  function inlineHtml(container) {
+    let html = "";
+    Array.prototype.forEach.call(container.children, function (child) {
+      if (child.localName === "r") {
+        html += runHtml(child);
+      } else if (child.localName === "hyperlink") {
+        const inner = inlineHtml(child);
+        const rid = child.getAttribute("r:id");
+        const target = rid ? rels[rid] : null;
+        if (target && /^https?:/i.test(target)) {
+          html += "<a href=\"" + escapeHtml(target) + "\">" +
+            inner + "</a>";
+        } else {
+          html += inner;
+        }
+      }
+    });
+    return html;
+  }
+  function plainTextOf(p) {
+    let text = "";
+    Array.prototype.forEach.call(p.getElementsByTagName("w:t"),
+      function (t) { text += t.textContent; });
+    return text;
+  }
+  function stripTextPrefix(p, count) {
+    let left = count;
+    const ts = p.getElementsByTagName("w:t");
+    for (let i = 0; i < ts.length && left > 0; i++) {
+      const take = Math.min(left, ts[i].textContent.length);
+      ts[i].textContent = ts[i].textContent.slice(take);
+      left -= take;
+    }
+  }
+  const out = [];
+  let openListKind = null;
+  let titleSeen = false;
+  function closeList() {
+    if (openListKind) {
+      out.push(openListKind === "ol" ? "</ol>" : "</ul>");
+      openListKind = null;
+    }
+  }
+  function ensureList(kind) {
+    if (openListKind !== kind) {
+      closeList();
+      out.push(kind === "ol" ? "<ol>"
+        : (kind === "checklist" ? "<ul class=\"ss-checklist\">" : "<ul>"));
+      openListKind = kind;
+    }
+  }
+  function tableHtml(tbl) {
+    let rowsHtml = "";
+    kids(tbl, "tr").forEach(function (tr) {
+      let cells = "";
+      kids(tr, "tc").forEach(function (tc) {
+        const cellParas = kids(tc, "p").map(function (p) {
+          return inlineHtml(p);
+        });
+        cells += "<td>" + (cellParas.join("<br>") || "<br>") + "</td>";
+      });
+      rowsHtml += "<tr>" + cells + "</tr>";
+    });
+    return "<table class=\"ss-table\"><tbody>" + rowsHtml +
+      "</tbody></table>";
+  }
+  function paraBlock(p) {
+    const pPr = firstKid(p, "pPr");
+    let styleId = "";
+    let hasNumPr = false;
+    if (pPr) {
+      const pStyle = firstKid(pPr, "pStyle");
+      styleId = pStyle ? (pStyle.getAttribute("w:val") || "") : "";
+      hasNumPr = !!firstKid(pPr, "numPr");
+    }
+    const styleKey = styleId.toLowerCase().replace(/[\s_]/g, "");
+    if (styleKey === "title") {
+      if (!titleSeen && expectedTitle &&
+          plainTextOf(p).trim() === expectedTitle.trim()) {
+        titleSeen = true;
+        return; /* the file name already gave the note its title */
+      }
+      closeList();
+      out.push("<h1>" + (inlineHtml(p) || "<br>") + "</h1>");
+      return;
+    }
+    if (styleKey === "heading1" || styleKey === "heading2" ||
+        styleKey === "heading3") {
+      closeList();
+      const tag = "h" + styleKey.slice(-1);
+      out.push("<" + tag + ">" + (inlineHtml(p) || "<br>") +
+        "</" + tag + ">");
+      return;
+    }
+    if (styleKey === "quote") {
+      closeList();
+      out.push("<blockquote>" + (inlineHtml(p) || "<br>") +
+        "</blockquote>");
+      return;
+    }
+    const text = plainTextOf(p);
+    let kind = null;
+    let prefixLen = 0;
+    let checked = false;
+    if (text.indexOf("\u2611 ") === 0) {
+      kind = "checklist"; prefixLen = 2; checked = true;
+    } else if (text.indexOf("\u2610 ") === 0) {
+      kind = "checklist"; prefixLen = 2;
+    } else if (text.indexOf("\u2022 ") === 0) {
+      kind = "ul"; prefixLen = 2;
+    } else {
+      const m = text.match(/^(\d+)[.)]\s/);
+      if (m) { kind = "ol"; prefixLen = m[0].length; }
+    }
+    if (!kind && hasNumPr) { kind = "ul"; }
+    if (kind) {
+      if (prefixLen) { stripTextPrefix(p, prefixLen); }
+      ensureList(kind);
+      const inner = inlineHtml(p);
+      if (kind === "checklist") {
+        out.push("<li" + (checked ? " class=\"done\"" : "") + ">" +
+          "<input type=\"checkbox\"" + (checked ? " checked" : "") + ">" +
+          inner + "</li>");
+      } else {
+        out.push("<li>" + (inner || "<br>") + "</li>");
+      }
+      return;
+    }
+    closeList();
+    out.push("<p>" + (inlineHtml(p) || "<br>") + "</p>");
+  }
+  const bodyEl = firstKid(doc.documentElement, "body") ||
+    doc.documentElement;
+  Array.prototype.forEach.call(bodyEl.children, function (child) {
+    if (child.localName === "p") { paraBlock(child); }
+    else if (child.localName === "tbl") {
+      closeList();
+      out.push(tableHtml(child));
+    }
+  });
+  closeList();
+  if (!out.length) { return "<p><br></p>"; }
+  return out.join("");
+}
+
+async function docxFileToHtml(arrayBuffer, expectedTitle) {
+  const entries = await readZipEntries(arrayBuffer);
+  const docEntry = entries.get("word/document.xml");
+  if (!docEntry) {
+    throw new Error("word/document.xml not found in the file");
+  }
+  const relEntry = entries.get("word/_rels/document.xml.rels");
+  const decoder = new TextDecoder();
+  return docxXmlToHtml(decoder.decode(docEntry),
+    relEntry ? decoder.decode(relEntry) : "", expectedTitle);
+}
+
+/* Import a batch of picked files. Each PDF import opens its note so
+   the attachment upload lands in it; with several PDFs, the last one
+   stays open. Text extraction from PDFs is out of scope: the PDF
+   itself is the note's content, attached with its in app preview. */
+async function importFiles(fileList) {
+  const files = Array.prototype.slice.call(fileList || []);
+  if (!files.length) { return; }
+  if (!state.notebooks.length) {
+    await createNotebook("Personal");
+  }
+  const slug = importTargetNotebookSlug();
+  let imported = 0;
+  const problems = [];
+  for (const file of files) {
+    const name = file.name || "file";
+    const lower = name.toLowerCase();
+    try {
+      if (lower.endsWith(".txt")) {
+        const text = await readBlobText(file);
+        createImportedNote(slug, titleFromFileName(name),
+          textToNoteBodyHtml(text));
+        imported++;
+      } else if (lower.endsWith(".docx")) {
+        const title = titleFromFileName(name);
+        const html = await docxFileToHtml(
+          await readBlobArrayBuffer(file), title);
+        createImportedNote(slug, title, html);
+        imported++;
+      } else if (lower.endsWith(".pdf")) {
+        const note = createImportedNote(slug, titleFromFileName(name),
+          "<p><br></p>");
+        imported++;
+        openNote(note.id);
+        const before = (note.attachments || []).length;
+        await handleIncomingFiles([file]);
+        if ((note.attachments || []).length === before) {
+          problems.push(name + " (the note was created, but the PDF " +
+            "was not attached; sign in with Google and attach it again)");
+        }
+      } else {
+        problems.push(name + " (not a .txt, .docx, or .pdf file)");
+      }
+    } catch (err) {
+      problems.push(name + " (" + err.message + ")");
+    }
+  }
+  let message = imported
+    ? "Imported " + imported + " note" + (imported === 1 ? "" : "s") + "."
+    : "No notes were imported.";
+  if (problems.length) {
+    message += " Problems: " + problems.join("; ");
+  }
+  toast(message, problems.length > 0);
+}
+
 const autosave = debounce(async function () {
   const note = currentNote();
   if (!note || note.trashed || note.archived) { return; }
@@ -5953,7 +7401,20 @@ function runInsertAction(kind) {
     return;
   }
   restoreFormatSelection();
-  if (kind === "link") {
+  if (kind === "noteLink") {
+    /* The picker captures the caret itself (it needs the selection
+       for the label decision) and marks dirty only when a link is
+       actually inserted, so opening and cancelling changes nothing. */
+    openNoteLinkPicker();
+    return;
+  }
+  if (kind === "table") {
+    insertStarterTable();
+  } else if (kind === "codeBlock") {
+    insertCodeBlock();
+  } else if (kind === "inlineCode") {
+    insertInlineCode();
+  } else if (kind === "link") {
     const sel = window.getSelection();
     if (!sel || !sel.rangeCount || sel.getRangeAt(0).collapsed) {
       toast("Select the text to turn into a link first.", true);
@@ -6158,9 +7619,10 @@ function wireToolbar() {
    password. The client ID that makes the button work belongs to
    the PUBLISHER (Chris, the app owner), who registered one app
    with Google, once, for free; it is baked into the app (see
-   PUBLISHER_GOOGLE_CLIENT_ID and effectiveGoogleClientId below),
-   and the field in the Attachments dialog is only an advanced
-   override. End users never register anything.
+   PUBLISHER_GOOGLE_CLIENT_ID and effectiveGoogleClientId below).
+   A client ID override saved in the app settings is honored as an
+   advanced override; there is no field for it in the app anymore.
+   End users never register anything.
 
    Token safety: the Google OAuth token is encrypted with AES-GCM
    under state.sessionKey, the random device key from section 4,
@@ -6316,11 +7778,12 @@ function loadGisScript() {
 }
 
 /* v1.4.2: the one place that decides which Google client ID a sign in
-   uses. A value saved in settings (the advanced override in the
-   Attachments settings dialog, kept for testing and for forks that
-   registered their own Google OAuth client) wins when it is non empty
-   after trimming. Otherwise the publisher ID baked into the app is
-   used. Either way a client ID is always available, so no sign in flow
+   uses. A value saved in settings (an advanced override kept for
+   testing and for forks that registered their own Google OAuth
+   client; v2.1.0 removed the dialog field that used to edit it, but a
+   stored value is still honored) wins when it is non empty after
+   trimming. Otherwise the publisher ID baked into the app is used.
+   Either way a client ID is always available, so no sign in flow
    ever has to ask the user for one. */
 function effectiveGoogleClientId() {
   const override = (state.attach.googleClientId || "").trim();
@@ -6336,9 +7799,9 @@ async function googleConnect(options) {
      notes sign in, the silent renewal, and the attachments
      provider all funnel through googleConnect), and the client ID
      always comes from effectiveGoogleClientId(). No code reads a
-     client ID field directly anymore: the sign in gate has no field at
-     all, and the Attachments dialog field only feeds the settings
-     override that the helper consults. */
+     client ID field directly anymore: no screen has a field at all
+     (v2.1.0 removed the last one), and the helper consults the saved
+     settings override itself. */
   const clientId = effectiveGoogleClientId();
   /* A user may reach sign in right after signing out, when the old
      device key was wiped with everything else. Recreate the local
@@ -7227,7 +8690,7 @@ async function hydrateOneAttachment(note, el) {
     const note1 = document.createElement("div");
     note1.className = "ss-att-msg";
     note1.textContent = driver
-      ? "Sign in with " + providerLabel(att.provider) + " (Attachments settings) to view this image."
+      ? "Sign in with " + providerLabel(att.provider) + " to view this image."
       : "The storage provider for this image is not available in this version.";
     el.appendChild(note1);
     return;
@@ -7640,8 +9103,8 @@ async function openAttachment(att) {
   }
   const status = await driver.getStatus();
   if (!status.connected) {
-    openAttachSettings("Sign in with " + providerLabel(att.provider) +
-      " to open \"" + att.name + "\".");
+    toast("Sign in with " + providerLabel(att.provider) +
+      " to open \"" + att.name + "\".", true);
     return;
   }
   try {
@@ -7722,8 +9185,8 @@ async function downloadAttachment(att) {
   }
   const status = await driver.getStatus();
   if (!status.connected) {
-    openAttachSettings("Sign in with " + providerLabel(att.provider) +
-      " to download \"" + att.name + "\".");
+    toast("Sign in with " + providerLabel(att.provider) +
+      " to download \"" + att.name + "\".", true);
     return;
   }
   try {
@@ -8340,14 +9803,14 @@ async function handleIncomingFiles(fileList) {
   }
   const providerName = state.attach.defaultProvider;
   if (!providerName || !providers[providerName]) {
-    openAttachSettings("Sign in with Google before adding attachments.");
+    toast("Sign in with Google before adding attachments.", true);
     return;
   }
   const driver = providers[providerName];
   const status = await driver.getStatus();
   if (!status.connected) {
-    openAttachSettings("Sign in with " + providerLabel(providerName) +
-      " before adding attachments.");
+    toast("Sign in with " + providerLabel(providerName) +
+      " before adding attachments.", true);
     return;
   }
   const accepted = [];
@@ -8412,49 +9875,6 @@ async function uploadOneAttachment(note, providerName, driver, file) {
     toast("Upload failed for " + file.name + ": " + err.message, true);
   }
 }
-
-/* ----- Attachments settings dialog ---------------------------------------
-   The dialog shows the one Google connection: its state must be
-   impossible to miss (Chris's standing UI rule): the card gets a
-   filled accent edge and a green status dot when signed in, the
-   status line says so in words, and the button flips between Sign
-   in and Sign out.                                                    */
-function openAttachSettings(message) {
-  /* The Google field shows the effective client ID, which is the
-     built in publisher ID unless an override was saved, so what the
-     user sees is always the ID sign in will actually use. */
-  document.getElementById("googleClientId").value = effectiveGoogleClientId();
-  const msg = document.getElementById("attachModalMsg");
-  if (message) {
-    msg.textContent = message;
-    msg.classList.remove("hidden");
-  } else {
-    msg.textContent = "";
-    msg.classList.add("hidden");
-  }
-  document.getElementById("attachModal").classList.remove("hidden");
-  refreshAttachDialog();
-}
-
-
-function closeAttachSettings() {
-  document.getElementById("attachModal").classList.add("hidden");
-}
-
-async function refreshAttachDialog() {
-  const g = await providers.google.getStatus();
-  document.getElementById("googleCard").classList.toggle("connected", g.connected);
-  document.getElementById("googleDot").className =
-    "status-dot" + (g.connected ? " on" : "");
-  document.getElementById("googleStatus").textContent = g.connected
-    ? "Signed in. New files go to the attachments subfolder of the \"" + NOTES_ROOT_NAME + "\" folder in your Drive, beside your notes. Google sign ins expire after about an hour; signing in again takes one click."
-    : (g.reason === "expired"
-        ? "Your Google sign in expired. Sign in with Google again to use Drive attachments."
-        : "Not signed in.");
-  document.getElementById("googleConnectBtn").textContent =
-    g.connected ? "Sign out of Google" : "Sign in with Google";
-}
-
 
 /* --------------------------------------------------------------------------
    12. Screen flow and event wiring
@@ -8703,12 +10123,23 @@ function wireEvents() {
      select). A plain click is NOT prevented: the caret still lands in
      the link text for editing exactly as before, and the link popup
      appears alongside as the way to open it (and the only way on touch
-     screens). Clicking a non link part of the body hides the popup. */
+     screens). Clicking a non link part of the body hides the popup.
+     v2.1.0: note links (href "ssnote:<id>") are resolved FIRST, before
+     both the modified click branch and the popup branch below: any
+     click on one navigates inside the app (see followNoteLink), and
+     the web link popup never appears for them. */
   document.getElementById("noteBody").addEventListener("click", function (ev) {
     const target = ev.target;
     const anchor = (target && target.closest) ? target.closest("a") : null;
     if (!anchor) {
       hideLinkPopup();
+      return;
+    }
+    const ssNoteId = noteLinkIdOf(anchor);
+    if (ssNoteId) {
+      ev.preventDefault();
+      hideLinkPopup();
+      followNoteLink(ssNoteId);
       return;
     }
     if (ev.ctrlKey || ev.metaKey) {
@@ -8973,39 +10404,61 @@ function wireEvents() {
     }
   });
 
-  /* v1.2 Attachments settings dialog controls. */
-  document.getElementById("attachSettingsBtn").addEventListener("click", function () {
-    openAttachSettings();
+  /* v2.1.0: Link to Note picker controls. Typing in the search box
+     filters the results list; Cancel, a click on the dimmed backdrop,
+     or Escape closes the picker without inserting anything. */
+  document.getElementById("noteLinkCancelBtn").addEventListener("click", closeNoteLinkPicker);
+  document.getElementById("noteLinkModal").addEventListener("click", function (ev) {
+    if (ev.target === ev.currentTarget) { closeNoteLinkPicker(); }
   });
-  document.getElementById("attachDoneBtn").addEventListener("click", closeAttachSettings);
-  document.getElementById("attachModal").addEventListener("click", function (ev) {
-    if (ev.target === ev.currentTarget) { closeAttachSettings(); }
+  document.getElementById("noteLinkSearch").addEventListener("input", function (ev) {
+    renderNoteLinkResults(ev.target.value);
   });
-  document.getElementById("googleClientId").addEventListener("change", function (ev) {
-    state.attach.googleClientId = ev.target.value.trim();
-    saveSettings();
+  document.getElementById("noteLinkModal").addEventListener("keydown", function (ev) {
+    if (ev.key === "Escape") { closeNoteLinkPicker(); }
   });
-  document.getElementById("googleConnectBtn").addEventListener("click", async function () {
-    try {
-      const status = await providers.google.getStatus();
-      if (status.connected) {
-        await providers.google.disconnect();
-        toast("Signed out of Google Drive.");
-      } else {
-        await providers.google.connect();
-        toast("Signed in with Google. Attachments can now use your Google Drive.");
-        /* A fresh sign in is the moment queued edits can finally
-           flush. syncNow flushes the queue before reloading, so
-           reconnecting never loses an edit that was preserved
-           while the token was expired. */
-        if (state.repoExists) {
-          await syncNow(false);
-        }
-      }
-    } catch (err) {
-      toast(err.message, true);
+
+  /* v2.1.0: the notes list toolbar Import button and its hidden file
+     input. The change handler copies the FileList into a plain array
+     BEFORE clearing the input (the v1.2.1 lesson: clearing the input
+     empties its live FileList and would leave the import with no
+     files), and clearing is what lets the same file be picked twice. */
+  document.getElementById("listImportBtn").addEventListener("click", function () {
+    document.getElementById("importFileInput").click();
+  });
+  document.getElementById("importFileInput").addEventListener("change", function (ev) {
+    const files = Array.prototype.slice.call(ev.target.files || []);
+    ev.target.value = "";
+    if (files.length) {
+      importFiles(files).catch(function (err) {
+        toast("Import failed: " + err.message, true);
+      });
     }
-    refreshAttachDialog();
+  });
+
+  /* v2.1.0: the editor footer Export menu (it opens upward; see the
+     .tb-menu.up rule). Picking an item closes the menu and runs that
+     export; clicking anywhere outside the wrap closes the menu. */
+  document.getElementById("exportBtn").addEventListener("click", function (ev) {
+    ev.stopPropagation();
+    document.getElementById("exportMenu").classList.toggle("hidden");
+  });
+  document.getElementById("exportMenu").querySelectorAll("button[data-export]")
+    .forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        document.getElementById("exportMenu").classList.add("hidden");
+        const kind = btn.getAttribute("data-export");
+        if (kind === "txt") { exportNoteTxt(); }
+        else if (kind === "docx") { exportNoteDocx(); }
+        else if (kind === "pdf") { exportNotePdf(); }
+      });
+    });
+  document.addEventListener("click", function (ev) {
+    const menu = document.getElementById("exportMenu");
+    if (menu.classList.contains("hidden")) { return; }
+    const target = ev.target;
+    if (target && target.closest && target.closest(".export-wrap")) { return; }
+    menu.classList.add("hidden");
   });
 
 
