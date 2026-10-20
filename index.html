@@ -4,6 +4,19 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#0B3D2E">
+<!-- v2.6.0: installable PWA wiring. The manifest and the icons live
+     beside this file in the repo and are served from the site root;
+     a standalone copy of this file simply never resolves them, which
+     is harmless. The Apple metas and the touch icon are what iOS
+     uses for Share, Add to Home Screen (Safari does not read the
+     manifest icons). The service worker itself is registered from
+     the script, guarded to HTTPS or localhost; see registerServiceWorker. -->
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="SnakeScale">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2064%20108'%3E%3Cdefs%3E%3ClinearGradient%20id='g'%20x1='1'%20y1='0'%20x2='0'%20y2='1'%3E%3Cstop%20offset='0'%20stop-color='%2357A773'/%3E%3Cstop%20offset='.38'%20stop-color='%232E7D4F'/%3E%3Cstop%20offset='1'%20stop-color='%2314532D'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect%20x='0'%20y='0'%20width='20'%20height='20'%20rx='5'%20fill='url(%23g)'/%3E%3Crect%20x='22'%20y='0'%20width='20'%20height='20'%20rx='5'%20fill='url(%23g)'/%3E%3Crect%20x='44'%20y='0'%20width='20'%20height='20'%20rx='5'%20fill='url(%23g)'/%3E%3Crect%20x='0'%20y='22'%20width='20'%20height='20'%20rx='5'%20fill='url(%23g)'/%3E%3Crect%20x='0'%20y='44'%20width='20'%20height='20'%20rx='5'%20fill='url(%23g)'/%3E%3Crect%20x='22'%20y='44'%20width='20'%20height='20'%20rx='5'%20fill='url(%23g)'/%3E%3Crect%20x='44'%20y='44'%20width='20'%20height='20'%20rx='5'%20fill='url(%23g)'/%3E%3Crect%20x='44'%20y='66'%20width='20'%20height='20'%20rx='5'%20fill='url(%23g)'/%3E%3Crect%20x='0'%20y='88'%20width='20'%20height='20'%20rx='5'%20fill='url(%23g)'/%3E%3Crect%20x='22'%20y='88'%20width='20'%20height='20'%20rx='5'%20fill='url(%23g)'/%3E%3Crect%20x='44'%20y='88'%20width='20'%20height='20'%20rx='5'%20fill='url(%23g)'/%3E%3Cpath%20d='M13%2020%20L20%2013%20L13%2013%20Z'%20fill='%23FFFFFF'%20fill-opacity='.28'/%3E%3Cpath%20d='M35%2020%20L42%2013%20L35%2013%20Z'%20fill='%23FFFFFF'%20fill-opacity='.28'/%3E%3Cpath%20d='M57%2020%20L64%2013%20L57%2013%20Z'%20fill='%23FFFFFF'%20fill-opacity='.28'/%3E%3Cpath%20d='M13%2042%20L20%2035%20L13%2035%20Z'%20fill='%23FFFFFF'%20fill-opacity='.28'/%3E%3Cpath%20d='M13%2064%20L20%2057%20L13%2057%20Z'%20fill='%23FFFFFF'%20fill-opacity='.28'/%3E%3Cpath%20d='M35%2064%20L42%2057%20L35%2057%20Z'%20fill='%23FFFFFF'%20fill-opacity='.28'/%3E%3Cpath%20d='M57%2064%20L64%2057%20L57%2057%20Z'%20fill='%23FFFFFF'%20fill-opacity='.28'/%3E%3Cpath%20d='M57%2086%20L64%2079%20L57%2079%20Z'%20fill='%23FFFFFF'%20fill-opacity='.28'/%3E%3Cpath%20d='M13%20108%20L20%20101%20L13%20101%20Z'%20fill='%23FFFFFF'%20fill-opacity='.28'/%3E%3Cpath%20d='M35%20108%20L42%20101%20L35%20101%20Z'%20fill='%23FFFFFF'%20fill-opacity='.28'/%3E%3Cpath%20d='M57%20108%20L64%20101%20L57%20101%20Z'%20fill='%23FFFFFF'%20fill-opacity='.28'/%3E%3C/svg%3E">
 <meta name="description" content="SnakeScale Notes: a free, open source notes app. Your notes live in your own Google Drive.">
 <title>SnakeScale Notes</title>
@@ -27,10 +40,53 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-20-SSN-V250
-  Version: 2.5.0
+  BUILD STAMP: 2026-10-20-SSN-V260
+  Version: 2.6.0
 
   Revision history:
+    v2.6.0 2026-10-20 Link tooltips, a true text background clear,
+                      more fonts, and an installable PWA. Links
+                      inside a note now carry hover tooltips: a web
+                      link shows its own address, and a note link
+                      shows the target note's current title, resolved
+                      fresh on every render (decorateLinkTooltips in
+                      section 9 runs with the other body decorations),
+                      so renaming the target updates the tooltip
+                      without anyone editing the link; a target in
+                      Trash or the Archive still shows its title, and
+                      a target that no longer exists falls back to
+                      the link's own text. Links also get correct
+                      titles at birth, in the note link picker, the
+                      link edit save, and the Insert Link command.
+                      The highlight palette gains a None swatch at
+                      its front (the labeled No highlight button now
+                      runs the same code): clearing goes through the
+                      palette's own apply path with transparent, then
+                      stripBackgroundFromRange removes the background
+                      styling the command leaves behind, splitting
+                      spans at the selection boundaries so text
+                      outside the selection keeps its formatting, so
+                      a saved note holds no background styling for a
+                      cleared range. The font family picker grows
+                      from four entries to sixteen, grouped as Sans,
+                      Serif, Mono, and Handwriting optgroups, all
+                      device font stacks with no downloads. The app
+                      is installable as a PWA, closing the gap open
+                      since v1.0: manifest.webmanifest, sw.js (a
+                      service worker whose cache is stamped with
+                      this build; the page is network first, so an
+                      online user can never be served a stale app,
+                      and it touches only same origin GET requests),
+                      and generated PNG icons (icon-192.png,
+                      icon-512.png, icon-maskable-512.png,
+                      apple-touch-icon.png) ship beside this file in
+                      the repo, the head carries the manifest link
+                      and the Apple home screen metas, registration
+                      is guarded to HTTPS or localhost and fails
+                      silently elsewhere (standalone file copies are
+                      unaffected), and an Install app button appears
+                      in the sidebar footer when the browser offers
+                      installation through beforeinstallprompt.
     v2.5.0 2026-10-20 Drag to Trash and Archive, a notebook link
                       picker, tags and save status relocations, a
                       maximize note view, and an icon rail sidebar.
@@ -1377,6 +1433,18 @@ body.note-drag-active{touch-action:none;overscroll-behavior:none;}
   width:22px;height:22px;min-width:22px;min-height:22px;padding:0;
   border-radius:6px;border:1px solid var(--border);
 }
+/* v2.6.0: the highlight palette's None swatch. It sits first in the
+   grid: the app background with a red diagonal slash, the standard
+   "none" affordance, so it reads as an empty choice beside the real
+   colors. Its title and aria-label carry the word None. */
+.tb-swatches .swatch-none{
+  background:
+    linear-gradient(to top right,
+      rgba(0,0,0,0) 0%, rgba(0,0,0,0) calc(50% - 1px),
+      #C0392B calc(50% - 1px), #C0392B calc(50% + 1px),
+      rgba(0,0,0,0) calc(50% + 1px), rgba(0,0,0,0) 100%),
+    var(--bg);
+}
 .tb-custom-row{
   display:flex;align-items:center;gap:8px;padding:5px 9px;
   font-size:13px;font-weight:600;color:var(--text);
@@ -2137,6 +2205,13 @@ body.dark .ss-att-provider{color:#EAF3EC;}
              the app (refreshGoogleConnection in section 11). The
              expired sign in messages name this button as the remedy. -->
         <button class="btn small" id="refreshConnBtn" type="button">Refresh connection</button>
+        <!-- v2.6.0: the install button. Hidden unless the browser has
+             offered installation (the beforeinstallprompt listener in
+             the PWA wiring at the end of the script unhides it), and
+             hidden again once the prompt is used or the app is
+             installed. On browsers that never offer the event (iOS
+             Safari) it simply never appears. -->
+        <button class="btn small hidden" id="installAppBtn" type="button">Install app</button>
       </div>
       <!-- v1.6: the running app's version, written from APP_VERSION
            by the script at boot. Never hard code a version here. -->
@@ -2358,11 +2433,36 @@ body.dark .ss-att-provider{color:#EAF3EC;}
                 <option value="BLOCKQUOTE">Quote</option>
                 <option value="PRE">Code block</option>
               </select>
+              <!-- v2.6.0: the family picker grew from four generic
+                   entries to sixteen, grouped with optgroups. Every
+                   value is a key into FONT_STACKS; all stacks are
+                   device fonts with generic fallbacks, no downloads. -->
               <select id="fontFamilySelect" title="Font family" aria-label="Font family">
-                <option value="sans">Sans Serif</option>
-                <option value="serif">Serif</option>
-                <option value="mono">Monospace</option>
-                <option value="hand">Handwriting</option>
+                <optgroup label="Sans">
+                  <option value="sans">Sans Serif</option>
+                  <option value="system">System default</option>
+                  <option value="verdana">Verdana</option>
+                  <option value="tahoma">Tahoma</option>
+                  <option value="trebuchet">Trebuchet MS</option>
+                  <option value="calibri">Calibri</option>
+                </optgroup>
+                <optgroup label="Serif">
+                  <option value="serif">Serif</option>
+                  <option value="georgia">Georgia</option>
+                  <option value="palatino">Palatino</option>
+                  <option value="garamond">Garamond</option>
+                  <option value="cambria">Cambria</option>
+                  <option value="times">Times New Roman</option>
+                </optgroup>
+                <optgroup label="Mono">
+                  <option value="mono">Monospace</option>
+                  <option value="consolas">Consolas</option>
+                  <option value="cascadia">Cascadia Code</option>
+                  <option value="courier">Courier New</option>
+                </optgroup>
+                <optgroup label="Handwriting">
+                  <option value="hand">Handwriting</option>
+                </optgroup>
               </select>
               <select id="fontSizeSelect" title="Font size" aria-label="Font size">
                 <option value="">Size</option>
@@ -2706,8 +2806,8 @@ body.dark .ss-att-provider{color:#EAF3EC;}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-20-SSN-V250";
-const APP_VERSION = "2.5.0";
+const APP_BUILD = "2026-10-20-SSN-V260";
+const APP_VERSION = "2.6.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -5961,6 +6061,11 @@ function renderEditor() {
        does not re-run filters; only setting or clearing one, and
        this render, reapplies row visibility.) */
     applyAllTableFilters(document.getElementById("noteBody"));
+    /* v2.6.0: link tooltips are resolved fresh on every render, with
+       the rest of the body decorations: a note link shows its
+       target's CURRENT title, so a rename is reflected the next time
+       this note opens, without the link itself being edited. */
+    decorateLinkTooltips(document.getElementById("noteBody"));
     setSaveState(note.trashed ? "In Trash" :
       (note.archived ? "Archived" : "Saved"));
     /* v1.2: fill the attachment placeholders from the providers. This is
@@ -6382,6 +6487,8 @@ function saveLinkEdit() {
     return;
   }
   anchor.setAttribute("href", normalized);
+  /* v2.6.0: keep the hover tooltip in step with the new address. */
+  anchor.setAttribute("title", normalized);
   const newText = document.getElementById("linkEditText").value;
   if (newText !== (anchor.textContent || "")) {
     anchor.textContent = newText;
@@ -6519,6 +6626,10 @@ function pickNoteLinkTarget(target) {
   const anchor = document.createElement("a");
   anchor.setAttribute("href", SSNOTE_HREF_PREFIX + target.id);
   anchor.setAttribute("class", "ss-note-link");
+  /* v2.6.0: the tooltip is correct from birth: the target's title.
+     Later renders re-resolve it (decorateLinkTooltips), so a rename
+     still shows through without this anchor being touched again. */
+  anchor.setAttribute("title", target.title || "Untitled note");
   anchor.textContent = (pending && pending.label) ||
     target.title || "Untitled note";
   let placed = false;
@@ -10610,6 +10721,40 @@ function normalizeChecklists(rootEl) {
   });
 }
 
+/* v2.6.0: the hover tooltip for one anchor in a note body. A note
+   link (ssnote:) shows the target note's current title; findNoteById
+   looks in the live list, Trash, and the Archive, so a target in
+   Trash or the Archive still shows its title, and only a target
+   that no longer exists at all falls back to the link's own text.
+   A web link shows its own address, exactly as written. Returns an
+   empty string when there is nothing sensible to show. */
+function linkTooltipFor(anchor) {
+  const noteId = noteLinkIdOf(anchor);
+  if (noteId) {
+    const target = findNoteById(noteId);
+    if (target) { return target.title || "Untitled note"; }
+    return (anchor.textContent || "").trim();
+  }
+  return anchor.getAttribute("href") || "";
+}
+
+/* v2.6.0: set the title attribute on every link under rootEl, the
+   same decoration shape as normalizeChecklists above. renderEditor
+   runs this each time a note's body is filled, alongside the
+   attachment decoration and the table filter pass, so tooltips are
+   always resolved against the notes as they are right now. Titles
+   are presentational only: the text and Word exporters read link
+   text and addresses, never title attributes, so nothing about a
+   tooltip can leak into an export. */
+function decorateLinkTooltips(rootEl) {
+  if (!rootEl || !rootEl.querySelectorAll) { return; }
+  rootEl.querySelectorAll("a[href]").forEach(function (anchor) {
+    const tip = linkTooltipFor(anchor);
+    if (tip) { anchor.setAttribute("title", tip); }
+    else { anchor.removeAttribute("title"); }
+  });
+}
+
 /* The text of a checklist item, not counting the checkbox itself.
    Tells an empty item (Enter leaves the list) from a filled one
    (Enter splits it). */
@@ -10720,13 +10865,33 @@ function handleChecklistEnter() {
 
 /* Font stacks behind the family picker keys. The generic families at
    the end of each stack keep the app dependency free: no web fonts are
-   downloaded, every device uses its own closest match. */
+   downloaded, every device uses its own closest match. v2.6.0: the
+   picker grew from the four generic entries to sixteen named stacks;
+   the original four are unchanged, so notes already using them keep
+   rendering exactly as before. */
 const FONT_STACKS = {
   sans: "-apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, " +
         "\"Helvetica Neue\", Arial, sans-serif",
+  system: "system-ui, -apple-system, BlinkMacSystemFont, " +
+        "\"Segoe UI\", Roboto, sans-serif",
+  verdana: "Verdana, Geneva, Tahoma, sans-serif",
+  tahoma: "Tahoma, Geneva, Verdana, sans-serif",
+  trebuchet: "\"Trebuchet MS\", \"Lucida Grande\", " +
+        "\"Lucida Sans Unicode\", sans-serif",
+  calibri: "Calibri, Candara, \"Segoe UI\", sans-serif",
   serif: "Georgia, \"Times New Roman\", Times, serif",
+  georgia: "Georgia, \"Times New Roman\", Times, serif",
+  palatino: "\"Palatino Linotype\", \"Book Antiqua\", Palatino, " +
+        "Georgia, serif",
+  garamond: "Garamond, \"EB Garamond\", \"Times New Roman\", serif",
+  cambria: "Cambria, Georgia, \"Times New Roman\", serif",
+  times: "\"Times New Roman\", Times, serif",
   mono: "ui-monospace, SFMono-Regular, Menlo, Consolas, " +
         "\"Liberation Mono\", monospace",
+  consolas: "Consolas, \"Liberation Mono\", Menlo, monospace",
+  cascadia: "\"Cascadia Code\", Consolas, \"Liberation Mono\", " +
+        "monospace",
+  courier: "\"Courier New\", Courier, monospace",
   hand: "\"Segoe Script\", \"Bradley Hand\", \"Comic Sans MS\", cursive"
 };
 
@@ -10930,6 +11095,144 @@ function applyHighlight(value) {
   markDirty();
 }
 
+/* v2.6.0: split el around one of its child nodes: el keeps the child,
+   and clones of el (same tag, same attributes) take the siblings
+   before and after it, inserted as el's own siblings. Returns el.
+   The clones carry el's styling, which is exactly what background
+   removal needs: the parts outside the selection keep their
+   background, the part inside can be stripped on its own. */
+function splitElementAroundChild(el, child) {
+  const parent = el.parentNode;
+  if (!parent || !el.contains(child)) { return el; }
+  const before = el.cloneNode(false);
+  const after = el.cloneNode(false);
+  const beforeNodes = [];
+  const afterNodes = [];
+  let seen = false;
+  let sib = el.firstChild;
+  while (sib) {
+    const next = sib.nextSibling;
+    if (sib === child) { seen = true; }
+    else if (!seen) { beforeNodes.push(sib); }
+    else { afterNodes.push(sib); }
+    sib = next;
+  }
+  beforeNodes.forEach(function (x) { before.appendChild(x); });
+  afterNodes.forEach(function (x) { after.appendChild(x); });
+  if (before.childNodes.length) { parent.insertBefore(before, el); }
+  if (after.childNodes.length) {
+    parent.insertBefore(after, el.nextSibling);
+  }
+  return el;
+}
+
+/* v2.6.0: narrow span so it covers only the branch that contains
+   node: every element on the path from span down to node is split
+   around the piece below it, deepest level first, so when the span
+   itself is split (last) the piece it keeps holds exactly node's
+   branch. The pieces split off keep the span's attributes and stay
+   in the document as its siblings. */
+function splitSpanAround(span, node) {
+  const path = [];
+  let n = node;
+  while (n && n !== span) { path.unshift(n); n = n.parentNode; }
+  if (n !== span) { return span; }
+  for (let i = path.length - 1; i >= 0; i--) {
+    const el = i === 0 ? span : path[i - 1];
+    splitElementAroundChild(el, path[i]);
+  }
+  return span;
+}
+
+/* v2.6.0: does this span carry a background in its inline style?
+   Checks the parsed properties and falls back to a text search of
+   the style attribute, so a background written as the shorthand is
+   caught too. */
+function spanHasBackground(span) {
+  if (!span.style) { return false; }
+  if (span.style.backgroundColor || span.style.background) {
+    return true;
+  }
+  return (span.getAttribute("style") || "")
+    .toLowerCase().indexOf("background") !== -1;
+}
+
+/* v2.6.0: remove background styling from exactly the part of the
+   body the range covers. For every text node the range touches,
+   each background carrying span above it is split around the node
+   (so the strip touches only the selected part) and then loses its
+   background properties; a span left with no attributes at all was
+   pure background and is unwrapped, restoring plain text, while a
+   span still carrying other styling (color, font) or a class stays
+   in place minus the background. Only spans are touched: table cell
+   backgrounds live on cells, not spans, and are the cell menu's
+   business, not the text highlight's. */
+function stripBackgroundFromRange(range) {
+  const bodyEl = document.getElementById("noteBody");
+  const walker = document.createTreeWalker(
+    bodyEl, NodeFilter.SHOW_TEXT, null);
+  const targets = [];
+  let node = walker.nextNode();
+  while (node) {
+    const parent = node.parentElement;
+    const inAttachment = parent && parent.closest(".ss-attachment");
+    if (!inAttachment && node.nodeValue.length &&
+        range.intersectsNode(node)) {
+      targets.push(node);
+    }
+    node = walker.nextNode();
+  }
+  targets.forEach(function (textNode) {
+    const chain = [];
+    let el = textNode.parentElement;
+    while (el && el !== bodyEl) {
+      if (el.tagName === "SPAN" && spanHasBackground(el)) {
+        chain.unshift(el);
+      }
+      el = el.parentElement;
+    }
+    chain.forEach(function (span) {
+      if (!span.parentNode) { return; }
+      const piece = splitSpanAround(span, textNode);
+      piece.style.removeProperty("background-color");
+      piece.style.removeProperty("background");
+      if (piece.getAttribute("style") === "") {
+        piece.removeAttribute("style");
+      }
+      if (piece.attributes.length === 0) {
+        const parent = piece.parentNode;
+        while (piece.firstChild) {
+          parent.insertBefore(piece.firstChild, piece);
+        }
+        parent.removeChild(piece);
+      }
+    });
+  });
+}
+
+/* v2.6.0: the highlight palette's None choice (the first swatch in
+   the grid, and the No highlight button, which now runs this too).
+   Step one is the palette's own mechanism, the same applyHighlight
+   path every color uses, with transparent. Step two (in
+   stripBackgroundFromRange) removes what step one can leave
+   behind: engines may keep a background-color: transparent inline
+   style on the cleared range (and the span fallback always does),
+   and an older span the command did not split keeps its color over
+   part of the range. After both steps the saved body holds no
+   background styling for the cleared range, while other formatting
+   on the same text (color, bold, font) is untouched. */
+function clearHighlightSelection() {
+  applyHighlight("transparent");
+  const bodyEl = document.getElementById("noteBody");
+  const sel = window.getSelection();
+  if (!sel || !sel.rangeCount) { return; }
+  const range = sel.getRangeAt(0);
+  if (range.collapsed ||
+      !bodyEl.contains(range.commonAncestorContainer)) { return; }
+  stripBackgroundFromRange(range);
+  markDirty();
+}
+
 /* ----- remove formatting (extended) ---------------------------------------
    Starts with the classic behavior (removeFormat plus formatBlock P),
    then unwraps the spans our own font, size, color, and highlight
@@ -11034,6 +11337,9 @@ function runInsertAction(kind) {
        restore the saved range again before creating the link. */
     restoreFormatSelection();
     document.execCommand("createLink", false, url.trim());
+    /* v2.6.0: the fresh anchor gets its hover tooltip (its own
+       address) at birth, from the same resolver renders use. */
+    decorateLinkTooltips(document.getElementById("noteBody"));
   } else if (kind === "divider") {
     document.execCommand("insertHorizontalRule", false, null);
   } else if (kind === "datetime") {
@@ -11198,11 +11504,31 @@ function wireToolbar() {
 
   /* Color palettes and the preset reset actions. */
   buildSwatches("textColorSwatches", applyTextColor);
+  /* v2.6.0: the highlight palette's None swatch is inserted FIRST,
+     ahead of the colors buildSwatches appends, so "no background"
+     reads as the palette's first choice. It behaves like the other
+     swatches (mousedown saves the editor selection, then the click
+     applies), and it runs the same full clear as the labeled No
+     highlight button below the grid. */
+  const hlNoneSwatch = document.createElement("button");
+  hlNoneSwatch.type = "button";
+  hlNoneSwatch.id = "highlightNoneSwatch";
+  hlNoneSwatch.className = "swatch swatch-none";
+  hlNoneSwatch.title = "None";
+  hlNoneSwatch.setAttribute("aria-label", "None");
+  hlNoneSwatch.addEventListener("mousedown", function (ev) {
+    ev.preventDefault();
+    saveFormatSelection();
+  });
+  hlNoneSwatch.addEventListener("click", function () {
+    clearHighlightSelection();
+  });
+  document.getElementById("highlightSwatches").appendChild(hlNoneSwatch);
   buildSwatches("highlightSwatches", applyHighlight);
   document.getElementById("textColorDefault").addEventListener("click",
     function () { applyTextColor("inherit"); });
   document.getElementById("highlightNone").addEventListener("click",
-    function () { applyHighlight("transparent"); });
+    function () { clearHighlightSelection(); });
 
   /* Custom color inputs apply when the picker is committed (the
      change event), not on every intermediate input tick. */
@@ -14510,6 +14836,92 @@ async function prepareGoogleGate() {
   }
   showGoogleConnectScreen();
 }
+
+/* --------------------------------------------------------------------------
+   v2.6.0: installable app (PWA) wiring
+
+   The install pieces are separate files served from the site root:
+   manifest.webmanifest, sw.js, and the generated PNG icons named in
+   the head of this file. This block is the page side of that story:
+   it registers the service worker and runs the Install app button.
+
+   Registration is guarded three ways, and every failure is silent:
+   the browser must expose navigator.serviceWorker, the page must be
+   served over HTTPS (or from localhost, where service workers are
+   also allowed), and the whole attempt sits in a try and catch with
+   a caught promise. A standalone copy of this file opened from disk
+   or served from anywhere else therefore behaves exactly as it did
+   before v2.6.0: no worker, no prompt, no error.
+
+   The install button listens for beforeinstallprompt, which
+   Chromium based browsers fire when the site is installable. The
+   event is stashed (its default mini infobar suppressed), the
+   sidebar's Install app button is unhidden, and clicking it plays
+   the stash back. The button hides again once the prompt has been
+   used, whether it was accepted or dismissed (a later offer fires
+   the event again and brings the button back), and for good once
+   the appinstalled event lands. Browsers that never fire the event
+   (iOS Safari) never show the button; the Apple metas and touch
+   icon in the head cover that path instead.
+   -------------------------------------------------------------------------- */
+let deferredInstallPrompt = null;
+
+window.addEventListener("beforeinstallprompt", function (ev) {
+  ev.preventDefault();
+  deferredInstallPrompt = ev;
+  const btn = document.getElementById("installAppBtn");
+  if (btn) { btn.classList.remove("hidden"); }
+});
+
+window.addEventListener("appinstalled", function () {
+  deferredInstallPrompt = null;
+  const btn = document.getElementById("installAppBtn");
+  if (btn) { btn.classList.add("hidden"); }
+});
+
+/* Play the stashed install prompt back. The outcome is recorded the
+   only way the app needs: the stash is spent and the button hides,
+   whichever way the user answered. */
+async function promptInstallApp() {
+  const btn = document.getElementById("installAppBtn");
+  const promptEvent = deferredInstallPrompt;
+  deferredInstallPrompt = null;
+  if (btn) { btn.classList.add("hidden"); }
+  if (!promptEvent) { return; }
+  try {
+    promptEvent.prompt();
+    await promptEvent.userChoice;
+  } catch (err) { /* a spent or refused prompt is not an app error */ }
+}
+
+function registerServiceWorker() {
+  try {
+    if (!("serviceWorker" in navigator)) { return; }
+    const proto = window.location.protocol;
+    const host = window.location.hostname;
+    const secureEnough = proto === "https:" ||
+      (proto === "http:" &&
+        (host === "localhost" || host === "127.0.0.1"));
+    if (!secureEnough) { return; }
+    navigator.serviceWorker.register("sw.js").catch(function () {
+      /* Silent by design: the app works the same without the
+         worker; it only loses offline shell caching and the
+         browser's install offer. */
+    });
+  } catch (err) { /* silent, same reasoning as above */ }
+}
+
+/* The listeners and the registration run at script evaluation: the
+   script sits at the end of the body, so the button exists, and
+   beforeinstallprompt can fire early in the page's life, before
+   boot() would get to it. */
+(function wirePwaInstall() {
+  const btn = document.getElementById("installAppBtn");
+  if (btn) {
+    btn.addEventListener("click", function () { promptInstallApp(); });
+  }
+  registerServiceWorker();
+})();
 
 /* --------------------------------------------------------------------------
    Boot
