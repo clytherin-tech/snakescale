@@ -40,10 +40,53 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-20-SSN-V260
-  Version: 2.6.0
+  BUILD STAMP: 2026-10-20-SSN-V270
+  Version: 2.7.0
 
   Revision history:
+    v2.7.0 2026-10-20 Checklist state persists, Tab sub-lists, and
+                      a sidebar footer menu. The checklist fix first:
+                      checking an item used to set only the checkbox
+                      element's live checked property, which innerHTML
+                      serialization drops, while the strikethrough
+                      rode on the item's done class, which does
+                      serialize, so a saved and reopened note showed
+                      struck text behind an empty box. The done class
+                      is now the single source of truth: the toggle
+                      mirrors it into the input's checked attribute
+                      (the serialized form), and every render syncs
+                      each box from its item's class
+                      (syncChecklistBoxes in section 9), which also
+                      heals notes saved by the buggy versions (done
+                      present, no checked marker) the first time
+                      they open. Tab and Shift+Tab inside a list item
+                      now indent and outdent it (indentListItem and
+                      outdentListItem beside handleBodyTabKey in
+                      section 9): the item moves into a sub-list
+                      inside the previous item, reusing a sub-list
+                      that is already there or creating one with the
+                      same tag (checklists nest as ss-checklist, so
+                      toggling and Enter keep working at depth); a
+                      selection across items moves them all, a mixed
+                      selection keeps the tab prefix on its plain
+                      blocks, and a list inside a table cell still
+                      navigates the table. The sidebar footer's
+                      standalone buttons are now one three dot menu
+                      (sidebarMenuBtn and sidebarMenu) at the right
+                      end of the Synced pill's row, with the save
+                      status on its own line under that row (Chris's
+                      layout): Refresh connection (its working label
+                      and disabled state live on the menu item now),
+                      Install app (shown under the same
+                      beforeinstallprompt conditions as the old
+                      button), Dark mode (a check mark shows while
+                      dark is active, refreshed on every open),
+                      Collapse sidebar, a separator, and Sign out.
+                      Every item runs the very handler its button
+                      ran; Sync now keeps its own button, and the
+                      icon rail is unchanged (its leaf buttons click
+                      these items through, as they clicked the
+                      buttons).
     v2.6.0 2026-10-20 Link tooltips, a true text background clear,
                       more fonts, and an installable PWA. Links
                       inside a note now carry hover tooltips: a web
@@ -974,15 +1017,41 @@ body.dark .gate-brand .wordmark{color:#EAF3EC;}
   background:#0A2E21;color:#BFD6C4;border:1px solid #2A5240;
   transition:border-color var(--motion),color var(--motion);
 }
-/* v2.5: the sync pill and the save status share one row in the
-   sidebar footer: the pill, then the status immediately to its
-   right as a small muted label. The row carries the bottom
-   margin the pill used to carry alone. */
+/* v2.5 put the sync pill and the save status in one row in the
+   sidebar footer. v2.7 (Chris's layout): the row now holds the
+   pill at the left and the footer's three dot menu button at the
+   right end, and the save status moved to its own line under the
+   row (.save-state-row). The row is the menu's positioning
+   anchor: the menu opens upward from the row's right end. */
 .sync-row{
-  display:flex;align-items:center;gap:10px;margin-bottom:10px;
-  flex-wrap:wrap;
+  display:flex;align-items:center;gap:10px;margin-bottom:6px;
+  flex-wrap:wrap;justify-content:space-between;position:relative;
 }
+.save-state-row{margin-bottom:10px;}
 #saveState{font-size:12.5px;color:#9DB8A6;font-weight:600;}
+/* v2.7: the sidebar footer's three dot menu button and its menu.
+   The button is a quiet dark chip like the footer buttons it
+   replaced; the menu is the standard card (the #attMenu look)
+   anchored to the sync row, opening upward so it never runs off
+   the bottom of the sidebar. */
+.sidebar-menu-btn{
+  background:#0A2E21;border:1px solid #2A5240;color:#EAF3EC;
+  border-radius:var(--radius-button);min-width:30px;min-height:26px;
+  padding:1px 7px;font-size:16px;line-height:1;cursor:pointer;
+}
+.sidebar-menu-btn:hover{border-color:var(--accent);}
+#sidebarMenu{
+  position:absolute;z-index:60;right:0;bottom:calc(100% + 6px);
+  min-width:212px;padding:6px;
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius-card);box-shadow:0 10px 28px rgba(6,32,22,.28);
+  display:flex;flex-direction:column;gap:2px;
+}
+#sidebarMenu.hidden{display:none;}
+#sidebarMenu button .sb-check{
+  display:inline-block;width:16px;flex:0 0 16px;font-weight:800;
+  color:var(--secondary);
+}
 .sync-dot{
   width:8px;height:8px;flex:0 0 8px;border-radius:50%;background:#9DB8A6;
 }
@@ -2184,34 +2253,33 @@ body.dark .ss-att-provider{color:#EAF3EC;}
     </div>
 
     <div class="sidebar-foot">
-      <!-- v2.5: the save status moved here from the editor footer;
-           it sits immediately right of the Synced pill and is still
-           written by setSaveState, exactly as before. -->
+      <!-- v2.7: the footer's action buttons became a three dot menu
+           beside the Synced pill, and the save status moved to its
+           own line under the pill row (Chris's layout). Each menu
+           item runs the very handler its standalone button ran
+           through v2.6.0: Refresh connection (v2.2), Install app
+           (v2.6.0, present only while the browser offers
+           installation), Dark mode (its check mark is refreshed
+           every time the menu opens), Collapse sidebar (the v2.5
+           rail toggle), and Sign out. Sync now keeps its own
+           button under the status line, and the icon rail is
+           unchanged: it keeps its own icon buttons, which click
+           these items through. -->
       <div class="sync-row">
         <div class="sync-pill" id="syncPill" data-state="idle"><span class="sync-dot" aria-hidden="true"></span><span class="sync-label">Not synced yet</span></div>
-        <span id="saveState">No changes</span>
+        <button class="sidebar-menu-btn" id="sidebarMenuBtn" type="button" aria-haspopup="true" aria-expanded="false" title="More actions" aria-label="More actions">&#8943;</button>
+        <div id="sidebarMenu" class="hidden" role="menu" aria-label="Sidebar actions">
+          <button class="att-menu-item" id="sidebarRefreshItem" type="button" role="menuitem"><span id="sidebarRefreshLabel">Refresh connection</span></button>
+          <button class="att-menu-item hidden" id="sidebarInstallItem" type="button" role="menuitem">Install app</button>
+          <button class="att-menu-item" id="sidebarThemeItem" type="button" role="menuitem"><span class="sb-check" id="sidebarThemeCheck" aria-hidden="true"></span>Dark mode</button>
+          <button class="att-menu-item" id="sidebarCollapseItem" type="button" role="menuitem">Collapse sidebar</button>
+          <div class="att-menu-sep"></div>
+          <button class="att-menu-item" id="sidebarSignOutItem" type="button" role="menuitem">Sign out</button>
+        </div>
       </div>
-      <div class="foot-buttons">
+      <div class="save-state-row"><span id="saveState">No changes</span></div>
       <div class="foot-buttons">
         <button class="btn small" id="syncNowBtn" type="button">Sync now</button>
-        <button class="btn small" id="themeBtn" type="button">Dark mode</button>
-        <button class="btn small" id="lockBtn" type="button">Sign out</button>
-        <!-- v2.5: the icon rail toggle. Its label is maintained by
-             renderRailChrome (Icons only in full mode, Full sidebar
-             in rail mode, though the rail shows its own expand icon
-             button for the trip back). -->
-        <button class="btn small" id="railToggleBtn" type="button">Icons only</button>
-        <!-- v2.2: get a fresh Google token and resync without leaving
-             the app (refreshGoogleConnection in section 11). The
-             expired sign in messages name this button as the remedy. -->
-        <button class="btn small" id="refreshConnBtn" type="button">Refresh connection</button>
-        <!-- v2.6.0: the install button. Hidden unless the browser has
-             offered installation (the beforeinstallprompt listener in
-             the PWA wiring at the end of the script unhides it), and
-             hidden again once the prompt is used or the app is
-             installed. On browsers that never offer the event (iOS
-             Safari) it simply never appears. -->
-        <button class="btn small hidden" id="installAppBtn" type="button">Install app</button>
       </div>
       <!-- v1.6: the running app's version, written from APP_VERSION
            by the script at boot. Never hard code a version here. -->
@@ -2806,8 +2874,8 @@ body.dark .ss-att-provider{color:#EAF3EC;}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-20-SSN-V260";
-const APP_VERSION = "2.6.0";
+const APP_BUILD = "2026-10-20-SSN-V270";
+const APP_VERSION = "2.7.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -4188,7 +4256,7 @@ async function saveNoteToRepoNow(note, options) {
       queueOp({ kind: "put", path: path, content: text, noteId: note.id });
       saveCache();
       toast("Your Google sign in expired. This edit was saved in the sync " +
-        "queue. Press Refresh connection (next to Sign out) to reconnect, " +
+        "queue. Use Refresh connection in the sidebar menu to reconnect, " +
         "then use Sync now if it does not sync on its own.", true);
       return { queued: true, googleReconnect: true };
     }
@@ -5085,11 +5153,14 @@ function renderSidebar() {
       "your own Google Drive as plain Markdown files, so your notes are " +
       "never locked inside this app.";
   }
-  document.getElementById("themeBtn").textContent =
-    document.body.classList.contains("dark") ? "Light mode" : "Dark mode";
-  /* v2.0: the button is Sign out for everyone; there is no lock
-     screen and no app password anymore. */
-  document.getElementById("lockBtn").textContent = "Sign out";
+  /* v2.7: the theme and sign out controls live in the sidebar
+     footer's three dot menu now, not in standalone buttons whose
+     labels this function used to maintain. The Dark mode item's
+     check mark is refreshed each time the menu opens (see
+     refreshSidebarThemeCheck), and Sign out is a static label in
+     the markup. (v2.0's rule stands behind the item: it is Sign
+     out for everyone; there is no lock screen and no app
+     password anymore.) */
   /* v2.5: the icon rail's chrome (toggle label, active marks,
      flyout contents) renders in step with the sidebar. */
   renderRailChrome();
@@ -5112,10 +5183,11 @@ function renderSidebar() {
 let railFlyoutCloseTimer = null;
 
 function renderRailChrome() {
-  const toggle = document.getElementById("railToggleBtn");
-  if (toggle) {
-    toggle.textContent = state.sidebarRail ? "Full sidebar" : "Icons only";
-  }
+  /* v2.7: the full sidebar's rail toggle button is gone (the
+     footer menu's Collapse sidebar item runs setSidebarRail
+     now), so there is no toggle label left to maintain here;
+     the rail's own expand icon is the way back, and it clicks
+     that same menu item. */
   const marks = [
     ["railAllBtn", state.view.kind === "all"],
     ["railPinnedBtn", state.view.kind === "pinned"],
@@ -5245,6 +5317,10 @@ const MAXIMIZE_ICON_RESTORE =
 
 function setMaximized(on) {
   editorMaximized = !!on;
+  /* v2.7: opening Maximize hides the sidebar; a sidebar footer
+     menu left open would be orphaned over the note, so it
+     closes as the layout changes. */
+  if (editorMaximized) { closeSidebarMenu(); }
   document.body.classList.toggle("note-maximized", editorMaximized);
   const btn = document.getElementById("maximizeBtn");
   if (btn) {
@@ -5268,7 +5344,7 @@ function anyOverlayOpen() {
   if (noteDrag) { return true; }
   const ids = ["noteLinkModal", "nbDropOverlay", "notebookMenu",
     "railFlyout", "linkPopup", "tableMenu", "cellMenu", "attMenu",
-    "exportMenu"];
+    "exportMenu", "sidebarMenu"];
   for (let i = 0; i < ids.length; i++) {
     const el = document.getElementById(ids[i]);
     if (el && !el.classList.contains("hidden")) { return true; }
@@ -6046,6 +6122,11 @@ function renderEditor() {
        existed, so they get the bullet free styling and Enter
        behavior of new ones. */
     normalizeChecklists(document.getElementById("noteBody"));
+    /* v2.7: restore every checklist box from its item's saved
+       done class (and heal the checked attribute in the same
+       pass), so a checked item reopens checked; see
+       syncChecklistBoxes. */
+    syncChecklistBoxes(document.getElementById("noteBody"));
     /* v1.7: freshly rendered placeholders get the shared decoration
        (the inline image class, the draggable flag) immediately, not
        only when hydration reaches them one by one. */
@@ -6182,6 +6263,54 @@ function toggleNotebookMenu() {
   if (!menu) { return; }
   if (menu.classList.contains("hidden")) { openNotebookMenu(); }
   else { closeNotebookMenu(); }
+}
+
+/* --------------------------------------------------------------------------
+   v2.7: the sidebar footer's three dot menu.
+   Chris's layout: the Synced pill row carries one menu button at
+   its right end, the save status sits on its own line under the
+   row, and the actions that were standalone footer buttons
+   through v2.6.0 (Refresh connection, Install app, Dark mode,
+   Collapse sidebar, Sign out) live in this menu. The menu opens
+   upward from the button and follows the notebook menu's
+   patterns: the button toggles it, clicks inside it do not
+   propagate, a document click outside the footer closes it,
+   Escape closes it, and choosing an item closes it (each item's
+   own handler, wired in wireEvents and in the PWA block, does
+   the closing). Opening it refreshes the Dark mode check mark,
+   so the active theme is visible, never silently remembered.
+   The items are wired to the very handlers the buttons ran;
+   nothing about those flows changed.
+   -------------------------------------------------------------------------- */
+function refreshSidebarThemeCheck() {
+  const check = document.getElementById("sidebarThemeCheck");
+  if (check) {
+    check.textContent =
+      document.body.classList.contains("dark") ? "✓" : "";
+  }
+}
+
+function openSidebarMenu() {
+  const menu = document.getElementById("sidebarMenu");
+  const btn = document.getElementById("sidebarMenuBtn");
+  if (!menu) { return; }
+  refreshSidebarThemeCheck();
+  menu.classList.remove("hidden");
+  if (btn) { btn.setAttribute("aria-expanded", "true"); }
+}
+
+function closeSidebarMenu() {
+  const menu = document.getElementById("sidebarMenu");
+  const btn = document.getElementById("sidebarMenuBtn");
+  if (menu) { menu.classList.add("hidden"); }
+  if (btn) { btn.setAttribute("aria-expanded", "false"); }
+}
+
+function toggleSidebarMenu() {
+  const menu = document.getElementById("sidebarMenu");
+  if (!menu) { return; }
+  if (menu.classList.contains("hidden")) { openSidebarMenu(); }
+  else { closeSidebarMenu(); }
 }
 
 function setSaveState(text) {
@@ -9677,17 +9806,24 @@ function moveNoteToNotebook(note, targetSlug) {
        last cell appends a new row, built by the same structure
        rules as the v2.2 table actions, and moves into its first
        cell. Pure navigation never marks the note dirty.
-     - With a selection spanning several blocks (outside tables),
-       Tab prefixes every touched block with a tab and Shift+Tab
-       removes one leading tab from each that has one; the touched
-       blocks stay selected afterwards.
+     - v2.7: inside a list item (bullet, numbered, or checklist),
+       Tab indents the item one level into a sub-list and
+       Shift+Tab outdents it one level (indentListItem and
+       outdentListItem below, plain DOM moves, never execCommand).
+       This wins over both block behaviors below for any touched
+       list item; in a mixed selection the plain blocks still
+       take the tab prefix path. A list inside a table cell does
+       not qualify: the table navigation above has already won
+       by the time this is consulted.
+     - With a selection spanning several blocks (outside tables
+       and lists), Tab prefixes every touched block with a tab
+       and Shift+Tab removes one leading tab from each that has
+       one; the touched blocks stay selected afterwards.
      - Otherwise (a collapsed caret, or a selection inside one
-       block, list and checklist items included), Tab inserts a
-       real tab character at the caret, replacing any selection,
-       and Shift+Tab removes one tab immediately before the caret
-       or the leading tab of the caret's block, doing nothing when
-       there is neither. List structure is never nested or
-       restructured by either key.
+       plain block), Tab inserts a real tab character at the
+       caret, replacing any selection, and Shift+Tab removes one
+       tab immediately before the caret or the leading tab of the
+       caret's block, doing nothing when there is neither.
    The inserted tab is a span.ss-tab holding the character: its
    scoped white-space preservation (see the CSS) renders it as a
    true tab stop gap, even at the start of a line where a raw tab
@@ -9938,6 +10074,90 @@ function tabNavigateTable(cell, range, shift) {
   selectTableCellContents(cells[targetIdx]);
 }
 
+/* v2.7: Tab and Shift+Tab inside list items make and unmake
+   sub-lists (Chris's request; through v2.6.0 the keys inserted a
+   tab character in list items and never restructured anything).
+   The operations are deterministic DOM moves on the <li> itself,
+   deliberately not execCommand indent or outdent, whose results
+   vary by browser and can wrap blocks in blockquotes.
+
+   The list item a node sits in, or null: the node's closest li,
+   provided it belongs to this note body. A list inside a table
+   cell or an attachment placeholder does not qualify (Tab in a
+   table is navigation, decided before this is consulted). For a
+   caret in a nested item, closest gives the innermost item, the
+   one the caret is actually in. */
+function listItemOfNode(node) {
+  const bodyEl = document.getElementById("noteBody");
+  let el = node && node.nodeType === 1 ? node : node && node.parentElement;
+  if (!el || !el.closest) { return null; }
+  const li = el.closest("li");
+  if (!li || !bodyEl.contains(li)) { return null; }
+  if (li.closest("table") || li.closest(".ss-attachment")) { return null; }
+  return li;
+}
+
+/* Indent one list item one level: move it into a sub-list inside
+   its previous sibling item. The first item of a list has nothing
+   above it to nest under, so it cannot indent (a no-op). The
+   sub-list is the previous sibling's existing list of the same
+   tag when one is there (the item joins it, after the items it
+   already holds), otherwise a fresh list of the same tag as the
+   item's own list, appended as the sibling's last child. In a
+   checklist the sub-list carries the ss-checklist class, so the
+   decoration, the Enter splitting, and the box toggling that key
+   off list shape keep working at depth. Returns whether the item
+   moved. */
+function indentListItem(li) {
+  const list = li.parentElement;
+  if (!list || (list.tagName !== "UL" && list.tagName !== "OL")) {
+    return false;
+  }
+  const prev = li.previousElementSibling;
+  if (!prev || prev.tagName !== "LI") { return false; }
+  const checklist = isChecklistList(list);
+  let sub = null;
+  for (let i = 0; i < prev.children.length; i++) {
+    if (prev.children[i].tagName === list.tagName) {
+      sub = prev.children[i];
+      break;
+    }
+  }
+  if (!sub) {
+    sub = document.createElement(list.tagName.toLowerCase());
+    if (checklist) { sub.className = "ss-checklist"; }
+    prev.appendChild(sub);
+  } else if (checklist && sub.tagName === "UL" &&
+             !sub.classList.contains("ss-checklist")) {
+    sub.classList.add("ss-checklist");
+  }
+  sub.appendChild(li);
+  return true;
+}
+
+/* Outdent one list item one level: the inverse move, defined
+   only when the item's list is itself nested inside another
+   item. The item moves into the parent list immediately after
+   the item it was nested under; items after it in the sub-list
+   stay in the sub-list, and a sub-list left with no items in it
+   is removed. At the top level there is nowhere to go: a no-op.
+   Returns whether the item moved. */
+function outdentListItem(li) {
+  const list = li.parentElement;
+  if (!list || (list.tagName !== "UL" && list.tagName !== "OL")) {
+    return false;
+  }
+  const host = list.parentElement;
+  if (!host || host.tagName !== "LI") { return false; }
+  const grand = host.parentElement;
+  if (!grand || (grand.tagName !== "UL" && grand.tagName !== "OL")) {
+    return false;
+  }
+  grand.insertBefore(li, host.nextSibling);
+  if (!list.querySelector("li")) { list.remove(); }
+  return true;
+}
+
 /* The Tab keydown itself. Returns true when the key was the note's
    to use (caret or selection inside an editable note body), in
    which case the caller preventDefaults and focus never leaves
@@ -9959,8 +10179,66 @@ function handleBodyTabKey(ev) {
     tabNavigateTable(cell, range, shift);
     return true;
   }
-  if (!range.collapsed) {
+  /* v2.7: list items indent and outdent (see the sub-list block
+     above). This wins over both block behaviors below for any
+     touched list item; a mixed selection sends its plain blocks
+     down the tab prefix path in the same keypress. Items indent
+     in document order (each lands after the previous one in the
+     sub-list it joins or starts) and outdent in reverse order
+     (each lands immediately after its host item, ahead of the
+     ones already lifted, so their order survives too). */
+  if (range.collapsed) {
+    const li = listItemOfNode(range.startContainer);
+    if (li) {
+      const caretNode = range.startContainer;
+      const caretOffset = range.startOffset;
+      const moved = shift ? outdentListItem(li) : indentListItem(li);
+      if (moved) {
+        /* The move carried the item (and the caret's nodes with
+           it) to a new parent; re-park the caret where it was
+           inside the item, falling back to the item's start if
+           the old spot no longer resolves. */
+        try { setBodyCaret(caretNode, caretOffset); }
+        catch (e) { setBodyCaret(li, 0); }
+        markDirty();
+      }
+      return true;
+    }
+  } else {
     const blocks = tabTouchedBlocks(bodyEl, range);
+    const items = blocks.filter(function (b) {
+      return b.tagName === "LI";
+    });
+    if (items.length) {
+      const others = blocks.filter(function (b) {
+        return b.tagName !== "LI";
+      });
+      let changed = false;
+      if (shift) {
+        for (let i = items.length - 1; i >= 0; i--) {
+          if (outdentListItem(items[i])) { changed = true; }
+        }
+        others.forEach(function (block) {
+          if (removeLeadingTab(block)) { changed = true; }
+        });
+      } else {
+        items.forEach(function (li) {
+          if (indentListItem(li)) { changed = true; }
+        });
+        others.forEach(function (block) {
+          insertLeadingTab(block);
+          changed = true;
+        });
+      }
+      const joined = document.createRange();
+      joined.setStart(blocks[0], 0);
+      const last = blocks[blocks.length - 1];
+      joined.setEnd(last, last.childNodes.length);
+      sel.removeAllRanges();
+      sel.addRange(joined);
+      if (changed) { markDirty(); }
+      return true;
+    }
     if (blocks.length > 1) {
       let changed = false;
       blocks.forEach(function (block) {
@@ -10719,6 +10997,42 @@ function normalizeChecklists(rootEl) {
   rootEl.querySelectorAll("ul").forEach(function (ul) {
     if (isChecklistList(ul)) { ul.classList.add("ss-checklist"); }
   });
+}
+
+/* v2.7: keep a checklist item's box in step with its saved state.
+   The single source of truth for "done" is the done class on the
+   <li>: it is part of the serialized body, so it is what survives
+   saving, and the strikethrough is drawn from it (see the li.done
+   rules in the stylesheet). The box's checked state, by contrast,
+   lives in the input's checked PROPERTY, and clicking a box flips
+   the property without touching the serialized form; through
+   v2.6.0 nothing mirrored the property into the checked ATTRIBUTE
+   (the only form innerHTML carries) and nothing restored the
+   property from the class when a note opened, so a checked item
+   came back with struck text and an empty box (Chris's report).
+   syncChecklistBox closes both directions for one box: the
+   property is set from the class, and the attribute is set or
+   removed to match, so the next serialization carries the state
+   too. syncChecklistBoxes runs over a whole body at render (see
+   renderEditor), which also HEALS notes saved by the buggy
+   builds: their done items carry the class and no attribute, and
+   they open with their boxes checked. */
+function syncChecklistBox(box) {
+  if (!box || box.tagName !== "INPUT" || box.type !== "checkbox") {
+    return;
+  }
+  const li = box.closest ? box.closest("li") : null;
+  if (!li) { return; }
+  const done = li.classList.contains("done");
+  box.checked = done;
+  if (done) { box.setAttribute("checked", ""); }
+  else { box.removeAttribute("checked"); }
+}
+
+function syncChecklistBoxes(rootEl) {
+  if (!rootEl || !rootEl.querySelectorAll) { return; }
+  rootEl.querySelectorAll("input[type=\"checkbox\"]").forEach(
+    function (box) { syncChecklistBox(box); });
 }
 
 /* v2.6.0: the hover tooltip for one anchor in a note body. A note
@@ -11640,8 +11954,8 @@ async function getGoogleAccessToken() {
     if (token) { return token; }
   }
   const err = new Error(status.reason === "expired"
-    ? "Your Google sign in expired. Press Refresh connection (next to " +
-      "Sign out) to reconnect."
+    ? "Your Google sign in expired. Use Refresh connection in the " +
+      "sidebar menu to reconnect."
     : "Sign in with Google first.");
   err.code = status.reason === "expired"
     ? "GOOGLE_TOKEN_EXPIRED" : "GOOGLE_SIGN_IN_REQUIRED";
@@ -11651,11 +11965,13 @@ async function getGoogleAccessToken() {
 
 function googleReconnectError(message) {
   /* v2.2: the default message names the remedy Chris can act on from
-     inside the app, the Refresh connection button next to Sign out,
-     instead of sending him back through the browser to the gate. */
+     inside the app, the Refresh connection action, instead of
+     sending him back through the browser to the gate. v2.7: the
+     wording follows the action into the sidebar footer menu,
+     where it lives now. */
   const err = new Error(message ||
-    "Your Google sign in expired. Press Refresh connection (next to " +
-    "Sign out) to reconnect.");
+    "Your Google sign in expired. Use Refresh connection in the " +
+    "sidebar menu to reconnect.");
   err.code = "GOOGLE_TOKEN_EXPIRED";
   err.needsGoogleReconnect = true;
   return err;
@@ -11799,7 +12115,10 @@ async function googleTrySilentSignIn() {
   }
 }
 
-/* v2.2: Refresh connection, the sidebar button next to Sign out.
+/* v2.2: Refresh connection. Through v2.6.0 it was a standalone
+   sidebar button next to Sign out; v2.7 moved it into the sidebar
+   footer's three dot menu, and the working label below is set on
+   that menu item (sidebarRefreshItem and its label span).
    Chris reached this build the hard way: his Google token expired
    mid session (browser token flows hand out no refresh token, so
    tokens live about an hour), the app told him to sign in again,
@@ -11827,12 +12146,11 @@ let refreshConnectionRunning = false;
 async function refreshGoogleConnection() {
   if (refreshConnectionRunning) { return; }
   refreshConnectionRunning = true;
-  const btn = document.getElementById("refreshConnBtn");
-  const originalLabel = btn ? btn.textContent : "Refresh connection";
-  if (btn) {
-    btn.disabled = true;
-    btn.textContent = "Refreshing...";
-  }
+  const btn = document.getElementById("sidebarRefreshItem");
+  const labelEl = document.getElementById("sidebarRefreshLabel");
+  const originalLabel = labelEl ? labelEl.textContent : "Refresh connection";
+  if (btn) { btn.disabled = true; }
+  if (labelEl) { labelEl.textContent = "Refreshing..."; }
   try {
     /* (a) Persist the open note locally before touching the token,
        through the same local save path the app uses before locking:
@@ -11894,10 +12212,8 @@ async function refreshGoogleConnection() {
       "changes are saved on this device; try again in a moment.", true);
   } finally {
     refreshConnectionRunning = false;
-    if (btn) {
-      btn.disabled = false;
-      btn.textContent = originalLabel;
-    }
+    if (btn) { btn.disabled = false; }
+    if (labelEl) { labelEl.textContent = originalLabel; }
   }
 }
 
@@ -14123,24 +14439,55 @@ function wireEvents() {
       renderNoteList();
     }, 150));
 
-  /* Sidebar footer: sync, theme, sign out. */
+  /* Sidebar footer: Sync now keeps its button. v2.7: the rest of
+     the footer lives in the three dot menu beside the Synced
+     pill (see the v2.7 block at openSidebarMenu). The menu's
+     open, close, and outside click wiring follows the notebook
+     menu's pattern exactly; each item closes the menu and then
+     runs the handler its standalone button ran. The Install app
+     item is the one exception: its click is wired in the PWA
+     block (wirePwaInstall), which also closes the menu. */
   document.getElementById("syncNowBtn").addEventListener("click", function () {
     syncNow(true);
   });
-  document.getElementById("themeBtn").addEventListener("click", function () {
+  document.getElementById("sidebarMenuBtn").addEventListener("click", function (ev) {
+    ev.stopPropagation();
+    toggleSidebarMenu();
+  });
+  document.getElementById("sidebarMenu").addEventListener("click", function (ev) {
+    ev.stopPropagation();
+  });
+  document.addEventListener("click", function (ev) {
+    const menu = document.getElementById("sidebarMenu");
+    if (!menu || menu.classList.contains("hidden")) { return; }
+    const target = ev.target;
+    if (target && target.closest && target.closest(".sidebar-foot")) { return; }
+    closeSidebarMenu();
+  });
+  document.addEventListener("keydown", function (ev) {
+    if (ev.key === "Escape") { closeSidebarMenu(); }
+  });
+  document.getElementById("sidebarThemeItem").addEventListener("click", function () {
+    closeSidebarMenu();
     document.body.classList.toggle("dark");
     saveSettings();
     renderSidebar();
   });
-  document.getElementById("lockBtn").addEventListener("click", function () {
+  document.getElementById("sidebarSignOutItem").addEventListener("click", function () {
+    closeSidebarMenu();
     signOut().catch(function (err) { toast(err.message, true); });
   });
-  /* v2.2: Refresh connection, next to Sign out. Unlike sign out it
-     wipes nothing: it saves the open note locally, gets a fresh
-     Google token, and resyncs in place (see refreshGoogleConnection
-     in section 11). */
-  document.getElementById("refreshConnBtn").addEventListener("click", function () {
+  /* v2.2: Refresh connection. Unlike sign out it wipes nothing:
+     it saves the open note locally, gets a fresh Google token,
+     and resyncs in place (see refreshGoogleConnection in
+     section 11). */
+  document.getElementById("sidebarRefreshItem").addEventListener("click", function () {
+    closeSidebarMenu();
     refreshGoogleConnection().catch(function (err) { toast(err.message, true); });
+  });
+  document.getElementById("sidebarCollapseItem").addEventListener("click", function () {
+    closeSidebarMenu();
+    setSidebarRail(!state.sidebarRail);
   });
 
   /* v2.4: drag and drop notes between notebooks: the delegated
@@ -14217,22 +14564,23 @@ function wireEvents() {
     setMaximized(false);
   });
 
-  /* v2.5: the icon rail. The toggle flips the persisted setting.
-     Every rail leaf button clicks its full sidebar counterpart,
-     so each action keeps exactly one implementation; the rail's
-     expand button clicks the toggle. The Notebooks button opens
-     the flyout on hover or click; leaving the button or the
-     flyout starts the grace close (scheduleRailFlyoutClose), and
-     the flyout's New Notebook entry clicks the sidebar's add
-     button, then closes. */
-  document.getElementById("railToggleBtn").addEventListener("click", function () {
-    setSidebarRail(!state.sidebarRail);
-  });
+  /* v2.5: the icon rail. Every rail leaf button clicks its full
+     sidebar counterpart, so each action keeps exactly one
+     implementation. v2.7: four of those counterparts are the
+     sidebar footer menu's items now (the refresh, theme, and
+     sign out items, and the collapse item the rail's expand
+     button clicks); clicking a hidden menu item runs its handler
+     exactly as a visible click would, so the rail's behavior is
+     unchanged. The Notebooks button opens the flyout on hover or
+     click; leaving the button or the flyout starts the grace
+     close (scheduleRailFlyoutClose), and the flyout's New
+     Notebook entry clicks the sidebar's add button, then
+     closes. */
   [["railNewNoteBtn", "newNoteBtn"], ["railAllBtn", "navAll"],
    ["railPinnedBtn", "navPinned"], ["railTrashBtn", "navTrash"],
-   ["railArchiveBtn", "navArchive"], ["railRefreshBtn", "refreshConnBtn"],
-   ["railThemeBtn", "themeBtn"], ["railLockBtn", "lockBtn"],
-   ["railExpandBtn", "railToggleBtn"]].forEach(function (pair) {
+   ["railArchiveBtn", "navArchive"], ["railRefreshBtn", "sidebarRefreshItem"],
+   ["railThemeBtn", "sidebarThemeItem"], ["railLockBtn", "sidebarSignOutItem"],
+   ["railExpandBtn", "sidebarCollapseItem"]].forEach(function (pair) {
     document.getElementById(pair[0]).addEventListener("click", function () {
       document.getElementById(pair[1]).click();
     });
@@ -14260,13 +14608,18 @@ function wireEvents() {
   /* Checklist toggling: a click on a checkbox inside the body flips the
      done style on its list item and saves. The change event from the
      checkbox also bubbles as an input event in most browsers, so the
-     dirty marking here is a belt and suspenders second call. */
+     dirty marking here is a belt and suspenders second call.
+     v2.7: the click is mirrored into the box's serialized form in
+     the same breath (syncChecklistBox): the class alone used to be
+     saved, so the strikethrough persisted while the box itself
+     came back unchecked on the next open. */
   document.getElementById("noteBody").addEventListener("click", function (ev) {
     const target = ev.target;
     if (target && target.tagName === "INPUT" && target.type === "checkbox") {
       const li = target.closest("li");
       if (li) {
         li.classList.toggle("done", target.checked);
+        syncChecklistBox(target);
         markDirty();
       }
     }
@@ -14620,9 +14973,10 @@ function wireEvents() {
   /* v2.4: Tab and Shift+Tab belong to the note while the caret is
      in it (see handleBodyTabKey in the editor section): table cell
      navigation, multi block indent and outdent, and real tab
-     characters, never a focus jump out of the editor. The handler
-     decides whether the key is the note's; only then is the
-     browser default (focus movement) prevented. */
+     characters, never a focus jump out of the editor. v2.7 added
+     sub-list indent and outdent for list items to that list. The
+     handler decides whether the key is the note's; only then is
+     the browser default (focus movement) prevented. */
   noteBodyEl.addEventListener("keydown", function (ev) {
     if (ev.key === "Tab" && handleBodyTabKey(ev)) {
       ev.preventDefault();
@@ -14853,37 +15207,39 @@ async function prepareGoogleGate() {
    or served from anywhere else therefore behaves exactly as it did
    before v2.6.0: no worker, no prompt, no error.
 
-   The install button listens for beforeinstallprompt, which
+   The install item listens for beforeinstallprompt, which
    Chromium based browsers fire when the site is installable. The
    event is stashed (its default mini infobar suppressed), the
-   sidebar's Install app button is unhidden, and clicking it plays
-   the stash back. The button hides again once the prompt has been
-   used, whether it was accepted or dismissed (a later offer fires
-   the event again and brings the button back), and for good once
-   the appinstalled event lands. Browsers that never fire the event
-   (iOS Safari) never show the button; the Apple metas and touch
-   icon in the head cover that path instead.
+   sidebar menu's Install app item is unhidden (v2.7: it was a
+   standalone footer button through v2.6.0), and clicking it
+   plays the stash back. The item hides again once the prompt
+   has been used, whether it was accepted or dismissed (a later
+   offer fires the event again and brings the item back), and
+   for good once the appinstalled event lands. Browsers that
+   never fire the event (iOS Safari) never show the item; the
+   Apple metas and touch icon in the head cover that path
+   instead.
    -------------------------------------------------------------------------- */
 let deferredInstallPrompt = null;
 
 window.addEventListener("beforeinstallprompt", function (ev) {
   ev.preventDefault();
   deferredInstallPrompt = ev;
-  const btn = document.getElementById("installAppBtn");
+  const btn = document.getElementById("sidebarInstallItem");
   if (btn) { btn.classList.remove("hidden"); }
 });
 
 window.addEventListener("appinstalled", function () {
   deferredInstallPrompt = null;
-  const btn = document.getElementById("installAppBtn");
+  const btn = document.getElementById("sidebarInstallItem");
   if (btn) { btn.classList.add("hidden"); }
 });
 
 /* Play the stashed install prompt back. The outcome is recorded the
-   only way the app needs: the stash is spent and the button hides,
+   only way the app needs: the stash is spent and the item hides,
    whichever way the user answered. */
 async function promptInstallApp() {
-  const btn = document.getElementById("installAppBtn");
+  const btn = document.getElementById("sidebarInstallItem");
   const promptEvent = deferredInstallPrompt;
   deferredInstallPrompt = null;
   if (btn) { btn.classList.add("hidden"); }
@@ -14916,9 +15272,15 @@ function registerServiceWorker() {
    beforeinstallprompt can fire early in the page's life, before
    boot() would get to it. */
 (function wirePwaInstall() {
-  const btn = document.getElementById("installAppBtn");
+  const btn = document.getElementById("sidebarInstallItem");
   if (btn) {
-    btn.addEventListener("click", function () { promptInstallApp(); });
+    btn.addEventListener("click", function () {
+      /* v2.7: the item lives in the sidebar menu; choosing it
+         closes the menu like every other item, then the prompt
+         plays. */
+      closeSidebarMenu();
+      promptInstallApp();
+    });
   }
   registerServiceWorker();
 })();
