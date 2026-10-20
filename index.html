@@ -27,10 +27,69 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-20-SSN-V220
-  Version: 2.2.0
+  BUILD STAMP: 2026-10-20-SSN-V230
+  Version: 2.3.0
 
   Revision history:
+    v2.3.0 2026-10-20 A per-cell three dot menu for tables, with
+                      sort, filter, header row, cell styling, column
+                      width, and copy, plus multi-cell selection.
+                      A small three dot button (#cellMenuBtn) parks
+                      inset in the upper right corner of the cell
+                      under the pointer or holding the caret and opens
+                      #cellMenu (both live outside #noteBody like the
+                      rest of the table furniture, so they are never
+                      saved). The menu mirrors the reference layout
+                      Chris provided: Sort column (ascending or
+                      descending, numeric aware and stable; the state
+                      is recorded on the table as data-ss-sort and
+                      sorting physically reorders the body rows),
+                      Filter column (an inline form; one filter per
+                      column, combined with AND; the state is recorded
+                      as data-ss-filters JSON on the table, matching
+                      rows stay visible and the rest get the saved
+                      class ss-filtered-out, which the editor hides; a
+                      Filter active chip clears all of a table's
+                      filters at once, and exports and print always
+                      include every row), a Header row toggle (the
+                      first body row moves into a thead as th cells,
+                      or the header row moves back as td cells
+                      leaving no thead), Cell background (the
+                      highlight palette's colors, as an inline
+                      background-color), Border style and Border width
+                      (inline on the cell), Reset style (clears
+                      exactly the properties this menu manages, plus
+                      the width of every column the selection
+                      touches), Align content (inline vertical-align:
+                      top, middle, or bottom), Set table width (the
+                      reference label; it sets the width of the cell's
+                      column as an inline width on every cell in the
+                      column, presets Auto, 15, 25, 33, and 50
+                      percent), and Copy cell (rich and plain
+                      clipboard payloads). Cells can also be selected
+                      as a rectangular range, by dragging the mouse
+                      across cells or with Shift+click, highlighted
+                      with the runtime only class ss-cell-selected (an
+                      inset accent box-shadow ring, never the
+                      background-color property; the canonicalizer
+                      strips it, so it can never be saved, unlike
+                      ss-filtered-out, which is a saved view setting).
+                      The formatting actions then apply to every cell
+                      in the range, Reset clears every touched
+                      column's width, Set table width sets every
+                      touched column, and Copy cell copies the
+                      rectangle (an HTML table fragment plus tab
+                      separated plain text). Applying a format keeps
+                      the selection; structural changes (sort, filter
+                      changes, row or column edits, the header toggle)
+                      clear it, as do note switches, locks, clicks
+                      outside the table, and Escape. All of the menu's
+                      state lives on the table, rows, and cells
+                      themselves (attributes, the row class, inline
+                      styles), which the save path passes through
+                      untouched, so everything survives the collect,
+                      save, reload round trip. Build stamp
+                      2026-10-20-SSN-V230.
     v2.2.0 2026-10-20 Table editing, pin in the list menu, and a
                       Refresh connection button. Tables inserted with
                       Insert > Table can now be edited in place: when
@@ -1155,6 +1214,97 @@ body.dark .tag-chip{color:var(--accent);}
 #tableMenu.hidden{display:none;}
 .att-menu-item:disabled{opacity:.45;cursor:default;}
 .att-menu-item:disabled:hover{background:none;}
+/* v2.3: rows a table filter hides. The class is a saved view setting
+   stored on the row itself, so it round trips with the note; the
+   editor simply never displays such rows. Exports read cell text
+   regardless of the class, and the print builder strips it from its
+   own copy, so filtered rows still export and print. */
+#noteBody table.ss-table tr.ss-filtered-out{display:none;}
+/* v2.3: the multi-cell range highlight. It deliberately uses an
+   inset box-shadow ring and never the background-color property,
+   because cell backgrounds are a user formatting feature of their
+   own (see the cell menu). Runtime only: canonicalization strips
+   this class, so it is never saved. */
+#noteBody table.ss-table th.ss-cell-selected,
+#noteBody table.ss-table td.ss-cell-selected{
+  box-shadow:inset 0 0 0 2px var(--accent);
+}
+/* v2.3: the per-cell three dot button, its menu, and the filter
+   chip. All three are position:fixed and live OUTSIDE #noteBody
+   (siblings of #tableMenu inside .editor-inner), so they can never
+   be saved into a note. The button is a small square the script
+   parks inset in the upper right corner of one cell (inset, so it
+   never collides with the Table button above the table); the menu
+   hangs under it; the chip is a pill parked above the table's top
+   left (the Table button owns the top right) whenever the active
+   table has filters. */
+#cellMenuBtn{
+  position:fixed;z-index:60;width:24px;height:22px;
+  display:flex;align-items:center;justify-content:center;
+  border-radius:6px;background:var(--surface);
+  border:1px solid var(--border);
+  box-shadow:0 4px 12px rgba(6,32,22,.22);
+  color:var(--muted);font-size:15px;font-weight:700;line-height:1;
+  cursor:pointer;padding:0;
+}
+#cellMenuBtn:hover{border-color:var(--accent);color:var(--primary);}
+#cellMenuBtn.hidden{display:none;}
+#tableFilterChip{
+  position:fixed;z-index:60;
+  display:inline-flex;align-items:center;gap:6px;
+  padding:4px 10px;border-radius:999px;
+  background:var(--soft);border:1px solid var(--accent);
+  color:var(--primary);font-size:12.5px;font-weight:600;cursor:pointer;
+  box-shadow:0 6px 18px rgba(6,32,22,.20);
+}
+#tableFilterChip:hover{background:var(--surface);}
+#tableFilterChip.hidden{display:none;}
+#cellMenu{
+  position:fixed;z-index:61;min-width:230px;max-width:300px;padding:6px;
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius-card);box-shadow:0 10px 28px rgba(6,32,22,.28);
+  display:flex;flex-direction:column;gap:2px;
+  max-height:calc(100vh - 16px);overflow-y:auto;
+}
+#cellMenu.hidden{display:none;}
+/* Menu rows that carry a current value on the right (the sort and
+   filter states, the align and width values). */
+.att-menu-item.cell-flex{
+  display:flex;align-items:center;justify-content:space-between;gap:14px;
+}
+.cell-menu-value{color:var(--muted);font-size:12.5px;font-weight:400;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:120px;}
+/* Sub panels: the choices for one menu row, shown indented under
+   it inside the same card, the way the toolbar palettes open within
+   their menus. */
+.cell-sub{
+  display:flex;flex-direction:column;gap:2px;
+  margin:2px 0 4px;padding:6px 0 2px 10px;
+  border-top:1px dashed var(--border);
+}
+.cell-sub.hidden{display:none;}
+.cell-sub .att-menu-item{font-size:13.5px;}
+/* The header row switch: a small pill with a knob, filled with the
+   secondary green while on. */
+.cell-toggle{
+  flex:none;width:36px;height:20px;border-radius:999px;
+  background:var(--border);position:relative;transition:background .15s;
+}
+.cell-toggle-knob{
+  position:absolute;top:2px;left:2px;width:16px;height:16px;
+  border-radius:50%;background:var(--surface);
+  box-shadow:0 1px 3px rgba(6,32,22,.35);transition:left .15s;
+}
+#cellHeaderToggle[aria-checked="true"] .cell-toggle{background:var(--secondary);}
+#cellHeaderToggle[aria-checked="true"] .cell-toggle-knob{left:18px;}
+/* The filter form inside the cell menu, modeled on the link popup's
+   edit form and reusing .link-edit-field for its field. */
+#cellFilterForm{display:flex;flex-direction:column;gap:8px;padding:2px 2px 4px;}
+.cell-filter-actions{display:flex;gap:8px;justify-content:flex-end;}
+/* The cell background swatches reuse the toolbar palette's
+   .tb-swatches and .swatch styles; the grid only needs padding
+   inside the sub panel. */
+#cellBgSub .tb-swatches{padding:2px;}
 /* The normal view is one row: clickable address, Edit, close. */
 #linkPopupView{display:flex;align-items:center;gap:8px;}
 #linkPopupUrl{
@@ -1951,6 +2101,76 @@ body.dark .ss-att-provider{color:#EAF3EC;}
             <div class="att-menu-sep"></div>
             <button class="att-menu-item danger" type="button" data-table-action="deleteTable">Delete table</button>
           </div>
+
+          <!-- v2.3: the per-cell three dot button, its menu, and the
+               filter chip, also SIBLINGS of #noteBody like the table
+               furniture above, so none of them can ever be saved into
+               a note. The script (section 10, per-cell table menu)
+               parks the button inset in the upper right corner of the
+               cell under the pointer or holding the caret; the menu
+               acts on the cell (or the multi-cell range) captured when
+               it opened; the chip appears above a filtered table and
+               clears all of its filters. All three hidden by default. -->
+          <button id="cellMenuBtn" class="hidden" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Cell options">&#8943;</button>
+          <button id="tableFilterChip" class="hidden" type="button" title="Clear all filters on this table">Filter active <span aria-hidden="true">&#215;</span></button>
+          <div id="cellMenu" class="hidden" role="menu" aria-label="Cell options">
+            <button class="att-menu-item cell-flex" type="button" data-cell-menu="sort"><span>Sort column</span><span class="cell-menu-value" id="cellMenuSortValue">None</span></button>
+            <div class="cell-sub hidden" id="cellSortSub">
+              <button class="att-menu-item" type="button" data-cell-sort="asc">Ascending</button>
+              <button class="att-menu-item" type="button" data-cell-sort="desc">Descending</button>
+            </div>
+            <button class="att-menu-item cell-flex" type="button" data-cell-menu="filter"><span>Filter column</span><span class="cell-menu-value" id="cellMenuFilterValue">None</span></button>
+            <div class="cell-sub hidden" id="cellFilterSub">
+              <form id="cellFilterForm">
+                <div class="link-edit-field">
+                  <label for="cellFilterInput">Show rows containing</label>
+                  <input type="text" id="cellFilterInput" autocomplete="off">
+                </div>
+                <div class="cell-filter-actions">
+                  <button class="btn small" type="button" id="cellFilterClear">Clear</button>
+                  <button class="btn small" type="submit" id="cellFilterApply">Apply</button>
+                </div>
+              </form>
+            </div>
+            <div class="att-menu-sep"></div>
+            <button class="att-menu-item cell-flex" type="button" id="cellHeaderToggle" role="switch" aria-checked="false"><span>Header row</span><span class="cell-toggle" aria-hidden="true"><span class="cell-toggle-knob"></span></span></button>
+            <button class="att-menu-item cell-flex" type="button" data-cell-menu="background"><span>Cell background</span><span class="cell-menu-value">&#8250;</span></button>
+            <div class="cell-sub hidden" id="cellBgSub">
+              <div class="tb-swatches" id="cellBgSwatches"></div>
+              <button class="att-menu-item" type="button" id="cellBgNone">None</button>
+            </div>
+            <button class="att-menu-item cell-flex" type="button" data-cell-menu="borderStyle"><span>Border style</span><span class="cell-menu-value" id="cellMenuBorderStyleValue"></span></button>
+            <div class="cell-sub hidden" id="cellBorderStyleSub">
+              <button class="att-menu-item" type="button" data-cell-border-style="solid">Solid</button>
+              <button class="att-menu-item" type="button" data-cell-border-style="dashed">Dashed</button>
+              <button class="att-menu-item" type="button" data-cell-border-style="dotted">Dotted</button>
+              <button class="att-menu-item" type="button" data-cell-border-style="none">None</button>
+            </div>
+            <button class="att-menu-item cell-flex" type="button" data-cell-menu="borderWidth"><span>Border width</span><span class="cell-menu-value" id="cellMenuBorderWidthValue"></span></button>
+            <div class="cell-sub hidden" id="cellBorderWidthSub">
+              <button class="att-menu-item" type="button" data-cell-border-width="1px">Thin</button>
+              <button class="att-menu-item" type="button" data-cell-border-width="2px">Medium</button>
+              <button class="att-menu-item" type="button" data-cell-border-width="4px">Thick</button>
+            </div>
+            <button class="att-menu-item" type="button" id="cellResetBtn">Reset style</button>
+            <div class="att-menu-sep"></div>
+            <button class="att-menu-item cell-flex" type="button" data-cell-menu="align"><span>Align content</span><span class="cell-menu-value" id="cellMenuAlignValue">Top</span></button>
+            <div class="cell-sub hidden" id="cellAlignSub">
+              <button class="att-menu-item" type="button" data-cell-align="top">Top</button>
+              <button class="att-menu-item" type="button" data-cell-align="middle">Middle</button>
+              <button class="att-menu-item" type="button" data-cell-align="bottom">Bottom</button>
+            </div>
+            <button class="att-menu-item cell-flex" type="button" data-cell-menu="width"><span>Set table width</span><span class="cell-menu-value" id="cellMenuWidthValue">Auto</span></button>
+            <div class="cell-sub hidden" id="cellWidthSub">
+              <button class="att-menu-item" type="button" data-cell-width="">Auto</button>
+              <button class="att-menu-item" type="button" data-cell-width="15%">15%</button>
+              <button class="att-menu-item" type="button" data-cell-width="25%">25%</button>
+              <button class="att-menu-item" type="button" data-cell-width="33%">33%</button>
+              <button class="att-menu-item" type="button" data-cell-width="50%">50%</button>
+            </div>
+            <div class="att-menu-sep"></div>
+            <button class="att-menu-item" type="button" id="cellCopyBtn">Copy cell</button>
+          </div>
         </div>
       </div>
       <div class="editor-foot">
@@ -2013,8 +2233,8 @@ body.dark .ss-att-provider{color:#EAF3EC;}
 "use strict";
 
 /* ============================================================================
-   SnakeScale Notes v2.2.0: application script
-   BUILD STAMP: 2026-10-20-SSN-V220
+   SnakeScale Notes v2.3.0: application script
+   BUILD STAMP: 2026-10-20-SSN-V230
 
    How this script is organized:
      1. Constants and global state
@@ -2045,8 +2265,8 @@ body.dark .ss-att-provider{color:#EAF3EC;}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-20-SSN-V220";
-const APP_VERSION = "2.2.0";
+const APP_BUILD = "2026-10-20-SSN-V230";
+const APP_VERSION = "2.3.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -5021,6 +5241,9 @@ function renderEditor() {
     hideLinkPopup();
     /* v2.2: and no table menu either. */
     hideTableMenu();
+    /* v2.3: and no cell menu, chip, or cell selection. */
+    hideCellMenu();
+    clearCellSelection();
     return;
   }
   noNote.classList.add("hidden");
@@ -5044,6 +5267,10 @@ function renderEditor() {
        note's tables; they close with the note swap, exactly like the
        link popup above. */
     hideTableMenu();
+    /* v2.3: the cell button, its menu, the filter chip, and any
+       multi-cell selection belong to the previous note too. */
+    hideCellMenu();
+    clearCellSelection();
     attachBodyGuard = true;
     /* v1.2: the previous note's image blob URLs are released before the
        editor switches, so long sessions do not accumulate them. */
@@ -5068,6 +5295,11 @@ function renderEditor() {
         });
         decorateAttachmentPlaceholder(note, el, att || null);
       });
+    /* v2.3: reapply any saved table filters, so rows a filter
+       hides start hidden when the note opens. (Typing inside cells
+       does not re-run filters; only setting or clearing one, and
+       this render, reapplies row visibility.) */
+    applyAllTableFilters(document.getElementById("noteBody"));
     setSaveState(note.trashed ? "In Trash" :
       (note.archived ? "Archived" : "Saved"));
     /* v1.2: fill the attachment placeholders from the providers. This is
@@ -5117,6 +5349,8 @@ function renderEditor() {
      Table button or menu; updateTableMenu would hide them on the
      next caret move anyway, but locking closes them immediately. */
   if (locked) { hideTableMenu(); }
+  /* v2.3: the same for the cell furniture and any cell selection. */
+  if (locked) { hideCellMenu(); clearCellSelection(); }
   picker.disabled = locked;
 }
 renderEditor._forId = null;
@@ -5181,6 +5415,16 @@ function canonicalizeAttachmentPlaceholders(html) {
     const width = savedImageWidthOf(el);
     if (width) { clean.setAttribute("style", "width:" + width); }
     el.replaceWith(clean);
+  });
+  /* v2.3: the multi-cell selection highlight (ss-cell-selected) is
+     runtime only editor state and must never be saved, even when a
+     save happens mid-selection, so it is stripped here, in the one
+     funnel every saved body passes through. The contrast is
+     deliberate: ss-filtered-out on table rows is a SAVED view
+     setting (the table filter) and passes through untouched. */
+  holder.querySelectorAll(".ss-cell-selected").forEach(function (el) {
+    el.classList.remove("ss-cell-selected");
+    if (!el.classList.length) { el.removeAttribute("class"); }
   });
   return holder.innerHTML;
 }
@@ -5811,6 +6055,8 @@ function syncTableMenuGuards() {
    editor, and the actions must still hit the cell the user meant. */
 function openTableMenu() {
   if (!tableMenuCell || !tableMenuTable) { return; }
+  /* v2.3: the cell menu and the table menu are never open at once. */
+  closeCellMenu();
   tableMenuActionCell = tableMenuCell;
   tableMenuActionTable = tableMenuTable;
   syncTableMenuGuards();
@@ -5861,6 +6107,12 @@ function runTableAction(action) {
   const cell = tableMenuActionCell;
   const table = tableMenuActionTable;
   closeTableMenu();
+  /* v2.3: a structural table operation shifts row and column
+     indexes, so any multi-cell selection is cleared first (its
+     highlight is runtime only and would point at the wrong cells
+     afterwards), and the cell menu closes with the table menu. */
+  closeCellMenu();
+  clearCellSelection();
   if (!cell || !table || !document.body.contains(table)) {
     hideTableMenu();
     return;
@@ -5919,6 +6171,1082 @@ function runTableAction(action) {
   if (caretCell) { placeCaretIn(caretCell, 0); }
   markDirty();
   updateTableMenu();
+}
+
+/* ----- v2.3: per-cell table menu and multi-cell selection -----------------
+   The per-cell companion to the v2.2 table editing above, modeled on
+   the reference menu Chris provided. A small three dot button
+   (#cellMenuBtn) parks inset in the upper right corner of one cell
+   of a table (inset, so it never collides with the v2.2 Table
+   button, which parks above the table's outer top right) and opens
+   #cellMenu: Sort column, Filter column, a Header row toggle, Cell
+   background, Border style, Border width, Reset style, Align
+   content, Set table width, and Copy cell. A third piece of
+   furniture, #tableFilterChip, parks above the table's top left
+   while that table has an active filter and clears all of its
+   filters when clicked. All three live OUTSIDE #noteBody, like the
+   rest of the table furniture, so they can never be saved.
+   The button follows the cell most recently hovered with the mouse,
+   or the caret's cell when the keyboard is being used. The acting
+   cell (and, with a range selected, the whole captured range) is
+   settled before the menu opens, and the menu acts only on that
+   capture, so clicks inside the menu can never retarget it.
+   State lives on the note's own markup, so it survives the collect,
+   save, reload round trip untouched: the sort state as data-ss-sort
+   ("<col>:asc" or "<col>:desc") and the filters as data-ss-filters
+   (a JSON object mapping column index to filter text) on the table,
+   filtered out rows carrying the class ss-filtered-out (reapplied
+   by applyAllTableFilters whenever a note renders), and cell
+   background, border style and width, vertical alignment, and
+   column width as inline styles on the cells. The ONE class in
+   this section that must NOT survive is ss-cell-selected, the
+   multi-cell highlight: it is runtime only, and
+   canonicalizeAttachmentPlaceholders strips it on every save
+   (see the comment there for the deliberate contrast).
+   Multi-cell selection: dragging the mouse from one cell into a
+   different cell selects the rectangle between them (dragging
+   inside a single cell keeps the normal text selection; range mode
+   starts only once the pointer enters another cell of the same
+   table), and Shift+click extends a rectangle from the anchored
+   cell to the clicked one. The formatting actions (background,
+   border style and width, alignment, reset, column width) apply to
+   every cell in the captured range, and Copy cell copies the
+   rectangle; sort, filter, and the header toggle stay anchored to
+   the one cell the menu was opened from. Applying a format keeps
+   the selection, so several formats can be applied in a row;
+   structural changes (sort, filter changes, the header toggle, and
+   the v2.2 row and column operations) clear it, as do note
+   switches, editor locks, clicks outside the table, and Escape. */
+let cellMenuCell = null;      /* the cell the three dot button sits on */
+let cellMenuTable = null;     /* that cell's table */
+let cellHoverCell = null;     /* the cell the pointer last hovered */
+let cellActionCell = null;    /* the cell the open menu acts from */
+let cellActionTable = null;   /* its table */
+let cellActionCells = [];     /* every cell the open menu acts on */
+/* Multi-cell selection state: the anchor and focus cells of the
+   rectangle (the resolved cells come from cellRangeCells). */
+let cellSelAnchor = null;
+let cellSelFocus = null;
+/* A potential drag selection: set on mousedown in a cell, active
+   once the pointer has entered a different cell. */
+let cellDragState = null;
+/* Set by mouseup after a real drag selection, so the click event
+   that follows it does not reset the anchor it just built. */
+let cellSuppressNextClick = false;
+
+const CELL_SUB_IDS = ["cellSortSub", "cellFilterSub", "cellBgSub",
+  "cellBorderStyleSub", "cellBorderWidthSub", "cellAlignSub",
+  "cellWidthSub"];
+
+/* Whether the editor currently shows an editable note: the same
+   rule updateTableMenu applies (a live note, body editable). */
+function cellEditorEditable() {
+  const bodyEl = document.getElementById("noteBody");
+  const note = currentNote();
+  return !!note && !note.trashed && !note.archived && !!bodyEl &&
+    bodyEl.contentEditable !== "false";
+}
+
+/* The column index of a cell within its row, or -1 when detached. */
+function cellIndexOf(cell) {
+  if (!cell || !cell.parentElement) { return -1; }
+  return Array.prototype.indexOf.call(cell.parentElement.cells, cell);
+}
+
+/* ----- sort and filter state on the table element ----- */
+
+/* The recorded sort state: { col, dir } or null. */
+function tableSortState(table) {
+  const raw = table.getAttribute("data-ss-sort") || "";
+  const m = raw.match(/^(\d+):(asc|desc)$/);
+  return m ? { col: Number(m[1]), dir: m[2] } : null;
+}
+
+/* The recorded column filters as an object mapping column index
+   (as a string) to filter text. Malformed state reads as none. */
+function tableFilters(table) {
+  let parsed = null;
+  try {
+    parsed = JSON.parse(table.getAttribute("data-ss-filters") || "{}");
+  } catch (err) {
+    parsed = null;
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return {};
+  }
+  const out = {};
+  Object.keys(parsed).forEach(function (k) {
+    const v = String(parsed[k] || "").trim();
+    if (v) { out[k] = v; }
+  });
+  return out;
+}
+
+/* Record the filters (dropping empty ones, and the attribute
+   itself when none remain) and reapply row visibility. */
+function setTableFilters(table, filters) {
+  const clean = {};
+  Object.keys(filters || {}).forEach(function (k) {
+    const v = String(filters[k] || "").trim();
+    if (v) { clean[k] = v; }
+  });
+  if (Object.keys(clean).length) {
+    table.setAttribute("data-ss-filters", JSON.stringify(clean));
+  } else {
+    table.removeAttribute("data-ss-filters");
+  }
+  applyTableFilters(table);
+}
+
+/* Show or hide the table's body rows from its recorded filters: a
+   row stays visible only when EVERY filtered column's cell
+   contains its filter text (case insensitive). Header rows never
+   hide. This runs when a filter is set or cleared and when a note
+   renders; typing inside cells does not re-run it. */
+function applyTableFilters(table) {
+  const filters = tableFilters(table);
+  const cols = Object.keys(filters);
+  Array.prototype.forEach.call(table.rows, function (row) {
+    const section = row.parentElement;
+    if (section && section.tagName === "THEAD") {
+      row.classList.remove("ss-filtered-out");
+      return;
+    }
+    let show = true;
+    cols.forEach(function (k) {
+      const cell = row.cells[Number(k)];
+      const text = cell ? (cell.textContent || "") : "";
+      if (text.toLowerCase().indexOf(filters[k].toLowerCase()) < 0) {
+        show = false;
+      }
+    });
+    row.classList.toggle("ss-filtered-out", !show);
+  });
+}
+
+/* Reapply every table's filters under a root (the note body on
+   render). */
+function applyAllTableFilters(rootEl) {
+  if (!rootEl) { return; }
+  rootEl.querySelectorAll("table[data-ss-filters]").forEach(
+    function (table) { applyTableFilters(table); });
+}
+
+/* Numeric aware cell text comparison: when both trimmed texts are
+   plain numbers they compare numerically (so 2 sorts before 10);
+   otherwise they compare case insensitively. Returns -1, 0, or 1. */
+function cellTextCompare(aText, bText) {
+  const a = String(aText || "").trim();
+  const b = String(bText || "").trim();
+  const numRe = /^[+-]?(\d+\.?\d*|\.\d+)$/;
+  if (numRe.test(a) && numRe.test(b)) {
+    const d = parseFloat(a) - parseFloat(b);
+    if (d !== 0) { return d < 0 ? -1 : 1; }
+    return 0;
+  }
+  const la = a.toLowerCase();
+  const lb = b.toLowerCase();
+  if (la < lb) { return -1; }
+  if (la > lb) { return 1; }
+  return 0;
+}
+
+/* Sort the table's BODY rows by one column. The sort is stable
+   (equal keys keep their current order) and physically reorders
+   the rows; filtered out rows move with their row elements and
+   keep their hidden class. The header section never moves. The
+   state is recorded on the table so it survives and displays
+   after reload; there is no unsort (None is simply the state
+   before any sort). */
+function sortTableByColumn(table, colIdx, dir) {
+  const sections = [];
+  Array.prototype.forEach.call(table.children, function (child) {
+    if (child.tagName === "TBODY") { sections.push(child); }
+  });
+  /* Tables whose rows sit directly under the table element (no
+     section wrappers) sort those rows in place. */
+  if (!sections.length) { sections.push(table); }
+  sections.forEach(function (section) {
+    let rows;
+    if (section === table) {
+      rows = Array.prototype.filter.call(table.rows, function (row) {
+        return row.parentElement === table;
+      });
+    } else {
+      rows = Array.prototype.slice.call(section.rows);
+    }
+    const decorated = rows.map(function (row, i) {
+      return { row: row, i: i };
+    });
+    decorated.sort(function (x, y) {
+      const cx = x.row.cells[colIdx];
+      const cy = y.row.cells[colIdx];
+      const cmp = cellTextCompare(cx ? cx.textContent : "",
+        cy ? cy.textContent : "");
+      if (cmp !== 0) { return dir === "desc" ? -cmp : cmp; }
+      return x.i - y.i;
+    });
+    decorated.forEach(function (d) { section.appendChild(d.row); });
+  });
+  table.setAttribute("data-ss-sort", colIdx + ":" + dir);
+}
+
+/* ----- header row toggle ----- */
+
+function tableHasHeaderRow(table) {
+  return !!(table.tHead && table.tHead.rows.length);
+}
+
+/* When a cell element is replaced by a converted one (see
+   convertRowCells), every tracked or captured reference to the old
+   element follows to the new one. */
+function fixCellReferences(oldCell, newCell) {
+  if (cellMenuCell === oldCell) { cellMenuCell = newCell; }
+  if (cellActionCell === oldCell) { cellActionCell = newCell; }
+  if (cellHoverCell === oldCell) { cellHoverCell = newCell; }
+  if (cellSelAnchor === oldCell) { cellSelAnchor = newCell; }
+  if (cellSelFocus === oldCell) { cellSelFocus = newCell; }
+  cellActionCells = cellActionCells.map(function (c) {
+    return c === oldCell ? newCell : c;
+  });
+}
+
+/* Rebuild each cell of a row as the given tag, carrying its
+   attributes (style, class) and children across, so converting a
+   row between header and body never loses cell formatting. */
+function convertRowCells(row, tag) {
+  Array.prototype.slice.call(row.cells).forEach(function (cell) {
+    if (cell.tagName.toLowerCase() === tag) { return; }
+    const fresh = document.createElement(tag);
+    Array.prototype.slice.call(cell.attributes).forEach(function (attr) {
+      fresh.setAttribute(attr.name, attr.value);
+    });
+    while (cell.firstChild) { fresh.appendChild(cell.firstChild); }
+    cell.replaceWith(fresh);
+    fixCellReferences(cell, fresh);
+  });
+}
+
+/* Turn the header row on or off. On: the first body row moves into
+   a thead, its cells converted to th. Off: the header row(s) move
+   back to the top of the tbody as td cells and the thead is
+   removed, so the v2.2 operations see exactly the same two shapes
+   they already handle (their guards key off the THEAD parent, and
+   column adds give th only to rows inside a thead). */
+function setTableHeaderRow(table, on) {
+  if (on === tableHasHeaderRow(table)) { return; }
+  if (on) {
+    const tbody = table.tBodies[0];
+    if (!tbody || !tbody.rows.length) { return; }
+    const row = tbody.rows[0];
+    convertRowCells(row, "th");
+    let thead = table.tHead;
+    if (!thead) {
+      thead = document.createElement("thead");
+      table.insertBefore(thead, table.firstChild);
+    }
+    thead.appendChild(row);
+  } else {
+    const thead = table.tHead;
+    if (!thead) { return; }
+    let tbody = table.tBodies[0];
+    if (!tbody) {
+      tbody = document.createElement("tbody");
+      table.appendChild(tbody);
+    }
+    const headRows = Array.prototype.slice.call(thead.rows);
+    headRows.forEach(function (row) { convertRowCells(row, "td"); });
+    const ref = tbody.rows[0] || null;
+    headRows.forEach(function (row) {
+      tbody.insertBefore(row, ref);
+    });
+    thead.parentElement.removeChild(thead);
+  }
+}
+
+/* ----- column helpers ----- */
+
+/* Every cell in one column of a table, header and body. */
+function tableColumnCells(table, colIdx) {
+  const out = [];
+  Array.prototype.forEach.call(table.rows, function (row) {
+    if (row.cells[colIdx]) { out.push(row.cells[colIdx]); }
+  });
+  return out;
+}
+
+/* Set (or clear, with "") the inline width of a whole column: the
+   width lives on every cell of the column, header and body, the
+   way the base table CSS distributes it. */
+function setTableColumnWidth(table, colIdx, width) {
+  tableColumnCells(table, colIdx).forEach(function (cell) {
+    if (width) { cell.style.width = width; }
+    else { cell.style.removeProperty("width"); }
+  });
+}
+
+/* ----- multi-cell selection ----- */
+
+/* The rectangle of cells between an anchor and a focus cell of one
+   table, in row major order. A focus outside the anchor's table
+   collapses the range to the anchor alone. */
+function cellRangeCells(anchor, focus) {
+  if (!anchor) { return []; }
+  if (!focus || focus === anchor) { return [anchor]; }
+  const table = anchor.closest("table");
+  if (!table || focus.closest("table") !== table) { return [anchor]; }
+  const rows = Array.prototype.slice.call(table.rows);
+  const aRow = anchor.parentElement;
+  const fRow = focus.parentElement;
+  const r1 = rows.indexOf(aRow);
+  const r2 = rows.indexOf(fRow);
+  const c1 = Array.prototype.indexOf.call(aRow.cells, anchor);
+  const c2 = Array.prototype.indexOf.call(fRow.cells, focus);
+  if (r1 < 0 || r2 < 0 || c1 < 0 || c2 < 0) { return [anchor]; }
+  const out = [];
+  const rMin = Math.min(r1, r2);
+  const rMax = Math.max(r1, r2);
+  const cMin = Math.min(c1, c2);
+  const cMax = Math.max(c1, c2);
+  for (let r = rMin; r <= rMax; r++) {
+    for (let c = cMin; c <= cMax; c++) {
+      if (rows[r].cells[c]) { out.push(rows[r].cells[c]); }
+    }
+  }
+  return out;
+}
+
+/* The current selection as a cell list when it spans more than one
+   cell, else null (the degenerate single cell case, which the menu
+   treats exactly like the plain captured cell). */
+function currentRangeCells() {
+  if (!cellSelAnchor || !document.body.contains(cellSelAnchor)) {
+    return null;
+  }
+  const cells = cellRangeCells(cellSelAnchor,
+    cellSelFocus || cellSelAnchor);
+  return cells.length > 1 ? cells : null;
+}
+
+/* Repaint the range highlight from the anchor and focus cells.
+   The class is applied only to multi-cell ranges; a single cell is
+   already marked by the caret and the three dot button. */
+function paintCellSelection() {
+  document.querySelectorAll("#noteBody .ss-cell-selected")
+    .forEach(function (el) { el.classList.remove("ss-cell-selected"); });
+  if (!cellSelAnchor || !cellSelFocus) { return; }
+  const cells = cellRangeCells(cellSelAnchor, cellSelFocus);
+  if (cells.length > 1) {
+    cells.forEach(function (cell) {
+      cell.classList.add("ss-cell-selected");
+    });
+  }
+}
+
+/* Forget the selection entirely: state and highlight. Called on
+   note switches, editor locks, clicks outside the table, Escape,
+   and after every structural operation, since row and column
+   indexes shift under it. Applying a format does NOT call this. */
+function clearCellSelection() {
+  cellSelAnchor = null;
+  cellSelFocus = null;
+  cellDragState = null;
+  document.querySelectorAll("#noteBody .ss-cell-selected")
+    .forEach(function (el) { el.classList.remove("ss-cell-selected"); });
+}
+
+/* Anchor a fresh single cell selection (a plain click or a caret
+   placement): any previous range is dropped. */
+function setCellAnchor(cell) {
+  cellSelAnchor = cell;
+  cellSelFocus = cell;
+  paintCellSelection();
+}
+
+/* ----- the three dot button, the chip, and the menu ----- */
+
+/* Park the three dot button inset in the upper right corner of
+   its cell, clamped into the viewport. */
+function positionCellMenuBtn() {
+  const btn = document.getElementById("cellMenuBtn");
+  if (!btn || !cellMenuCell) { return; }
+  const rect = cellMenuCell.getBoundingClientRect();
+  const width = btn.offsetWidth || 24;
+  const height = btn.offsetHeight || 22;
+  let left = rect.right - width - 4;
+  left = Math.max(8, Math.min(left, window.innerWidth - width - 8));
+  let top = rect.top + 4;
+  top = Math.max(8, Math.min(top, window.innerHeight - height - 8));
+  btn.style.left = left + "px";
+  btn.style.top = top + "px";
+}
+
+/* Park the filter chip above the table's top left (the Table
+   button owns the top right), flipping below the table when it
+   touches the top of the viewport, like the Table button. */
+function positionFilterChip() {
+  const chip = document.getElementById("tableFilterChip");
+  if (!chip || !cellMenuTable) { return; }
+  const rect = cellMenuTable.getBoundingClientRect();
+  const width = chip.offsetWidth || 110;
+  const height = chip.offsetHeight || 26;
+  let left = Math.max(8, Math.min(rect.left,
+    window.innerWidth - width - 8));
+  let top = rect.top - height - 6;
+  if (top < 8) { top = rect.bottom + 6; }
+  chip.style.left = left + "px";
+  chip.style.top = top + "px";
+}
+
+/* The chip shows exactly while the tracked table has at least one
+   active filter; it is re-evaluated whenever the furniture moves. */
+function updateFilterChip() {
+  const chip = document.getElementById("tableFilterChip");
+  if (!chip) { return; }
+  const active = !!cellMenuTable &&
+    Object.keys(tableFilters(cellMenuTable)).length > 0;
+  if (!active) { chip.classList.add("hidden"); return; }
+  chip.classList.remove("hidden");
+  positionFilterChip();
+}
+
+/* Furniture watcher: park the three dot button on the hovered
+   cell, or on the caret's cell when the pointer is not over the
+   body, and hide everything when neither is inside a table of an
+   editable note. Wired to document mouseover (which keeps the
+   hover cell current), body clicks and keyups, and document
+   selectionchange. While the menu itself is open it stands still:
+   the menu acts on its capture, not on live tracking. */
+function updateCellMenu() {
+  const btn = document.getElementById("cellMenuBtn");
+  if (!btn) { return; }
+  const appEl = document.getElementById("app");
+  if (!appEl || appEl.classList.contains("hidden")) {
+    hideCellMenu();
+    return;
+  }
+  if (!cellEditorEditable()) { hideCellMenu(); return; }
+  const menu = document.getElementById("cellMenu");
+  if (menu && !menu.classList.contains("hidden")) { return; }
+  if (cellDragState && cellDragState.active) { return; }
+  const bodyEl = document.getElementById("noteBody");
+  let cell = null;
+  if (cellHoverCell && bodyEl.contains(cellHoverCell)) {
+    cell = cellHoverCell;
+  }
+  if (!cell) {
+    const sel = window.getSelection();
+    const anchor = sel && sel.rangeCount ? sel.anchorNode : null;
+    cell = tableCellFromNode(anchor);
+  }
+  if (!cell) { hideCellMenu(); return; }
+  cellMenuCell = cell;
+  cellMenuTable = cell.closest("table");
+  if (!cellMenuTable) { hideCellMenu(); return; }
+  btn.classList.remove("hidden");
+  positionCellMenuBtn();
+  updateFilterChip();
+}
+
+/* Close just the menu popup (the button and chip stay). */
+function closeCellMenu() {
+  const menu = document.getElementById("cellMenu");
+  if (menu) { menu.classList.add("hidden"); }
+  const btn = document.getElementById("cellMenuBtn");
+  if (btn) { btn.setAttribute("aria-expanded", "false"); }
+  cellActionCell = null;
+  cellActionTable = null;
+  cellActionCells = [];
+}
+
+/* Hide the whole cell control set and forget the tracked cell.
+   Called when the pointer and caret have left the table, when the
+   note switches, and when the editor locks. */
+function hideCellMenu() {
+  closeCellMenu();
+  cellMenuCell = null;
+  cellMenuTable = null;
+  cellHoverCell = null;
+  const btn = document.getElementById("cellMenuBtn");
+  if (btn) { btn.classList.add("hidden"); }
+  const chip = document.getElementById("tableFilterChip");
+  if (chip) { chip.classList.add("hidden"); }
+}
+
+/* Fill the menu's current values from the captured cell and table
+   and start with every sub panel closed. */
+function syncCellMenuState() {
+  const cell = cellActionCell;
+  const table = cellActionTable;
+  if (!cell || !table) { return; }
+  const colIdx = cellIndexOf(cell);
+  const sortState = tableSortState(table);
+  document.getElementById("cellMenuSortValue").textContent =
+    sortState && sortState.col === colIdx
+      ? (sortState.dir === "asc" ? "Ascending" : "Descending")
+      : "None";
+  const filters = tableFilters(table);
+  const filterValue = filters[String(colIdx)] || "";
+  document.getElementById("cellMenuFilterValue").textContent =
+    filterValue || "None";
+  document.getElementById("cellFilterInput").value = filterValue;
+  document.getElementById("cellHeaderToggle").setAttribute(
+    "aria-checked", tableHasHeaderRow(table) ? "true" : "false");
+  const bs = cell.style.borderStyle || "";
+  document.getElementById("cellMenuBorderStyleValue").textContent =
+    bs ? bs.charAt(0).toUpperCase() + bs.slice(1) : "";
+  const bw = cell.style.borderWidth || "";
+  document.getElementById("cellMenuBorderWidthValue").textContent =
+    bw === "1px" ? "Thin" : bw === "2px" ? "Medium"
+      : bw === "4px" ? "Thick" : bw;
+  const va = cell.style.verticalAlign || "";
+  document.getElementById("cellMenuAlignValue").textContent =
+    va === "middle" ? "Middle" : va === "bottom" ? "Bottom" : "Top";
+  document.getElementById("cellMenuWidthValue").textContent =
+    cell.style.width || "Auto";
+  CELL_SUB_IDS.forEach(function (id) {
+    document.getElementById(id).classList.add("hidden");
+  });
+}
+
+/* Position the open menu under its button, right edges aligned,
+   flipping above the button when it would spill off the bottom. */
+function positionCellMenu() {
+  const menu = document.getElementById("cellMenu");
+  const btn = document.getElementById("cellMenuBtn");
+  if (!menu || !btn) { return; }
+  const btnRect = btn.getBoundingClientRect();
+  const width = menu.offsetWidth || 240;
+  const height = menu.offsetHeight || 420;
+  let left = Math.max(8, Math.min(btnRect.right - width,
+    window.innerWidth - width - 8));
+  let top = btnRect.bottom + 4;
+  if (top + height > window.innerHeight - 8) {
+    top = Math.max(8, btnRect.top - height - 4);
+  }
+  menu.style.left = left + "px";
+  menu.style.top = top + "px";
+}
+
+/* Open the menu from the three dot button. The acting cells are
+   captured now: the multi-cell range when one is selected in this
+   table, otherwise the button's cell alone. Sort, filter, and the
+   header toggle anchor to the button's cell either way. Opening
+   the cell menu closes the v2.2 table menu, and vice versa. */
+function openCellMenu() {
+  if (!cellMenuCell || !cellMenuTable) { return; }
+  closeTableMenu();
+  const range = currentRangeCells();
+  cellActionCell = cellMenuCell;
+  cellActionTable = cellMenuTable;
+  cellActionCells = (range &&
+    range[0].closest("table") === cellMenuTable)
+    ? range.slice() : [cellMenuCell];
+  syncCellMenuState();
+  const menu = document.getElementById("cellMenu");
+  const btn = document.getElementById("cellMenuBtn");
+  menu.classList.remove("hidden");
+  btn.setAttribute("aria-expanded", "true");
+  positionCellMenu();
+}
+
+/* Show one sub panel and close the others, then reposition: the
+   menu's height changed under its button. */
+function toggleCellSub(subId) {
+  CELL_SUB_IDS.forEach(function (id) {
+    if (id !== subId) {
+      document.getElementById(id).classList.add("hidden");
+    }
+  });
+  const sub = document.getElementById(subId);
+  const willShow = sub.classList.contains("hidden");
+  sub.classList.toggle("hidden", !willShow);
+  positionCellMenu();
+  if (willShow && subId === "cellFilterSub") {
+    const input = document.getElementById("cellFilterInput");
+    input.focus();
+    input.select();
+  }
+}
+
+/* ----- the menu's actions ----- */
+
+/* Shared tail for the formatting actions: the change saves like
+   any edit, the menu closes, and the cell selection deliberately
+   survives, so several formats can be applied in a row. */
+function finishCellFormat() {
+  markDirty();
+  closeCellMenu();
+}
+
+function applyCellBackground(value) {
+  if (!cellActionCells.length) { closeCellMenu(); return; }
+  cellActionCells.forEach(function (cell) {
+    if (value) { cell.style.backgroundColor = value; }
+    else { cell.style.removeProperty("background-color"); }
+  });
+  finishCellFormat();
+}
+
+function applyCellBorderStyle(value) {
+  if (!cellActionCells.length) { closeCellMenu(); return; }
+  cellActionCells.forEach(function (cell) {
+    cell.style.borderStyle = value;
+  });
+  finishCellFormat();
+}
+
+function applyCellBorderWidth(value) {
+  if (!cellActionCells.length) { closeCellMenu(); return; }
+  cellActionCells.forEach(function (cell) {
+    cell.style.borderWidth = value;
+  });
+  finishCellFormat();
+}
+
+function applyCellAlign(value) {
+  if (!cellActionCells.length) { closeCellMenu(); return; }
+  cellActionCells.forEach(function (cell) {
+    cell.style.verticalAlign = value;
+  });
+  finishCellFormat();
+}
+
+/* Set table width sets the width of every column the captured
+   cells touch: one column for a single cell, several for a range. */
+function applyCellColumnWidth(width) {
+  const table = cellActionTable;
+  if (!table || !cellActionCells.length) { closeCellMenu(); return; }
+  const cols = [];
+  cellActionCells.forEach(function (cell) {
+    const idx = cellIndexOf(cell);
+    if (idx >= 0 && cols.indexOf(idx) < 0) { cols.push(idx); }
+  });
+  cols.forEach(function (idx) {
+    setTableColumnWidth(table, idx, width);
+  });
+  finishCellFormat();
+}
+
+/* Reset style removes exactly the properties this menu manages
+   (background, border style and width, vertical alignment) from
+   every captured cell, and clears the width of every column the
+   selection touches. Anything else on a cell (a font span inside
+   it, other inline styles) is not this menu's to remove. */
+function resetCellStyles() {
+  const table = cellActionTable;
+  if (!cellActionCells.length) { closeCellMenu(); return; }
+  const cols = [];
+  cellActionCells.forEach(function (cell) {
+    cell.style.removeProperty("background-color");
+    cell.style.removeProperty("border-style");
+    cell.style.removeProperty("border-width");
+    cell.style.removeProperty("vertical-align");
+    const idx = cellIndexOf(cell);
+    if (idx >= 0 && cols.indexOf(idx) < 0) { cols.push(idx); }
+  });
+  if (table) {
+    cols.forEach(function (idx) {
+      setTableColumnWidth(table, idx, "");
+    });
+  }
+  finishCellFormat();
+}
+
+/* Sort is structural (rows move), so it clears the cell selection
+   like the other structural operations. */
+function doCellSort(dir) {
+  const table = cellActionTable;
+  const cell = cellActionCell;
+  if (!table || !cell || !document.body.contains(table)) {
+    closeCellMenu();
+    return;
+  }
+  const colIdx = cellIndexOf(cell);
+  if (colIdx < 0) { closeCellMenu(); return; }
+  sortTableByColumn(table, colIdx, dir);
+  markDirty();
+  closeCellMenu();
+  clearCellSelection();
+  updateTableMenu();
+  updateCellMenu();
+}
+
+/* Apply the filter form to the captured cell's column: the typed
+   text becomes that column's filter (empty text clears it). A
+   filter change is structural for selection purposes, so the cell
+   selection clears. */
+function applyCellFilterFromForm() {
+  const table = cellActionTable;
+  const cell = cellActionCell;
+  if (!table || !cell) { closeCellMenu(); return; }
+  const colIdx = cellIndexOf(cell);
+  if (colIdx < 0) { closeCellMenu(); return; }
+  const value = document.getElementById("cellFilterInput").value.trim();
+  const filters = tableFilters(table);
+  if (value) { filters[String(colIdx)] = value; }
+  else { delete filters[String(colIdx)]; }
+  setTableFilters(table, filters);
+  markDirty();
+  closeCellMenu();
+  clearCellSelection();
+  updateCellMenu();
+}
+
+/* Clear just the captured column's filter. */
+function clearCellFilter() {
+  const table = cellActionTable;
+  const cell = cellActionCell;
+  if (!table || !cell) { closeCellMenu(); return; }
+  const colIdx = cellIndexOf(cell);
+  if (colIdx < 0) { closeCellMenu(); return; }
+  const filters = tableFilters(table);
+  delete filters[String(colIdx)];
+  setTableFilters(table, filters);
+  markDirty();
+  closeCellMenu();
+  clearCellSelection();
+  updateCellMenu();
+}
+
+/* The header toggle is structural (a row changes sections and its
+   cells change tag), so it clears the cell selection too. */
+function toggleCellHeaderRow() {
+  const table = cellActionTable;
+  if (!table || !document.body.contains(table)) {
+    closeCellMenu();
+    return;
+  }
+  setTableHeaderRow(table, !tableHasHeaderRow(table));
+  markDirty();
+  closeCellMenu();
+  clearCellSelection();
+  updateTableMenu();
+  updateCellMenu();
+}
+
+/* The given cells grouped into rows, in order, for range copy.
+   The caller passes its captured list explicitly: the menu's
+   capture globals are cleared when the menu closes, which happens
+   before the copy reads them. */
+function actionCellRows(cells) {
+  const rows = [];
+  let lastRowEl = null;
+  cells.forEach(function (cell) {
+    if (cell.parentElement !== lastRowEl) {
+      rows.push([]);
+      lastRowEl = cell.parentElement;
+    }
+    rows[rows.length - 1].push(cell);
+  });
+  return rows;
+}
+
+/* Copy cell: a single cell copies its content (rich HTML plus
+   plain text). A range copies the rectangle: the rich payload is
+   a small table fragment holding the selected cells, and the
+   plain payload is tab separated values with one line per row,
+   so it pastes cleanly into spreadsheets and other editors. Rich
+   copy is attempted first (ClipboardItem), with a plain text
+   fallback, and the result is reported honestly by toast. */
+function copyCellSelection() {
+  const cells = cellActionCells.length ? cellActionCells
+    : (cellActionCell ? [cellActionCell] : []);
+  closeCellMenu();
+  if (!cells.length) { return; }
+  let html;
+  let text;
+  if (cells.length === 1) {
+    html = cells[0].innerHTML;
+    text = cells[0].textContent || "";
+  } else {
+    const rowsHtml = [];
+    const rowsText = [];
+    actionCellRows(cells).forEach(function (rowCells) {
+      const tds = rowCells.map(function (cell) {
+        const tag = cell.tagName.toLowerCase();
+        return "<" + tag + ">" + cell.innerHTML + "</" + tag + ">";
+      });
+      rowsHtml.push("<tr>" + tds.join("") + "</tr>");
+      rowsText.push(rowCells.map(function (cell) {
+        return (cell.textContent || "").replace(/\s+/g, " ").trim();
+      }).join("\t"));
+    });
+    html = "<table><tbody>" + rowsHtml.join("") + "</tbody></table>";
+    text = rowsText.join("\n");
+  }
+  function done() { toast("Cell copied."); }
+  function fail() {
+    toast("Copy failed: the browser refused clipboard access.", true);
+  }
+  if (navigator.clipboard &&
+      typeof navigator.clipboard.write === "function" &&
+      typeof ClipboardItem !== "undefined") {
+    try {
+      const item = new ClipboardItem({
+        "text/html": new Blob([html], { type: "text/html" }),
+        "text/plain": new Blob([text], { type: "text/plain" })
+      });
+      navigator.clipboard.write([item]).then(done, function () {
+        if (navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(done, fail);
+        } else { fail(); }
+      });
+    } catch (err) {
+      if (navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done, fail);
+      } else { fail(); }
+    }
+  } else if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(done, fail);
+  } else {
+    fail();
+  }
+}
+
+/* ----- v2.3 wiring --------------------------------------------------------
+   Called once from wireEvents, beside the v2.2 table wiring. Hover
+   tracking is a document level mouseover: it keeps the hovered cell
+   current wherever the pointer goes (and clears it when the
+   pointer leaves the body), while the cell furniture itself is
+   left out of tracking. The drag selection rides mousedown on the
+   body plus document mousemove and mouseup: nothing is prevented
+   or suppressed until the pointer has entered a different cell of
+   the same table, so selecting text inside one cell works exactly
+   as it always has. */
+function wireCellMenu() {
+  const bodyEl = document.getElementById("noteBody");
+
+  /* Cell background swatches, built from the same TB_COLORS palette
+     as the toolbar's highlight popup. */
+  buildSwatches("cellBgSwatches", function (value) {
+    applyCellBackground(value);
+  });
+  document.getElementById("cellBgNone").addEventListener("click",
+    function () { applyCellBackground(""); });
+
+  /* Hover tracking plus the furniture watchers. */
+  document.addEventListener("mouseover", function (ev) {
+    const target = ev.target;
+    if (!target || !target.closest) { return; }
+    if (target.closest("#cellMenu") || target.closest("#cellMenuBtn") ||
+        target.closest("#tableFilterChip")) { return; }
+    const appEl = document.getElementById("app");
+    if (!appEl || appEl.classList.contains("hidden")) { return; }
+    cellHoverCell = bodyEl.contains(target)
+      ? tableCellFromNode(target) : null;
+    updateCellMenu();
+  });
+  bodyEl.addEventListener("click", updateCellMenu);
+  bodyEl.addEventListener("keyup", updateCellMenu);
+  document.addEventListener("selectionchange", updateCellMenu);
+
+  /* Anchor tracking: a caret inside the body but outside any cell
+     ends a selection; a caret in a different cell starts a fresh
+     single cell anchor. Selections outside the body (focus sitting
+     in a menu) are left alone, so applying a format from the menu
+     never disturbs the range it was captured from. */
+  document.addEventListener("selectionchange", function () {
+    if (cellDragState) { return; }
+    const sel = window.getSelection();
+    if (!sel || !sel.rangeCount) { return; }
+    if (!bodyEl.contains(sel.anchorNode)) { return; }
+    const cell = tableCellFromNode(sel.anchorNode);
+    if (!cell) {
+      if (cellSelAnchor) { clearCellSelection(); }
+      return;
+    }
+    if (cell !== cellSelAnchor) { setCellAnchor(cell); }
+  });
+
+  /* Plain clicks anchor a fresh single cell; Shift+click extends
+     the rectangle from the anchor; clicks outside any cell clear
+     the selection. */
+  bodyEl.addEventListener("click", function (ev) {
+    if (cellSuppressNextClick) {
+      cellSuppressNextClick = false;
+      return;
+    }
+    const cell = tableCellFromNode(ev.target);
+    if (!cell) { clearCellSelection(); return; }
+    if (ev.shiftKey && cellSelAnchor &&
+        cellSelAnchor.closest("table") === cell.closest("table")) {
+      cellSelFocus = cell;
+      const sel = window.getSelection();
+      if (sel) { sel.removeAllRanges(); }
+      paintCellSelection();
+    } else {
+      setCellAnchor(cell);
+    }
+  });
+
+  /* Drag selection: mousedown in a cell arms a potential range
+     (attachment placeholders are excluded; their own dragging
+     keeps working). Only when the pointer enters a DIFFERENT cell
+     of the same table does range mode begin: the native text
+     selection is dropped and suppressed from there on, and the
+     rectangle paints until mouseup. */
+  bodyEl.addEventListener("mousedown", function (ev) {
+    /* A fresh press ends the previous drag's tail: the click that
+       belongs to a finished drag arrives with no press of its own
+       (see cellSuppressNextClick), so any mousedown is a new
+       gesture and the suppression lapses here, before the click
+       that follows it is judged. */
+    cellSuppressNextClick = false;
+    if (ev.button !== 0) { cellDragState = null; return; }
+    if (ev.target && ev.target.closest &&
+        ev.target.closest(".ss-attachment")) {
+      cellDragState = null;
+      return;
+    }
+    const cell = tableCellFromNode(ev.target);
+    cellDragState = cell ? { anchor: cell, active: false } : null;
+  });
+  document.addEventListener("mousemove", function (ev) {
+    if (!cellDragState || !(ev.buttons & 1)) { return; }
+    if (ev.target && ev.target.closest &&
+        (ev.target.closest("#cellMenu") ||
+         ev.target.closest("#cellMenuBtn") ||
+         ev.target.closest("#tableFilterChip"))) { return; }
+    if (!bodyEl.contains(ev.target)) { return; }
+    const cell = tableCellFromNode(ev.target);
+    if (!cell) { return; }
+    if (cell.closest("table") !==
+        cellDragState.anchor.closest("table")) { return; }
+    if (cell === cellDragState.anchor && !cellDragState.active) {
+      return;
+    }
+    if (!cellDragState.active) {
+      cellDragState.active = true;
+      cellSelAnchor = cellDragState.anchor;
+    }
+    cellSelFocus = cell;
+    const sel = window.getSelection();
+    if (sel) { sel.removeAllRanges(); }
+    paintCellSelection();
+    ev.preventDefault();
+  });
+  document.addEventListener("mouseup", function () {
+    if (cellDragState && cellDragState.active) {
+      cellSuppressNextClick = true;
+      updateCellMenu();
+    }
+    cellDragState = null;
+  });
+
+  /* The three dot button toggles the menu. mousedown is prevented
+     so clicking it never moves the editor selection or the hover
+     tracking away from the cell it sits on; the menu then acts on
+     the cells captured when it opened. */
+  const cellBtn = document.getElementById("cellMenuBtn");
+  cellBtn.addEventListener("mousedown", function (ev) {
+    ev.preventDefault();
+  });
+  cellBtn.addEventListener("click", function () {
+    const menu = document.getElementById("cellMenu");
+    if (menu.classList.contains("hidden")) { openCellMenu(); }
+    else { closeCellMenu(); }
+  });
+
+  /* The chip clears every filter on its table at once. */
+  document.getElementById("tableFilterChip").addEventListener("click",
+    function () {
+      const table = cellMenuTable;
+      if (!table) { return; }
+      setTableFilters(table, {});
+      markDirty();
+      clearCellSelection();
+      updateCellMenu();
+    });
+
+  /* One delegated listener for the menu's rows and choices. */
+  document.getElementById("cellMenu").addEventListener("click",
+    function (ev) {
+      const target = ev.target;
+      if (!target || !target.closest) { return; }
+      let el = target.closest("[data-cell-sort]");
+      if (el) { doCellSort(el.getAttribute("data-cell-sort")); return; }
+      el = target.closest("[data-cell-border-style]");
+      if (el) {
+        applyCellBorderStyle(el.getAttribute("data-cell-border-style"));
+        return;
+      }
+      el = target.closest("[data-cell-border-width]");
+      if (el) {
+        applyCellBorderWidth(el.getAttribute("data-cell-border-width"));
+        return;
+      }
+      el = target.closest("[data-cell-align]");
+      if (el) {
+        applyCellAlign(el.getAttribute("data-cell-align"));
+        return;
+      }
+      el = target.closest("[data-cell-width]");
+      if (el) {
+        applyCellColumnWidth(el.getAttribute("data-cell-width"));
+        return;
+      }
+      if (target.closest("#cellFilterClear")) {
+        clearCellFilter();
+        return;
+      }
+      if (target.closest("#cellHeaderToggle")) {
+        toggleCellHeaderRow();
+        return;
+      }
+      if (target.closest("#cellResetBtn")) { resetCellStyles(); return; }
+      if (target.closest("#cellCopyBtn")) { copyCellSelection(); return; }
+      el = target.closest("[data-cell-menu]");
+      if (el) {
+        const subs = {
+          sort: "cellSortSub", filter: "cellFilterSub",
+          background: "cellBgSub", borderStyle: "cellBorderStyleSub",
+          borderWidth: "cellBorderWidthSub", align: "cellAlignSub",
+          width: "cellWidthSub"
+        };
+        const subId = subs[el.getAttribute("data-cell-menu")];
+        if (subId) { toggleCellSub(subId); }
+      }
+    });
+  document.getElementById("cellFilterForm").addEventListener("submit",
+    function (ev) {
+      ev.preventDefault();
+      applyCellFilterFromForm();
+    });
+
+  /* Clicking anywhere else closes the menu; a click outside the
+     note body also ends any cell selection. The table furniture
+     (both menus, both buttons, the chip) is exempt: those clicks
+     belong to the table flows, which manage selection themselves. */
+  document.addEventListener("click", function (ev) {
+    const target = ev.target;
+    if (!target || !target.closest) { return; }
+    if (target.closest("#cellMenu") || target.closest("#cellMenuBtn") ||
+        target.closest("#tableFilterChip") ||
+        target.closest("#tableMenu") ||
+        target.closest("#tableMenuBtn")) { return; }
+    closeCellMenu();
+    if (!bodyEl.contains(target)) { clearCellSelection(); }
+  });
+  document.addEventListener("keydown", function (ev) {
+    if (ev.key === "Escape") {
+      closeCellMenu();
+      clearCellSelection();
+    }
+  });
+  /* Scrolling the editor moves the table under its parked
+     furniture: the menu closes and the button and chip re-park,
+     mirroring the v2.2 table menu's scroll rule. */
+  document.querySelector(".editor-scroll").addEventListener("scroll",
+    function () {
+      closeCellMenu();
+      if (cellMenuTable &&
+          !document.getElementById("cellMenuBtn").classList
+            .contains("hidden")) {
+        positionCellMenuBtn();
+        positionFilterChip();
+      }
+    });
 }
 
 /* Insert, Code Block: a pre.ss-code-block holding a code element, an
@@ -6551,6 +7879,18 @@ function exportNoteDocx() {
    browser's print dialog. */
 function buildPrintDocument(note, bodyHtml) {
   const title = escapeHtml(note.title || "Untitled note");
+  /* v2.3: a table filter is an editor view aid, never a print
+     setting, so rows it hides in the editor (class ss-filtered-out)
+     print like every other row: the class is stripped from the body
+     copy that goes into the print document. The note itself is not
+     touched. */
+  const printHolder = document.createElement("div");
+  printHolder.innerHTML = bodyHtml || "";
+  printHolder.querySelectorAll(".ss-filtered-out").forEach(function (el) {
+    el.classList.remove("ss-filtered-out");
+    if (!el.classList.length) { el.removeAttribute("class"); }
+  });
+  const cleanBodyHtml = printHolder.innerHTML;
   return "<!DOCTYPE html>\n<html><head><meta charset=\"UTF-8\">" +
     "<title>" + title + "</title>" +
     "<style>" +
@@ -6571,7 +7911,7 @@ function buildPrintDocument(note, bodyHtml) {
     "@media print{body{margin:0 auto;}}" +
     "</style></head><body>" +
     "<h1>" + title + "</h1>" +
-    (bodyHtml || "") +
+    cleanBodyHtml +
     "<script>window.addEventListener('load',function(){" +
     "setTimeout(function(){window.print();},60);});</scr" + "ipt>" +
     "</body></html>";
@@ -10828,6 +12168,10 @@ function wireEvents() {
       positionTableMenuBtn();
     }
   });
+
+  /* v2.3: per-cell table menu, filter chip, and multi-cell
+     selection wiring. */
+  wireCellMenu();
 
   /* Toolbar buttons. mousedown is prevented so the text selection in the
      editor is not lost before execCommand runs. */
