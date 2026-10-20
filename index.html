@@ -68,7 +68,7 @@
                       outside the selection keeps its formatting, so
                       a saved note holds no background styling for a
                       cleared range. The font family picker grows
-                      from four entries to sixteen, grouped as Sans,
+                      from four entries to seventeen, grouped as Sans,
                       Serif, Mono, and Handwriting optgroups, all
                       device font stacks with no downloads. The app
                       is installable as a PWA, closing the gap open
@@ -2434,7 +2434,7 @@ body.dark .ss-att-provider{color:#EAF3EC;}
                 <option value="PRE">Code block</option>
               </select>
               <!-- v2.6.0: the family picker grew from four generic
-                   entries to sixteen, grouped with optgroups. Every
+                   entries to seventeen, grouped with optgroups. Every
                    value is a key into FONT_STACKS; all stacks are
                    device fonts with generic fallbacks, no downloads. -->
               <select id="fontFamilySelect" title="Font family" aria-label="Font family">
@@ -10866,7 +10866,7 @@ function handleChecklistEnter() {
 /* Font stacks behind the family picker keys. The generic families at
    the end of each stack keep the app dependency free: no web fonts are
    downloaded, every device uses its own closest match. v2.6.0: the
-   picker grew from the four generic entries to sixteen named stacks;
+   picker grew from the four generic entries to seventeen named stacks;
    the original four are unchanged, so notes already using them keep
    rendering exactly as before. */
 const FONT_STACKS = {
