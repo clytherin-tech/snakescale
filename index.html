@@ -28,10 +28,26 @@
   notes are files, and there is no server and no shared database anywhere
   in this design.
 
-  BUILD STAMP: 2026-10-19-SSN-V181
-  Version: 1.8.1
+  BUILD STAMP: 2026-10-20-SSN-V182
+  Version: 1.8.2
 
   Revision history:
+    v1.8.2 2026-10-20 pCloud sign in fix. The Sign in with pCloud
+                      button sent the browser to an authorize address
+                      spelled with an underscore where pCloud's
+                      documented address has a slash:
+                      my.pcloud.com/oauth2/authorize. The misspelled
+                      address is not a real pCloud page, so pCloud's
+                      web app fell through to the signed in user's
+                      drive with no consent screen and no error, and
+                      sign in silently never happened. The authorize
+                      address now matches pCloud's OAuth 2.0
+                      documentation exactly. The return capture also
+                      reads the account id from the "uid" fragment
+                      parameter pCloud documents, keeping "userid"
+                      as a fallback, so the signed in account id is
+                      actually recorded. No other behavior changes.
+                      Build stamp 2026-10-20-SSN-V182.
     v1.8.1 2026-10-19 Checklist in place, Trash and Archive multi
                       select, and a desktop fix for the Back to list
                       button. The toolbar Checklist button used to
@@ -63,7 +79,7 @@
                       permanent deletes run through the same confirm
                       wording style, best effort attachment cleanup,
                       and per note operation chain as a single
-                      Delete Forever. Build stamp 2026-10-19-SSN-V181.
+                      Delete Forever.
     v1.8.0 2026-10-19 A toolbar for the notes list: New Note, Filters,
                       Sort, and a notebook menu. The list header gains
                       a right aligned row of four icon buttons under
@@ -1910,8 +1926,8 @@ body.dark .ss-att-provider{color:#EAF3EC;}
 "use strict";
 
 /* ============================================================================
-   SnakeScale Notes v1.8.1: application script
-   BUILD STAMP: 2026-10-19-SSN-V181
+   SnakeScale Notes v1.8.2: application script
+   BUILD STAMP: 2026-10-20-SSN-V182
 
    How this script is organized:
      1. Constants and global state
@@ -1942,8 +1958,8 @@ body.dark .ss-att-provider{color:#EAF3EC;}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-19-SSN-V181";
-const APP_VERSION = "1.8.1";
+const APP_BUILD = "2026-10-20-SSN-V182";
+const APP_VERSION = "1.8.2";
 const API_BASE = "https://api.github.com";
 const API_VERSION_HEADER = "2022-11-28";
 /* v1.4: the two storage backends. "github" is the original repository
@@ -7471,8 +7487,14 @@ async function driveStoreDeleteFile(path, token) {
 /* ----- pCloud driver ----------------------------------------------------
    Sign in uses pCloud's OAuth 2.0 token (implicit) flow, which pCloud
    documents as appropriate for pure client side JavaScript apps: the
-   browser is sent to my.pcloud.com, the user approves, and pCloud
-   redirects back to the app URL with the access token in the fragment.
+   browser is sent to the authorize address documented at
+   docs.pcloud.com (methods, OAuth 2.0, authorize),
+   https://my.pcloud.com/oauth2/authorize, the user approves, and
+   pCloud redirects back to the app URL with the access token in the
+   fragment. v1.8.2 fixed that address: earlier builds spelled the
+   path with an underscore in place of the slash, which is not a real
+   pCloud page, so the browser quietly landed in the user's drive
+   with no consent screen and sign in never happened.
    boot() captures that fragment BEFORE any screen routing (see
    capturePcloudReturn). The account may live in the US or EU data
    region; the redirect returns the right API hostname, which is stored
@@ -7494,7 +7516,7 @@ function pcloudConnect() {
   sessionStorage.setItem(SS_PCLOUD_OAUTH,
     JSON.stringify({ state: oauthState, ts: Date.now() }));
   const redirectUri = window.location.origin + window.location.pathname;
-  window.location.href = "https://my.pcloud.com/oauth2_authorize" +
+  window.location.href = "https://my.pcloud.com/oauth2/authorize" +
     "?client_id=" + encodeURIComponent(clientId) +
     "&response_type=token" +
     "&redirect_uri=" + encodeURIComponent(redirectUri) +
@@ -7525,9 +7547,11 @@ function capturePcloudReturn() {
       window.location.pathname + window.location.search);
   } catch (e) { /* fragment scrub is best effort */ }
   if (!token || !expected || expected.state !== returnedState) { return; }
+  /* The token flow returns the account id as "uid" (the parameter
+     pCloud documents); "userid" is read as a fallback only. */
   state.pendingPcloud = {
     token: token,
-    userId: params.get("userid") || "",
+    userId: params.get("uid") || params.get("userid") || "",
     locationId: params.get("locationid") || "",
     hostname: params.get("hostname") || "api.pcloud.com"
   };
