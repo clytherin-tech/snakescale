@@ -40,10 +40,37 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-20-SSN-V271
-  Version: 2.7.1
+  BUILD STAMP: 2026-10-20-SSN-V280
+  Version: 2.8.0
 
   Revision history:
+    v2.8.0 2026-10-20 Settings modal, note version history, and an
+                      inline notebook selector. The notebook label
+                      and selector now share one row in the editor
+                      header. A Settings modal (opened from the
+                      sidebar menu) holds Appearance, Connection,
+                      and Note history sections: the Light and Dark
+                      choices are a segmented control whose active
+                      side is visibly selected, Refresh connection
+                      moved there from the sidebar menu, and a
+                      numeric setting chooses how many versions to
+                      keep per note (default 10, range 0 to 100,
+                      with 0 turning history off). The icon rail
+                      keeps direct theme and refresh buttons through
+                      shared functions. Note history stores one JSON
+                      file per note in a top level versions folder
+                      inside the same Drive root. A qualifying
+                      content save first preserves the previous
+                      saved title, body, tags, and attachment
+                      records, at most one snapshot per note per
+                      10 minutes, and pruning drops the oldest
+                      entries at the configured limit. The editor
+                      footer gains a History button with preview
+                      and restore; restoring preserves the current
+                      saved note as a forced version first. Trash
+                      keeps history, Delete Forever removes it best
+                      effort, and attachment binaries are never
+                      copied into versions, only their records.
     v2.7.1 2026-10-20 Sync now moves into the sidebar menu. The
                       standalone Sync now button that sat under the
                       save status line through v2.7.0 is gone, and
@@ -1407,6 +1434,19 @@ body.note-drag-active{touch-action:none;overscroll-behavior:none;}
 .meta-row{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;margin-bottom:12px;}
 .meta-row .meta-field{flex:1 1 180px;}
 .meta-row label{display:block;font-size:12px;font-weight:700;color:var(--muted);margin-bottom:3px;}
+/* v2.8: the Notebook label and its selector share one line. The
+   field is a non wrapping flex row, the label keeps its natural
+   width, and the selector may shrink so a long notebook name
+   truncates inside the link instead of pushing the row apart. */
+.meta-row .notebook-field{
+  display:flex;align-items:center;gap:8px;flex-wrap:nowrap;min-width:0;
+}
+.meta-row .notebook-field label{
+  display:inline-block;margin-bottom:0;flex:0 0 auto;
+}
+.meta-row .notebook-field .notebook-link-wrap{
+  min-width:0;flex:0 1 auto;
+}
 .meta-row input,.meta-row select{
   width:100%;padding:8px;border:1px solid var(--border);
   border-radius:var(--radius-button);background:var(--surface);
@@ -1430,6 +1470,10 @@ body.note-drag-active{touch-action:none;overscroll-behavior:none;}
   background:none;border:none;padding:6px 2px;cursor:pointer;
   font-size:15px;font-weight:700;color:var(--secondary);
   text-align:left;border-radius:var(--radius-button);
+  display:inline-flex;align-items:center;min-width:0;max-width:100%;
+}
+#notebookLinkName{
+  min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
 }
 #notebookLink:hover:not(:disabled){text-decoration:underline;}
 #notebookLink:focus-visible{outline:2px solid var(--accent);outline-offset:1px;}
@@ -2035,6 +2079,89 @@ body.dark .ss-att-provider{color:#EAF3EC;}
   border-radius:var(--radius-button);background:var(--surface);
 }
 .modal-foot{display:flex;justify-content:flex-end;gap:8px;margin-top:16px;}
+/* v2.8: the Settings modal. Sections are separated by rules and
+   headings so future settings can join as another section without
+   redesigning the dialog. The theme control is a segmented pill:
+   the active side is filled with the primary color and exposed
+   with aria-pressed, so the current choice is obvious at a glance
+   rather than silently remembered. */
+.settings-card{max-width:680px;}
+.settings-section{
+  border-top:1px solid var(--border);padding:16px 0 6px;margin-top:16px;
+}
+.settings-section h3{
+  margin:0 0 10px;font-size:16px;color:var(--primary);
+}
+body.dark .settings-section h3{color:var(--accent);}
+.settings-section p{font-size:14px;line-height:1.45;}
+.settings-help,.settings-feedback{
+  font-size:13px;color:var(--muted);margin-top:6px;line-height:1.4;
+}
+.settings-feedback{min-height:18px;font-weight:600;}
+.theme-segmented{
+  display:inline-flex;gap:3px;padding:3px;border:1px solid var(--border);
+  border-radius:999px;background:var(--soft);
+}
+.theme-segmented button{
+  border:1px solid transparent;background:transparent;color:var(--text);
+  border-radius:999px;padding:7px 18px;font-weight:700;cursor:pointer;
+}
+.theme-segmented button:hover{border-color:var(--secondary);}
+.theme-segmented button[aria-pressed="true"]{
+  background:var(--primary);border-color:var(--primary);color:#fff;
+  box-shadow:0 1px 5px rgba(11,61,46,.25);
+}
+.modal input[type="number"]{
+  width:120px;padding:8px 10px;border:1px solid var(--border);
+  border-radius:var(--radius-button);background:var(--surface);
+  color:var(--text);
+}
+/* v2.8: the note History modal. Rows are compact cards; the
+   preview is a read only rendering under the list, with pointer
+   interaction disabled so links and controls inside an old
+   version can never navigate or mutate the open note. Attachment
+   placeholders in a preview become plain labeled cards built
+   from that version's own records, never hydrated images. */
+.version-history-card{max-width:720px;}
+.version-history-list{
+  display:flex;flex-direction:column;gap:8px;max-height:320px;overflow-y:auto;
+}
+.version-row{
+  display:flex;gap:12px;justify-content:space-between;align-items:flex-start;
+  border:1px solid var(--border);border-radius:var(--radius-card);
+  background:var(--surface);padding:10px 12px;
+}
+.version-row-main{min-width:0;flex:1 1 auto;}
+.version-date{font-size:13px;font-weight:800;color:var(--primary);}
+body.dark .version-date{color:var(--accent);}
+.version-title{
+  font-size:14px;font-weight:700;margin-top:2px;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap;
+}
+.version-excerpt,.version-restore-note{
+  font-size:13px;color:var(--muted);line-height:1.4;margin-top:3px;
+}
+.version-actions{display:flex;gap:6px;flex:0 0 auto;}
+.version-empty{
+  font-size:14px;color:var(--muted);line-height:1.5;padding:10px 2px;
+}
+.version-preview{
+  margin-top:16px;border-top:1px solid var(--border);padding-top:14px;
+  max-height:380px;overflow-y:auto;
+}
+.version-preview h3{margin:0 0 4px;font-size:17px;}
+.version-preview-meta{font-size:13px;color:var(--muted);margin-bottom:10px;}
+.version-preview-body{pointer-events:none;line-height:1.5;}
+.version-preview-body .version-att-card{
+  display:block;border:1px solid var(--border);border-radius:var(--radius-card);
+  background:var(--soft);padding:10px 12px;margin:10px 0;max-width:100%;
+}
+.version-att-name{font-weight:700;overflow-wrap:anywhere;}
+.version-att-meta{font-size:13px;color:var(--muted);margin-top:2px;}
+@media (max-width:600px){
+  .version-row{flex-direction:column;}
+  .version-actions{align-self:flex-end;}
+}
 
 /* mobile top bar (only shown on small screens) */
 #mobileBar{display:none;}
@@ -2271,26 +2398,24 @@ body.dark .ss-att-provider{color:#EAF3EC;}
     <div class="sidebar-foot">
       <!-- v2.7: the footer's action buttons became a three dot menu
            beside the Synced pill, and the save status moved to its
-           own line under the pill row (Chris's layout). Each menu
-           item runs the very handler its standalone button ran:
-           Sync now (the footer's own button through v2.7.0; it
-           moved into the menu as the first item in v2.7.1, which
-           left this footer as the pill row, the save status line
-           under it, and the version), Refresh connection (v2.2),
-           Install app (v2.6.0, present only while the browser
-           offers installation), Dark mode (its check mark is
-           refreshed every time the menu opens), Collapse sidebar
-           (the v2.5 rail toggle), and Sign out. The icon rail is
-           unchanged: it keeps its own icon buttons, which click
-           these items through. -->
+           own line under the pill row (Chris's layout). v2.7.1
+           moved Sync now in as the first item. v2.8: Refresh
+           connection and Dark mode moved out of this menu into
+           the new Settings modal, and a Settings item took their
+           place here. The menu is now Sync now, Install app
+           (present only while the browser offers installation),
+           Settings, Collapse sidebar (the v2.5 rail toggle), and
+           Sign out. The icon rail keeps its own icon buttons;
+           its refresh and theme buttons now call the shared
+           refresh and theme functions directly, while its other
+           leaf buttons still click their counterparts here. -->
       <div class="sync-row">
         <div class="sync-pill" id="syncPill" data-state="idle"><span class="sync-dot" aria-hidden="true"></span><span class="sync-label">Not synced yet</span></div>
         <button class="sidebar-menu-btn" id="sidebarMenuBtn" type="button" aria-haspopup="true" aria-expanded="false" title="More actions" aria-label="More actions">&#8943;</button>
         <div id="sidebarMenu" class="hidden" role="menu" aria-label="Sidebar actions">
           <button class="att-menu-item" id="sidebarSyncItem" type="button" role="menuitem">Sync now</button>
-          <button class="att-menu-item" id="sidebarRefreshItem" type="button" role="menuitem"><span id="sidebarRefreshLabel">Refresh connection</span></button>
           <button class="att-menu-item hidden" id="sidebarInstallItem" type="button" role="menuitem">Install app</button>
-          <button class="att-menu-item" id="sidebarThemeItem" type="button" role="menuitem"><span class="sb-check" id="sidebarThemeCheck" aria-hidden="true"></span>Dark mode</button>
+          <button class="att-menu-item" id="sidebarSettingsItem" type="button" role="menuitem">Settings</button>
           <button class="att-menu-item" id="sidebarCollapseItem" type="button" role="menuitem">Collapse sidebar</button>
           <div class="att-menu-sep"></div>
           <button class="att-menu-item" id="sidebarSignOutItem" type="button" role="menuitem">Sign out</button>
@@ -2461,8 +2586,10 @@ body.dark .ss-att-provider{color:#EAF3EC;}
                  the link is plain non interactive text showing the
                  notebook the note came from. The menu is a sibling
                  pattern like the toolbar menus: furniture, never
-                 saved into the note. -->
-            <div class="meta-field">
+                 saved into the note. v2.8: the label and the link
+                 share one line (the .notebook-field flex row in the
+                 CSS), the name truncating when it is long. -->
+            <div class="meta-field notebook-field">
               <label id="notebookFieldLabel">Notebook</label>
               <span class="tb-menu-wrap notebook-link-wrap">
                 <button type="button" id="notebookLink" aria-haspopup="true" aria-expanded="false"><span id="notebookLinkName"></span><span class="notebook-caret" aria-hidden="true"> &#9662;</span></button>
@@ -2785,6 +2912,12 @@ body.dark .ss-att-provider{color:#EAF3EC;}
               <button type="button" data-export="pdf">PDF (print)</button>
             </div>
           </span>
+          <!-- v2.8: History opens the open note's version list
+               (versionHistoryModal, below), with preview and
+               restore. It stays available on locked notes too:
+               their versions can be viewed and previewed, and
+               only Restore is disabled there. -->
+          <button class="btn small" id="versionHistoryBtn" type="button" title="See earlier versions of this note">History</button>
           <!-- v2.5: Maximize fills the window with the note (the
                sidebar and the notes list hide, the writing column
                uncaps). Its icon and label flip to Restore while
@@ -2828,6 +2961,77 @@ body.dark .ss-att-provider{color:#EAF3EC;}
   </div>
 </div>
 
+<!-- ==========================================================================
+     v2.8: Settings
+     Opened from the sidebar menu's Settings item. The modal is
+     built as headed sections (Appearance, Connection, Note
+     history) so future settings can be added as another section
+     without redesigning the dialog. Appearance holds the Light
+     and Dark segmented control (the sidebar menu's old Dark mode
+     item moved here); Connection holds Refresh connection (the
+     same item moved here, running the same refresh flow); Note
+     history holds the versions per note limit. Like every modal,
+     it lives outside #noteBody and can never be saved into a note.
+     ========================================================================== -->
+<div id="settingsModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+  <div class="modal-card settings-card">
+    <h2 id="settingsTitle">Settings</h2>
+    <p class="modal-sub">Settings are saved on this device as you change them.</p>
+
+    <section class="settings-section" aria-labelledby="settingsAppearanceTitle">
+      <h3 id="settingsAppearanceTitle">Appearance</h3>
+      <div class="theme-segmented" role="group" aria-label="Theme">
+        <button id="settingsThemeLightBtn" type="button" aria-pressed="false">Light</button>
+        <button id="settingsThemeDarkBtn" type="button" aria-pressed="true">Dark</button>
+      </div>
+    </section>
+
+    <section class="settings-section" aria-labelledby="settingsConnectionTitle">
+      <h3 id="settingsConnectionTitle">Connection</h3>
+      <p>Reconnect to Google Drive without reloading the page. The open note is saved on this device first, and nothing is wiped.</p>
+      <button class="btn" id="settingsRefreshBtn" type="button"><span id="settingsRefreshLabel">Refresh connection</span></button>
+    </section>
+
+    <section class="settings-section" aria-labelledby="settingsHistoryTitle">
+      <h3 id="settingsHistoryTitle">Note history</h3>
+      <div class="field">
+        <label for="settingsVersionsInput">Versions to keep per note</label>
+        <input id="settingsVersionsInput" type="number" min="0" max="100" step="1" inputmode="numeric">
+        <div class="settings-help">When a note changes and is saved, its previous saved version is kept. At the limit, the oldest version is removed as the newest is added. Use 0 to turn version history off.</div>
+        <div class="settings-feedback" id="settingsVersionsFeedback" aria-live="polite"></div>
+      </div>
+    </section>
+
+    <div class="modal-foot">
+      <button class="btn" id="settingsCloseBtn" type="button">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==========================================================================
+     v2.8: Note history
+     Opened from the editor footer's History button. The script
+     renders one row per stored version of the open note (newest
+     first) into versionHistoryList; Preview fills
+     versionHistoryPreview with a read only rendering of that
+     version, built from the version's own attachment records, and
+     Restore runs the serialized restore flow (the current note is
+     preserved as a new version first). On a locked note (Trash or
+     Archive) the rows still preview, and Restore is disabled with
+     the reason printed on the row.
+     ========================================================================== -->
+<div id="versionHistoryModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="versionHistoryTitle">
+  <div class="modal-card version-history-card">
+    <h2 id="versionHistoryTitle">Note history</h2>
+    <p class="modal-sub">Earlier saved versions of this note, newest first. Restoring a version preserves the current note as a new version first.</p>
+    <div class="version-history-list" id="versionHistoryList"></div>
+    <div class="version-preview hidden" id="versionHistoryPreview"></div>
+    <div class="modal-foot">
+      <button class="btn" id="versionHistoryCloseBtn" type="button">Close</button>
+    </div>
+  </div>
+</div>
+
 <!-- Toasts land here (bottom right). -->
 <div id="toastBox" aria-live="polite"></div>
 
@@ -2858,8 +3062,8 @@ body.dark .ss-att-provider{color:#EAF3EC;}
 "use strict";
 
 /* ============================================================================
-   SnakeScale Notes v2.5.0: application script
-   BUILD STAMP: 2026-10-20-SSN-V250
+   SnakeScale Notes v2.8.0: application script
+   BUILD STAMP: 2026-10-20-SSN-V280
 
    How this script is organized:
      1. Constants and global state
@@ -2890,8 +3094,8 @@ body.dark .ss-att-provider{color:#EAF3EC;}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-20-SSN-V271";
-const APP_VERSION = "2.7.1";
+const APP_BUILD = "2026-10-20-SSN-V280";
+const APP_VERSION = "2.8.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -2992,6 +3196,10 @@ const state = {
                             // remembered in settings, default full.
                             // Applied as body.rail; at widths of
                             // 900px and under it has no effect.
+  versionsLimit: 10,        // v2.8: how many past versions to keep
+                            // per note (0 turns version history
+                            // off), remembered in settings and
+                            // edited in the Settings modal.
   trashSelection: [],       // v1.8.1: ids of the notes checked in the
                             // Trash view, for Delete Selected
   archiveSelection: [],     // v1.8.1: ids of the notes checked in the
@@ -3359,6 +3567,9 @@ async function signOut() {
   state.archive = [];
   state.index = null;
   state.selectedId = null;
+  /* v2.8: histories and baselines belong to the signed in account;
+     none of them may leak into the next sign in on this device. */
+  clearVersionRuntimeState();
   state.attach.googleExpiresAt = 0;
   state.attach.googleFolderId = null;
   revokeAttachmentUrls();
@@ -3441,6 +3652,17 @@ function loadSettings() {
     state.sidebarRail = true;
     document.body.classList.add("rail");
   }
+  /* v2.8: the versions per note limit. Only a finite stored number
+     is honored, truncated to a whole number and clamped into the
+     0 to 100 range the Settings input offers; anything else (an
+     absent field from an older build, a damaged value) leaves the
+     default of 10 in place, so a bad record can never corrupt the
+     setting. */
+  if (s.versionsLimit !== undefined && s.versionsLimit !== null &&
+      Number.isFinite(Number(s.versionsLimit))) {
+    state.versionsLimit = Math.max(0, Math.min(100,
+      Math.trunc(Number(s.versionsLimit))));
+  }
 }
 
 
@@ -3449,7 +3671,8 @@ function saveSettings() {
     dark: document.body.classList.contains("dark"),
     attach: state.attach,
     listSort: state.listSort,   // v1.8: the remembered notes list sort
-    sidebarRail: state.sidebarRail   // v2.5: the icon rail choice
+    sidebarRail: state.sidebarRail,   // v2.5: the icon rail choice
+    versionsLimit: state.versionsLimit   // v2.8: versions kept per note
   }));
 }
 
@@ -3522,6 +3745,10 @@ function applyCacheSnapshot(c) {
      ignored here. */
   state.archive = c.archive || [];
   state.index = c.index || null;
+  /* v2.8: the loaded objects are the last saved state, so they
+     seed the version history baseline map (see the version
+     history section below). */
+  rememberLastSavedContentForAllNotes();
   return true;
 }
 
@@ -3623,6 +3850,469 @@ function queueOp(op) {
   const queue = loadQueue();
   queue.push(op);
   saveQueue(queue);
+}
+
+/* --------------------------------------------------------------------------
+   v2.8: note version history
+
+   Storage: one JSON file per note at versions/<noteId>.json in the
+   same Drive root as notebooks, trash, archive, and attachments.
+   The normal note file format does not change. Each history file
+   is {noteId, versions:[...]} with the versions newest first; a
+   version entry is {id, createdAt, title, body, tags, attachments}
+   and holds the note's previous saved content, attachment RECORDS
+   included (the binaries themselves are never copied; a restored
+   version points at the same Drive files as before, and a file
+   that was permanently deleted stays missing, exactly like any
+   other dangling attachment record).
+
+   The folder is created lazily by the first history write (the
+   store layer creates parent folders on the way to a file). A
+   missing folder or file is an empty history, not an error. The
+   index rebuild never sees these files: loadAllFromRepo lists
+   only notebooks, trash, and archive, so a top level versions
+   folder is structurally ignored, the same way attachments is.
+
+   Capture: saveNoteToRepoNow compares the note against the last
+   saved content snapshot kept in lastSavedContentByNoteId (the
+   baseline map, populated on every load and after every persisted
+   or queued save). Callers mutate the note object before saving,
+   so the baseline has to live outside the note; without it there
+   would be no reliable "previous saved state" left to snapshot.
+   A note's first save has no baseline and creates no version. A
+   save whose title, body, and tags all match the baseline creates
+   none either, which is why pin, move, archive, trash, and
+   restore operations (which save or move the same content) never
+   create versions by themselves. When a qualifying save lands,
+   the baseline becomes a snapshot, at most one per note per
+   VERSION_COALESCE_MS, and the list is pruned to the configured
+   limit, oldest dropped first. If the history file cannot be
+   loaded safely (damaged JSON, a shape this build cannot trust),
+   the note save still proceeds, but version creation, pruning,
+   and history deletion for that save are skipped rather than
+   risk overwriting or deleting a history that might be intact.
+
+   Offline: when a note save itself is queued, a matching
+   {kind:"version-history"} entry is queued right behind it,
+   carrying the previous snapshot, the content it expects the
+   queued note write to leave behind, the capture time, and the
+   limit in force. flushQueue applies those entries in order,
+   after the note write they belong to, and an entry whose
+   expected content is not what the note write left behind (the
+   write became a conflict copy, for example) is skipped. When a
+   history write itself fails with an offline or expired sign in
+   error after its note save already landed, the same kind of
+   entry is queued as a replay, so the update is durable rather
+   than silently dropped.
+   -------------------------------------------------------------------------- */
+const VERSIONS_FOLDER_NAME = "versions";
+const VERSION_COALESCE_MS = 10 * 60 * 1000;
+const versionHistoryCache = Object.create(null);
+const lastSavedContentByNoteId = Object.create(null);
+const versionHistoryPruneNeeded = new Set();
+let versionHistoryOpenNoteId = null;
+let versionHistoryPreviewVersionId = null;
+
+/* The configured versions per note limit, normalized: a whole
+   number from 0 to 100, with the default 10 for anything that is
+   not a finite number. state.versionsLimit is kept normalized by
+   loadSettings and by the Settings input; this helper is the
+   belt and suspenders every consumer reads through. */
+function currentVersionsLimit() {
+  const n = Number(state.versionsLimit);
+  if (!Number.isFinite(n)) { return 10; }
+  return Math.max(0, Math.min(100, Math.trunc(n)));
+}
+function versionsLimitValue(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) { return currentVersionsLimit(); }
+  return Math.max(0, Math.min(100, Math.trunc(n)));
+}
+
+function versionHistoryPath(noteId) {
+  return VERSIONS_FOLDER_NAME + "/" + noteId + ".json";
+}
+
+/* Deep clone for the plain JSON shaped values history deals in
+   (strings, arrays, and the flat attachment records). */
+function cloneVersionValue(value) {
+  if (value === undefined) { return undefined; }
+  return JSON.parse(JSON.stringify(value));
+}
+
+/* The content snapshot of one note: exactly the fields a version
+   preserves. Attachments are sanitized and cloned, so a snapshot
+   can never be mutated by later work on the note object. */
+function noteContentSnapshot(note) {
+  if (!note) { return null; }
+  return {
+    title: String(note.title || ""),
+    body: String(note.body || ""),
+    tags: (Array.isArray(note.tags) ? note.tags : [])
+      .map(function (t) { return String(t); }),
+    attachments: sanitizeAttachments(cloneVersionValue(note.attachments || []))
+  };
+}
+
+function rememberLastSavedContent(note) {
+  const snapshot = noteContentSnapshot(note);
+  if (snapshot) { lastSavedContentByNoteId[note.id] = snapshot; }
+}
+function rememberLastSavedSnapshot(noteId, snapshot) {
+  if (noteId && snapshot) {
+    lastSavedContentByNoteId[noteId] = cloneVersionValue(snapshot);
+  }
+}
+function forgetLastSavedContent(noteId) {
+  delete lastSavedContentByNoteId[noteId];
+}
+/* Rebuild the baseline map from the three note lists. Called
+   after every load (cache or store), because the loaded objects
+   ARE the last saved state at that moment. */
+function rememberLastSavedContentForAllNotes() {
+  Object.keys(lastSavedContentByNoteId).forEach(function (id) {
+    delete lastSavedContentByNoteId[id];
+  });
+  [state.notes, state.trash, state.archive].forEach(function (list) {
+    (list || []).forEach(function (note) { rememberLastSavedContent(note); });
+  });
+}
+function clearVersionHistoryCache() {
+  Object.keys(versionHistoryCache).forEach(function (id) {
+    delete versionHistoryCache[id];
+  });
+}
+/* Sign out drops every in memory history record and baseline, so
+   a different Google account on the same browser can never be
+   handed the previous account's histories. */
+function clearVersionRuntimeState() {
+  clearVersionHistoryCache();
+  Object.keys(lastSavedContentByNoteId).forEach(function (id) {
+    delete lastSavedContentByNoteId[id];
+  });
+  versionHistoryPruneNeeded.clear();
+  versionHistoryOpenNoteId = null;
+  versionHistoryPreviewVersionId = null;
+}
+
+/* Full snapshot equality (title, body, tags, and the attachment
+   records). Restore uses this for its already current test. */
+function versionContentEqual(a, b) {
+  if (!a || !b) { return false; }
+  return a.title === b.title && a.body === b.body &&
+    JSON.stringify(a.tags || []) === JSON.stringify(b.tags || []) &&
+    JSON.stringify(a.attachments || []) ===
+      JSON.stringify(b.attachments || []);
+}
+/* The capture gate's equality: content means title, body, or
+   tags, per the feature's rules. Attachment records travel with
+   a snapshot but do not by themselves qualify a save. */
+function versionTextContentEqual(a, b) {
+  if (!a || !b) { return false; }
+  return a.title === b.title && a.body === b.body &&
+    JSON.stringify(a.tags || []) === JSON.stringify(b.tags || []);
+}
+
+function versionHistoryLoadError(message) {
+  const err = new Error(message);
+  err.code = "VERSION_HISTORY_UNSAFE";
+  return err;
+}
+function isVersionHistoryUnsafeError(err) {
+  return !!err && (err.code === "VERSION_HISTORY_UNSAFE" ||
+    err instanceof SyntaxError);
+}
+
+/* Validate and normalize one stored version entry. Anything this
+   build cannot trust makes the whole history unsafe (the caller
+   then leaves the stored bytes untouched), rather than silently
+   dropping entries the user may still need. */
+function normalizeVersionEntry(raw) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    throw versionHistoryLoadError("A stored version entry is not an object.");
+  }
+  if (typeof raw.id !== "string" || !raw.id) {
+    throw versionHistoryLoadError("A stored version entry has no id.");
+  }
+  if (typeof raw.createdAt !== "string" ||
+      isNaN(new Date(raw.createdAt).getTime())) {
+    throw versionHistoryLoadError("A stored version entry has no valid date.");
+  }
+  if (typeof raw.title !== "string" || typeof raw.body !== "string" ||
+      !Array.isArray(raw.tags) || !Array.isArray(raw.attachments)) {
+    throw versionHistoryLoadError("A stored version entry is incomplete.");
+  }
+  return {
+    id: raw.id,
+    createdAt: raw.createdAt,
+    title: raw.title,
+    body: raw.body,
+    tags: raw.tags.map(function (t) { return String(t); }),
+    attachments: sanitizeAttachments(cloneVersionValue(raw.attachments))
+  };
+}
+function normalizeVersionHistoryData(noteId, parsed) {
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed) ||
+      parsed.noteId !== noteId || !Array.isArray(parsed.versions)) {
+    throw versionHistoryLoadError("The stored version history has an unexpected shape.");
+  }
+  const versions = parsed.versions.map(function (raw) {
+    return normalizeVersionEntry(raw);
+  });
+  versions.sort(function (a, b) {
+    return new Date(b.createdAt) - new Date(a.createdAt);
+  });
+  return { noteId: noteId, versions: versions };
+}
+
+/* Load one note's history through the store layer. The result is
+   a record: {ok:true, existed, token, data} for a history that is
+   safe to use (a missing folder or file is existed:false with an
+   empty list), or {ok:false, error} when the stored history
+   exists but could not be loaded safely, or the store could not
+   be reached. Successful loads and unsafe loads are cached by
+   note id; transient store failures are not cached, so a later
+   save can try again. */
+async function loadVersionHistory(noteId) {
+  const cached = versionHistoryCache[noteId];
+  if (cached) { return cached; }
+  let record;
+  try {
+    const file = await storeGetFile(versionHistoryPath(noteId));
+    if (!file) {
+      record = {
+        ok: true, existed: false, token: null,
+        data: { noteId: noteId, versions: [] }
+      };
+    } else {
+      record = {
+        ok: true, existed: true, token: file.token || null,
+        data: normalizeVersionHistoryData(noteId, JSON.parse(file.text))
+      };
+    }
+  } catch (err) {
+    record = { ok: false, existed: null, token: null, data: null, error: err };
+    if (isVersionHistoryUnsafeError(err)) {
+      versionHistoryCache[noteId] = record;
+    }
+    return record;
+  }
+  versionHistoryCache[noteId] = record;
+  return record;
+}
+
+/* Queue one history maintenance entry (see the block comment at
+   the top of this section for the offline design). */
+function queueVersionHistoryMaintenance(noteId, path, previous, expectedContent, options) {
+  options = options || {};
+  queueOp({
+    kind: "version-history",
+    noteId: noteId,
+    notePath: path || null,
+    previous: previous ? cloneVersionValue(previous) : null,
+    expectedContent: expectedContent ? cloneVersionValue(expectedContent) : null,
+    verifyExpected: !!options.verifyExpected,
+    forceSnapshot: !!options.forceSnapshot,
+    capturedAt: new Date(options.nowMs || Date.now()).toISOString(),
+    limit: versionsLimitValue(options.limit)
+  });
+}
+
+/* Write one history file and refresh the cache record with the
+   token the store returned. */
+async function writeVersionHistoryData(noteId, data, expectedToken) {
+  const token = await storePutFile(versionHistoryPath(noteId),
+    JSON.stringify(data, null, 2), expectedToken || null,
+    "Update version history for note " + noteId);
+  versionHistoryCache[noteId] = {
+    ok: true, existed: true, token: token || null,
+    data: cloneVersionValue(data)
+  };
+  return token;
+}
+
+/* Delete the history file a safe load described. Used by the
+   limit 0 maintenance path, which has already proven the stored
+   history readable. */
+async function deleteLoadedVersionHistory(noteId, loaded) {
+  if (loaded && loaded.existed) {
+    await storeDeleteFile(versionHistoryPath(noteId), loaded.token || null,
+      "Remove version history for note " + noteId);
+  }
+  versionHistoryCache[noteId] = {
+    ok: true, existed: false, token: null,
+    data: { noteId: noteId, versions: [] }
+  };
+}
+
+/* Best effort history deletion for Delete Forever. Deliberately
+   independent of the load cache: permanent deletion of a note
+   always tries to remove its history file, and any failure is
+   reported only through the return value, never by blocking the
+   note's own deletion. */
+async function deleteVersionHistoryBestEffort(noteId) {
+  try {
+    const file = await storeGetFile(versionHistoryPath(noteId));
+    if (file) {
+      await storeDeleteFile(versionHistoryPath(noteId), file.token,
+        "Delete version history with note " + noteId);
+    }
+    delete versionHistoryCache[noteId];
+    return true;
+  } catch (err) {
+    return false;
+  }
+}
+
+/* The one history maintenance pass. Given the previous saved
+   snapshot and the facts of the save that just landed (or, from
+   the queue, the facts of the save that is being flushed), it:
+     - does nothing at all when the stored history cannot be
+       loaded safely (status "skipped-load");
+     - with a limit of 0, removes the stored history file
+       (status "deleted") and offers no snapshots;
+     - adds the previous snapshot when the caller says the save
+       changed content (or forces it, for a restore), unless the
+       newest snapshot is younger than the coalescing window;
+     - prunes to the limit in force, dropping the oldest entries,
+       which is also how a lowered limit takes effect on the next
+       maintenance for a note, even when coalescing prevented a
+       new snapshot;
+     - writes the file only when something actually changed.
+   A write that fails because the sign in expired or the network
+   dropped is queued as a replay entry (unless the caller forbids
+   deferral, as the queue flush does) and the cache is updated
+   optimistically, so the History view shows the state the queue
+   will land. A write conflict marks the cached history unsafe,
+   so later saves skip rather than overwrite. */
+async function maintainVersionHistory(noteId, previous, options) {
+  options = options || {};
+  if (!previous && !options.pruneOnly) { return { status: "no-previous" }; }
+  const limit = versionsLimitValue(options.limit);
+  const loaded = await loadVersionHistory(noteId);
+  if (!loaded.ok) { return { status: "skipped-load", error: loaded.error }; }
+  const nowMs = Number.isFinite(options.nowMs) ? options.nowMs : Date.now();
+
+  if (limit === 0) {
+    if (!loaded.existed && loaded.data.versions.length === 0) {
+      return { status: "empty", data: cloneVersionValue(loaded.data) };
+    }
+    try {
+      await deleteLoadedVersionHistory(noteId, loaded);
+      return { status: "deleted" };
+    } catch (err) {
+      if ((err.offline || err.needsGoogleReconnect) &&
+          options.allowDefer !== false) {
+        queueVersionHistoryMaintenance(noteId, options.notePath || null,
+          null, null, { limit: 0, nowMs: nowMs });
+        versionHistoryCache[noteId] = {
+          ok: true, existed: false, token: null,
+          data: { noteId: noteId, versions: [] }
+        };
+        return { status: "queued" };
+      }
+      return { status: "delete-failed", error: err };
+    }
+  }
+
+  const versions = loaded.data.versions.map(function (entry) {
+    return cloneVersionValue(entry);
+  });
+  let changed = false;
+  if ((options.forceSnapshot || options.contentChanged) && previous) {
+    const newest = versions[0] || null;
+    const newestMs = newest ? new Date(newest.createdAt).getTime() : NaN;
+    if (options.forceSnapshot || !newest || isNaN(newestMs) ||
+        nowMs - newestMs >= VERSION_COALESCE_MS) {
+      versions.unshift({
+        id: "v" + nowMs.toString(36) + "-" +
+          Math.random().toString(36).slice(2, 8),
+        createdAt: new Date(nowMs).toISOString(),
+        title: previous.title,
+        body: previous.body,
+        tags: previous.tags.slice(),
+        attachments: cloneVersionValue(previous.attachments)
+      });
+      changed = true;
+    }
+  }
+  if (versions.length > limit) {
+    versions.length = limit;
+    changed = true;
+  }
+  if (!changed) {
+    return { status: "unchanged", data: cloneVersionValue(loaded.data) };
+  }
+  const data = { noteId: noteId, versions: versions };
+  try {
+    await writeVersionHistoryData(noteId, data, loaded.token);
+    return { status: "saved", data: cloneVersionValue(data) };
+  } catch (err) {
+    if (isStoreConflict(err)) {
+      versionHistoryCache[noteId] = {
+        ok: false, existed: loaded.existed, token: null, data: null, error: err
+      };
+      return { status: "skipped-conflict", error: err };
+    }
+    if ((err.offline || err.needsGoogleReconnect || !state.online) &&
+        options.allowDefer !== false) {
+      queueVersionHistoryMaintenance(noteId, options.notePath || null,
+        previous, null, {
+          forceSnapshot: !!options.forceSnapshot,
+          limit: limit, nowMs: nowMs
+        });
+      versionHistoryCache[noteId] = {
+        ok: true, existed: loaded.existed, token: null,
+        data: cloneVersionValue(data)
+      };
+      return { status: "queued", data: cloneVersionValue(data) };
+    }
+    return { status: "write-failed", error: err };
+  }
+}
+
+/* Apply one queued version-history entry during flushQueue. Runs
+   after the note write it belongs to (queue order), verifies the
+   note file that write left behind when the entry asks it to,
+   and reports through its return value: unsafe stored histories
+   and vanished expectations are a clean skip (the entry is
+   consumed), while a store failure throws, so flushQueue keeps
+   the entry and everything behind it for the next flush. */
+async function flushVersionHistoryOp(op) {
+  if (!op || !op.noteId) { return { status: "skipped-invalid" }; }
+  if (versionsLimitValue(op.limit) !== 0 && !op.previous) {
+    return { status: "skipped-invalid" };
+  }
+  if (op.verifyExpected) {
+    if (!op.notePath || !op.expectedContent) {
+      return { status: "skipped-unverifiable" };
+    }
+    const file = await storeGetFile(op.notePath);
+    if (!file) { return { status: "skipped-missing-note" }; }
+    const parsed = parseNoteFile(file.text, file.token, op.noteId, false);
+    if (!versionContentEqual(noteContentSnapshot(parsed), op.expectedContent)) {
+      return { status: "skipped-content-moved-on" };
+    }
+  }
+  const result = await maintainVersionHistory(op.noteId, op.previous, {
+    contentChanged: true,
+    forceSnapshot: !!op.forceSnapshot,
+    pruneOnly: !op.previous,
+    limit: op.limit,
+    nowMs: new Date(op.capturedAt).getTime() || Date.now(),
+    notePath: op.notePath,
+    allowDefer: false
+  });
+  if (result.status === "skipped-load") {
+    if (isVersionHistoryUnsafeError(result.error)) { return result; }
+    throw result.error || versionHistoryLoadError(
+      "The version history could not be loaded during sync.");
+  }
+  if (result.status === "write-failed" || result.status === "delete-failed" ||
+      result.status === "skipped-conflict") {
+    throw result.error || new Error("The version history update failed during sync.");
+  }
+  return result;
 }
 
 /* --------------------------------------------------------------------------
@@ -4102,6 +4792,12 @@ async function loadAllFromRepo() {
   state.notes = notes;
   state.trash = trash;
   state.archive = archive;
+  /* v2.8: a fresh load is the last saved state, so it reseeds the
+     version baselines; cached histories are dropped too, because
+     another device may have written or pruned them since this
+     device last read them. */
+  rememberLastSavedContentForAllNotes();
+  clearVersionHistoryCache();
   saveCache();
   /* v1.2: one readable warning if any note file carried attachment
      metadata that could not be parsed. Those notes still loaded; they
@@ -4230,12 +4926,39 @@ function saveNoteToRepo(note, options) {
    saveNoteToRepo. */
 async function saveNoteToRepoNow(note, options) {
   options = options || {};
+  /* v2.8: capture the version history facts BEFORE anything in
+     this save can move them. previousSavedContent is the note's
+     last saved state, held in the baseline map precisely because
+     callers have already mutated the note object by the time this
+     runs; candidateContent is the state this save is about to make
+     current. History maintenance runs only after the note write
+     itself has landed (or been durably queued), inside this same
+     per note chain step, so a version is never written for a save
+     that failed, and never ahead of the save it belongs to.
+     options.suppressVersionCapture is the restore flow's flag: it
+     has already preserved the pre restore state itself. */
+  const previousSavedContent = lastSavedContentByNoteId[note.id]
+    ? cloneVersionValue(lastSavedContentByNoteId[note.id]) : null;
+  const candidateContent = noteContentSnapshot(note);
+  const versionContentChanged = !!previousSavedContent &&
+    !versionTextContentEqual(previousSavedContent, candidateContent);
+  const suppressVersionCapture = !!options.suppressVersionCapture;
   note.updated = new Date().toISOString();
   const path = notePath(note);
   const text = serializeNote(note);
 
   if (!state.online) {
     queueOp({ kind: "put", path: path, content: text, noteId: note.id });
+    /* v2.8: the matching history entry queues immediately behind
+       the note write it belongs to (see flushVersionHistoryOp). A
+       first save has no previous state and queues nothing. */
+    if (!suppressVersionCapture && previousSavedContent &&
+        (versionContentChanged || versionHistoryPruneNeeded.has(note.id))) {
+      queueVersionHistoryMaintenance(note.id, path, previousSavedContent,
+        candidateContent, { verifyExpected: true });
+      versionHistoryPruneNeeded.delete(note.id);
+    }
+    rememberLastSavedSnapshot(note.id, candidateContent);
     saveCache();
     return { queued: true };
   }
@@ -4259,8 +4982,40 @@ async function saveNoteToRepoNow(note, options) {
       (shaToUse ? "Update note " : "Create note ") + note.id,
       { fresh: !!options.fresh });
     note.sha = newSha;
+    /* v2.8: the note write landed, so its history maintenance may
+       run. It runs when this save changed content, when a lowered
+       limit is waiting to prune this note, or when the note's
+       history is already loaded in this session (which keeps a
+       lowered limit's pruning timely without reading Drive on
+       every unchanged save). Maintenance is fail soft by design:
+       a history that cannot be loaded safely is left untouched,
+       and the note save still stands. */
+    let versionStatus = null;
+    if (!suppressVersionCapture && previousSavedContent &&
+        (versionContentChanged || versionHistoryPruneNeeded.has(note.id) ||
+         versionHistoryCache[note.id])) {
+      const versionResult = await maintainVersionHistory(note.id,
+        previousSavedContent, {
+          contentChanged: versionContentChanged,
+          notePath: path
+        });
+      versionStatus = versionResult.status;
+      if (versionStatus !== "skipped-load" &&
+          versionStatus !== "write-failed" &&
+          versionStatus !== "delete-failed") {
+        versionHistoryPruneNeeded.delete(note.id);
+      }
+      if (versionStatus === "skipped-load" ||
+          versionStatus === "write-failed" ||
+          versionStatus === "delete-failed" ||
+          versionStatus === "skipped-conflict") {
+        console.warn("Version history was not updated for note " +
+          note.id + " (" + versionStatus + ").");
+      }
+    }
+    rememberLastSavedSnapshot(note.id, candidateContent);
     saveCache();
-    return { saved: true };
+    return { saved: true, versionStatus: versionStatus };
   } catch (err) {
     if (isStoreConflict(err) || err.status === 409 || err.status === 422) {
       return await saveConflictCopy(note, path);
@@ -4270,14 +5025,30 @@ async function saveNoteToRepoNow(note, options) {
          complete note text joins the same offline queue used for network
          outages, and flushQueue retries it after the next sign in. */
       queueOp({ kind: "put", path: path, content: text, noteId: note.id });
+      /* v2.8: the history entry for this queued save queues behind
+         it, exactly as in the offline branch below. */
+      if (!suppressVersionCapture && previousSavedContent &&
+          (versionContentChanged || versionHistoryPruneNeeded.has(note.id))) {
+        queueVersionHistoryMaintenance(note.id, path, previousSavedContent,
+          candidateContent, { verifyExpected: true });
+        versionHistoryPruneNeeded.delete(note.id);
+      }
+      rememberLastSavedSnapshot(note.id, candidateContent);
       saveCache();
       toast("Your Google sign in expired. This edit was saved in the sync " +
-        "queue. Use Refresh connection in the sidebar menu to reconnect, " +
+        "queue. Use Refresh connection in Settings to reconnect, " +
         "then use Sync now if it does not sync on its own.", true);
       return { queued: true, googleReconnect: true };
     }
     if (err.offline || !state.online) {
       queueOp({ kind: "put", path: path, content: text, noteId: note.id });
+      if (!suppressVersionCapture && previousSavedContent &&
+          (versionContentChanged || versionHistoryPruneNeeded.has(note.id))) {
+        queueVersionHistoryMaintenance(note.id, path, previousSavedContent,
+          candidateContent, { verifyExpected: true });
+        versionHistoryPruneNeeded.delete(note.id);
+      }
+      rememberLastSavedSnapshot(note.id, candidateContent);
       saveCache();
       return { queued: true };
     }
@@ -4309,6 +5080,10 @@ async function saveConflictCopy(note, originalPath) {
   const copyPath = "notebooks/" + copy.notebook + "/" + copy.id + ".md";
   copy.sha = await storePutFile(copyPath, serializeNote(copy), null,
     "Save conflict copy of " + note.id);
+  /* v2.8: the copy's content is now its last saved state. The
+     original note keeps its own baseline: its stored content was
+     not replaced by this save, so no version is captured for it. */
+  rememberLastSavedContent(copy);
   state.notes.push(copy);
   saveCache();
   renderAll();
@@ -4361,6 +5136,12 @@ async function flushQueue() {
           parsed.sha = await storePutFile(
             "notebooks/" + parsed.notebook + "/" + parsed.id + ".md",
             serializeNote(parsed), null, "Save queued conflict copy");
+          /* v2.8: the queued conflict copy is a saved note in its
+             own right, so it gets a baseline; the original note's
+             version entry in this queue (if any) will find that
+             its expected content never landed on the original and
+             skip itself. */
+          rememberLastSavedContent(parsed);
           state.notes.push(parsed);
           showConflictBanner("A note edited offline changed on " +
             storageDisplayName() + " too. Your offline version was kept as \"" +
@@ -4373,6 +5154,15 @@ async function flushQueue() {
             localNote.sha = newSha;
           }
         }
+      } else if (op.kind === "version-history") {
+        /* v2.8: a queued history maintenance entry, written right
+           behind the note save it belongs to. flushVersionHistoryOp
+           decides whether it still applies (its expected content
+           check is what keeps a note write that became a conflict
+           copy from capturing a version for the original note);
+           a clean skip consumes the entry, a store failure throws
+           and keeps it, in the usual flush way. */
+        await flushVersionHistoryOp(op);
       } else if (op.kind === "delete") {
         const existing = await storeGetFile(op.path);
         if (existing) {
@@ -4705,18 +5495,38 @@ function deleteNoteForever(note) {
   if (state.selectedId === note.id) { state.selectedId = null; }
   if (!online) {
     queueOp({ kind: "delete", path: path, noteId: note.id });
+    /* v2.8: the note's version history is deleted with it. Offline
+       that is a second queued delete, right behind the note's own,
+       so the flush removes the history in the same pass. */
+    queueOp({ kind: "delete", path: versionHistoryPath(note.id), noteId: note.id });
+    forgetLastSavedContent(note.id);
+    delete versionHistoryCache[note.id];
+    versionHistoryPruneNeeded.delete(note.id);
   }
   saveCache();
   renderAll();
   if (!online) { return Promise.resolve(); }
   return chainNoteOp(note, async function () {
+    let noteError = null;
     try {
       const file = note.sha ? { token: note.sha } : await storeGetFile(path);
       if (file && file.token) {
         await storeDeleteFile(path, file.token, "Delete note forever");
       }
     } catch (err) {
-      toast("Delete failed on " + storageDisplayName() + ": " + err.message, true);
+      noteError = err;
+    }
+    /* v2.8: the history file goes too, best effort and independent
+       of the note delete above: its own failure never blocks or
+       masks the note deletion. This is the one central path, so
+       the single Delete Forever button, Delete Selected, and
+       Empty Trash (all of which run through deleteNotesForever
+       into here) all clean up history the same way. */
+    await deleteVersionHistoryBestEffort(note.id);
+    forgetLastSavedContent(note.id);
+    versionHistoryPruneNeeded.delete(note.id);
+    if (noteError) {
+      toast("Delete failed on " + storageDisplayName() + ": " + noteError.message, true);
     }
   });
 }
@@ -4847,6 +5657,10 @@ async function seedInitialStore() {
   welcome.sha = await storePutFile(notePath(welcome), serializeNote(welcome),
     null, "Create welcome note", { fresh: true });
   state.notes = [welcome];
+  /* v2.8: the seeded note was written directly, not through
+     saveNoteToRepo, so record its baseline here: its first later
+     edit can then snapshot this original state. */
+  rememberLastSavedContent(welcome);
   await saveIndex();
   /* v1.4.4: saveIndex() only schedules the coalesced index write now.
      Seeding must not return until the seeded index is physically on
@@ -5171,10 +5985,10 @@ function renderSidebar() {
   }
   /* v2.7: the theme and sign out controls live in the sidebar
      footer's three dot menu now, not in standalone buttons whose
-     labels this function used to maintain. The Dark mode item's
-     check mark is refreshed each time the menu opens (see
-     refreshSidebarThemeCheck), and Sign out is a static label in
-     the markup. (v2.0's rule stands behind the item: it is Sign
+     labels this function used to maintain. v2.8: Dark mode moved
+     on into the Settings modal's segmented control (kept in step
+     by syncSettingsThemeControls), and Sign out is a static label
+     in the markup. (v2.0's rule stands behind the item: it is Sign
      out for everyone; there is no lock screen and no app
      password anymore.) */
   /* v2.5: the icon rail's chrome (toggle label, active marks,
@@ -5187,10 +6001,13 @@ function renderSidebar() {
    The rail is the sidebar's collapsed second form, a separate
    strip (#sidebarRail) the CSS swaps in for #sidebar at desktop
    widths when body.rail is set; the setting persists in settings
-   (state.sidebarRail). The leaf buttons own no logic: their
+   (state.sidebarRail). Most leaf buttons own no logic: their
    handlers click the full sidebar's counterparts, so New Note,
-   the views, Refresh connection, theme, and Sign out each keep
-   exactly one implementation. The Notebooks button is the one
+   the views, and Sign out each keep exactly one implementation.
+   v2.8: the refresh and theme buttons are the exceptions by
+   necessity (their counterparts moved into the Settings modal),
+   and they call the shared refreshGoogleConnection and
+   toggleTheme functions directly instead. The Notebooks button is the one
    container: it opens the flyout, whose rows are built here in
    the same pass as the sidebar's notebook rows and navigate the
    same way they do. The flyout closes on a grace timer once the
@@ -5358,7 +6175,8 @@ function setMaximized(on) {
    Escape always deals with the innermost thing first. */
 function anyOverlayOpen() {
   if (noteDrag) { return true; }
-  const ids = ["noteLinkModal", "nbDropOverlay", "notebookMenu",
+  const ids = ["noteLinkModal", "settingsModal", "versionHistoryModal",
+    "nbDropOverlay", "notebookMenu",
     "railFlyout", "linkPopup", "tableMenu", "cellMenu", "attMenu",
     "exportMenu", "sidebarMenu"];
   for (let i = 0; i < ids.length; i++) {
@@ -6286,31 +7104,21 @@ function toggleNotebookMenu() {
    Chris's layout: the Synced pill row carries one menu button at
    its right end, the save status sits on its own line under the
    row, and the actions that were standalone footer buttons
-   through v2.6.0 (Refresh connection, Install app, Dark mode,
-   Collapse sidebar, Sign out) live in this menu. The menu opens
-   upward from the button and follows the notebook menu's
-   patterns: the button toggles it, clicks inside it do not
-   propagate, a document click outside the footer closes it,
-   Escape closes it, and choosing an item closes it (each item's
-   own handler, wired in wireEvents and in the PWA block, does
-   the closing). Opening it refreshes the Dark mode check mark,
-   so the active theme is visible, never silently remembered.
-   The items are wired to the very handlers the buttons ran;
-   nothing about those flows changed.
+   through v2.6.0 live in this menu. The menu opens upward from
+   the button and follows the notebook menu's patterns: the
+   button toggles it, clicks inside it do not propagate, a
+   document click outside the footer closes it, Escape closes
+   it, and choosing an item closes it (each item's own handler,
+   wired in wireEvents and in the PWA block, does the closing).
+   v2.8: Refresh connection and Dark mode left this menu for the
+   Settings modal (see the v2.8 block below); the menu now holds
+   Sync now, Install app, Settings, Collapse sidebar, and
+   Sign out.
    -------------------------------------------------------------------------- */
-function refreshSidebarThemeCheck() {
-  const check = document.getElementById("sidebarThemeCheck");
-  if (check) {
-    check.textContent =
-      document.body.classList.contains("dark") ? "✓" : "";
-  }
-}
-
 function openSidebarMenu() {
   const menu = document.getElementById("sidebarMenu");
   const btn = document.getElementById("sidebarMenuBtn");
   if (!menu) { return; }
-  refreshSidebarThemeCheck();
   menu.classList.remove("hidden");
   if (btn) { btn.setAttribute("aria-expanded", "true"); }
 }
@@ -6327,6 +7135,505 @@ function toggleSidebarMenu() {
   if (!menu) { return; }
   if (menu.classList.contains("hidden")) { openSidebarMenu(); }
   else { closeSidebarMenu(); }
+}
+
+/* --------------------------------------------------------------------------
+   v2.8: the Settings modal and the shared theme control
+
+   The modal (settingsModal in the markup) is organized as headed
+   sections so future settings can be added as another section
+   without redesigning it. v2.8 ships three: Appearance (the
+   Light and Dark segmented control), Connection (Refresh
+   connection), and Note history (the versions per note limit).
+
+   Theme has exactly one writer, setTheme, and every surface
+   goes through it: the Settings segmented control sets a side,
+   the icon rail's theme button toggles through toggleTheme, and
+   the choice persists through saveSettings like it always has.
+   (Through v2.7 the sidebar menu's Dark mode item toggled the
+   body class inline; that item is gone, and this shared pair is
+   what replaced it, which is also what lets the rail keep a
+   direct theme button now that there is no menu item for it to
+   click through to.) The segmented control's selected side is
+   refreshed from the body class on every sync, so the active
+   choice is always the visibly filled, aria-pressed side.
+   -------------------------------------------------------------------------- */
+function syncSettingsThemeControls() {
+  const dark = document.body.classList.contains("dark");
+  const lightBtn = document.getElementById("settingsThemeLightBtn");
+  const darkBtn = document.getElementById("settingsThemeDarkBtn");
+  if (lightBtn) { lightBtn.setAttribute("aria-pressed", dark ? "false" : "true"); }
+  if (darkBtn) { darkBtn.setAttribute("aria-pressed", dark ? "true" : "false"); }
+}
+
+function setTheme(dark) {
+  document.body.classList.toggle("dark", !!dark);
+  saveSettings();
+  syncSettingsThemeControls();
+  /* renderSidebar ends in renderRailChrome, which keeps the rail
+     theme button's tooltip (Dark mode or Light mode) in step. */
+  renderSidebar();
+}
+
+function toggleTheme() {
+  setTheme(!document.body.classList.contains("dark"));
+}
+
+/* The saved feedback line under the versions input. One writer,
+   used when the modal opens (where it reports the setting in
+   force) and whenever the input is applied (where it confirms
+   the save, or explains a rejected value). */
+function setVersionsFeedback(text) {
+  const el = document.getElementById("settingsVersionsFeedback");
+  if (el) { el.textContent = text; }
+}
+function versionsLimitFeedback(limit) {
+  if (limit === 0) { return "Version history is off."; }
+  return "SnakeScale keeps up to " + limit + " version" +
+    (limit === 1 ? "" : "s") + " per note.";
+}
+
+/* Push every control in the modal to the state it controls.
+   Called on every open, so the modal never shows a stale theme
+   or a stale limit. */
+function syncSettingsControls() {
+  syncSettingsThemeControls();
+  const input = document.getElementById("settingsVersionsInput");
+  if (input) { input.value = String(currentVersionsLimit()); }
+  setVersionsFeedback(versionsLimitFeedback(currentVersionsLimit()));
+}
+
+function openSettingsModal() {
+  closeSidebarMenu();
+  syncSettingsControls();
+  const modal = document.getElementById("settingsModal");
+  if (modal) { modal.classList.remove("hidden"); }
+  const closeBtn = document.getElementById("settingsCloseBtn");
+  if (closeBtn) { closeBtn.focus(); }
+}
+
+function closeSettingsModal() {
+  const modal = document.getElementById("settingsModal");
+  if (modal) { modal.classList.add("hidden"); }
+}
+
+/* The versions input's change handler. A valid value is a whole
+   number, truncated and clamped into 0 to 100 (so 150 saves as
+   100 and a negative saves as 0), persisted at once, and
+   confirmed in the feedback line. A blank or non numeric value
+   never reaches the settings: the input is restored to the
+   saved value and the feedback says why. Lowering the limit
+   registers every loaded note for pruning at its next history
+   maintenance (see versionHistoryPruneNeeded in the version
+   history section); nothing crawls Drive from here. */
+function applyVersionsLimitFromInput() {
+  const input = document.getElementById("settingsVersionsInput");
+  if (!input) { return; }
+  const raw = String(input.value || "").trim();
+  const parsed = raw === "" ? NaN : Number(raw);
+  if (!Number.isFinite(parsed)) {
+    input.value = String(currentVersionsLimit());
+    setVersionsFeedback("That was not a whole number from 0 to 100, " +
+      "so the saved setting was restored.");
+    return;
+  }
+  const previousLimit = currentVersionsLimit();
+  const nextLimit = Math.max(0, Math.min(100, Math.trunc(parsed)));
+  state.versionsLimit = nextLimit;
+  input.value = String(nextLimit);
+  saveSettings();
+  if (nextLimit < previousLimit) {
+    [state.notes, state.trash, state.archive].forEach(function (list) {
+      (list || []).forEach(function (note) {
+        versionHistoryPruneNeeded.add(note.id);
+      });
+    });
+  }
+  setVersionsFeedback("Saved. " + versionsLimitFeedback(nextLimit));
+}
+
+/* --------------------------------------------------------------------------
+   v2.8: the note History modal
+
+   versionHistoryOpenNoteId names the note the modal is showing;
+   it is captured at open time, so a background render can never
+   quietly retarget the list at another note. The list renders
+   from loadVersionHistory (the same safe load the save path
+   uses): a damaged history shows an explanation and is left
+   untouched, and with the setting at 0 the modal says history
+   is off and offers no Restore (a restore preserves the current
+   note as a version first, which a limit of 0 forbids).
+   -------------------------------------------------------------------------- */
+function versionHistoryNote() {
+  if (!versionHistoryOpenNoteId) { return null; }
+  return findNoteById(versionHistoryOpenNoteId);
+}
+
+function versionDateLabel(iso) {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) { return String(iso || "Unknown date"); }
+  return d.toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
+}
+
+function versionExcerpt(entry) {
+  const text = htmlToText(entry.body || "");
+  if (!text) { return "No body text."; }
+  return text.length > 140 ? text.slice(0, 137) + "..." : text;
+}
+
+/* The content the editor currently shows for one note, read
+   without mutating the note object. Restore compares it against
+   the note object to learn whether there are unsaved edits to
+   establish first; it mirrors collectEditor field for field. */
+function editorContentSnapshot(note) {
+  return {
+    title: document.getElementById("noteTitle").value.trim() || "Untitled note",
+    tags: document.getElementById("noteTags").value
+      .split(",")
+      .map(function (t) { return t.trim(); })
+      .filter(function (t) { return t.length > 0; }),
+    body: canonicalizeAttachmentPlaceholders(
+      document.getElementById("noteBody").innerHTML),
+    attachments: sanitizeAttachments(cloneVersionValue(note.attachments || []))
+  };
+}
+
+async function openVersionHistory() {
+  const note = currentNote();
+  if (!note) {
+    toast("Open a note first to see its history.", true);
+    return;
+  }
+  const exportMenu = document.getElementById("exportMenu");
+  if (exportMenu) { exportMenu.classList.add("hidden"); }
+  versionHistoryOpenNoteId = note.id;
+  versionHistoryPreviewVersionId = null;
+  const preview = document.getElementById("versionHistoryPreview");
+  if (preview) { preview.innerHTML = ""; preview.classList.add("hidden"); }
+  const list = document.getElementById("versionHistoryList");
+  if (list) {
+    list.innerHTML = "";
+    const loading = document.createElement("div");
+    loading.className = "version-empty";
+    loading.textContent = "Loading history...";
+    list.appendChild(loading);
+  }
+  const modal = document.getElementById("versionHistoryModal");
+  if (modal) { modal.classList.remove("hidden"); }
+  const closeBtn = document.getElementById("versionHistoryCloseBtn");
+  if (closeBtn) { closeBtn.focus(); }
+  await renderVersionHistory();
+}
+
+function closeVersionHistory() {
+  const modal = document.getElementById("versionHistoryModal");
+  if (modal) { modal.classList.add("hidden"); }
+  versionHistoryOpenNoteId = null;
+  versionHistoryPreviewVersionId = null;
+  const preview = document.getElementById("versionHistoryPreview");
+  if (preview) { preview.innerHTML = ""; preview.classList.add("hidden"); }
+}
+
+function versionHistoryEmpty(list, text) {
+  const empty = document.createElement("div");
+  empty.className = "version-empty";
+  empty.textContent = text;
+  list.appendChild(empty);
+}
+
+async function renderVersionHistory() {
+  const note = versionHistoryNote();
+  const list = document.getElementById("versionHistoryList");
+  if (!note || !list) { return; }
+  list.innerHTML = "";
+  if (currentVersionsLimit() === 0) {
+    versionHistoryEmpty(list,
+      "Version history is off in Settings. Choose how many versions " +
+      "to keep per note there to turn it back on.");
+    return;
+  }
+  const loaded = await loadVersionHistory(note.id);
+  if (!loaded.ok) {
+    versionHistoryEmpty(list,
+      "This note's version history could not be loaded safely, so it " +
+      "was left unchanged. Saving the note still works; history " +
+      "updates for it are paused until the history loads cleanly.");
+    return;
+  }
+  if (!loaded.data.versions.length) {
+    versionHistoryEmpty(list,
+      "No versions yet. Versions appear after a previously saved note " +
+      "is changed and saved again.");
+    return;
+  }
+  loaded.data.versions.forEach(function (entry) {
+    list.appendChild(buildVersionHistoryRow(note, entry));
+  });
+}
+
+/* One history row: the snapshot date, its title, and a plain text
+   excerpt, with Preview and Restore controls. On a locked note
+   (Trash or Archive) Restore is disabled and the row says what
+   to do first. */
+function buildVersionHistoryRow(note, entry) {
+  const row = document.createElement("div");
+  row.className = "version-row";
+  row.setAttribute("data-version-id", entry.id);
+
+  const main = document.createElement("div");
+  main.className = "version-row-main";
+  const date = document.createElement("div");
+  date.className = "version-date";
+  date.textContent = versionDateLabel(entry.createdAt);
+  main.appendChild(date);
+  const title = document.createElement("div");
+  title.className = "version-title";
+  title.textContent = entry.title || "Untitled";
+  main.appendChild(title);
+  const excerpt = document.createElement("div");
+  excerpt.className = "version-excerpt";
+  excerpt.textContent = versionExcerpt(entry);
+  main.appendChild(excerpt);
+  if (note.trashed || note.archived) {
+    const noteLine = document.createElement("div");
+    noteLine.className = "version-restore-note";
+    noteLine.textContent = note.trashed
+      ? "Restore this note from Trash before restoring a version."
+      : "Unarchive this note before restoring a version.";
+    main.appendChild(noteLine);
+  }
+  row.appendChild(main);
+
+  const actions = document.createElement("div");
+  actions.className = "version-actions";
+  const previewBtn = document.createElement("button");
+  previewBtn.type = "button";
+  previewBtn.className = "btn small";
+  previewBtn.textContent = "Preview";
+  previewBtn.addEventListener("click", function () {
+    renderVersionPreview(entry);
+  });
+  actions.appendChild(previewBtn);
+  const restoreBtn = document.createElement("button");
+  restoreBtn.type = "button";
+  restoreBtn.className = "btn small";
+  restoreBtn.textContent = "Restore";
+  restoreBtn.disabled = !!note.trashed || !!note.archived;
+  if (restoreBtn.disabled) {
+    restoreBtn.title = note.trashed
+      ? "Restore this note from Trash first"
+      : "Unarchive this note first";
+  }
+  restoreBtn.addEventListener("click", function () {
+    restoreVersionFromHistory(entry.id).catch(function (err) {
+      toast("Restore failed: " + err.message, true);
+    });
+  });
+  actions.appendChild(restoreBtn);
+  row.appendChild(actions);
+  return row;
+}
+
+/* Render one version read only into the preview pane. The body
+   is decorated from the VERSION's attachment records, never
+   hydrated against the open note: placeholders become labeled
+   cards (see decorateVersionPreviewBody), links lose their
+   hrefs, form controls are disabled, and the pane's CSS turns
+   pointer interaction off entirely, so previewing cannot
+   navigate, mutate the note, create object URLs, or mark it
+   dirty. */
+function renderVersionPreview(entry) {
+  const preview = document.getElementById("versionHistoryPreview");
+  if (!preview) { return; }
+  versionHistoryPreviewVersionId = entry.id;
+  preview.innerHTML = "";
+  const heading = document.createElement("h3");
+  heading.textContent = entry.title || "Untitled";
+  preview.appendChild(heading);
+  const meta = document.createElement("div");
+  meta.className = "version-preview-meta";
+  meta.textContent = versionDateLabel(entry.createdAt) +
+    (entry.tags && entry.tags.length
+      ? "  Tags: " + entry.tags.join(", ") : "");
+  preview.appendChild(meta);
+  const body = document.createElement("div");
+  body.className = "version-preview-body";
+  body.innerHTML = entry.body || "";
+  decorateVersionPreviewBody(body, entry);
+  preview.appendChild(body);
+  preview.classList.remove("hidden");
+}
+
+function decorateVersionPreviewBody(bodyEl, entry) {
+  bodyEl.querySelectorAll("*").forEach(function (el) {
+    el.removeAttribute("contenteditable");
+    if (el.tagName === "A") {
+      el.removeAttribute("href");
+      el.setAttribute("aria-disabled", "true");
+    }
+    if (el.tagName === "INPUT" || el.tagName === "BUTTON" ||
+        el.tagName === "TEXTAREA" || el.tagName === "SELECT") {
+      el.disabled = true;
+    }
+    if (el.tagName === "INPUT" && el.type === "checkbox") {
+      const li = el.closest("li");
+      el.checked = !!(li && li.classList.contains("done"));
+    }
+  });
+  bodyEl.querySelectorAll(".ss-attachment").forEach(function (el) {
+    const attId = el.getAttribute("data-attachment-id");
+    const att = (entry.attachments || []).find(function (a) {
+      return a.id === attId;
+    });
+    el.innerHTML = "";
+    el.removeAttribute("style");
+    el.setAttribute("class", "ss-attachment version-att-card");
+    el.setAttribute("contenteditable", "false");
+    const name = document.createElement("div");
+    name.className = "version-att-name";
+    name.textContent = att ? att.name
+      : "Attachment details are missing from this version.";
+    el.appendChild(name);
+    const meta = document.createElement("div");
+    meta.className = "version-att-meta";
+    meta.textContent = att
+      ? (isImageAttachment(att) ? "Image: " : "File: ") +
+        (att.mime || "unknown type") + ", " + humanSize(att.size)
+      : "The referenced file is not listed in this version.";
+    el.appendChild(meta);
+  });
+}
+
+/* Restore one version, serialized through the note's operation
+   chain like every other storage operation on the note. The
+   worker (restoreVersionNow) does the steps in order; this
+   wrapper owns the confirmation, whose text states the promise
+   the flow keeps: the current note is preserved as a new
+   version first. */
+async function restoreVersionFromHistory(versionId) {
+  const note = versionHistoryNote();
+  if (!note) { return; }
+  if (note.trashed || note.archived) {
+    toast(note.trashed
+      ? "Restore this note from Trash before restoring a version."
+      : "Unarchive this note before restoring a version.", true);
+    return;
+  }
+  if (currentVersionsLimit() === 0) {
+    toast("Version history is off in Settings, so versions cannot " +
+      "be restored.", true);
+    return;
+  }
+  const ok = confirm("Restore this version of \"" +
+    (note.title || "Untitled note") + "\"? Your current note will be " +
+    "preserved as a new version first, so this restore can itself " +
+    "be undone from History.");
+  if (!ok) { return; }
+  await chainNoteOp(note, function () {
+    return restoreVersionNow(note, versionId);
+  });
+}
+
+async function restoreVersionNow(note, versionId) {
+  /* Step 1: establish "current". If the editor shows unsaved
+     edits for this note, collect and persist them through the
+     normal save worker first (this call is already inside the
+     note's chain, so it calls the worker, not the chaining
+     wrapper). A conflict here stops the restore: the user's
+     current text was kept as a conflict copy, and guessing which
+     text to preserve would risk losing some of it. */
+  let preSaveResult = null;
+  if (renderEditor._forId === note.id && !note.trashed && !note.archived) {
+    const editorContent = editorContentSnapshot(note);
+    if (!versionContentEqual(editorContent, noteContentSnapshot(note))) {
+      collectEditor(note);
+      preSaveResult = await saveNoteToRepoNow(note);
+      if (preSaveResult && preSaveResult.conflict) {
+        toast("Your current edits were saved as a conflict copy, so " +
+          "the restore was stopped and nothing was replaced.", true);
+        return;
+      }
+    }
+  }
+  /* Step 2: load the history safely, and find the version. */
+  const loaded = await loadVersionHistory(note.id);
+  if (!loaded.ok) {
+    toast("This note's version history could not be loaded safely, " +
+      "so nothing was restored.", true);
+    return;
+  }
+  const entry = loaded.data.versions.find(function (v) {
+    return v.id === versionId;
+  });
+  if (!entry) {
+    toast("That version is no longer available.", true);
+    return;
+  }
+  const selected = {
+    title: entry.title,
+    body: entry.body,
+    tags: entry.tags.slice(),
+    attachments: cloneVersionValue(entry.attachments)
+  };
+  const currentSaved = lastSavedContentByNoteId[note.id]
+    ? cloneVersionValue(lastSavedContentByNoteId[note.id])
+    : noteContentSnapshot(note);
+  /* Already current is a clean no op: no snapshot, no save, no
+     timestamp churn. */
+  if (versionContentEqual(currentSaved, selected)) {
+    toast("That version already matches the current note.");
+    return;
+  }
+  /* Step 3: preserve the current saved state as a forced newest
+     snapshot, bypassing the coalescing window. If it cannot be
+     preserved, the restore stops rather than replacing text the
+     user could not get back. */
+  const forced = await maintainVersionHistory(note.id, currentSaved, {
+    forceSnapshot: true,
+    contentChanged: true,
+    notePath: notePath(note)
+  });
+  if (forced.status === "skipped-load" || forced.status === "skipped-conflict" ||
+      forced.status === "write-failed" || forced.status === "delete-failed") {
+    toast("The current note could not be preserved as a version, so " +
+      "nothing was restored.", true);
+    return;
+  }
+  versionHistoryPruneNeeded.delete(note.id);
+  /* Steps 4 and 5: apply the version and save it through the
+     normal worker, with ordinary version capture suppressed so
+     the save does not snapshot the pre restore state a second
+     time (step 3 already did, deliberately). The worker updates
+     the note's updated timestamp and its baseline. */
+  note.title = selected.title;
+  note.body = selected.body;
+  note.tags = selected.tags.slice();
+  note.attachments = cloneVersionValue(selected.attachments);
+  let result;
+  try {
+    result = await saveNoteToRepoNow(note, { suppressVersionCapture: true });
+  } catch (err) {
+    toast("Restore failed: " + err.message, true);
+    renderAll();
+    return;
+  }
+  if (result && result.conflict) {
+    toast("The restore ran into a storage conflict, so it was saved " +
+      "as a conflict copy instead of replacing the note.", true);
+    renderAll();
+    return;
+  }
+  /* Step 6: refresh everything the restore touched. Clearing the
+     render marker makes renderEditor refill the editor from the
+     restored note, and its normal open pass rehydrates the
+     restored attachment records. */
+  saveCache();
+  renderEditor._forId = null;
+  renderAll();
+  closeVersionHistory();
+  toast(result && result.queued
+    ? "Version restored. It will sync when the connection returns."
+    : "Version restored.");
 }
 
 function setSaveState(text) {
@@ -11970,8 +13277,8 @@ async function getGoogleAccessToken() {
     if (token) { return token; }
   }
   const err = new Error(status.reason === "expired"
-    ? "Your Google sign in expired. Use Refresh connection in the " +
-      "sidebar menu to reconnect."
+    ? "Your Google sign in expired. Use Refresh connection in " +
+      "Settings to reconnect."
     : "Sign in with Google first.");
   err.code = status.reason === "expired"
     ? "GOOGLE_TOKEN_EXPIRED" : "GOOGLE_SIGN_IN_REQUIRED";
@@ -11983,11 +13290,12 @@ function googleReconnectError(message) {
   /* v2.2: the default message names the remedy Chris can act on from
      inside the app, the Refresh connection action, instead of
      sending him back through the browser to the gate. v2.7: the
-     wording follows the action into the sidebar footer menu,
-     where it lives now. */
+     wording followed the action into the sidebar footer menu.
+     v2.8: it follows it again, into Settings, where the action
+     lives now. */
   const err = new Error(message ||
-    "Your Google sign in expired. Use Refresh connection in the " +
-    "sidebar menu to reconnect.");
+    "Your Google sign in expired. Use Refresh connection in " +
+    "Settings to reconnect.");
   err.code = "GOOGLE_TOKEN_EXPIRED";
   err.needsGoogleReconnect = true;
   return err;
@@ -12133,8 +13441,13 @@ async function googleTrySilentSignIn() {
 
 /* v2.2: Refresh connection. Through v2.6.0 it was a standalone
    sidebar button next to Sign out; v2.7 moved it into the sidebar
-   footer's three dot menu, and the working label below is set on
-   that menu item (sidebarRefreshItem and its label span).
+   footer's three dot menu, and v2.8 moved it again, into the
+   Settings modal, and the working label below is set on that
+   modal's button (settingsRefreshBtn and its label span). The
+   elements are looked up once here and restored in the finally
+   block, so the working state lands correctly even if the modal
+   is closed while a refresh is still running. The icon rail's
+   refresh button calls this same function directly.
    Chris reached this build the hard way: his Google token expired
    mid session (browser token flows hand out no refresh token, so
    tokens live about an hour), the app told him to sign in again,
@@ -12162,8 +13475,8 @@ let refreshConnectionRunning = false;
 async function refreshGoogleConnection() {
   if (refreshConnectionRunning) { return; }
   refreshConnectionRunning = true;
-  const btn = document.getElementById("sidebarRefreshItem");
-  const labelEl = document.getElementById("sidebarRefreshLabel");
+  const btn = document.getElementById("settingsRefreshBtn");
+  const labelEl = document.getElementById("settingsRefreshLabel");
   const originalLabel = labelEl ? labelEl.textContent : "Refresh connection";
   if (btn) { btn.disabled = true; }
   if (labelEl) { labelEl.textContent = "Refreshing..."; }
@@ -14458,16 +15771,18 @@ function wireEvents() {
   /* Sidebar footer: v2.7 moved the footer's buttons into the
      three dot menu beside the Synced pill (see the v2.7 block at
      openSidebarMenu), and v2.7.1 moved Sync now in as the menu's
-     first item, so every footer action now lives in that menu.
-     The menu's open, close, and outside click wiring follows the
-     notebook menu's pattern exactly; each item closes the menu
-     and then runs the handler its standalone button ran. The
-     Install app item is the one exception: its click is wired
-     in the PWA block (wirePwaInstall), which also closes the
-     menu. The Sync now item mirrors its old button exactly: the
-     button showed no working state of its own (a sync in flight
-     shows on the Synced pill, and syncNow itself refuses to run
-     twice), so the item needs none either, only the call. */
+     first item. v2.8: Refresh connection and Dark mode moved out
+     of the menu into the Settings modal, and the Settings item
+     below opens that modal (openSettingsModal closes the menu
+     itself). The menu's open, close, and outside click wiring
+     follows the notebook menu's pattern exactly; each item
+     closes the menu and then runs its action. The Install app
+     item is the one exception: its click is wired in the PWA
+     block (wirePwaInstall), which also closes the menu. The Sync
+     now item mirrors its old button exactly: the button showed
+     no working state of its own (a sync in flight shows on the
+     Synced pill, and syncNow itself refuses to run twice), so
+     the item needs none either, only the call. */
   document.getElementById("sidebarSyncItem").addEventListener("click", function () {
     closeSidebarMenu();
     syncNow(true);
@@ -14489,27 +15804,58 @@ function wireEvents() {
   document.addEventListener("keydown", function (ev) {
     if (ev.key === "Escape") { closeSidebarMenu(); }
   });
-  document.getElementById("sidebarThemeItem").addEventListener("click", function () {
-    closeSidebarMenu();
-    document.body.classList.toggle("dark");
-    saveSettings();
-    renderSidebar();
+  document.getElementById("sidebarSettingsItem").addEventListener("click", function () {
+    openSettingsModal();
   });
   document.getElementById("sidebarSignOutItem").addEventListener("click", function () {
     closeSidebarMenu();
     signOut().catch(function (err) { toast(err.message, true); });
   });
-  /* v2.2: Refresh connection. Unlike sign out it wipes nothing:
-     it saves the open note locally, gets a fresh Google token,
-     and resyncs in place (see refreshGoogleConnection in
-     section 11). */
-  document.getElementById("sidebarRefreshItem").addEventListener("click", function () {
-    closeSidebarMenu();
-    refreshGoogleConnection().catch(function (err) { toast(err.message, true); });
-  });
   document.getElementById("sidebarCollapseItem").addEventListener("click", function () {
     closeSidebarMenu();
     setSidebarRail(!state.sidebarRail);
+  });
+
+  /* v2.8: the Settings modal's own controls, following the note
+     link picker's modal pattern: the Close button, a click on
+     the dimmed backdrop, or Escape closes it. The theme buttons
+     set their side through the shared setTheme; the refresh
+     button runs the same refreshGoogleConnection the rail's
+     refresh icon calls directly (unlike sign out it wipes
+     nothing: it saves the open note locally, gets a fresh
+     Google token, and resyncs in place; see section 11); the
+     versions input applies on change. */
+  document.getElementById("settingsCloseBtn").addEventListener("click", closeSettingsModal);
+  document.getElementById("settingsModal").addEventListener("click", function (ev) {
+    if (ev.target === ev.currentTarget) { closeSettingsModal(); }
+  });
+  document.getElementById("settingsModal").addEventListener("keydown", function (ev) {
+    if (ev.key === "Escape") { closeSettingsModal(); }
+  });
+  document.getElementById("settingsThemeLightBtn").addEventListener("click", function () {
+    setTheme(false);
+  });
+  document.getElementById("settingsThemeDarkBtn").addEventListener("click", function () {
+    setTheme(true);
+  });
+  document.getElementById("settingsRefreshBtn").addEventListener("click", function () {
+    refreshGoogleConnection().catch(function (err) { toast(err.message, true); });
+  });
+  document.getElementById("settingsVersionsInput").addEventListener("change",
+    applyVersionsLimitFromInput);
+
+  /* v2.8: the editor footer's History button and its modal, with
+     the same close pattern as Settings. The list's Preview and
+     Restore controls are wired per row in buildVersionHistoryRow. */
+  document.getElementById("versionHistoryBtn").addEventListener("click", function () {
+    openVersionHistory().catch(function (err) { toast(err.message, true); });
+  });
+  document.getElementById("versionHistoryCloseBtn").addEventListener("click", closeVersionHistory);
+  document.getElementById("versionHistoryModal").addEventListener("click", function (ev) {
+    if (ev.target === ev.currentTarget) { closeVersionHistory(); }
+  });
+  document.getElementById("versionHistoryModal").addEventListener("keydown", function (ev) {
+    if (ev.key === "Escape") { closeVersionHistory(); }
   });
 
   /* v2.4: drag and drop notes between notebooks: the delegated
@@ -14586,26 +15932,34 @@ function wireEvents() {
     setMaximized(false);
   });
 
-  /* v2.5: the icon rail. Every rail leaf button clicks its full
-     sidebar counterpart, so each action keeps exactly one
-     implementation. v2.7: four of those counterparts are the
-     sidebar footer menu's items now (the refresh, theme, and
-     sign out items, and the collapse item the rail's expand
-     button clicks); clicking a hidden menu item runs its handler
-     exactly as a visible click would, so the rail's behavior is
-     unchanged. The Notebooks button opens the flyout on hover or
-     click; leaving the button or the flyout starts the grace
-     close (scheduleRailFlyoutClose), and the flyout's New
-     Notebook entry clicks the sidebar's add button, then
-     closes. */
+  /* v2.5: the icon rail. Most rail leaf buttons click their full
+     sidebar counterparts, so each action keeps exactly one
+     implementation. v2.7: three of those counterparts were the
+     sidebar footer menu's items (the sign out item, and the
+     collapse item the rail's expand button clicks); clicking a
+     hidden menu item runs its handler exactly as a visible click
+     would. v2.8: Refresh connection and Dark mode no longer have
+     menu items to click through to (both live in Settings now),
+     so the rail's refresh and theme buttons call the shared
+     functions directly: refreshGoogleConnection for refresh,
+     and toggleTheme for the theme. The Notebooks button opens
+     the flyout on hover or click; leaving the button or the
+     flyout starts the grace close (scheduleRailFlyoutClose), and
+     the flyout's New Notebook entry clicks the sidebar's add
+     button, then closes. */
   [["railNewNoteBtn", "newNoteBtn"], ["railAllBtn", "navAll"],
    ["railPinnedBtn", "navPinned"], ["railTrashBtn", "navTrash"],
-   ["railArchiveBtn", "navArchive"], ["railRefreshBtn", "sidebarRefreshItem"],
-   ["railThemeBtn", "sidebarThemeItem"], ["railLockBtn", "sidebarSignOutItem"],
+   ["railArchiveBtn", "navArchive"], ["railLockBtn", "sidebarSignOutItem"],
    ["railExpandBtn", "sidebarCollapseItem"]].forEach(function (pair) {
     document.getElementById(pair[0]).addEventListener("click", function () {
       document.getElementById(pair[1]).click();
     });
+  });
+  document.getElementById("railRefreshBtn").addEventListener("click", function () {
+    refreshGoogleConnection().catch(function (err) { toast(err.message, true); });
+  });
+  document.getElementById("railThemeBtn").addEventListener("click", function () {
+    toggleTheme();
   });
   const railNbBtn = document.getElementById("railNotebooksBtn");
   const railFlyout = document.getElementById("railFlyout");
