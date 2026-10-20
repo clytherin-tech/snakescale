@@ -40,10 +40,26 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-20-SSN-V270
-  Version: 2.7.0
+  BUILD STAMP: 2026-10-20-SSN-V271
+  Version: 2.7.1
 
   Revision history:
+    v2.7.1 2026-10-20 Sync now moves into the sidebar menu. The
+                      standalone Sync now button that sat under the
+                      save status line through v2.7.0 is gone, and
+                      the three dot menu beside the Synced pill
+                      gains Sync now as its first item
+                      (sidebarSyncItem), running the very
+                      syncNow(true) call the button ran. The button
+                      never showed a working state of its own (a
+                      sync in flight shows on the Synced pill, and
+                      syncNow refuses to run twice), so the item
+                      mirrors the call exactly and needs none
+                      either. Nothing else reached the button: the
+                      icon rail has no sync control and never routed
+                      through it. The sidebar footer is now the
+                      pill row, the save status line under it, and
+                      the version, nothing else.
     v2.7.0 2026-10-20 Checklist state persists, Tab sub-lists, and
                       a sidebar footer menu. The checklist fix first:
                       checking an item used to set only the checkbox
@@ -1000,9 +1016,9 @@ body.dark .gate-brand .wordmark{color:#EAF3EC;}
 .sidebar-foot{
   margin-top:auto;padding:16px;border-top:1px solid #1D4A38;font-size:13px;
 }
-.foot-buttons{display:flex;flex-wrap:wrap;gap:6px;}
-.foot-buttons .btn{background:#0A2E21;border-color:#2A5240;color:#EAF3EC;}
-.foot-buttons .btn:hover{border-color:var(--accent);}
+/* v2.7.1: the .foot-buttons row that held the standalone Sync now
+   button is gone with the button; every footer action now lives in
+   the three dot menu beside the Synced pill. */
 /* v1.6: the app version, small and quiet at the very bottom of the
    sidebar. The text is written by the script from APP_VERSION, so it
    can never drift from the build that is actually running. */
@@ -2256,19 +2272,22 @@ body.dark .ss-att-provider{color:#EAF3EC;}
       <!-- v2.7: the footer's action buttons became a three dot menu
            beside the Synced pill, and the save status moved to its
            own line under the pill row (Chris's layout). Each menu
-           item runs the very handler its standalone button ran
-           through v2.6.0: Refresh connection (v2.2), Install app
-           (v2.6.0, present only while the browser offers
-           installation), Dark mode (its check mark is refreshed
-           every time the menu opens), Collapse sidebar (the v2.5
-           rail toggle), and Sign out. Sync now keeps its own
-           button under the status line, and the icon rail is
+           item runs the very handler its standalone button ran:
+           Sync now (the footer's own button through v2.7.0; it
+           moved into the menu as the first item in v2.7.1, which
+           left this footer as the pill row, the save status line
+           under it, and the version), Refresh connection (v2.2),
+           Install app (v2.6.0, present only while the browser
+           offers installation), Dark mode (its check mark is
+           refreshed every time the menu opens), Collapse sidebar
+           (the v2.5 rail toggle), and Sign out. The icon rail is
            unchanged: it keeps its own icon buttons, which click
            these items through. -->
       <div class="sync-row">
         <div class="sync-pill" id="syncPill" data-state="idle"><span class="sync-dot" aria-hidden="true"></span><span class="sync-label">Not synced yet</span></div>
         <button class="sidebar-menu-btn" id="sidebarMenuBtn" type="button" aria-haspopup="true" aria-expanded="false" title="More actions" aria-label="More actions">&#8943;</button>
         <div id="sidebarMenu" class="hidden" role="menu" aria-label="Sidebar actions">
+          <button class="att-menu-item" id="sidebarSyncItem" type="button" role="menuitem">Sync now</button>
           <button class="att-menu-item" id="sidebarRefreshItem" type="button" role="menuitem"><span id="sidebarRefreshLabel">Refresh connection</span></button>
           <button class="att-menu-item hidden" id="sidebarInstallItem" type="button" role="menuitem">Install app</button>
           <button class="att-menu-item" id="sidebarThemeItem" type="button" role="menuitem"><span class="sb-check" id="sidebarThemeCheck" aria-hidden="true"></span>Dark mode</button>
@@ -2278,9 +2297,6 @@ body.dark .ss-att-provider{color:#EAF3EC;}
         </div>
       </div>
       <div class="save-state-row"><span id="saveState">No changes</span></div>
-      <div class="foot-buttons">
-        <button class="btn small" id="syncNowBtn" type="button">Sync now</button>
-      </div>
       <!-- v1.6: the running app's version, written from APP_VERSION
            by the script at boot. Never hard code a version here. -->
       <div class="app-version" id="appVersion"></div>
@@ -2874,8 +2890,8 @@ body.dark .ss-att-provider{color:#EAF3EC;}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-20-SSN-V270";
-const APP_VERSION = "2.7.0";
+const APP_BUILD = "2026-10-20-SSN-V271";
+const APP_VERSION = "2.7.1";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -14439,15 +14455,21 @@ function wireEvents() {
       renderNoteList();
     }, 150));
 
-  /* Sidebar footer: Sync now keeps its button. v2.7: the rest of
-     the footer lives in the three dot menu beside the Synced
-     pill (see the v2.7 block at openSidebarMenu). The menu's
-     open, close, and outside click wiring follows the notebook
-     menu's pattern exactly; each item closes the menu and then
-     runs the handler its standalone button ran. The Install app
-     item is the one exception: its click is wired in the PWA
-     block (wirePwaInstall), which also closes the menu. */
-  document.getElementById("syncNowBtn").addEventListener("click", function () {
+  /* Sidebar footer: v2.7 moved the footer's buttons into the
+     three dot menu beside the Synced pill (see the v2.7 block at
+     openSidebarMenu), and v2.7.1 moved Sync now in as the menu's
+     first item, so every footer action now lives in that menu.
+     The menu's open, close, and outside click wiring follows the
+     notebook menu's pattern exactly; each item closes the menu
+     and then runs the handler its standalone button ran. The
+     Install app item is the one exception: its click is wired
+     in the PWA block (wirePwaInstall), which also closes the
+     menu. The Sync now item mirrors its old button exactly: the
+     button showed no working state of its own (a sync in flight
+     shows on the Synced pill, and syncNow itself refuses to run
+     twice), so the item needs none either, only the call. */
+  document.getElementById("sidebarSyncItem").addEventListener("click", function () {
+    closeSidebarMenu();
     syncNow(true);
   });
   document.getElementById("sidebarMenuBtn").addEventListener("click", function (ev) {
