@@ -27,10 +27,45 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-20-SSN-V210
-  Version: 2.1.0
+  BUILD STAMP: 2026-10-20-SSN-V220
+  Version: 2.2.0
 
   Revision history:
+    v2.2.0 2026-10-20 Table editing, pin in the list menu, and a
+                      Refresh connection button. Tables inserted with
+                      Insert > Table can now be edited in place: when
+                      the caret is inside a table in an editable note,
+                      a small floating Table button appears above the
+                      table (positioned from the table rectangle,
+                      living outside #noteBody so it is never saved)
+                      and opens a menu with Add row above, Add row
+                      below, Add column left, Add column right, Delete
+                      row, Delete column, and Delete table. The
+                      actions work from the caret's cell, header cells
+                      stay th and body cells stay td, Delete row is
+                      disabled in the header row and on the table's
+                      only row, Delete column is disabled at one
+                      column, and Delete table leaves an empty
+                      paragraph behind. The Pinned checkbox leaves the
+                      editor's meta row (collectEditor no longer reads
+                      a pin control, so editing a pinned note can
+                      never unpin it) and becomes a Pin note / Unpin
+                      note item in the notes list toolbar menu,
+                      present in All Notes, Pinned, tag, and notebook
+                      views and absent in Trash and Archive. A new
+                      Refresh connection button sits next to Sign out
+                      in the sidebar footer: it first saves the open
+                      note through the app's local save path, then
+                      asks Google for a fresh token through the same
+                      googleConnect machinery a normal sign in uses
+                      (silent request first, interactive prompt only
+                      if that fails), then runs the normal sync
+                      sequence, all without reloading the page,
+                      changing screens, reseeding, or wiping the
+                      cache, queue, device key, or settings. The
+                      expired sign in reconnect message now names the
+                      button as the remedy. Build stamp
+                      2026-10-20-SSN-V220.
     v2.1.0 2026-10-20 Export, import, note links, and more insert
                       items. The open note can now be exported from a
                       new Export menu in the editor footer: as a plain
@@ -902,7 +937,9 @@ body.dark .tag-chip{color:var(--accent);}
   border-color:var(--secondary);outline:none;
   box-shadow:0 0 0 3px rgba(87,167,115,.22);
 }
-.pin-toggle{display:flex;align-items:center;gap:6px;font-size:13.5px;font-weight:600;padding-bottom:9px;}
+/* v2.2: the .pin-toggle rule that styled the editor's Pinned
+   checkbox lived here; the checkbox is gone (pinning moved to the
+   notes list toolbar menu), so the rule went with it. */
 .toolbar{
   display:flex;flex-wrap:wrap;gap:4px;padding:6px;align-items:center;
   border:1px solid var(--border);border-radius:var(--radius-card);
@@ -1090,6 +1127,34 @@ body.dark .tag-chip{color:var(--accent);}
 .att-menu-item:hover{background:var(--soft);}
 .att-menu-item.danger{color:var(--danger);}
 .att-menu-sep{height:1px;background:var(--border);margin:4px 2px;}
+/* v2.2: the floating Table button and its menu. Both are
+   position:fixed and live OUTSIDE #noteBody (siblings of #attMenu
+   inside .editor-inner), so collectEditor, which reads only
+   #noteBody, can never save them into a note. The button is a small
+   pill the script parks at the top right corner of the table the
+   caret is in; it exists only while the caret is inside a table in
+   an editable note. The menu reuses the .att-menu-item look so it
+   matches the image menu exactly. */
+#tableMenuBtn{
+  position:fixed;z-index:60;
+  display:inline-flex;align-items:center;gap:5px;
+  padding:4px 10px;border-radius:999px;
+  background:var(--surface);border:1px solid var(--border);
+  box-shadow:0 6px 18px rgba(6,32,22,.24);
+  color:var(--text);font-size:12.5px;font-weight:600;cursor:pointer;
+}
+#tableMenuBtn:hover{border-color:var(--accent);color:var(--primary);}
+#tableMenuBtn.hidden{display:none;}
+#tableMenuBtn .table-caret{font-size:10px;line-height:1;}
+#tableMenu{
+  position:fixed;z-index:61;min-width:190px;padding:6px;
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius-card);box-shadow:0 10px 28px rgba(6,32,22,.28);
+  display:flex;flex-direction:column;gap:2px;
+}
+#tableMenu.hidden{display:none;}
+.att-menu-item:disabled{opacity:.45;cursor:default;}
+.att-menu-item:disabled:hover{background:none;}
 /* The normal view is one row: clickable address, Edit, close. */
 #linkPopupView{display:flex;align-items:center;gap:8px;}
 #linkPopupUrl{
@@ -1571,6 +1636,10 @@ body.dark .ss-att-provider{color:#EAF3EC;}
         <button class="btn small" id="syncNowBtn" type="button">Sync now</button>
         <button class="btn small" id="themeBtn" type="button">Dark mode</button>
         <button class="btn small" id="lockBtn" type="button">Sign out</button>
+        <!-- v2.2: get a fresh Google token and resync without leaving
+             the app (refreshGoogleConnection in section 11). The
+             expired sign in messages name this button as the remedy. -->
+        <button class="btn small" id="refreshConnBtn" type="button">Refresh connection</button>
       </div>
       <!-- v1.6: the running app's version, written from APP_VERSION
            by the script at boot. Never hard code a version here. -->
@@ -1642,6 +1711,12 @@ body.dark .ss-att-provider{color:#EAF3EC;}
           <div id="nbActionMenu" class="list-panel hidden" role="menu" aria-label="Notebook options">
             <button type="button" class="list-menu-item" id="nbRenameBtn" role="menuitem">Rename Notebook</button>
             <button type="button" class="list-menu-item danger" id="nbDeleteBtn" role="menuitem">Delete Notebook</button>
+            <!-- v2.2: pinning moved here from the editor's meta row.
+                 renderListToolbar sets this item's label (Pin note or
+                 Unpin note) from the selected note, enables it only
+                 when a live note is selected, and hides it entirely
+                 in Trash and Archive views. -->
+            <button type="button" class="list-menu-item" id="nbPinBtn" role="menuitem">Pin note</button>
             <!-- v1.8.1: the menu adapts to the view. These three items
                  belong to Trash and the Archive; renderListToolbar
                  shows and enables the ones for the current view and
@@ -1681,9 +1756,11 @@ body.dark .ss-att-provider{color:#EAF3EC;}
               <label for="noteTags">Tags (comma separated)</label>
               <input id="noteTags" type="text" placeholder="ideas, work, personal">
             </div>
-            <label class="pin-toggle">
-              <input type="checkbox" id="notePinned"> Pinned
-            </label>
+            <!-- v2.2: the Pinned checkbox used to live here. Pinning
+                 now happens from the notes list toolbar menu (Pin note
+                 / Unpin note), and collectEditor no longer reads a pin
+                 control: the note object's own pinned value is the
+                 only source, so editing can never unpin a note. -->
           </div>
 
           <!-- Formatting toolbar. v1.3 restyled it into labeled groups
@@ -1851,6 +1928,29 @@ body.dark .ss-att-provider{color:#EAF3EC;}
             <div class="att-menu-sep"></div>
             <button class="att-menu-item danger" type="button" data-action="remove">Remove</button>
           </div>
+
+          <!-- v2.2: the floating Table button and its menu, also
+               SIBLINGS of #noteBody like the link popup and the image
+               menu, so they can never be saved into a note. The script
+               (section 10, table editing) shows the button parked at
+               the top right of the table the caret is in, while the
+               note is editable; the menu's buttons carry
+               data-table-action values and one delegated listener runs
+               them against the cell the menu was opened from. Both are
+               hidden by default. -->
+          <button id="tableMenuBtn" class="hidden" type="button" aria-haspopup="true" aria-expanded="false">Table <span class="table-caret" aria-hidden="true">&#9662;</span></button>
+          <div id="tableMenu" class="hidden" role="menu" aria-label="Table options">
+            <button class="att-menu-item" type="button" data-table-action="rowAbove">Add row above</button>
+            <button class="att-menu-item" type="button" data-table-action="rowBelow">Add row below</button>
+            <div class="att-menu-sep"></div>
+            <button class="att-menu-item" type="button" data-table-action="colLeft">Add column left</button>
+            <button class="att-menu-item" type="button" data-table-action="colRight">Add column right</button>
+            <div class="att-menu-sep"></div>
+            <button class="att-menu-item" type="button" data-table-action="deleteRow">Delete row</button>
+            <button class="att-menu-item" type="button" data-table-action="deleteCol">Delete column</button>
+            <div class="att-menu-sep"></div>
+            <button class="att-menu-item danger" type="button" data-table-action="deleteTable">Delete table</button>
+          </div>
         </div>
       </div>
       <div class="editor-foot">
@@ -1913,8 +2013,8 @@ body.dark .ss-att-provider{color:#EAF3EC;}
 "use strict";
 
 /* ============================================================================
-   SnakeScale Notes v2.1.0: application script
-   BUILD STAMP: 2026-10-20-SSN-V210
+   SnakeScale Notes v2.2.0: application script
+   BUILD STAMP: 2026-10-20-SSN-V220
 
    How this script is organized:
      1. Constants and global state
@@ -1945,8 +2045,8 @@ body.dark .ss-att-provider{color:#EAF3EC;}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-20-SSN-V210";
-const APP_VERSION = "2.1.0";
+const APP_BUILD = "2026-10-20-SSN-V220";
+const APP_VERSION = "2.2.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -3303,8 +3403,8 @@ async function saveNoteToRepoNow(note, options) {
       queueOp({ kind: "put", path: path, content: text, noteId: note.id });
       saveCache();
       toast("Your Google sign in expired. This edit was saved in the sync " +
-        "queue. Sign in with Google again; it takes one click, then use " +
-        "Sync now if it does not sync on its own.", true);
+        "queue. Press Refresh connection (next to Sign out) to reconnect, " +
+        "then use Sync now if it does not sync on its own.", true);
       return { queued: true, googleReconnect: true };
     }
     if (err.offline || !state.online) {
@@ -4466,6 +4566,22 @@ function renderListToolbar() {
     deleteBtn.classList.toggle("hidden", kind === "trash" || kind === "archive");
     deleteBtn.disabled = !inNotebook;
   }
+  /* v2.2: the pin item sits with the notebook items. It is part of
+     the menu in All Notes, Pinned, tag, and notebook views, and not
+     part of it at all in Trash and Archive, where the menu carries
+     only the view's bulk actions. Its label follows the selected
+     note, and it is enabled only when the selection is a live note
+     (present in state.notes, so never a trashed or archived one). */
+  const pinBtn = document.getElementById("nbPinBtn");
+  if (pinBtn) {
+    pinBtn.classList.toggle("hidden", kind === "trash" || kind === "archive");
+    const selected = currentNote();
+    const liveSelected = selected &&
+      state.notes.indexOf(selected) >= 0 ? selected : null;
+    pinBtn.disabled = !liveSelected;
+    pinBtn.textContent = liveSelected && liveSelected.pinned
+      ? "Unpin note" : "Pin note";
+  }
   const emptyTrashBtn = document.getElementById("nbEmptyTrashBtn");
   if (emptyTrashBtn) {
     emptyTrashBtn.classList.toggle("hidden", kind !== "trash");
@@ -4524,6 +4640,27 @@ function confirmDeleteNotebook(slug) {
       toast("Delete failed: " + err.message, true);
     });
   }
+}
+
+/* v2.2: toggle the selected note's pinned flag, from the Pin note /
+   Unpin note item in the notes list toolbar menu. The flag lives on
+   the note object (collectEditor never reads it from a form control
+   anymore), the change persists through the same per note save path
+   every other edit uses (saveNoteToRepo, which queues when Google
+   cannot be reached), and the list re-renders so the PINNED card
+   marker, the Pinned view membership, and the menu label all follow
+   at once. */
+async function toggleSelectedNotePin() {
+  const note = currentNote();
+  if (!note || state.notes.indexOf(note) < 0) { return; }
+  note.pinned = !note.pinned;
+  renderNoteList();
+  try {
+    await saveNoteToRepo(note);
+  } catch (err) {
+    toast("Could not save the pin change: " + err.message, true);
+  }
+  renderNoteList();
 }
 
 /* --------------------------------------------------------------------------
@@ -4882,6 +5019,8 @@ function renderEditor() {
     wrap.classList.add("hidden");
     /* v1.3.1: no note on screen, so no link popup either. */
     hideLinkPopup();
+    /* v2.2: and no table menu either. */
+    hideTableMenu();
     return;
   }
   noNote.classList.add("hidden");
@@ -4901,13 +5040,19 @@ function renderEditor() {
        reconciliation can never mistake a note swap for a mass
        deletion while the new body is being built. */
     deselectAttachment();
+    /* v2.2: the floating Table button and menu belong to the previous
+       note's tables; they close with the note swap, exactly like the
+       link popup above. */
+    hideTableMenu();
     attachBodyGuard = true;
     /* v1.2: the previous note's image blob URLs are released before the
        editor switches, so long sessions do not accumulate them. */
     revokeAttachmentUrls();
     document.getElementById("noteTitle").value = note.title || "";
     document.getElementById("noteTags").value = note.tags.join(", ");
-    document.getElementById("notePinned").checked = !!note.pinned;
+    /* v2.2: no pin control is filled here anymore. The note object's
+       pinned value is authoritative and is changed only by the Pin
+       note / Unpin note item in the notes list toolbar menu. */
     document.getElementById("noteBody").innerHTML = note.body || "";
     /* v1.6: tag checklists saved before the ss-checklist class
        existed, so they get the bullet free styling and Enter
@@ -4968,7 +5113,10 @@ function renderEditor() {
   document.getElementById("noteBody").contentEditable = locked ? "false" : "true";
   document.getElementById("noteTitle").disabled = locked;
   document.getElementById("noteTags").disabled = locked;
-  document.getElementById("notePinned").disabled = locked;
+  /* v2.2: a locked note (Trash or Archive) never shows the floating
+     Table button or menu; updateTableMenu would hide them on the
+     next caret move anyway, but locking closes them immediately. */
+  if (locked) { hideTableMenu(); }
   picker.disabled = locked;
 }
 renderEditor._forId = null;
@@ -4987,7 +5135,10 @@ function setMobileView(which) {
 /* --------------------------------------------------------------------------
    10. Editor behavior
    The editor reads and writes the note object through collectEditor(),
-   which pulls title, notebook, tags, pin, and body HTML out of the form.
+   which pulls title, notebook, tags, and body HTML out of the form.
+   (Through v2.1 it also pulled the Pinned checkbox; v2.2 removed that
+   control, so collectEditor no longer touches note.pinned at all and
+   the flag is changed only from the notes list toolbar menu.)
    Autosave is debounced at about 800 ms after the last edit. If the note
    moved notebooks, the file is written to the new folder and the old file
    is removed. Save results update the saved state text and, for lists,
@@ -5058,7 +5209,11 @@ function collectEditor(note) {
     .split(",")
     .map(function (t) { return t.trim(); })
     .filter(function (t) { return t.length > 0; });
-  note.pinned = document.getElementById("notePinned").checked;
+  /* v2.2: note.pinned is deliberately NOT read here. The Pinned
+     checkbox that used to feed this line is gone, so the value stays
+     exactly as it sits on the note object (set by the Pin note /
+     Unpin note item in the notes list toolbar menu), and editing a
+     pinned note through any save path can never unpin it. */
   /* v1.2: the stored body always carries canonical placeholders. */
   note.body = canonicalizeAttachmentPlaceholders(
     document.getElementById("noteBody").innerHTML);
@@ -5511,6 +5666,259 @@ function insertStarterTable() {
   insertBlockAtCaret(table, emptyFollowParagraph());
   const firstCell = table.querySelector("th");
   if (firstCell) { placeCaretIn(firstCell, 0); }
+}
+
+/* ----- v2.2: table editing ------------------------------------------------
+   The tables Insert > Table creates (table.ss-table) can be edited in
+   place. While the caret or selection sits inside a table in an
+   editable note, a small floating Table button (#tableMenuBtn) parks
+   at the top right corner of that table, positioned from the table's
+   own rectangle the way the link popup is positioned from its anchor.
+   The button opens #tableMenu with seven actions: Add row above, Add
+   row below, Add column left, Add column right, Delete row, Delete
+   column, Delete table.
+   Both elements live OUTSIDE #noteBody (siblings of #linkPopup and
+   #attMenu inside .editor-inner), and collectEditor reads only
+   #noteBody, so the furniture can never be saved into a note; the
+   actions below edit only real table markup (table, thead, tbody,
+   tr, th, td), which canonicalization passes through untouched, so a
+   table survives a save and reload round trip exactly.
+   The helpers work from the caret's cell: its row within the table
+   and its cell index within the row decide where rows and columns
+   are added or removed. New cells are empty (a single <br>, exactly
+   like the starter table's cells) and take th in the header section,
+   td in body rows. Guards: Delete row is disabled (and refuses to
+   run) when the caret is in the header row or the row is the table's
+   only row; Delete column is disabled at one column; Delete table
+   removes the table and leaves an empty paragraph in its place.
+   After every action the caret lands in a sensible neighboring cell
+   and markDirty runs, so autosave picks the change up like any edit.
+   The button and menu hide whenever the caret leaves the table, the
+   note switches, or the editor locks (renderEditor calls
+   hideTableMenu in all three cases). */
+let tableMenuCell = null;        /* the td or th the caret is in */
+let tableMenuTable = null;       /* that cell's table */
+let tableMenuActionCell = null;  /* the cell captured when the menu opened */
+let tableMenuActionTable = null; /* and its table */
+
+/* The table cell (td or th) containing a DOM node, or null when the
+   node is not inside a cell of a table that lives in #noteBody. */
+function tableCellFromNode(node) {
+  const bodyEl = document.getElementById("noteBody");
+  if (!node || !bodyEl) { return null; }
+  let el = node.nodeType === 1 ? node : node.parentElement;
+  if (!el || !bodyEl.contains(el)) { return null; }
+  const cell = el.closest ? el.closest("td, th") : null;
+  if (!cell || !bodyEl.contains(cell)) { return null; }
+  return cell;
+}
+
+/* Caret watcher: show the Table button (parked on the caret's table)
+   when the selection is inside a table in an editable note, and hide
+   the button and menu in every other case. Wired to body clicks and
+   keyups plus document selectionchange in wireEvents, and called
+   directly after each table action. Focus sitting on the table
+   furniture itself (the button or the open menu) is not a caret move,
+   so it leaves the tracked state alone. */
+function updateTableMenu() {
+  const bodyEl = document.getElementById("noteBody");
+  const btn = document.getElementById("tableMenuBtn");
+  if (!bodyEl || !btn) { return; }
+  const sel = window.getSelection();
+  const anchor = sel && sel.rangeCount ? sel.anchorNode : null;
+  const anchorEl = !anchor ? null
+    : anchor.nodeType === 1 ? anchor : anchor.parentElement;
+  if (anchorEl && anchorEl.closest &&
+      (anchorEl.closest("#tableMenuBtn") || anchorEl.closest("#tableMenu"))) {
+    return;
+  }
+  const note = currentNote();
+  const editable = !!note && !note.trashed && !note.archived &&
+    bodyEl.contentEditable !== "false";
+  const cell = editable ? tableCellFromNode(anchor) : null;
+  if (!cell) { hideTableMenu(); return; }
+  tableMenuCell = cell;
+  tableMenuTable = cell.closest("table");
+  if (!tableMenuTable) { hideTableMenu(); return; }
+  btn.classList.remove("hidden");
+  positionTableMenuBtn();
+  const menu = document.getElementById("tableMenu");
+  if (menu && !menu.classList.contains("hidden")) { syncTableMenuGuards(); }
+}
+
+/* Park the Table button at the table's top right corner, clamped
+   into the viewport with the same 8px margin the link popup uses.
+   A table touching the top of the viewport has no room above it, so
+   the button then sits just below the table instead. */
+function positionTableMenuBtn() {
+  const btn = document.getElementById("tableMenuBtn");
+  if (!btn || !tableMenuTable) { return; }
+  const rect = tableMenuTable.getBoundingClientRect();
+  const width = btn.offsetWidth || 76;
+  const height = btn.offsetHeight || 26;
+  let left = rect.right - width;
+  left = Math.max(8, Math.min(left, window.innerWidth - width - 8));
+  let top = rect.top - height - 6;
+  if (top < 8) { top = rect.bottom + 6; }
+  btn.style.left = left + "px";
+  btn.style.top = top + "px";
+}
+
+/* Close just the menu popup (the button stays while the caret is in
+   the table), mirroring how the image menu closes on its own. */
+function closeTableMenu() {
+  const menu = document.getElementById("tableMenu");
+  if (menu) { menu.classList.add("hidden"); }
+  const btn = document.getElementById("tableMenuBtn");
+  if (btn) { btn.setAttribute("aria-expanded", "false"); }
+  tableMenuActionCell = null;
+  tableMenuActionTable = null;
+}
+
+/* Hide the whole table control set and forget the tracked cell.
+   Called when the caret leaves the table, when the note switches,
+   and when the editor locks. */
+function hideTableMenu() {
+  tableMenuCell = null;
+  tableMenuTable = null;
+  closeTableMenu();
+  const btn = document.getElementById("tableMenuBtn");
+  if (btn) { btn.classList.add("hidden"); }
+}
+
+/* Refresh the Delete guards from the cell the menu will act on:
+   Delete row is disabled in the header row and when the table has a
+   single row; Delete column is disabled when the table has a single
+   column. runTableAction enforces the same guards again, so a stale
+   menu can never delete what it should not. */
+function syncTableMenuGuards() {
+  const menu = document.getElementById("tableMenu");
+  const cell = tableMenuActionCell || tableMenuCell;
+  if (!menu || !cell) { return; }
+  const row = cell.parentElement;
+  const table = cell.closest("table");
+  if (!row || !table) { return; }
+  const inHeader = row.parentElement &&
+    row.parentElement.tagName === "THEAD";
+  const delRow = menu.querySelector('[data-table-action="deleteRow"]');
+  const delCol = menu.querySelector('[data-table-action="deleteCol"]');
+  if (delRow) { delRow.disabled = !!inHeader || table.rows.length <= 1; }
+  if (delCol) { delCol.disabled = row.cells.length <= 1; }
+}
+
+/* Open the menu under the Table button. The acting cell and table
+   are captured now: clicking menu items moves focus out of the
+   editor, and the actions must still hit the cell the user meant. */
+function openTableMenu() {
+  if (!tableMenuCell || !tableMenuTable) { return; }
+  tableMenuActionCell = tableMenuCell;
+  tableMenuActionTable = tableMenuTable;
+  syncTableMenuGuards();
+  const menu = document.getElementById("tableMenu");
+  const btn = document.getElementById("tableMenuBtn");
+  menu.classList.remove("hidden");
+  btn.setAttribute("aria-expanded", "true");
+  const btnRect = btn.getBoundingClientRect();
+  const width = menu.offsetWidth || 190;
+  const height = menu.offsetHeight || 320;
+  let left = Math.max(8, Math.min(btnRect.left, window.innerWidth - width - 8));
+  let top = btnRect.bottom + 4;
+  if (top + height > window.innerHeight - 8) {
+    top = Math.max(8, btnRect.top - height - 4);
+  }
+  menu.style.left = left + "px";
+  menu.style.top = top + "px";
+}
+
+/* One empty cell of the given kind, matching the starter table's
+   shape: the tag and a single <br> so the cell is clickable and
+   typeable while it holds nothing. */
+function emptyTableCell(tag) {
+  const c = document.createElement(tag);
+  c.appendChild(document.createElement("br"));
+  return c;
+}
+
+/* The tag a new cell in this row should take: th for any row in the
+   header section; in body rows, the tag the row already uses at the
+   reference index (td for the app's own tables), falling back to td. */
+function tableCellTagFor(row, refIndex) {
+  if (row.parentElement && row.parentElement.tagName === "THEAD") {
+    return "th";
+  }
+  const ref = row.cells[Math.min(refIndex, row.cells.length - 1)];
+  return ref && ref.tagName === "TH" ? "th" : "td";
+}
+
+/* Run one menu action against the captured cell. Adding a row clones
+   the reference row's structure with empty cells and lands in the
+   same section (so a row added next to the header row stays a header
+   row). Adding a column inserts a cell at the same index in every
+   row of the table. Deleting a column removes that index everywhere.
+   After the structure changes, the caret moves to a neighboring cell
+   and the edit goes through markDirty like any typed change. */
+function runTableAction(action) {
+  const cell = tableMenuActionCell;
+  const table = tableMenuActionTable;
+  closeTableMenu();
+  if (!cell || !table || !document.body.contains(table)) {
+    hideTableMenu();
+    return;
+  }
+  const row = cell.parentElement;
+  if (!row || !row.parentElement) { return; }
+  const rows = Array.prototype.slice.call(table.rows);
+  const rowIdx = rows.indexOf(row);
+  const cellIdx = Array.prototype.indexOf.call(row.cells, cell);
+  if (rowIdx < 0 || cellIdx < 0) { return; }
+  const inHeader = row.parentElement.tagName === "THEAD";
+  let caretCell = null;
+
+  if (action === "rowAbove" || action === "rowBelow") {
+    const newRow = document.createElement("tr");
+    for (let i = 0; i < row.cells.length; i++) {
+      newRow.appendChild(emptyTableCell(tableCellTagFor(row, i)));
+    }
+    if (action === "rowAbove") {
+      row.parentElement.insertBefore(newRow, row);
+    } else {
+      row.parentElement.insertBefore(newRow, row.nextSibling);
+    }
+    caretCell = newRow.cells[cellIdx] || null;
+  } else if (action === "colLeft" || action === "colRight") {
+    const at = action === "colLeft" ? cellIdx : cellIdx + 1;
+    rows.forEach(function (r) {
+      const fresh = emptyTableCell(tableCellTagFor(r, cellIdx));
+      if (at >= r.cells.length) { r.appendChild(fresh); }
+      else { r.insertBefore(fresh, r.cells[at]); }
+    });
+    caretCell = row.cells[at] || row.cells[row.cells.length - 1] || null;
+  } else if (action === "deleteRow") {
+    if (inHeader || rows.length <= 1) { updateTableMenu(); return; }
+    const neighbor = rows[rowIdx + 1] || rows[rowIdx - 1] || null;
+    row.parentElement.removeChild(row);
+    if (neighbor) {
+      caretCell = neighbor.cells[Math.min(cellIdx, neighbor.cells.length - 1)] || null;
+    }
+  } else if (action === "deleteCol") {
+    if (row.cells.length <= 1) { updateTableMenu(); return; }
+    rows.forEach(function (r) {
+      if (r.cells[cellIdx]) { r.removeChild(r.cells[cellIdx]); }
+    });
+    caretCell = row.cells[Math.min(cellIdx, row.cells.length - 1)] || null;
+  } else if (action === "deleteTable") {
+    const p = emptyFollowParagraph();
+    table.parentElement.replaceChild(p, table);
+    placeCaretIn(p, 0);
+    markDirty();
+    hideTableMenu();
+    return;
+  } else {
+    return;
+  }
+  if (caretCell) { placeCaretIn(caretCell, 0); }
+  markDirty();
+  updateTableMenu();
 }
 
 /* Insert, Code Block: a pre.ss-code-block holding a code element, an
@@ -7706,7 +8114,8 @@ async function getGoogleAccessToken() {
     if (token) { return token; }
   }
   const err = new Error(status.reason === "expired"
-    ? "Your Google sign in expired. Sign in with Google again; it takes one click."
+    ? "Your Google sign in expired. Press Refresh connection (next to " +
+      "Sign out) to reconnect."
     : "Sign in with Google first.");
   err.code = status.reason === "expired"
     ? "GOOGLE_TOKEN_EXPIRED" : "GOOGLE_SIGN_IN_REQUIRED";
@@ -7715,8 +8124,12 @@ async function getGoogleAccessToken() {
 }
 
 function googleReconnectError(message) {
+  /* v2.2: the default message names the remedy Chris can act on from
+     inside the app, the Refresh connection button next to Sign out,
+     instead of sending him back through the browser to the gate. */
   const err = new Error(message ||
-    "Your Google sign in expired. Sign in with Google again; it takes one click.");
+    "Your Google sign in expired. Press Refresh connection (next to " +
+    "Sign out) to reconnect.");
   err.code = "GOOGLE_TOKEN_EXPIRED";
   err.needsGoogleReconnect = true;
   return err;
@@ -7791,10 +8204,15 @@ function effectiveGoogleClientId() {
 }
 
 async function googleConnect(options) {
-  /* The options argument (googleTrySilentSignIn passes {silent: true})
-     is accepted for the caller's bookkeeping; the token request itself
-     is the same either way, an empty prompt that lets Google decide
-     whether an interaction is needed.
+  /* The options argument carries the prompt the token request should
+     use. googleTrySilentSignIn passes {silent: true}, which maps to
+     the default below: an empty prompt that lets Google decide
+     whether an interaction is needed, and no interaction is shown
+     when Google can issue the token quietly. v2.2: the Refresh
+     connection flow's fallback passes { prompt: "consent" } to ask
+     for the interactive consent prompt explicitly, so the silent
+     attempt and the interactive attempt share this one function and
+     its token recording, with no duplicated token logic anywhere.
      v1.4.2: every GIS token client in the app is created here (the
      notes sign in, the silent renewal, and the attachments
      provider all funnel through googleConnect), and the client ID
@@ -7823,7 +8241,9 @@ async function googleConnect(options) {
           (err && err.type ? " (" + err.type + ")" : "") + "."));
       }
     });
-    client.requestAccessToken({ prompt: "" });
+    const promptValue = options && typeof options.prompt === "string"
+      ? options.prompt : "";
+    client.requestAccessToken({ prompt: promptValue });
   });
   state.attach.googleExpiresAt =
     Date.now() + (Number(resp.expires_in) || 3600) * 1000;
@@ -7850,6 +8270,108 @@ async function googleTrySilentSignIn() {
     return true;
   } catch (e) {
     return false;
+  }
+}
+
+/* v2.2: Refresh connection, the sidebar button next to Sign out.
+   Chris reached this build the hard way: his Google token expired
+   mid session (browser token flows hand out no refresh token, so
+   tokens live about an hour), the app told him to sign in again,
+   and the only visible route was a page refresh he was afraid to
+   make with unsaved typing on screen. This handler never reloads
+   the page, never changes screens, never reseeds, and never wipes
+   the cache, the queue, the device key, or settings, and it is safe
+   to press at any time, signed in, expired, or mid edit.
+   What it reuses, deliberately, instead of duplicating token logic:
+   googleConnect (the one GIS token client factory and token
+   recorder) for both token attempts, googleTrySilentSignIn for the
+   silent first attempt, driveEnsureNotesRoot to prove the fresh
+   token against Drive, and syncNow for the established flush then
+   load sequence a gate sign in runs (flushQueue, flushIndexWrites,
+   loadAllFromRepo, renderAll). The only new token behavior is the
+   prompt googleConnect now honors from its options.
+   Failure honesty: if both token attempts fail, or the Drive proof
+   or the sync throws, the toast says plainly that the connection
+   could not be refreshed and that his notes and queued changes are
+   saved on this device, which is true: step (a) put the open note
+   into the encrypted local cache (and into the sync queue whenever
+   the old token was already dead), and nothing in this function
+   ever deletes local state. */
+let refreshConnectionRunning = false;
+async function refreshGoogleConnection() {
+  if (refreshConnectionRunning) { return; }
+  refreshConnectionRunning = true;
+  const btn = document.getElementById("refreshConnBtn");
+  const originalLabel = btn ? btn.textContent : "Refresh connection";
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "Refreshing...";
+  }
+  try {
+    /* (a) Persist the open note locally before touching the token,
+       through the same local save path the app uses before locking:
+       collectEditor folds everything on screen into the note object
+       and saveCache writes the encrypted local cache. The follow up
+       save through the normal per note path matters just as much:
+       with an already expired token that path queues the note's full
+       current text in the offline queue (and saves the cache again),
+       and with a live token it simply saves, so the newest text is
+       never held only in the cache copy that the load in step (c)
+       is about to replace. A locked note (Trash or Archive) is
+       skipped: it is not editable, so there is nothing typed to
+       protect, and its editor fields are disabled anyway. */
+    const open = currentNote();
+    if (open && !open.trashed && !open.archived &&
+        renderEditor._forId === open.id) {
+      collectEditor(open);
+      saveCache();
+      await saveNoteToRepo(open).catch(function () { return null; });
+    }
+    /* (b) A fresh token through the existing GIS machinery: the
+       silent request first (empty prompt, via googleTrySilentSignIn,
+       which is googleConnect), and only when that fails, the
+       interactive consent prompt through the same googleConnect.
+       googleConnect records the token exactly as a normal sign in
+       does (expiry on state.attach, provider token store, settings
+       saved), so nothing after this step can tell the difference
+       between a refresh and a sign in. */
+    let connected = await googleTrySilentSignIn();
+    if (!connected) {
+      try {
+        await googleConnect({ prompt: "consent" });
+        connected = true;
+      } catch (err) {
+        connected = false;
+      }
+    }
+    if (!connected) {
+      toast("Could not refresh the connection. Your notes and queued " +
+        "changes are saved on this device; try again in a moment.", true);
+      return;
+    }
+    /* (c) The same load and sync sequence a gate sign in runs, minus
+       everything that belongs only to the gate: no screen change, no
+       loading overlay, no seeding check, no consolidation (that one
+       time move already ran, or runs on a later real sign in), and
+       nothing wiped. driveEnsureNotesRoot proves the token against
+       Drive before the sync trusts it, exactly as connectAndLoad
+       does. syncNow flushes the queue first and then loads, in the
+       established order; if a sync is already running it returns
+       early and that sync owns the same work. */
+    await driveEnsureNotesRoot();
+    state.repoExists = true;
+    await syncNow(false);
+    refreshSyncPill();
+    toast("Connection refreshed.");
+  } catch (err) {
+    toast("Could not refresh the connection. Your notes and queued " +
+      "changes are saved on this device; try again in a moment.", true);
+  } finally {
+    refreshConnectionRunning = false;
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = originalLabel;
+    }
   }
 }
 
@@ -10030,6 +10552,14 @@ function wireEvents() {
     closeListPanels();
     confirmDeleteNotebook(state.view.value);
   });
+  /* v2.2: the pin item. It belongs to the selected note, not to a
+     view, so there is no view guard here: renderListToolbar hides
+     it in Trash and Archive and disables it unless a live note is
+     selected, and toggleSelectedNotePin re-checks the selection. */
+  document.getElementById("nbPinBtn").addEventListener("click", function () {
+    closeListPanels();
+    toggleSelectedNotePin().catch(function (err) { toast(err.message, true); });
+  });
   /* v1.8.1: the same menu's Trash and Archive items. renderListToolbar
      only shows them in their view (and disables them when they would
      have nothing to act on); the view guards stay as a second line
@@ -10079,6 +10609,13 @@ function wireEvents() {
   document.getElementById("lockBtn").addEventListener("click", function () {
     signOut().catch(function (err) { toast(err.message, true); });
   });
+  /* v2.2: Refresh connection, next to Sign out. Unlike sign out it
+     wipes nothing: it saves the open note locally, gets a fresh
+     Google token, and resyncs in place (see refreshGoogleConnection
+     in section 11). */
+  document.getElementById("refreshConnBtn").addEventListener("click", function () {
+    refreshGoogleConnection().catch(function (err) { toast(err.message, true); });
+  });
 
   /* Mobile bar. */
   document.getElementById("mobileNavBtn").addEventListener("click", function () { setMobileView("nav"); });
@@ -10088,8 +10625,10 @@ function wireEvents() {
   });
   document.getElementById("editorBackBtn").addEventListener("click", function () { setMobileView("list"); });
 
-  /* Editor inputs: any change marks the note dirty and autosaves. */
-  ["noteTitle", "noteTags", "noteNotebook", "notePinned"].forEach(function (id) {
+  /* Editor inputs: any change marks the note dirty and autosaves.
+     (v2.2: notePinned left this list with the checkbox itself; the
+     pin flag is not a form field anymore.) */
+  ["noteTitle", "noteTags", "noteNotebook"].forEach(function (id) {
     document.getElementById(id).addEventListener("input", markDirty);
     document.getElementById(id).addEventListener("change", markDirty);
   });
@@ -10234,6 +10773,60 @@ function wireEvents() {
      fixed position is tied to where the image was. */
   document.querySelector(".editor-scroll").addEventListener("scroll", function () {
     closeAttMenu();
+  });
+
+  /* v2.2: table editing wiring. The caret watcher runs on body
+     clicks and keyups and on document selectionchange, so the Table
+     button follows the caret into and out of tables however it got
+     there (mouse, keyboard, or a table action's caret placement). */
+  const noteBodyForTables = document.getElementById("noteBody");
+  noteBodyForTables.addEventListener("click", updateTableMenu);
+  noteBodyForTables.addEventListener("keyup", updateTableMenu);
+  document.addEventListener("selectionchange", updateTableMenu);
+  /* The button toggles the menu. mousedown is prevented so clicking
+     it never moves the editor selection away from the caret's cell;
+     the menu then acts on the cell captured when it opened. */
+  const tableMenuBtn = document.getElementById("tableMenuBtn");
+  tableMenuBtn.addEventListener("mousedown", function (ev) {
+    ev.preventDefault();
+  });
+  tableMenuBtn.addEventListener("click", function () {
+    const menu = document.getElementById("tableMenu");
+    if (menu.classList.contains("hidden")) { openTableMenu(); }
+    else { closeTableMenu(); }
+  });
+  /* The menu's items run through one delegated listener, like the
+     image menu's. */
+  document.getElementById("tableMenu").addEventListener("click", function (ev) {
+    const target = ev.target;
+    const btn = target && target.closest ?
+      target.closest("button[data-table-action]") : null;
+    if (!btn || btn.disabled) { return; }
+    runTableAction(btn.getAttribute("data-table-action"));
+  });
+  /* Clicking anywhere else closes the menu (the button itself, which
+     toggles, is excluded), mirroring the image menu's rule. */
+  document.addEventListener("click", function (ev) {
+    const menu = document.getElementById("tableMenu");
+    if (!menu || menu.classList.contains("hidden")) { return; }
+    const target = ev.target;
+    if (!target || !target.closest) { return; }
+    if (target.closest("#tableMenu")) { return; }
+    if (target.closest("#tableMenuBtn")) { return; }
+    closeTableMenu();
+  });
+  document.addEventListener("keydown", function (ev) {
+    if (ev.key === "Escape") { closeTableMenu(); }
+  });
+  /* Scrolling the editor moves the table under its parked button, so
+     the menu closes and the button re-parks on the table, mirroring
+     how the image menu closes on scroll. */
+  document.querySelector(".editor-scroll").addEventListener("scroll", function () {
+    closeTableMenu();
+    if (tableMenuTable &&
+        !document.getElementById("tableMenuBtn").classList.contains("hidden")) {
+      positionTableMenuBtn();
+    }
   });
 
   /* Toolbar buttons. mousedown is prevented so the text selection in the
