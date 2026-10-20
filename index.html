@@ -27,10 +27,39 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-20-SSN-V240
-  Version: 2.4.0
+  BUILD STAMP: 2026-10-20-SSN-V241
+  Version: 2.4.1
 
   Revision history:
+    v2.4.1 2026-10-20 Fix: Word import image records, and a
+                      see-through drag ghost. In v2.4.0 the Word
+                      import created and saved the note immediately
+                      (the instant pattern), with image placeholders
+                      already in its body, and uploaded the images
+                      afterwards, adding their attachment records to
+                      the note object and saving a second time. Any
+                      look at the note inside that window, most
+                      simply opening it from the list while the
+                      uploads were still running (a real document
+                      with real photos keeps them running for
+                      seconds), hydrated every placeholder against
+                      the still empty record list and showed "This
+                      attachment's details are missing from the
+                      note", and because an open editor only
+                      hydrates when the note on screen changes,
+                      the broken blocks never healed even after
+                      the records landed moments later. The import
+                      now holds the create save until the uploads
+                      finish, so the first version of the note ever
+                      persisted already carries its records (or has
+                      the failed placeholders removed), and when
+                      the uploads land on the note that is already
+                      open, its placeholders are hydrated again so
+                      the images appear. The drag ghost is now
+                      clearly translucent (opacity 0.5, was 0.94),
+                      and the highlighted drop target paints above
+                      it, so the notebook underneath stays visible
+                      while dragging.
     v2.4.0 2026-10-20 Word import keeps embedded images, the Tab
                       key works inside the note, and notes can be
                       dragged between notebooks on desktop and
@@ -1019,14 +1048,25 @@ body.dark .tag-chip{color:var(--accent);}
    All of it is app furniture: none of it is serialized into a
    note or persisted anywhere. */
 .note-card.drag-source{opacity:.45;}
+/* v2.4.1: the ghost is clearly translucent (opacity 0.5; v2.4.0
+   shipped 0.94, which hid the notebook row underneath it, exactly
+   where the user is aiming), and the highlighted drop target
+   paints ABOVE the ghost: the sidebar row carries its own
+   position and z-index while it is the target, and the mobile
+   overlay, a stacking context its rows cannot escape, sits
+   above the ghost as a whole. The destination is therefore
+   visible both through the ghost and around it. */
 .note-drag-ghost{
-  position:fixed;z-index:120;pointer-events:none;margin:0;opacity:.94;
+  position:fixed;z-index:120;pointer-events:none;margin:0;opacity:.5;
   box-shadow:var(--shadow);
 }
 body.note-drag-active{touch-action:none;overscroll-behavior:none;}
-#sidebar .nav-item.drop-hover{background:var(--secondary);color:#fff;}
+#sidebar .nav-item.drop-hover{
+  background:var(--secondary);color:#fff;
+  position:relative;z-index:130;
+}
 #nbDropOverlay{
-  position:fixed;left:10px;right:10px;bottom:10px;z-index:115;
+  position:fixed;left:10px;right:10px;bottom:10px;z-index:125;
   background:var(--surface);color:var(--text);
   border:1px solid var(--border);border-radius:var(--radius-card);
   box-shadow:var(--shadow);padding:10px;
@@ -2352,7 +2392,7 @@ body.dark .ss-att-provider{color:#EAF3EC;}
 
 /* ============================================================================
    SnakeScale Notes v2.4.0: application script
-   BUILD STAMP: 2026-10-20-SSN-V240
+   BUILD STAMP: 2026-10-20-SSN-V241
 
    How this script is organized:
      1. Constants and global state
@@ -2383,8 +2423,8 @@ body.dark .ss-att-provider{color:#EAF3EC;}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-20-SSN-V240";
-const APP_VERSION = "2.4.0";
+const APP_BUILD = "2026-10-20-SSN-V241";
+const APP_VERSION = "2.4.1";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -8139,19 +8179,43 @@ function titleFromFileName(name) {
 /* Create one imported note instantly, exactly like the toolbar New
    Note does: local first (unshift, cache, render), upload in the
    background as a fresh note (no conflict check against a file that
-   cannot exist yet), cache again once its file id lands. */
-function createImportedNote(notebookSlug, title, bodyHtml) {
+   cannot exist yet), cache again once its file id lands.
+   v2.4.1: a caller whose note is not finished yet passes
+   options.holdSave and starts the save itself once the note is
+   complete. The Word import is that caller: its body already
+   carries image placeholders whose attachment records only exist
+   after the uploads finish, so saving at creation would persist
+   a note whose placeholders have no records, and anything that
+   rendered that version (most simply, the user opening the note
+   from the list while the uploads were still running) showed
+   every image as a missing details block. Holding the save
+   means the first version ever persisted is the finished one. */
+function createImportedNote(notebookSlug, title, bodyHtml, options) {
   const note = makeNote(notebookSlug, title, bodyHtml);
   state.notes.unshift(note);
   saveCache();
   renderAll();
+  if (!options || !options.holdSave) {
+    startImportedNoteSave(note, title);
+  }
+  return note;
+}
+
+/* The create save of an imported note, exactly as it has always
+   run: a fresh write with no conflict check (the file cannot
+   exist yet), the cache refreshed when it lands, and an honest
+   toast when the store cannot be reached (the note text is
+   queued by the save itself in that case, records included).
+   v2.4.1: extracted from createImportedNote so the Word import
+   can start the identical save after its image uploads finish;
+   see importFiles. */
+function startImportedNoteSave(note, title) {
   saveNoteToRepo(note, { skipConflictCheck: true, fresh: true })
     .then(function () { saveCache(); })
     .catch(function (err) {
       toast("Note \"" + title + "\" was imported and saved on this " +
         "device, but its upload failed: " + err.message, true);
     });
-  return note;
 }
 
 /* Plain text to note body HTML: paragraphs split on blank lines,
@@ -8679,11 +8743,16 @@ function removeImportedPlaceholder(note, attId) {
    record shape, the binary in the Drive attachments subfolder.
    An image that cannot be extracted or uploaded is skipped and
    counted, never fatal, and when uploads cannot run at all
-   (offline or signed out) every image skips the same way. The
-   note is saved once more at the end through the normal per note
-   save chain, so the records and any placeholder removals reach
-   Drive in order behind the create save createImportedNote
-   already started. Returns the number of skipped images. */
+   (offline or signed out) every image skips the same way.
+   v2.4.1: this pass no longer saves the note at the end. The
+   caller (importFiles) holds the note's create save until this
+   pass returns and then starts it, so the records pushed here
+   and the placeholder removals below are already on the note
+   when its first, only create save serializes it: no persisted
+   version of the note ever carries a placeholder without its
+   record. What this pass still settles locally is the cache
+   snapshot, and the open editor's hydration (see the end of the
+   function). Returns the number of skipped images. */
 async function attachImportedDocxImages(note, images) {
   let skipped = 0;
   const providerName = state.attach.defaultProvider;
@@ -8728,13 +8797,25 @@ async function attachImportedDocxImages(note, images) {
       removeImportedPlaceholder(note, img.attId);
     }
   }
-  try {
-    await saveNoteToRepo(note, { skipConflictCheck: true });
-    saveCache();
-  } catch (err) {
-    /* The create save has already reported store trouble if there
-       is any; the records and removals live in the local cache
-       either way, and a queued save carries them to Drive. */
+  /* v2.4.1: refresh the local cache with the records (and any
+     placeholder removals) on the note. The Drive save is the
+     caller's held create save, started right after this pass;
+     it serializes this same object, records included. */
+  saveCache();
+  /* v2.4.1: the note is in the list and clickable from the moment
+     it is created, while these uploads run for seconds on a real
+     document. If the user has already opened it, the editor
+     rendered its placeholders against the then empty record
+     list and stamped each one with a missing details block, and
+     an open editor never re-hydrates on its own (renderEditor
+     refills only when the note on screen changes), so those
+     blocks would sit there for the whole session even though
+     the records have now landed. Hydrate the open note again so
+     its images simply appear. */
+  if (currentNote() === note) {
+    finishNoteOpenAttachments(note).catch(function (err) {
+      console.warn("Imported image hydration failed:", err);
+    });
   }
   return skipped;
 }
@@ -8770,12 +8851,30 @@ async function importFiles(fileList) {
            summary below, never fatal to the note. */
         const parts = await docxFileToNoteParts(
           await readBlobArrayBuffer(file), title);
+        /* v2.4.1: when the file carries images, the create save
+           is held until the uploads have run: the records (and
+           any placeholder removals for failed images) must be
+           on the note before its first version is persisted, or
+           that version's placeholders have no records and render
+           as missing details blocks (the v2.4.0 bug). A docx
+           without images saves at creation, exactly as before,
+           and so do the .txt and .pdf branches below. */
         const importedNote = createImportedNote(slug, title,
-          parts.html);
+          parts.html, { holdSave: parts.images.length > 0 });
         imported++;
         if (parts.images.length) {
-          const skippedImages = await attachImportedDocxImages(
-            importedNote, parts.images);
+          let skippedImages = 0;
+          try {
+            skippedImages = await attachImportedDocxImages(
+              importedNote, parts.images);
+          } finally {
+            /* The held create save starts whatever happened
+               above: with every record that landed, with failed
+               placeholders already removed. If the attach pass
+               itself threw, this save still runs and the error
+               is reported by the per file catch below. */
+            startImportedNoteSave(importedNote, title);
+          }
           if (skippedImages > 0) {
             problems.push(name + " (" + skippedImages + " image" +
               (skippedImages === 1 ? "" : "s") +
