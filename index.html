@@ -27,10 +27,50 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-20-SSN-V241
-  Version: 2.4.1
+  BUILD STAMP: 2026-10-20-SSN-V250
+  Version: 2.5.0
 
   Revision history:
+    v2.5.0 2026-10-20 Drag to Trash and Archive, a notebook link
+                      picker, tags and save status relocations, a
+                      maximize note view, and an icon rail sidebar.
+                      Drag and drop (v2.4) gains two destinations:
+                      the sidebar Trash and Archive entries are
+                      drop targets beside the notebooks, running
+                      the exact trash and archive actions and
+                      toasting the same confirmations, and the
+                      mobile drop overlay lists them too. The
+                      notebook dropdown under the note title is
+                      replaced by a text link showing the current
+                      notebook; clicking it opens a small menu of
+                      notebooks (the current one marked), and
+                      picking one moves the note through the same
+                      shared move path as drag and drop; in Trash
+                      and Archive the link is plain text. The Tags
+                      box moves from the editor header to the
+                      bottom left of the editor footer, and the
+                      save status moves from that footer spot to
+                      the sidebar, immediately right of the Synced
+                      pill, driven by the same writers as before.
+                      A Maximize button in the editor footer hides
+                      the sidebar and the notes list so the note
+                      fills the window, writing column uncapped;
+                      the same button (now Restore) or Escape
+                      brings the layout back, and Escape closes
+                      any open menu or modal first. The sidebar
+                      gains an icon rail mode (a footer toggle,
+                      remembered in settings, desktop widths only):
+                      a narrow strip of icons (New Note, All
+                      Notes, Pinned, Notebooks, Trash, Archive,
+                      and the footer actions as icons), the active
+                      view marked, with the Notebooks icon opening
+                      a flyout of notebooks by name (plus New
+                      Notebook and the save status line) that
+                      closes when the pointer leaves; note drags
+                      keep working in rail mode, the flyout
+                      opening mid drag over the Notebooks icon and
+                      the Trash and Archive icons taking drops
+                      directly.
     v2.4.1 2026-10-20 Fix: Word import image records, and a
                       see-through drag ghost. In v2.4.0 the Word
                       import created and saved the note immediately
@@ -876,8 +916,17 @@ body.dark .gate-brand .wordmark{color:#EAF3EC;}
   display:inline-flex;align-items:center;gap:7px;padding:4px 10px;
   border-radius:var(--radius-pill);font-size:12px;font-weight:700;
   background:#0A2E21;color:#BFD6C4;border:1px solid #2A5240;
-  margin-bottom:10px;transition:border-color var(--motion),color var(--motion);
+  transition:border-color var(--motion),color var(--motion);
 }
+/* v2.5: the sync pill and the save status share one row in the
+   sidebar footer: the pill, then the status immediately to its
+   right as a small muted label. The row carries the bottom
+   margin the pill used to carry alone. */
+.sync-row{
+  display:flex;align-items:center;gap:10px;margin-bottom:10px;
+  flex-wrap:wrap;
+}
+#saveState{font-size:12.5px;color:#9DB8A6;font-weight:600;}
 .sync-dot{
   width:8px;height:8px;flex:0 0 8px;border-radius:50%;background:#9DB8A6;
 }
@@ -1088,6 +1137,103 @@ body.note-drag-active{touch-action:none;overscroll-behavior:none;}
   background:var(--selected);border-color:var(--accent);
 }
 #nbDropCancelBtn{align-self:flex-end;}
+
+/* ----- v2.5: maximize note, and the icon rail sidebar -----
+   Maximize is a body class (note-maximized) plus rules that only
+   exist at desktop widths: the sidebar (either form) and the
+   notes list hide, and the writing column loses its 860px cap.
+   At mobile widths the editor already is the whole screen, so
+   the button hides and the class has no rules at all.
+   The rail is the sidebar's second form: #sidebarRail is display
+   none in every other circumstance, and body.rail at desktop
+   widths swaps the two. The flyout is a fixed panel beside the
+   rail; both are app furniture and are never serialized. */
+#sidebarRail{display:none;}
+#railFlyout{
+  position:fixed;left:72px;top:88px;z-index:126;width:232px;
+  max-height:70vh;overflow-y:auto;padding:8px;
+  background:var(--sidebar);color:#EAF3EC;
+  border:1px solid #1D4A38;border-radius:var(--radius-card);
+  box-shadow:var(--shadow);
+}
+#railFlyout.hidden{display:none;}
+.rail-fly-head{
+  font-size:11px;font-weight:700;letter-spacing:1.6px;
+  text-transform:uppercase;color:#AFCDB7;padding:4px 8px 8px;
+}
+.rail-fly-row{
+  position:relative;display:flex;align-items:center;gap:8px;width:100%;
+  text-align:left;background:none;border:none;color:#EAF3EC;
+  padding:8px;border-radius:var(--radius-button);font-size:14px;
+  transition:background-color var(--motion),color var(--motion);
+}
+.rail-fly-row:hover{background:rgba(87,167,115,.16);}
+.rail-fly-row.active{background:rgba(87,167,115,.28);color:#fff;font-weight:800;}
+.rail-fly-row .count{margin-left:auto;}
+#railFlyout .count-pill{
+  min-width:24px;padding:2px 7px;border-radius:var(--radius-pill);
+  background:rgba(220,232,220,.16);color:#DDEEE1;text-align:center;
+  font-size:11px;font-weight:700;line-height:1.35;
+}
+#railFlyout .count-pill:empty{display:none;}
+#railFlyout .rail-fly-row.active .count-pill{
+  background:var(--accent);color:#0B3D2E;
+}
+#railFlyout .rail-fly-row.drop-hover{
+  background:var(--secondary);color:#fff;z-index:130;
+}
+.rail-fly-new{
+  display:block;width:100%;text-align:left;margin-top:6px;
+  background:none;border:none;border-top:1px solid #1D4A38;
+  color:var(--accent);font-size:13.5px;font-weight:700;
+  padding:9px 8px 4px;cursor:pointer;border-radius:var(--radius-button);
+}
+.rail-fly-new:hover{background:rgba(87,167,115,.16);color:#fff;}
+.rail-fly-status{
+  border-top:1px solid #1D4A38;margin-top:6px;padding:8px 8px 2px;
+  font-size:12px;color:#9DB8A6;font-weight:600;
+}
+@media (min-width:901px){
+  body.note-maximized #sidebar,
+  body.note-maximized #sidebarRail,
+  body.note-maximized #listpane{display:none;}
+  body.note-maximized .editor-inner{max-width:none;}
+  body.rail #sidebar{display:none;}
+  body.rail #sidebarRail{
+    display:flex;flex-direction:column;align-items:center;
+    width:64px;flex:0 0 64px;background:var(--sidebar);color:#EAF3EC;
+    padding:10px 0 12px;gap:4px;overflow-y:auto;overflow-x:hidden;
+  }
+  #sidebarRail .rail-head{padding:6px 0 10px;}
+  #sidebarRail .rail-head .logo-slot svg{display:block;width:26px;height:auto;}
+  #sidebarRail .rail-btn{
+    position:relative;display:flex;align-items:center;justify-content:center;
+    width:44px;height:44px;flex:0 0 44px;border:none;cursor:pointer;
+    background:none;color:#EAF3EC;border-radius:var(--radius-button);
+    transition:background-color var(--motion),color var(--motion),
+      box-shadow var(--motion);
+  }
+  #sidebarRail .rail-btn:hover{background:rgba(87,167,115,.16);}
+  #sidebarRail .rail-btn.active{
+    background:rgba(87,167,115,.28);color:#fff;
+    box-shadow:inset 3px 0 0 var(--accent);
+  }
+  #sidebarRail .rail-btn.drop-hover{
+    background:var(--secondary);color:#fff;z-index:130;
+  }
+  #sidebarRail .rail-spacer{flex:1 1 auto;min-height:12px;}
+  #sidebarRail .rail-sync{
+    display:flex;align-items:center;justify-content:center;
+    width:44px;height:30px;flex:0 0 30px;
+  }
+  #sidebarRail .rail-sync[data-state="ok"] .sync-dot{background:var(--accent);}
+  #sidebarRail .rail-sync[data-state="busy"] .sync-dot{background:#D9A441;}
+  #sidebarRail .rail-sync[data-state="offline"] .sync-dot{background:#D9A441;}
+  #sidebarRail .rail-sync[data-state="conflict"] .sync-dot{background:#C0392B;}
+}
+@media (max-width:900px){
+  #maximizeBtn{display:none;}
+}
 /* The empty list keeps its existing guidance, now over a very faint tile S
    watermark supplied by the generated inline SVG data URI below. */
 .empty-state{
@@ -1132,6 +1278,30 @@ body.note-drag-active{touch-action:none;overscroll-behavior:none;}
 /* v2.2: the .pin-toggle rule that styled the editor's Pinned
    checkbox lived here; the checkbox is gone (pinning moved to the
    notes list toolbar menu), so the rule went with it. */
+/* v2.5: the notebook picker is a text link. It reads as a link
+   (accent color, underline on hover) with a small caret; its menu
+   reuses .tb-menu, with the current notebook's item marked by a
+   check in .nb-check and a soft background. On a locked note the
+   button is disabled and the .locked rules strip the link look
+   entirely, leaving plain text. */
+.notebook-link-wrap{display:inline-flex;}
+#notebookLink{
+  background:none;border:none;padding:6px 2px;cursor:pointer;
+  font-size:15px;font-weight:700;color:var(--secondary);
+  text-align:left;border-radius:var(--radius-button);
+}
+#notebookLink:hover:not(:disabled){text-decoration:underline;}
+#notebookLink:focus-visible{outline:2px solid var(--accent);outline-offset:1px;}
+#notebookLink .notebook-caret{font-size:11px;color:var(--muted);}
+#notebookLink.locked{
+  color:var(--text);font-weight:600;cursor:default;
+}
+#notebookLink.locked .notebook-caret{display:none;}
+#notebookMenu button .nb-check{
+  display:inline-block;width:16px;flex:0 0 16px;font-weight:800;
+  color:var(--secondary);
+}
+#notebookMenu button.current{background:var(--soft);font-weight:700;}
 .toolbar{
   display:flex;flex-wrap:wrap;gap:4px;padding:6px;align-items:center;
   border:1px solid var(--border);border-radius:var(--radius-card);
@@ -1487,8 +1657,28 @@ body.dark #linkPopupUrl{color:#9FD4B2;}
   display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;
   padding:10px 22px;border-top:1px solid var(--border);background:var(--surface);
 }
-#saveState{font-size:13px;color:var(--muted);font-weight:600;}
-.editor-actions{display:flex;gap:6px;flex-wrap:wrap;}
+/* v2.5: the Tags box sits at the footer's left, where the save
+   status used to be (the status itself now lives beside the
+   sidebar's Synced pill; its #saveState rule lives with the
+   sidebar styles). A quiet label and a modestly sized input, so
+   the footer row keeps its height and the actions stay right. */
+.foot-tags{display:flex;align-items:center;gap:8px;}
+.foot-tags label{font-size:12px;font-weight:700;color:var(--muted);}
+.foot-tags input{
+  width:210px;max-width:44vw;padding:6px 8px;
+  border:1px solid var(--border);border-radius:var(--radius-button);
+  background:var(--surface);color:var(--text);font-size:13.5px;
+  transition:border-color var(--motion),box-shadow var(--motion);
+}
+.foot-tags input:focus{
+  border-color:var(--secondary);outline:none;
+  box-shadow:0 0 0 3px rgba(87,167,115,.22);
+}
+.foot-tags input:disabled{opacity:.55;}
+.editor-actions{display:flex;gap:6px;flex-wrap:wrap;align-items:center;}
+#maximizeBtn{display:inline-flex;align-items:center;gap:5px;}
+#maximizeIcon{display:inline-flex;}
+#maximizeIcon svg{display:block;}
 .no-note{padding:50px 24px;text-align:center;color:var(--muted);}
 .no-note .big{font-size:19px;font-weight:800;color:var(--text);margin-bottom:8px;}
 
@@ -1908,8 +2098,11 @@ body.dark .ss-att-provider{color:#EAF3EC;}
     <div class="nav-section">
       <button class="nav-item" id="navAll" type="button">All Notes <span class="count count-pill" id="countAll"></span></button>
       <button class="nav-item" id="navPinned" type="button">Pinned <span class="count count-pill" id="countPinned"></span></button>
-      <button class="nav-item" id="navTrash" type="button">Trash <span class="count count-pill" id="countTrash"></span></button>
-      <button class="nav-item" id="navArchive" type="button">Archive <span class="count count-pill" id="countArchive"></span></button>
+      <!-- v2.5: Trash and Archive are drag and drop destinations
+           too (data-drop-action is what the note drag hit test
+           reads), beside the notebook rows' data-nb-slug. -->
+      <button class="nav-item" id="navTrash" type="button" data-drop-action="trash">Trash <span class="count count-pill" id="countTrash"></span></button>
+      <button class="nav-item" id="navArchive" type="button" data-drop-action="archive">Archive <span class="count count-pill" id="countArchive"></span></button>
     </div>
 
     <div class="nav-section">
@@ -1923,12 +2116,23 @@ body.dark .ss-att-provider{color:#EAF3EC;}
     </div>
 
     <div class="sidebar-foot">
-      <div class="sync-pill" id="syncPill" data-state="idle"><span class="sync-dot" aria-hidden="true"></span><span class="sync-label">Not synced yet</span></div>
+      <!-- v2.5: the save status moved here from the editor footer;
+           it sits immediately right of the Synced pill and is still
+           written by setSaveState, exactly as before. -->
+      <div class="sync-row">
+        <div class="sync-pill" id="syncPill" data-state="idle"><span class="sync-dot" aria-hidden="true"></span><span class="sync-label">Not synced yet</span></div>
+        <span id="saveState">No changes</span>
+      </div>
       <div class="foot-buttons">
       <div class="foot-buttons">
         <button class="btn small" id="syncNowBtn" type="button">Sync now</button>
         <button class="btn small" id="themeBtn" type="button">Dark mode</button>
         <button class="btn small" id="lockBtn" type="button">Sign out</button>
+        <!-- v2.5: the icon rail toggle. Its label is maintained by
+             renderRailChrome (Icons only in full mode, Full sidebar
+             in rail mode, though the rail shows its own expand icon
+             button for the trip back). -->
+        <button class="btn small" id="railToggleBtn" type="button">Icons only</button>
         <!-- v2.2: get a fresh Google token and resync without leaving
              the app (refreshGoogleConnection in section 11). The
              expired sign in messages name this button as the remedy. -->
@@ -1939,6 +2143,53 @@ body.dark .ss-att-provider{color:#EAF3EC;}
       <div class="app-version" id="appVersion"></div>
     </div>
   </aside>
+
+  <!-- v2.5: the icon rail, the sidebar's collapsed form. It is a
+       separate strip shown instead of #sidebar at desktop widths
+       when the rail setting is on (body.rail, min-width 901px; at
+       smaller widths the media query never shows it and the full
+       sidebar keeps the mobile pane behavior). Every button is an
+       icon with a tooltip; the leaf buttons simply click their
+       full sidebar counterparts, so each action has exactly one
+       implementation. The Notebooks button opens #railFlyout. The
+       rail sync dot mirrors the sync pill's state (setSyncPill
+       keeps its data-state and title current), and the save status
+       text lives at the foot of the flyout (#railSaveState, kept
+       current by setSaveState). Trash and Archive carry the same
+       data-drop-action the drag hit test reads in the full
+       sidebar, so drops work here too. The active view's button
+       carries .active, maintained by renderRailChrome. -->
+  <aside id="sidebarRail" aria-label="Sidebar, collapsed to icons">
+    <div class="rail-head"><span class="logo-slot" aria-hidden="true"></span></div>
+    <button class="rail-btn" id="railNewNoteBtn" type="button" title="New Note" aria-label="New Note"><svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true" focusable="false"><path d="M10 3v14M3 10h14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" fill="none"/></svg></button>
+    <button class="rail-btn" id="railAllBtn" type="button" title="All Notes" aria-label="All Notes"><svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true" focusable="false"><path d="M3 5.5h14M3 10h14M3 14.5h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" fill="none"/></svg></button>
+    <button class="rail-btn" id="railPinnedBtn" type="button" title="Pinned" aria-label="Pinned"><svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true" focusable="false"><rect x="7.2" y="2.2" width="8.6" height="8.6" rx="2.2" transform="rotate(45 11.5 6.5)" fill="currentColor" stroke="none"/><path d="M7.6 10.4L3 17" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" fill="none"/></svg></button>
+    <button class="rail-btn" id="railNotebooksBtn" type="button" title="Notebooks" aria-label="Notebooks" aria-haspopup="true" aria-expanded="false"><svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true" focusable="false"><path d="M4 3.5C4 2.7 4.7 2 5.5 2H10v16H5.5C4.7 18 4 17.3 4 16.5zM16 3.5C16 2.7 15.3 2 14.5 2H10v16h4.5c.8 0 1.5-.7 1.5-1.5z" fill="currentColor" stroke="none"/></svg></button>
+    <button class="rail-btn" id="railTrashBtn" type="button" title="Trash" aria-label="Trash" data-drop-action="trash"><svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true" focusable="false"><path d="M3 5h14M8 5V3.5A.5.5 0 0 1 8.5 3h3a.5.5 0 0 1 .5.5V5M5 5l.8 11a1.5 1.5 0 0 0 1.5 1.4h5.4A1.5 1.5 0 0 0 14.2 16L15 5M8.3 8.5v5M11.7 8.5v5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg></button>
+    <button class="rail-btn" id="railArchiveBtn" type="button" title="Archive" aria-label="Archive" data-drop-action="archive"><svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true" focusable="false"><rect x="2.5" y="3" width="15" height="4" rx="1" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M4 7v8a1.5 1.5 0 0 0 1.5 1.5h9A1.5 1.5 0 0 0 16 15V7M8 10h4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" fill="none"/></svg></button>
+    <div class="rail-spacer"></div>
+    <div class="rail-sync" id="railSync" data-state="idle" title="Not synced yet"><span class="sync-dot" aria-hidden="true"></span></div>
+    <button class="rail-btn" id="railRefreshBtn" type="button" title="Refresh connection" aria-label="Refresh connection"><svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true" focusable="false"><path d="M16.5 10a6.5 6.5 0 1 1-1.9-4.6M16.7 2.8v3.4h-3.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg></button>
+    <button class="rail-btn" id="railThemeBtn" type="button" title="Dark mode" aria-label="Toggle dark mode"><svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true" focusable="false"><path d="M16.8 12.6A7.5 7.5 0 1 1 7.4 3.2a6 6 0 0 0 9.4 9.4z" fill="currentColor" stroke="none"/></svg></button>
+    <button class="rail-btn" id="railLockBtn" type="button" title="Sign out" aria-label="Sign out"><svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true" focusable="false"><path d="M8 3H5.5A1.5 1.5 0 0 0 4 4.5v11A1.5 1.5 0 0 0 5.5 17H8M13 6l4 4-4 4M17 10H7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg></button>
+    <button class="rail-btn" id="railExpandBtn" type="button" title="Expand sidebar" aria-label="Expand sidebar"><svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true" focusable="false"><rect x="2.5" y="3.5" width="15" height="13" rx="2" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M8 3.5v13" stroke="currentColor" stroke-width="1.7" fill="none"/></svg></button>
+  </aside>
+
+  <!-- v2.5: the rail's Notebooks flyout. One instance, app
+       furniture beside the rail; it opens from the Notebooks rail
+       button on hover or click (and mid drag, so notebooks stay
+       reachable as drop targets), and closes when the pointer
+       leaves both the button and the panel, after a short grace
+       delay, or when a row is chosen. Its rows carry data-nb-slug
+       like the sidebar's, so the drag hit test finds them. The
+       foot of the panel carries the save status text in rail
+       mode (#railSaveState). -->
+  <div id="railFlyout" class="hidden" role="menu" aria-label="Notebooks">
+    <div class="rail-fly-head">Notebooks</div>
+    <div id="railFlyoutList"></div>
+    <button type="button" class="rail-fly-new" id="railNewNotebookBtn">+ New Notebook</button>
+    <div class="rail-fly-status" id="railSaveState">No changes</div>
+  </div>
 
   <!-- MIDDLE PANE: note list -->
   <section id="listpane">
@@ -2041,19 +2292,33 @@ body.dark .ss-att-provider{color:#EAF3EC;}
         <div class="editor-inner">
           <input id="noteTitle" type="text" placeholder="Untitled note" aria-label="Note title">
           <div class="meta-row">
+            <!-- v2.5: the notebook dropdown is a text link now. It
+                 shows the open note's current notebook name with a
+                 small caret; clicking it (on an editable note) opens
+                 the notebook menu below it, whose items are the
+                 notebooks, the current one marked. Picking one moves
+                 the note through the same moveNoteToNotebook path
+                 as drag and drop. On a locked note (Trash, Archive)
+                 the link is plain non interactive text showing the
+                 notebook the note came from. The menu is a sibling
+                 pattern like the toolbar menus: furniture, never
+                 saved into the note. -->
             <div class="meta-field">
-              <label for="noteNotebook">Notebook</label>
-              <select id="noteNotebook"></select>
-            </div>
-            <div class="meta-field">
-              <label for="noteTags">Tags (comma separated)</label>
-              <input id="noteTags" type="text" placeholder="ideas, work, personal">
+              <label id="notebookFieldLabel">Notebook</label>
+              <span class="tb-menu-wrap notebook-link-wrap">
+                <button type="button" id="notebookLink" aria-haspopup="true" aria-expanded="false"><span id="notebookLinkName"></span><span class="notebook-caret" aria-hidden="true"> &#9662;</span></button>
+                <div class="tb-menu hidden" id="notebookMenu" role="menu" aria-label="Move note to notebook"></div>
+              </span>
             </div>
             <!-- v2.2: the Pinned checkbox used to live here. Pinning
                  now happens from the notes list toolbar menu (Pin note
                  / Unpin note), and collectEditor no longer reads a pin
                  control: the note object's own pinned value is the
-                 only source, so editing can never unpin a note. -->
+                 only source, so editing can never unpin a note.
+                 v2.5: the Tags box used to live here too; it moved
+                 to the editor footer (see .foot-tags there), and
+                 the save status that sat in the footer moved to
+                 the sidebar, beside the Synced pill. -->
           </div>
 
           <!-- Formatting toolbar. v1.3 restyled it into labeled groups
@@ -2317,7 +2582,15 @@ body.dark .ss-att-provider{color:#EAF3EC;}
         </div>
       </div>
       <div class="editor-foot">
-        <span id="saveState">No changes</span>
+        <!-- v2.5: the Tags box lives here now, bottom left where
+             the save status used to sit (the status moved to the
+             sidebar, beside the Synced pill). Same input, same id,
+             same parsing and wiring; still disabled on locked
+             notes by the same lock handling in renderEditor. -->
+        <div class="foot-tags">
+          <label for="noteTags">Tags</label>
+          <input id="noteTags" type="text" placeholder="ideas, work, personal">
+        </div>
         <span class="editor-hint">Links: Ctrl+click (Cmd+click on Mac) opens a link, or click it to open or edit it.</span>
         <div class="editor-actions">
           <span class="tb-menu-wrap export-wrap">
@@ -2328,6 +2601,13 @@ body.dark .ss-att-provider{color:#EAF3EC;}
               <button type="button" data-export="pdf">PDF (print)</button>
             </div>
           </span>
+          <!-- v2.5: Maximize fills the window with the note (the
+               sidebar and the notes list hide, the writing column
+               uncaps). Its icon and label flip to Restore while
+               maximized; Escape also leaves, once no menu or modal
+               is open. Hidden at mobile widths, where the editor
+               already is the whole screen. -->
+          <button class="btn small" id="maximizeBtn" type="button" aria-pressed="false" title="Fill the window with this note"><span id="maximizeIcon" aria-hidden="true"></span><span id="maximizeLabel">Maximize</span></button>
           <button class="btn small" id="editorBackBtn" type="button">Back to list</button>
           <button class="btn small danger" id="trashBtn" type="button">Move to Trash</button>
           <button class="btn small" id="archiveBtn" type="button">Archive</button>
@@ -2380,9 +2660,12 @@ body.dark .ss-att-provider{color:#EAF3EC;}
      data-nb-slug), and is dismissed by a drop, the Cancel button,
      Escape, or a cancelled pointer. Pure app furniture at body
      level: nothing about it is rendered into the note list's
-     persistent state or into any note. -->
-<div id="nbDropOverlay" class="hidden" role="dialog" aria-label="Move note to notebook">
-  <div class="nb-drop-head">Move to notebook</div>
+     persistent state or into any note.
+     v2.5: the overlay also offers Trash and Archive rows (built
+     by the same script pass, carrying data-drop-action like the
+     sidebar entries), under a "Move to" heading. -->
+<div id="nbDropOverlay" class="hidden" role="dialog" aria-label="Move note">
+  <div class="nb-drop-head">Move to</div>
   <div id="nbDropList"></div>
   <button type="button" class="btn small" id="nbDropCancelBtn">Cancel</button>
 </div>
@@ -2391,8 +2674,8 @@ body.dark .ss-att-provider{color:#EAF3EC;}
 "use strict";
 
 /* ============================================================================
-   SnakeScale Notes v2.4.0: application script
-   BUILD STAMP: 2026-10-20-SSN-V241
+   SnakeScale Notes v2.5.0: application script
+   BUILD STAMP: 2026-10-20-SSN-V250
 
    How this script is organized:
      1. Constants and global state
@@ -2423,8 +2706,8 @@ body.dark .ss-att-provider{color:#EAF3EC;}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-20-SSN-V241";
-const APP_VERSION = "2.4.1";
+const APP_BUILD = "2026-10-20-SSN-V250";
+const APP_VERSION = "2.5.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -2521,6 +2804,10 @@ const state = {
     field: "updated",         // title | created | updated
     dir: "desc"               // asc | desc; default matches the pre-v1.8 order
   },
+  sidebarRail: false,       // v2.5: the sidebar's icon rail mode,
+                            // remembered in settings, default full.
+                            // Applied as body.rail; at widths of
+                            // 900px and under it has no effect.
   trashSelection: [],       // v1.8.1: ids of the notes checked in the
                             // Trash view, for Delete Selected
   archiveSelection: [],     // v1.8.1: ids of the notes checked in the
@@ -2680,6 +2967,15 @@ function setSyncPill(kind, text) {
   pill.dataset.state = text.indexOf("Conflict") === 0 ? "conflict" :
     (kind === "bad" && text.indexOf("Offline") === 0 ? "offline" : (kind || "idle"));
   pill.className = "sync-pill" + (kind ? " " + kind : "");
+  /* v2.5: the icon rail has no room for the pill's text, so its
+     sync dot mirrors the same state: same data-state value (the
+     dot colors key off it identically) and the pill's label as
+     the dot's tooltip. */
+  const railSync = document.getElementById("railSync");
+  if (railSync) {
+    railSync.dataset.state = pill.dataset.state;
+    railSync.title = text;
+  }
 }
 function refreshSyncPill() {
   const queued = loadQueue().length;
@@ -2951,6 +3247,16 @@ function loadSettings() {
       state.listSort.dir = s.listSort.dir;
     }
   }
+  /* v2.5: the remembered sidebar form. Only a stored true turns
+     the rail on; anything else leaves the full sidebar default.
+     The body class is the whole application of the setting: the
+     rail CSS hangs off it (inside the desktop media query), and
+     renderRailChrome keeps the toggle label and rail active
+     states in step from the first render on. */
+  if (s.sidebarRail === true) {
+    state.sidebarRail = true;
+    document.body.classList.add("rail");
+  }
 }
 
 
@@ -2958,7 +3264,8 @@ function saveSettings() {
   localStorage.setItem(LS_SETTINGS, JSON.stringify({
     dark: document.body.classList.contains("dark"),
     attach: state.attach,
-    listSort: state.listSort   // v1.8: the remembered notes list sort
+    listSort: state.listSort,   // v1.8: the remembered notes list sort
+    sidebarRail: state.sidebarRail   // v2.5: the icon rail choice
   }));
 }
 
@@ -4683,6 +4990,192 @@ function renderSidebar() {
   /* v2.0: the button is Sign out for everyone; there is no lock
      screen and no app password anymore. */
   document.getElementById("lockBtn").textContent = "Sign out";
+  /* v2.5: the icon rail's chrome (toggle label, active marks,
+     flyout contents) renders in step with the sidebar. */
+  renderRailChrome();
+}
+
+/* --------------------------------------------------------------------------
+   v2.5: the icon rail.
+   The rail is the sidebar's collapsed second form, a separate
+   strip (#sidebarRail) the CSS swaps in for #sidebar at desktop
+   widths when body.rail is set; the setting persists in settings
+   (state.sidebarRail). The leaf buttons own no logic: their
+   handlers click the full sidebar's counterparts, so New Note,
+   the views, Refresh connection, theme, and Sign out each keep
+   exactly one implementation. The Notebooks button is the one
+   container: it opens the flyout, whose rows are built here in
+   the same pass as the sidebar's notebook rows and navigate the
+   same way they do. The flyout closes on a grace timer once the
+   pointer has left both the button and the panel.
+   -------------------------------------------------------------------------- */
+let railFlyoutCloseTimer = null;
+
+function renderRailChrome() {
+  const toggle = document.getElementById("railToggleBtn");
+  if (toggle) {
+    toggle.textContent = state.sidebarRail ? "Full sidebar" : "Icons only";
+  }
+  const marks = [
+    ["railAllBtn", state.view.kind === "all"],
+    ["railPinnedBtn", state.view.kind === "pinned"],
+    ["railTrashBtn", state.view.kind === "trash"],
+    ["railArchiveBtn", state.view.kind === "archive"],
+    ["railNotebooksBtn", state.view.kind === "notebook"]
+  ];
+  marks.forEach(function (pair) {
+    const btn = document.getElementById(pair[0]);
+    if (btn) { btn.classList.toggle("active", pair[1]); }
+  });
+  const railTheme = document.getElementById("railThemeBtn");
+  if (railTheme) {
+    railTheme.title =
+      document.body.classList.contains("dark") ? "Light mode" : "Dark mode";
+  }
+  renderRailFlyoutList();
+}
+
+function renderRailFlyoutList() {
+  const list = document.getElementById("railFlyoutList");
+  if (!list) { return; }
+  list.innerHTML = "";
+  if (!state.notebooks.length) {
+    const empty = document.createElement("div");
+    empty.className = "hint";
+    empty.style.padding = "4px 8px";
+    empty.textContent = "No notebooks yet. Use + New Notebook to add one.";
+    list.appendChild(empty);
+  }
+  state.notebooks.forEach(function (nb) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "rail-fly-row" +
+      ((state.view.kind === "notebook" && state.view.value === nb.slug) ? " active" : "");
+    const nameSpan = document.createElement("span");
+    nameSpan.textContent = nb.name;
+    btn.appendChild(nameSpan);
+    const countSpan = document.createElement("span");
+    countSpan.className = "count count-pill";
+    countSpan.textContent = notebookCount(nb.slug) || "";
+    btn.appendChild(countSpan);
+    /* The slug rides on the row so the note drag hit test can
+       name the notebook under the pointer, exactly like the
+       sidebar's rows. */
+    btn.setAttribute("data-nb-slug", nb.slug);
+    btn.addEventListener("click", function () {
+      closeRailFlyout();
+      state.view = { kind: "notebook", value: nb.slug };
+      renderAll();
+      setMobileView("list");
+    });
+    list.appendChild(btn);
+  });
+}
+
+function openRailFlyout() {
+  if (railFlyoutCloseTimer) {
+    clearTimeout(railFlyoutCloseTimer);
+    railFlyoutCloseTimer = null;
+  }
+  const flyout = document.getElementById("railFlyout");
+  if (flyout) { flyout.classList.remove("hidden"); }
+  const btn = document.getElementById("railNotebooksBtn");
+  if (btn) { btn.setAttribute("aria-expanded", "true"); }
+}
+
+function closeRailFlyout() {
+  if (railFlyoutCloseTimer) {
+    clearTimeout(railFlyoutCloseTimer);
+    railFlyoutCloseTimer = null;
+  }
+  const flyout = document.getElementById("railFlyout");
+  if (flyout) { flyout.classList.add("hidden"); }
+  const btn = document.getElementById("railNotebooksBtn");
+  if (btn) { btn.setAttribute("aria-expanded", "false"); }
+}
+
+/* Leaving the button or the panel starts a short grace timer
+   instead of closing at once, so crossing the gap between them
+   never flickers the panel shut; entering either cancels it. */
+function scheduleRailFlyoutClose() {
+  if (railFlyoutCloseTimer) { clearTimeout(railFlyoutCloseTimer); }
+  railFlyoutCloseTimer = setTimeout(function () {
+    railFlyoutCloseTimer = null;
+    closeRailFlyout();
+  }, 300);
+}
+
+function toggleRailFlyout() {
+  const flyout = document.getElementById("railFlyout");
+  if (!flyout) { return; }
+  if (flyout.classList.contains("hidden")) { openRailFlyout(); }
+  else { closeRailFlyout(); }
+}
+
+function setSidebarRail(on) {
+  state.sidebarRail = !!on;
+  document.body.classList.toggle("rail", state.sidebarRail);
+  if (!state.sidebarRail) { closeRailFlyout(); }
+  saveSettings();
+  renderRailChrome();
+}
+
+/* --------------------------------------------------------------------------
+   v2.5: maximize the open note.
+   A runtime view state only: body.note-maximized hides the
+   sidebar and the notes list (desktop widths only, where the CSS
+   rules live) and uncaps the writing column. Nothing is
+   persisted. Escape leaves maximize only when nothing more
+   specific is open: an active note drag cancels itself (its own
+   capture handler), and every menu, panel, popup, and modal has
+   its own Escape closer, so this handler defers whenever
+   anyOverlayOpen reports one up.
+   -------------------------------------------------------------------------- */
+let editorMaximized = false;
+const MAXIMIZE_ICON_EXPAND =
+  "<svg viewBox=\"0 0 16 16\" width=\"13\" height=\"13\" aria-hidden=\"true\">" +
+  "<path d=\"M6 2H2v4M10 2h4v4M6 14H2v-4M10 14h4v-4\" stroke=\"currentColor\" " +
+  "stroke-width=\"1.7\" stroke-linecap=\"round\" stroke-linejoin=\"round\" " +
+  "fill=\"none\"/></svg>";
+const MAXIMIZE_ICON_RESTORE =
+  "<svg viewBox=\"0 0 16 16\" width=\"13\" height=\"13\" aria-hidden=\"true\">" +
+  "<path d=\"M9.5 6.5L14 2M14 6.5V2H9.5M6.5 9.5L2 14M2 9.5V14h4.5\" " +
+  "stroke=\"currentColor\" stroke-width=\"1.7\" stroke-linecap=\"round\" " +
+  "stroke-linejoin=\"round\" fill=\"none\"/></svg>";
+
+function setMaximized(on) {
+  editorMaximized = !!on;
+  document.body.classList.toggle("note-maximized", editorMaximized);
+  const btn = document.getElementById("maximizeBtn");
+  if (btn) {
+    btn.setAttribute("aria-pressed", editorMaximized ? "true" : "false");
+    btn.title = editorMaximized
+      ? "Back to the full layout" : "Fill the window with this note";
+  }
+  const icon = document.getElementById("maximizeIcon");
+  if (icon) {
+    icon.innerHTML = editorMaximized
+      ? MAXIMIZE_ICON_RESTORE : MAXIMIZE_ICON_EXPAND;
+  }
+  const label = document.getElementById("maximizeLabel");
+  if (label) { label.textContent = editorMaximized ? "Restore" : "Maximize"; }
+}
+
+/* True while any menu, panel, popup, modal, or note drag is up.
+   Consulted by the maximize Escape handler (in wireEvents) so
+   Escape always deals with the innermost thing first. */
+function anyOverlayOpen() {
+  if (noteDrag) { return true; }
+  const ids = ["noteLinkModal", "nbDropOverlay", "notebookMenu",
+    "railFlyout", "linkPopup", "tableMenu", "cellMenu", "attMenu",
+    "exportMenu"];
+  for (let i = 0; i < ids.length; i++) {
+    const el = document.getElementById(ids[i]);
+    if (el && !el.classList.contains("hidden")) { return true; }
+  }
+  return document.querySelectorAll(
+    "#toolbar .tb-menu:not(.hidden), " +
+    "#listToolbar .list-panel:not(.hidden)").length > 0;
 }
 
 
@@ -5408,6 +5901,8 @@ function renderEditor() {
     /* v2.3: and no cell menu, chip, or cell selection. */
     hideCellMenu();
     clearCellSelection();
+    /* v2.5: and no notebook menu. */
+    closeNotebookMenu();
     return;
   }
   noNote.classList.add("hidden");
@@ -5435,6 +5930,8 @@ function renderEditor() {
        multi-cell selection belong to the previous note too. */
     hideCellMenu();
     clearCellSelection();
+    /* v2.5: the notebook menu belongs to the previous note too. */
+    closeNotebookMenu();
     attachBodyGuard = true;
     /* v1.2: the previous note's image blob URLs are released before the
        editor switches, so long sessions do not accumulate them. */
@@ -5476,23 +5973,11 @@ function renderEditor() {
     });
   }
 
-  /* Notebook picker options follow the notebook list. A trashed or
+  /* v2.5: the notebook link follows the note. A trashed or
      archived note shows the notebook it came from, since that is
-     where Restore or Unarchive will put it back. */
-  const picker = document.getElementById("noteNotebook");
-  const wanted = note.trashed ? (note.trashedFrom || note.notebook) :
-    (note.archived ? (note.archivedFrom || note.notebook) : note.notebook);
-  if (picker.getAttribute("data-for") !== String(state.notebooks.length) + ":" + wanted) {
-    picker.setAttribute("data-for", String(state.notebooks.length) + ":" + wanted);
-    picker.innerHTML = "";
-    state.notebooks.forEach(function (nb) {
-      const opt = document.createElement("option");
-      opt.value = nb.slug;
-      opt.textContent = nb.name;
-      picker.appendChild(opt);
-    });
-    picker.value = wanted;
-  }
+     where Restore or Unarchive will put it back; the link is
+     inert on those locked notes. See refreshNotebookLink. */
+  refreshNotebookLink(note);
 
   /* Trash mode swaps the action buttons and locks editing. Archive
      mode (v1.5) does the same, with its own pair: Unarchive and Move
@@ -5515,12 +6000,92 @@ function renderEditor() {
   if (locked) { hideTableMenu(); }
   /* v2.3: the same for the cell furniture and any cell selection. */
   if (locked) { hideCellMenu(); clearCellSelection(); }
-  picker.disabled = locked;
+  /* v2.5: the notebook link's locked state was set by
+     refreshNotebookLink above (it replaced the old picker's
+     disabled line here). */
 }
 renderEditor._forId = null;
 
+/* --------------------------------------------------------------------------
+   v2.5: the notebook link and its menu.
+   The link shows the open note's effective notebook: for a live
+   note, the notebook it lives in; for a trashed or archived note,
+   the notebook it came from (where Restore or Unarchive returns
+   it), rendered as plain text because a locked note cannot move.
+   The menu is rebuilt on every open from state.notebooks, the
+   note's own notebook marked, and picking another runs the shared
+   moveNoteToNotebook path from section 10, the same one drag and
+   drop lands on, so there is still exactly one move
+   implementation. The notebook itself is never a form value
+   anymore: collectEditor reads it from the note object, which
+   only the move paths change.
+   -------------------------------------------------------------------------- */
+function refreshNotebookLink(note) {
+  const link = document.getElementById("notebookLink");
+  if (!link || !note) { return; }
+  const wanted = note.trashed ? (note.trashedFrom || note.notebook) :
+    (note.archived ? (note.archivedFrom || note.notebook) : note.notebook);
+  const nb = state.notebooks.find(function (n) { return n.slug === wanted; });
+  document.getElementById("notebookLinkName").textContent =
+    nb ? nb.name : (wanted || "");
+  link.dataset.slug = wanted || "";
+  const locked = !!note.trashed || !!note.archived;
+  link.disabled = locked;
+  link.classList.toggle("locked", locked);
+  if (locked) { closeNotebookMenu(); }
+}
+
+function closeNotebookMenu() {
+  const menu = document.getElementById("notebookMenu");
+  if (menu) { menu.classList.add("hidden"); }
+  const link = document.getElementById("notebookLink");
+  if (link) { link.setAttribute("aria-expanded", "false"); }
+}
+
+function openNotebookMenu() {
+  const note = currentNote();
+  const menu = document.getElementById("notebookMenu");
+  const link = document.getElementById("notebookLink");
+  if (!note || !menu || !link || link.disabled) { return; }
+  menu.innerHTML = "";
+  state.notebooks.forEach(function (nb) {
+    const item = document.createElement("button");
+    item.type = "button";
+    item.setAttribute("role", "menuitem");
+    const isCurrent = nb.slug === note.notebook;
+    if (isCurrent) { item.classList.add("current"); }
+    const check = document.createElement("span");
+    check.className = "nb-check";
+    check.setAttribute("aria-hidden", "true");
+    check.textContent = isCurrent ? "✓" : "";
+    item.appendChild(check);
+    const label = document.createElement("span");
+    label.textContent = nb.name;
+    item.appendChild(label);
+    item.addEventListener("click", function () {
+      closeNotebookMenu();
+      if (!isCurrent) { moveNoteToNotebook(note, nb.slug); }
+    });
+    menu.appendChild(item);
+  });
+  menu.classList.remove("hidden");
+  link.setAttribute("aria-expanded", "true");
+}
+
+function toggleNotebookMenu() {
+  const menu = document.getElementById("notebookMenu");
+  if (!menu) { return; }
+  if (menu.classList.contains("hidden")) { openNotebookMenu(); }
+  else { closeNotebookMenu(); }
+}
+
 function setSaveState(text) {
   document.getElementById("saveState").textContent = text;
+  /* v2.5: the same text is mirrored into the rail flyout's status
+     line, the save status's visible home while the sidebar is
+     collapsed to the icon rail. One writer, two homes. */
+  const railSave = document.getElementById("railSaveState");
+  if (railSave) { railSave.textContent = text; }
 }
 
 /* Mobile pane switching. Desktop CSS ignores these classes. */
@@ -5533,10 +6098,12 @@ function setMobileView(which) {
 /* --------------------------------------------------------------------------
    10. Editor behavior
    The editor reads and writes the note object through collectEditor(),
-   which pulls title, notebook, tags, and body HTML out of the form.
+   which pulls title, tags, and body HTML out of the form.
    (Through v2.1 it also pulled the Pinned checkbox; v2.2 removed that
    control, so collectEditor no longer touches note.pinned at all and
-   the flag is changed only from the notes list toolbar menu.)
+   the flag is changed only from the notes list toolbar menu. v2.5
+   removed the notebook dropdown the same way: collectEditor no longer
+   touches note.notebook, which changes only through the move paths.)
    Autosave is debounced at about 800 ms after the last edit. If the note
    moved notebooks, the file is written to the new folder and the old file
    is removed. Save results update the saved state text and, for lists,
@@ -5611,8 +6178,13 @@ function savedImageWidthOf(el) {
 
 function collectEditor(note) {
   note.title = document.getElementById("noteTitle").value.trim() || "Untitled note";
-  const pickerValue = document.getElementById("noteNotebook").value;
-  if (pickerValue) { note.notebook = pickerValue; }
+  /* v2.5: note.notebook is deliberately NOT read from a form
+     control anymore. The dropdown is gone; the notebook lives on
+     the note object and changes only through the move paths
+     (moveNoteToNotebook, used by the notebook link menu and by
+     drag and drop; trash, restore, archive, and unarchive set
+     their own fields), so a save can never silently reassign the
+     notebook from a stale widget. */
   note.tags = document.getElementById("noteTags").value
     .split(",")
     .map(function (t) { return t.trim(); })
@@ -8938,11 +9510,13 @@ async function saveNoteAndSettleMove(note, previousPath) {
    and the storage move finishes behind them). The notebook picker
    in the editor stays the visible truth for the open note: when
    the moved note is the one on screen, the editor's current
-   contents are collected first (which reads the picker, still
-   showing the old notebook), the picker is then set to the target,
-   and only then does the shared save run, so no pending autosave
-   can ever pull the note back. Dropping on the notebook the note
-   already lives in performs no write at all. */
+   contents are collected first (which, since v2.5, no longer
+   touches the notebook field), the note's notebook is set to the
+   target and the notebook link refreshed, and only then does the
+   shared save run, so no pending autosave can ever pull the note
+   back. Dropping on the notebook the note already lives in
+   performs no write at all. Since v2.5 the notebook link menu is
+   a second caller of this same path, next to drag and drop. */
 function moveNoteToNotebook(note, targetSlug) {
   const target = state.notebooks.find(function (nb) {
     return nb.slug === targetSlug;
@@ -8956,8 +9530,11 @@ function moveNoteToNotebook(note, targetSlug) {
   if (isOpen) {
     collectEditor(note);
     note.notebook = targetSlug;
-    const picker = document.getElementById("noteNotebook");
-    if (picker) { picker.value = targetSlug; }
+    /* v2.5: the editor's visible truth for the notebook is the
+       notebook link now; refresh it to the target. (renderAll
+       below re-runs it anyway; this keeps the link right even
+       before that render lands.) */
+    refreshNotebookLink(note);
   } else {
     note.notebook = targetSlug;
   }
@@ -9327,7 +9904,14 @@ function handleBodyTabKey(ev) {
    dropping outside any target, Escape, and pointercancel all end
    the drag with no move. Cards in Trash and Archive never start a
    candidate. The ghost, overlay, and highlights are furniture:
-   none of their state is serialized anywhere. */
+   none of their state is serialized anywhere.
+   v2.5: Trash and Archive join the notebooks as drop targets (see
+   noteDragTargetAt and endNoteDrag): the sidebar entries, the
+   icon rail's buttons, and two rows the mobile overlay gains.
+   A drop on either runs that destination's own action function,
+   the same one its editor footer button runs. In rail mode,
+   hovering the Notebooks rail button mid drag opens its flyout
+   so the notebooks inside stay reachable. */
 const NOTE_DRAG_MOUSE_PX = 6;
 const NOTE_DRAG_TOUCH_SLOP_PX = 10;
 const NOTE_DRAG_LONGPRESS_MS = 300;
@@ -9374,20 +9958,35 @@ function noteDragAutoScroll(clientY) {
 }
 
 /* The drop target row under a point, by rectangle scan of the
-   visible target set (the overlay's rows while it is shown, else
-   the sidebar's notebook rows). A rectangle scan, rather than
+   visible target set. A rectangle scan, rather than
    elementFromPoint, keeps the rule identical everywhere: a row
-   counts when the point is inside its box. */
+   counts when the point is inside its box. Zero size boxes (the
+   hidden sidebar form, a closed flyout) never match.
+   v2.5: the target set grew. Notebook rows still carry
+   data-nb-slug; Trash and Archive carry data-drop-action, in the
+   full sidebar (the navTrash and navArchive items), in the icon
+   rail (its Trash and Archive buttons), and in the mobile
+   overlay. While the overlay is shown it is the whole set;
+   otherwise the set is whatever the visible sidebar form shows:
+   the full sidebar, or the rail plus its flyout when open. */
 function noteDragTargetAt(x, y) {
   const overlay = document.getElementById("nbDropOverlay");
   const inOverlay = overlay && !overlay.classList.contains("hidden");
-  const scope = inOverlay ? overlay : document.getElementById("notebookNav");
-  if (!scope) { return null; }
-  const rows = scope.querySelectorAll("[data-nb-slug]");
-  for (let i = 0; i < rows.length; i++) {
-    const r = rows[i].getBoundingClientRect();
-    if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) {
-      return rows[i];
+  const scopes = inOverlay ? [overlay] : [
+    document.getElementById("sidebar"),
+    document.getElementById("sidebarRail"),
+    document.getElementById("railFlyout")
+  ];
+  for (let s = 0; s < scopes.length; s++) {
+    const scope = scopes[s];
+    if (!scope) { continue; }
+    const rows = scope.querySelectorAll("[data-nb-slug], [data-drop-action]");
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i].getBoundingClientRect();
+      if (r.width <= 0 || r.height <= 0) { continue; }
+      if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) {
+        return rows[i];
+      }
     }
   }
   return null;
@@ -9408,6 +10007,17 @@ function showNbDropOverlay(dragNote) {
       (dragNote && nb.slug === dragNote.notebook ? " (current)" : "");
     list.appendChild(row);
   });
+  /* v2.5: Trash and Archive are destinations here too, as rows
+     under the notebooks, marked with data-drop-action exactly
+     like the sidebar entries they mirror. */
+  [["trash", "Trash"], ["archive", "Archive"]].forEach(function (pair) {
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = "nb-drop-row nb-drop-action";
+    row.setAttribute("data-drop-action", pair[0]);
+    row.textContent = pair[1];
+    list.appendChild(row);
+  });
   overlay.classList.remove("hidden");
 }
 
@@ -9424,12 +10034,26 @@ function positionNoteDragGhost(x, y) {
 
 function updateNoteDragTarget(x, y) {
   if (!noteDrag) { return; }
+  /* v2.5, rail mode: the rail's Notebooks button is a container,
+     not a target; hovering it mid drag opens the flyout so the
+     notebooks inside stay reachable as targets. */
+  const railNbBtn = document.getElementById("railNotebooksBtn");
+  if (railNbBtn && document.body.classList.contains("rail")) {
+    const br = railNbBtn.getBoundingClientRect();
+    if (br.width > 0 && x >= br.left && x <= br.right &&
+        y >= br.top && y <= br.bottom) {
+      openRailFlyout();
+    }
+  }
   const row = noteDragTargetAt(x, y);
   if (noteDrag.targetEl && noteDrag.targetEl !== row) {
     noteDrag.targetEl.classList.remove("drop-hover");
   }
   noteDrag.targetEl = row;
+  /* v2.5: a target is either a notebook (data-nb-slug) or one of
+     the two fixed destinations (data-drop-action). */
   noteDrag.targetSlug = row ? row.getAttribute("data-nb-slug") : null;
+  noteDrag.targetAction = row ? row.getAttribute("data-drop-action") : null;
   if (row) { row.classList.add("drop-hover"); }
 }
 
@@ -9478,6 +10102,8 @@ function cleanupNoteDrag() {
   }
   document.body.classList.remove("note-drag-active");
   hideNbDropOverlay();
+  /* v2.5: a flyout opened for this drag closes with it. */
+  closeRailFlyout();
   window.removeEventListener("pointermove", onNoteDragMove);
   window.removeEventListener("pointerup", onNoteDragUp);
   window.removeEventListener("pointercancel", onNoteDragCancel);
@@ -9508,6 +10134,7 @@ function onNoteListPointerDown(ev) {
     offsetX: 0,
     offsetY: 0,
     targetSlug: null,
+    targetAction: null,
     targetEl: null,
     timer: null,
     card: card
@@ -9550,11 +10177,28 @@ function endNoteDrag(commit) {
   const wasEngaged = drag.engaged;
   const note = findNoteById(drag.noteId);
   const slug = drag.targetSlug;
+  const action = drag.targetAction;
   cleanupNoteDrag();
   if (!wasEngaged) { return; }
   noteDragClickBlock = true;
-  if (commit && slug && note && slug !== note.notebook) {
-    moveNoteToNotebook(note, slug);
+  if (!commit || !note) { return; }
+  if (slug) {
+    if (slug !== note.notebook) { moveNoteToNotebook(note, slug); }
+    return;
+  }
+  /* v2.5: the two fixed destinations run the very functions the
+     editor footer buttons run, with the same confirmation
+     toasts. Drag candidates are always live notes (Trash and
+     Archive cards never start one), so no already-there case
+     exists for either. */
+  if (action === "trash") {
+    moveNoteToTrash(note, false).then(function () {
+      toast("Moved to Trash.");
+    }).catch(function (err) { toast(err.message, true); });
+  } else if (action === "archive") {
+    archiveNote(note).then(function () {
+      toast("Note archived.");
+    }).catch(function (err) { toast(err.message, true); });
   }
 }
 
@@ -13188,10 +13832,95 @@ function wireEvents() {
 
   /* Editor inputs: any change marks the note dirty and autosaves.
      (v2.2: notePinned left this list with the checkbox itself; the
-     pin flag is not a form field anymore.) */
-  ["noteTitle", "noteTags", "noteNotebook"].forEach(function (id) {
+     pin flag is not a form field anymore. v2.5: noteNotebook left
+     with the dropdown itself; the notebook is not a form field
+     anymore either, it changes only through the move paths. The
+     Tags input kept its place in this list from its new home in
+     the editor footer.) */
+  ["noteTitle", "noteTags"].forEach(function (id) {
     document.getElementById(id).addEventListener("input", markDirty);
     document.getElementById(id).addEventListener("change", markDirty);
+  });
+
+  /* v2.5: the notebook link and its menu. The link toggles the
+     menu; a click anywhere outside the wrap closes it, and so
+     does Escape (each in the same style as the export menu's
+     closers above). Choosing an item runs moveNoteToNotebook
+     from the item's own listener (see openNotebookMenu). */
+  document.getElementById("notebookLink").addEventListener("click", function (ev) {
+    ev.stopPropagation();
+    toggleNotebookMenu();
+  });
+  document.getElementById("notebookMenu").addEventListener("click", function (ev) {
+    ev.stopPropagation();
+  });
+  document.addEventListener("click", function (ev) {
+    const menu = document.getElementById("notebookMenu");
+    if (!menu || menu.classList.contains("hidden")) { return; }
+    const target = ev.target;
+    if (target && target.closest && target.closest(".notebook-link-wrap")) { return; }
+    closeNotebookMenu();
+  });
+  document.addEventListener("keydown", function (ev) {
+    if (ev.key === "Escape") { closeNotebookMenu(); }
+  });
+
+  /* v2.5: Maximize. The button toggles; Escape leaves too, but
+     only when no menu, panel, popup, modal, or note drag is up.
+     Those all have their own Escape closers, most of them bubble
+     phase document handlers like this one, so by the time a
+     bubble handler runs the menu it should defer to is already
+     closed and gone. The capture phase listener therefore
+     snapshots anyOverlayOpen BEFORE any closer runs, and the
+     bubble handler acts on the snapshot: Escape with something
+     open closes that thing (its own handlers do it) and leaves
+     maximize alone; only a bare Escape exits maximize. The one
+     capture phase closer, the note drag's, is covered too: an
+     active drag makes the snapshot true on its own. */
+  let maximizeEscapeHadOverlay = false;
+  document.addEventListener("keydown", function (ev) {
+    if (ev.key === "Escape") { maximizeEscapeHadOverlay = anyOverlayOpen(); }
+  }, true);
+  document.getElementById("maximizeBtn").addEventListener("click", function () {
+    setMaximized(!editorMaximized);
+  });
+  setMaximized(false);
+  document.addEventListener("keydown", function (ev) {
+    if (ev.key !== "Escape" || !editorMaximized) { return; }
+    if (maximizeEscapeHadOverlay) { return; }
+    setMaximized(false);
+  });
+
+  /* v2.5: the icon rail. The toggle flips the persisted setting.
+     Every rail leaf button clicks its full sidebar counterpart,
+     so each action keeps exactly one implementation; the rail's
+     expand button clicks the toggle. The Notebooks button opens
+     the flyout on hover or click; leaving the button or the
+     flyout starts the grace close (scheduleRailFlyoutClose), and
+     the flyout's New Notebook entry clicks the sidebar's add
+     button, then closes. */
+  document.getElementById("railToggleBtn").addEventListener("click", function () {
+    setSidebarRail(!state.sidebarRail);
+  });
+  [["railNewNoteBtn", "newNoteBtn"], ["railAllBtn", "navAll"],
+   ["railPinnedBtn", "navPinned"], ["railTrashBtn", "navTrash"],
+   ["railArchiveBtn", "navArchive"], ["railRefreshBtn", "refreshConnBtn"],
+   ["railThemeBtn", "themeBtn"], ["railLockBtn", "lockBtn"],
+   ["railExpandBtn", "railToggleBtn"]].forEach(function (pair) {
+    document.getElementById(pair[0]).addEventListener("click", function () {
+      document.getElementById(pair[1]).click();
+    });
+  });
+  const railNbBtn = document.getElementById("railNotebooksBtn");
+  const railFlyout = document.getElementById("railFlyout");
+  railNbBtn.addEventListener("pointerenter", function () { openRailFlyout(); });
+  railNbBtn.addEventListener("pointerleave", function () { scheduleRailFlyoutClose(); });
+  railNbBtn.addEventListener("click", function () { toggleRailFlyout(); });
+  railFlyout.addEventListener("pointerenter", function () { openRailFlyout(); });
+  railFlyout.addEventListener("pointerleave", function () { scheduleRailFlyoutClose(); });
+  document.getElementById("railNewNotebookBtn").addEventListener("click", function () {
+    closeRailFlyout();
+    document.getElementById("addNotebookBtn").click();
   });
   document.getElementById("noteBody").addEventListener("input", markDirty);
   /* v1.7: the same body input events feed the attachment deletion
