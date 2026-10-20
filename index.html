@@ -27,10 +27,62 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-20-SSN-V230
-  Version: 2.3.0
+  BUILD STAMP: 2026-10-20-SSN-V240
+  Version: 2.4.0
 
   Revision history:
+    v2.4.0 2026-10-20 Word import keeps embedded images, the Tab
+                      key works inside the note, and notes can be
+                      dragged between notebooks on desktop and
+                      mobile. Import: the .docx converter now
+                      claims the package's image parts (resolved
+                      through word/_rels/document.xml.rels) and
+                      places each one inline in document order,
+                      inside tables too, as a standard attachment
+                      uploaded through the same pipeline as a hand
+                      attached file. Displayable types (png, jpeg,
+                      gif, bmp, webp) become inline images at
+                      Word's display width (the drawing extent,
+                      converted at 9525 EMU per pixel and capped
+                      at the 860px reading column); any other media
+                      type becomes a file attachment; an image
+                      referenced twice is uploaded once and placed
+                      twice; a failed image is skipped, its
+                      placeholder removed, and the skip counted in
+                      the import summary, never fatal. Word export
+                      is unchanged: images still leave as bracketed
+                      name lines. Tab: a keydown handler on the
+                      note body keeps Tab and Shift+Tab inside the
+                      note. In a table they move between cells,
+                      selecting the target cell's contents, and Tab
+                      in the last cell adds a row; with a selection
+                      spanning several blocks they indent and
+                      outdent those blocks; otherwise Tab inserts a
+                      real tab character carried in a span.ss-tab,
+                      whose scoped white-space preservation renders
+                      it as a true tab stop (even at a line start,
+                      where a raw tab would collapse) without
+                      changing how any existing note renders, and
+                      Shift+Tab removes a tab before the caret or
+                      at the block's start. Word export writes the
+                      tab as a real <w:tab/> element, the text
+                      export as the character itself. Drag and
+                      drop: note cards move between notebooks by a
+                      Pointer Events drag, one path for mouse,
+                      touch, and pen (mouse engages after a small
+                      movement; touch and pen after a stationary
+                      long press, so list scrolling and tapping
+                      are untouched). A ghost card follows the
+                      pointer, the notebook under it highlights,
+                      edge holding auto scrolls the notebook list,
+                      and at mobile widths an overlay lists the
+                      notebooks as drop targets for the duration
+                      of the drag. The drop runs the same move
+                      machinery as the editor's notebook picker
+                      (extracted below as saveNoteAndSettleMove,
+                      driven by moveNoteToNotebook), cards in
+                      Trash and Archive never drag, and nothing
+                      about the drag is ever saved into a note.
     v2.3.0 2026-10-20 A per-cell three dot menu for tables, with
                       sort, filter, header row, cell styling, column
                       width, and copy, plus multi-cell selection.
@@ -955,6 +1007,47 @@ body.dark .tag-chip{color:var(--accent);}
 .note-card.multi-selected{
   background:var(--selected);border-color:var(--secondary);
 }
+/* v2.4: drag and drop notes between notebooks. The drag runs on
+   Pointer Events (one path for mouse, touch, and pen); these rules
+   are its whole visual language. The ghost is a card clone parked
+   on the body, following the pointer; the source card dims; the
+   notebook row under the pointer highlights, in the sidebar or in
+   the mobile drop overlay. While a drag is engaged the body takes
+   touch-action none, so a touch drag is never reinterpreted as a
+   scroll; the class is added only at engage time (after the long
+   press), so ordinary list scrolling before that is untouched.
+   All of it is app furniture: none of it is serialized into a
+   note or persisted anywhere. */
+.note-card.drag-source{opacity:.45;}
+.note-drag-ghost{
+  position:fixed;z-index:120;pointer-events:none;margin:0;opacity:.94;
+  box-shadow:var(--shadow);
+}
+body.note-drag-active{touch-action:none;overscroll-behavior:none;}
+#sidebar .nav-item.drop-hover{background:var(--secondary);color:#fff;}
+#nbDropOverlay{
+  position:fixed;left:10px;right:10px;bottom:10px;z-index:115;
+  background:var(--surface);color:var(--text);
+  border:1px solid var(--border);border-radius:var(--radius-card);
+  box-shadow:var(--shadow);padding:10px;
+  display:flex;flex-direction:column;max-height:58vh;
+}
+#nbDropOverlay.hidden{display:none;}
+.nb-drop-head{font-weight:700;font-size:14px;padding:2px 2px 0;}
+#nbDropList{
+  overflow-y:auto;display:flex;flex-direction:column;gap:5px;margin:9px 0;
+}
+.nb-drop-row{
+  display:block;width:100%;text-align:left;cursor:pointer;
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius-button);padding:10px 12px;color:var(--text);
+  font-size:14px;
+}
+.nb-drop-row.current{opacity:.55;}
+#nbDropList .nb-drop-row.drop-hover{
+  background:var(--selected);border-color:var(--accent);
+}
+#nbDropCancelBtn{align-self:flex-end;}
 /* The empty list keeps its existing guidance, now over a very faint tile S
    watermark supplied by the generated inline SVG data URI below. */
 .empty-state{
@@ -1094,6 +1187,16 @@ body.dark .tag-chip{color:var(--accent);}
    read as internal links: accent color and an underline. The accent
    variable exists in both themes, so this holds in dark mode too. */
 #noteBody a.ss-note-link{color:var(--accent);text-decoration:underline;}
+/* v2.4: an inserted Tab character lives in a span.ss-tab, whose own
+   white-space preservation renders the character as a true tab
+   stop gap (tab-size 4), including at the start of a line, where a
+   raw tab in the body's normal flow would collapse to nothing.
+   The rule is scoped to the tab spans themselves, so nothing about
+   how any existing note renders changes: notes saved before v2.4
+   contain no such spans. The span is plain body content: it saves,
+   syncs, and exports like any other text (the text export emits
+   the character; the Word exporter turns it into a <w:tab/>). */
+#noteBody .ss-tab{white-space:pre-wrap;tab-size:4;}
 /* v2.1.0: inserted tables (class ss-table): collapsed borders from the
    theme border variable, cell padding, a soft header background, and
    full width so the table spans the note column. */
@@ -2229,12 +2332,27 @@ body.dark .ss-att-provider{color:#EAF3EC;}
      exactly as long as its five second undo window. -->
 <div id="undoToastBox" aria-live="polite"></div>
 
+<!-- v2.4: the notebook drop overlay for drag and drop at mobile
+     widths, where the sidebar is not on screen beside the list.
+     It exists only for the duration of an engaged drag (the script
+     fills #nbDropList with one row per notebook and shows it),
+     offers the same drop targets as the sidebar rows (both carry
+     data-nb-slug), and is dismissed by a drop, the Cancel button,
+     Escape, or a cancelled pointer. Pure app furniture at body
+     level: nothing about it is rendered into the note list's
+     persistent state or into any note. -->
+<div id="nbDropOverlay" class="hidden" role="dialog" aria-label="Move note to notebook">
+  <div class="nb-drop-head">Move to notebook</div>
+  <div id="nbDropList"></div>
+  <button type="button" class="btn small" id="nbDropCancelBtn">Cancel</button>
+</div>
+
 <script>
 "use strict";
 
 /* ============================================================================
-   SnakeScale Notes v2.3.0: application script
-   BUILD STAMP: 2026-10-20-SSN-V230
+   SnakeScale Notes v2.4.0: application script
+   BUILD STAMP: 2026-10-20-SSN-V240
 
    How this script is organized:
      1. Constants and global state
@@ -2265,8 +2383,8 @@ body.dark .ss-att-provider{color:#EAF3EC;}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-20-SSN-V230";
-const APP_VERSION = "2.3.0";
+const APP_BUILD = "2026-10-20-SSN-V240";
+const APP_VERSION = "2.4.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -4462,6 +4580,9 @@ function renderSidebar() {
     countSpan.className = "count count-pill";
     countSpan.textContent = notebookCount(nb.slug) || "";
     btn.appendChild(countSpan);
+    /* v2.4: the slug rides on the row so the drag and drop hit
+       test can name the notebook under the pointer. */
+    btn.setAttribute("data-nb-slug", nb.slug);
     btn.addEventListener("click", function () {
       state.view = { kind: "notebook", value: nb.slug };
       renderAll();
@@ -5150,6 +5271,9 @@ function renderNoteList() {
   list.forEach(function (note) {
     const card = document.createElement("div");
     card.className = "note-card" + (note.id === state.selectedId ? " active" : "");
+    /* v2.4: the drag and drop pointer handler is delegated on the
+       list, so the card itself carries the note id it stands for. */
+    card.setAttribute("data-note-id", note.id);
     if (selectSet) {
       /* A selection checkbox at the row's left edge. Its click is
          stopped at the picker, so checking a note can never fall
@@ -7504,8 +7628,10 @@ function exportNoteTxt() {
    and U+2611 (checked), web links become their text plus the URL in
    parentheses, note links degrade to their label, tables become a
    simple Word table, code becomes monospace runs, and attachments
-   become bracketed name lines (no embedded media in this round). All
-   text passes through xmlEscapeText before it enters the XML. */
+   become bracketed name lines (no embedded media in this round).
+   Tab characters in run text become real <w:tab/> elements (v2.4:
+   a literal tab inside <w:t> is not honored by Word). All text
+   passes through xmlEscapeText before it enters the XML. */
 
 function xmlEscapeText(text) {
   return String(text)
@@ -7527,8 +7653,24 @@ function docxRun(text, fmt) {
   if (fmt.code) {
     rpr += "<w:rFonts w:ascii=\"Consolas\" w:hAnsi=\"Consolas\"/>";
   }
-  return "<w:r>" + (rpr ? "<w:rPr>" + rpr + "</w:rPr>" : "") +
-    "<w:t xml:space=\"preserve\">" + xmlEscapeText(text) + "</w:t></w:r>";
+  const open = "<w:r>" + (rpr ? "<w:rPr>" + rpr + "</w:rPr>" : "");
+  /* v2.4: the text is split on tab characters and the segments are
+     joined by runs holding a real <w:tab/> element. Text without
+     tabs produces exactly the single run this function has always
+     produced. */
+  const segments = String(text).split("\t");
+  let out = "";
+  segments.forEach(function (segment, i) {
+    if (i > 0) { out += "<w:r><w:tab/></w:r>"; }
+    if (segment) {
+      out += open + "<w:t xml:space=\"preserve\">" +
+        xmlEscapeText(segment) + "</w:t></w:r>";
+    }
+  });
+  if (!out) {
+    out = open + "<w:t xml:space=\"preserve\"></w:t></w:r>";
+  }
+  return out;
 }
 
 function docxBreakRun() {
@@ -8100,12 +8242,16 @@ async function inflateRawBytes(bytes) {
    Title styles, simple lists (numbering definition paragraphs, and
    the literal bullet, number, and ballot box prefixes our exporter
    writes, regrouped into real lists), simple tables, and hyperlinks
-   when the relationships part resolves them. Anything fancier (text
-   boxes, fields, tracked changes, embedded images) is skipped, never
-   fatal. A Title paragraph whose text equals the note title (from
+   when the relationships part resolves them. Embedded images are
+   claimed when the caller passes an image context
+   (docxFileToNoteParts does): a drawing or legacy picture inside a
+   run becomes an attachment placeholder exactly where it sits.
+   Anything fancier (text boxes, fields, tracked changes) is
+   skipped, never fatal. A Title paragraph whose text equals the
+   note title (from
    the file name) is dropped: our exporter writes the title into the
    document, and it should not come back as a body heading. */
-function docxXmlToHtml(xmlText, relsXmlText, expectedTitle) {
+function docxXmlToHtml(xmlText, relsXmlText, expectedTitle, imageCtx) {
   const doc = new DOMParser().parseFromString(xmlText, "application/xml");
   if (!doc || !doc.documentElement ||
       doc.documentElement.localName === "parsererror" ||
@@ -8136,16 +8282,82 @@ function docxXmlToHtml(xmlText, relsXmlText, expectedTitle) {
     const v = el.getAttribute("w:val");
     return v !== "false" && v !== "0" && v !== "off";
   }
+  /* One run's text under its formatting, the exact wrapping this
+     converter has always applied. v2.4: a tab character in the
+     text becomes the editor's tab span (span.ss-tab, the same
+     shape the Tab key inserts), so a Word tab survives as a tab
+     instead of collapsing to a space. */
+  function formatRunText(text, rPr, code) {
+    let html = escapeHtml(text).replace(/\n/g, "<br>")
+      .replace(/\t/g, "<span class=\"ss-tab\">\t</span>");
+    if (code) {
+      return "<code class=\"ss-inline-code\">" + html + "</code>";
+    }
+    if (runFlag(rPr, "strike")) { html = "<s>" + html + "</s>"; }
+    if (runFlag(rPr, "u")) { html = "<u>" + html + "</u>"; }
+    if (runFlag(rPr, "i")) { html = "<em>" + html + "</em>"; }
+    if (runFlag(rPr, "b")) { html = "<strong>" + html + "</strong>"; }
+    return html;
+  }
+  /* The first descendant element with a local name, depth first.
+     The converter matches on localName throughout (prefix free),
+     and image parts are found the same way. */
+  function descendantByLocal(el, name) {
+    let found = null;
+    (function walk(node) {
+      const kids = node.children || [];
+      for (let i = 0; i < kids.length && !found; i++) {
+        if (kids[i].localName === name) { found = kids[i]; }
+        else { walk(kids[i]); }
+      }
+    })(el);
+    return found;
+  }
+  /* v2.4: an image reference inside a run: a DrawingML drawing
+     (a:blip r:embed) or a legacy VML picture (v:imagedata r:id).
+     Resolves the relationship to its package part, reads Word's
+     display width from the drawing extent when one is present
+     (9525 EMU per pixel, capped at the reading column by the
+     importer), claims the part through the image context, and
+     returns the placeholder that stands in the body for it.
+     Without an image context (docxFileToHtml's plain conversion),
+     or when anything fails to resolve, the image is skipped
+     exactly as before v2.4. */
+  function imagePlaceholderFor(part) {
+    if (!imageCtx) { return ""; }
+    const blip = descendantByLocal(part, "blip");
+    let rid = blip ? (blip.getAttribute("r:embed") ||
+      blip.getAttribute("embed")) : null;
+    if (!rid) {
+      const imagedata = descendantByLocal(part, "imagedata");
+      if (imagedata) {
+        rid = imagedata.getAttribute("r:id") ||
+          imagedata.getAttribute("id");
+      }
+    }
+    if (!rid) { return ""; }
+    const target = rels[rid];
+    if (!target) { return ""; }
+    let entryName = String(target).replace(/\\/g, "/");
+    if (entryName.charAt(0) === "/") { entryName = entryName.slice(1); }
+    if (entryName.indexOf("word/") !== 0) {
+      entryName = "word/" + entryName;
+    }
+    let widthPx = 0;
+    const extent = descendantByLocal(part, "extent") ||
+      descendantByLocal(part, "ext");
+    if (extent) {
+      const cx = parseInt(extent.getAttribute("cx") || "0", 10);
+      if (cx > 0) { widthPx = Math.round(cx / 9525); }
+    }
+    if (widthPx > IMPORT_IMAGE_MAX_WIDTH_PX) {
+      widthPx = IMPORT_IMAGE_MAX_WIDTH_PX;
+    }
+    const rec = imageCtx.registerImage(entryName);
+    if (!rec) { return ""; }
+    return importedImagePlaceholderHtml(rec, widthPx);
+  }
   function runHtml(r) {
-    let text = "";
-    Array.prototype.forEach.call(r.children, function (part) {
-      if (part.localName === "t") { text += part.textContent; }
-      else if (part.localName === "br" || part.localName === "cr") {
-        text += "\n";
-      } else if (part.localName === "tab") { text += " "; }
-    });
-    if (!text) { return ""; }
-    let html = escapeHtml(text).replace(/\n/g, "<br>");
     const rPr = firstKid(r, "rPr");
     let code = false;
     if (rPr) {
@@ -8154,14 +8366,27 @@ function docxXmlToHtml(xmlText, relsXmlText, expectedTitle) {
         ? (fonts.getAttribute("w:ascii") || "") : "";
       code = /consolas|courier|mono/i.test(fontName);
     }
-    if (code) {
-      html = "<code class=\"ss-inline-code\">" + html + "</code>";
-    } else {
-      if (runFlag(rPr, "strike")) { html = "<s>" + html + "</s>"; }
-      if (runFlag(rPr, "u")) { html = "<u>" + html + "</u>"; }
-      if (runFlag(rPr, "i")) { html = "<em>" + html + "</em>"; }
-      if (runFlag(rPr, "b")) { html = "<strong>" + html + "</strong>"; }
+    /* The run's children are converted in order: text accumulates
+       and is formatted as one piece (as it always was), and an
+       image reference flushes the text ahead of it and stands in
+       the flow exactly where the document puts it. */
+    let html = "";
+    let text = "";
+    function flush() {
+      if (text) { html += formatRunText(text, rPr, code); text = ""; }
     }
+    Array.prototype.forEach.call(r.children, function (part) {
+      if (part.localName === "t") { text += part.textContent; }
+      else if (part.localName === "br" || part.localName === "cr") {
+        text += "\n";
+      } else if (part.localName === "tab") { text += "\t"; }
+      else if (part.localName === "drawing" ||
+               part.localName === "pict") {
+        const placeholder = imagePlaceholderFor(part);
+        if (placeholder) { flush(); html += placeholder; }
+      }
+    });
+    flush();
     return html;
   }
   function inlineHtml(container) {
@@ -8293,7 +8518,27 @@ function docxXmlToHtml(xmlText, relsXmlText, expectedTitle) {
       return;
     }
     closeList();
-    out.push("<p>" + (inlineHtml(p) || "<br>") + "</p>");
+    const inner = inlineHtml(p);
+    const chunks = inner.split(
+      /(<(?:figure|div) class="ss-attachment"[^>]*><\/(?:figure|div)>)/g);
+    if (chunks.length > 1) {
+      /* v2.4: a paragraph carrying imported image placeholders. A
+         figure inside a <p> is not valid nesting (the browser
+         would tear the paragraph apart at render and strand its
+         text), so the paragraph is emitted as a sequence in
+         document order: its text runs as paragraphs of their own,
+         each placeholder standing alone as the block it is. */
+      chunks.forEach(function (chunk) {
+        if (!chunk) { return; }
+        if (/^<(?:figure|div) class="ss-attachment"/.test(chunk)) {
+          out.push(chunk);
+        } else {
+          out.push("<p>" + chunk + "</p>");
+        }
+      });
+      return;
+    }
+    out.push("<p>" + (inner || "<br>") + "</p>");
   }
   const bodyEl = firstKid(doc.documentElement, "body") ||
     doc.documentElement;
@@ -8321,6 +8566,179 @@ async function docxFileToHtml(arrayBuffer, expectedTitle) {
     relEntry ? decoder.decode(relEntry) : "", expectedTitle);
 }
 
+/* v2.4: the image types a Word file can embed that SnakeScale
+   shows inline, keyed by file extension, with their mime types.
+   Any other media part (an .emf drawing, a .tiff scan) still
+   imports, as a regular file attachment: see registerImage. */
+const DOCX_INLINE_IMAGE_MIMES = {
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  gif: "image/gif",
+  bmp: "image/bmp",
+  webp: "image/webp"
+};
+
+/* v2.4: imported images keep Word's display width (the drawing
+   extent, converted at 9525 EMU per pixel) but never wider than
+   the editor's 860px reading column. The width rides on the
+   placeholder block, the v1.7.2 size model, so the image menu's
+   own size choices can change it later like any other image. */
+const IMPORT_IMAGE_MAX_WIDTH_PX = 860;
+
+/* v2.4: the placeholder shell for one claimed Word image, in
+   exactly the canonical form canonicalizeAttachmentPlaceholders
+   writes on every save: a figure for a displayable image, a div
+   for any other media, the class, the attachment id,
+   contenteditable false, and the imported width on the block when
+   Word specified one. */
+function importedImagePlaceholderHtml(rec, widthPx) {
+  if (rec.inline) {
+    const style = widthPx > 0
+      ? " style=\"width:" + widthPx + "px\"" : "";
+    return "<figure class=\"ss-attachment\" data-attachment-id=\"" +
+      rec.attId + "\" contenteditable=\"false\"" + style +
+      "></figure>";
+  }
+  return "<div class=\"ss-attachment\" data-attachment-id=\"" +
+    rec.attId + "\" contenteditable=\"false\"></div>";
+}
+
+/* v2.4: docxFileToHtml's sibling for the import flow: the same
+   conversion, plus the package's embedded images, claimed. Each
+   image part is claimed ONCE, however many runs reference it (a
+   second reference reuses the record, so its bytes upload once
+   and the attachment is placed twice), and the converter emits
+   the standard placeholder for every reference, in document
+   order. The returned images list carries the bytes; the caller
+   uploads them through attachImportedDocxImages. */
+async function docxFileToNoteParts(arrayBuffer, expectedTitle) {
+  const entries = await readZipEntries(arrayBuffer);
+  const docEntry = entries.get("word/document.xml");
+  if (!docEntry) {
+    throw new Error("word/document.xml not found in the file");
+  }
+  const relEntry = entries.get("word/_rels/document.xml.rels");
+  const decoder = new TextDecoder();
+  const claimed = new Map();
+  const images = [];
+  const imageCtx = {
+    registerImage: function (entryName) {
+      if (claimed.has(entryName)) { return claimed.get(entryName); }
+      const bytes = entries.get(entryName);
+      if (!bytes) { return null; }
+      const base = entryName.split("/").pop() || "image";
+      const dot = base.lastIndexOf(".");
+      const ext = dot >= 0 ? base.slice(dot + 1).toLowerCase() : "";
+      const mime = DOCX_INLINE_IMAGE_MIMES[ext] || "";
+      const rec = {
+        attId: newNoteId() + "a",
+        entryName: entryName,
+        name: base,
+        inline: !!mime,
+        /* A media type the app does not show inline is recorded
+           with a generic mime, so hydration builds it a file card
+           (name, Open, Download) instead of an image block. The
+           record's name keeps the real file name and extension. */
+        mime: mime || "application/octet-stream",
+        bytes: bytes
+      };
+      claimed.set(entryName, rec);
+      images.push(rec);
+      return rec;
+    }
+  };
+  const html = docxXmlToHtml(decoder.decode(docEntry),
+    relEntry ? decoder.decode(relEntry) : "", expectedTitle, imageCtx);
+  return { html: html, images: images };
+}
+
+/* Remove one placeholder from a note's stored body by attachment
+   id, used when an imported image could not be uploaded: a
+   placeholder whose record never lands could only ever render as
+   a broken block, so the note keeps its text and loses the dead
+   shell. The note is not open in the editor during import, so its
+   body is still the HTML string the converter produced. */
+function removeImportedPlaceholder(note, attId) {
+  if (!note.body || note.body.indexOf(attId) < 0) { return; }
+  const holder = document.createElement("div");
+  holder.innerHTML = note.body;
+  /* An image referenced twice is placed twice under the same
+     attachment id, so every placement goes, not just the first. */
+  const els = holder.querySelectorAll(
+    ".ss-attachment[data-attachment-id=\"" + attId + "\"]");
+  if (els.length) {
+    els.forEach(function (el) { el.remove(); });
+    note.body = holder.innerHTML;
+  }
+}
+
+/* v2.4: upload one imported note's Word images through the same
+   attachment pipeline the Attach flow uses: the note's provider
+   driver, the attId + "__" + file name storage name, the standard
+   record shape, the binary in the Drive attachments subfolder.
+   An image that cannot be extracted or uploaded is skipped and
+   counted, never fatal, and when uploads cannot run at all
+   (offline or signed out) every image skips the same way. The
+   note is saved once more at the end through the normal per note
+   save chain, so the records and any placeholder removals reach
+   Drive in order behind the create save createImportedNote
+   already started. Returns the number of skipped images. */
+async function attachImportedDocxImages(note, images) {
+  let skipped = 0;
+  const providerName = state.attach.defaultProvider;
+  const driver = providerName ? providers[providerName] : null;
+  let ready = false;
+  if (driver && state.online) {
+    try {
+      const status = await driver.getStatus();
+      ready = !!status.connected;
+    } catch (err) { ready = false; }
+  }
+  for (const img of images) {
+    let landed = false;
+    if (ready) {
+      try {
+        if (img.bytes.length > ATTACH_MAX_BYTES) {
+          throw new Error("the image is larger than the 100 MB " +
+            "per file limit");
+        }
+        const file = new File([img.bytes], img.name,
+          { type: img.mime });
+        const storageName = img.attId + "__" +
+          sanitizeFileName(img.name);
+        const result = await driver.upload(file, storageName,
+          function () { });
+        note.attachments = note.attachments || [];
+        note.attachments.push({
+          id: img.attId,
+          provider: providerName,
+          fileId: String(result.fileId),
+          name: img.name,
+          storageName: storageName,
+          mime: img.mime,
+          size: img.bytes.length,
+          created: new Date().toISOString()
+        });
+        landed = true;
+      } catch (err) { landed = false; }
+    }
+    if (!landed) {
+      skipped++;
+      removeImportedPlaceholder(note, img.attId);
+    }
+  }
+  try {
+    await saveNoteToRepo(note, { skipConflictCheck: true });
+    saveCache();
+  } catch (err) {
+    /* The create save has already reported store trouble if there
+       is any; the records and removals live in the local cache
+       either way, and a queued save carries them to Drive. */
+  }
+  return skipped;
+}
+
 /* Import a batch of picked files. Each PDF import opens its note so
    the attachment upload lands in it; with several PDFs, the last one
    stays open. Text extraction from PDFs is out of scope: the PDF
@@ -8345,10 +8763,25 @@ async function importFiles(fileList) {
         imported++;
       } else if (lower.endsWith(".docx")) {
         const title = titleFromFileName(name);
-        const html = await docxFileToHtml(
+        /* v2.4: the parts based converter also claims the file's
+           embedded images; each is uploaded through the
+           attachment pipeline and placed inline where the
+           document has it. Skipped images are counted into the
+           summary below, never fatal to the note. */
+        const parts = await docxFileToNoteParts(
           await readBlobArrayBuffer(file), title);
-        createImportedNote(slug, title, html);
+        const importedNote = createImportedNote(slug, title,
+          parts.html);
         imported++;
+        if (parts.images.length) {
+          const skippedImages = await attachImportedDocxImages(
+            importedNote, parts.images);
+          if (skippedImages > 0) {
+            problems.push(name + " (" + skippedImages + " image" +
+              (skippedImages === 1 ? "" : "s") +
+              " could not be imported)");
+          }
+        }
       } else if (lower.endsWith(".pdf")) {
         const note = createImportedNote(slug, titleFromFileName(name),
           "<p><br></p>");
@@ -8376,25 +8809,709 @@ async function importFiles(fileList) {
   toast(message, problems.length > 0);
 }
 
+/* ----- v2.4: the shared notebook move path --------------------------------
+   saveNoteAndSettleMove is the exact sequence the editor's notebook
+   picker has always flowed into through autosave: save the note (at
+   whatever path its current notebook gives it), and when that path
+   differs from the path it had before, remove the old file from the
+   store, or queue its deletion when the store is not connected.
+   Extracted unchanged from the body of autosave below, so the
+   picker and drag and drop run literally the same code. */
+async function saveNoteAndSettleMove(note, previousPath) {
+  const result = await saveNoteToRepo(note);
+  if (notePath(note) !== previousPath) {
+    if (state.online && state.repoExists) {
+      const oldFile = await storeGetFile(previousPath);
+      if (oldFile) {
+        await storeDeleteFile(previousPath, oldFile.token,
+          "Remove note from previous notebook");
+      }
+    } else {
+      queueOp({ kind: "delete", path: previousPath, noteId: note.id });
+    }
+  }
+  return result;
+}
+
+/* Move one note to another notebook, the drag and drop landing (and
+   a faithful sibling of every other instant move in this app: the
+   state change, the cache write, and the render happen at once,
+   and the storage move finishes behind them). The notebook picker
+   in the editor stays the visible truth for the open note: when
+   the moved note is the one on screen, the editor's current
+   contents are collected first (which reads the picker, still
+   showing the old notebook), the picker is then set to the target,
+   and only then does the shared save run, so no pending autosave
+   can ever pull the note back. Dropping on the notebook the note
+   already lives in performs no write at all. */
+function moveNoteToNotebook(note, targetSlug) {
+  const target = state.notebooks.find(function (nb) {
+    return nb.slug === targetSlug;
+  });
+  if (!note || !target || note.trashed || note.archived) {
+    return Promise.resolve(false);
+  }
+  if (note.notebook === targetSlug) { return Promise.resolve(false); }
+  const previousPath = notePath(note);
+  const isOpen = state.selectedId === note.id;
+  if (isOpen) {
+    collectEditor(note);
+    note.notebook = targetSlug;
+    const picker = document.getElementById("noteNotebook");
+    if (picker) { picker.value = targetSlug; }
+  } else {
+    note.notebook = targetSlug;
+  }
+  saveCache();
+  renderAll();
+  return saveNoteAndSettleMove(note, previousPath)
+    .then(function () {
+      saveCache();
+      saveIndex();
+      renderSidebar();
+      renderNoteList();
+      toast("Moved to " + target.name + ".");
+      return true;
+    })
+    .catch(function (err) {
+      toast("Move to " + target.name + " failed: " + err.message, true);
+      return false;
+    });
+}
+
+/* ----- v2.4: the Tab key inside the note body ------------------------------
+   The browser's default for Tab in a contenteditable is to move
+   focus to the next control, which reads as "Tab exits the note".
+   This handler keeps Tab (and Shift+Tab) inside the note whenever
+   the caret or selection is in #noteBody:
+     - In a table cell, Tab moves to the next cell in document
+       order and Shift+Tab to the previous one, selecting the
+       target cell's contents (Word's behavior). Tab in the very
+       last cell appends a new row, built by the same structure
+       rules as the v2.2 table actions, and moves into its first
+       cell. Pure navigation never marks the note dirty.
+     - With a selection spanning several blocks (outside tables),
+       Tab prefixes every touched block with a tab and Shift+Tab
+       removes one leading tab from each that has one; the touched
+       blocks stay selected afterwards.
+     - Otherwise (a collapsed caret, or a selection inside one
+       block, list and checklist items included), Tab inserts a
+       real tab character at the caret, replacing any selection,
+       and Shift+Tab removes one tab immediately before the caret
+       or the leading tab of the caret's block, doing nothing when
+       there is neither. List structure is never nested or
+       restructured by either key.
+   The inserted tab is a span.ss-tab holding the character: its
+   scoped white-space preservation (see the CSS) renders it as a
+   true tab stop gap, even at the start of a line where a raw tab
+   would collapse in the body's normal flow. The span is scoped to
+   the tab itself, so nothing about how an existing note renders
+   changes. The character is what every downstream consumer sees:
+   the saved body carries the span with the character inside it,
+   the text export emits the character, and the Word exporter
+   turns it into a real <w:tab/> element. */
+function makeTabSpan() {
+  const span = document.createElement("span");
+  span.className = "ss-tab";
+  span.textContent = "\t";
+  return span;
+}
+
+function isTabSpan(node) {
+  return !!node && node.nodeType === 1 && !!node.classList &&
+    node.classList.contains("ss-tab");
+}
+
+/* The editing block (paragraph, heading, quote, code block, or list
+   item) inside #noteBody that contains a node, or null. Table
+   cells are deliberately not blocks here: Tab inside a table is
+   navigation, handled before this is consulted, and blocks inside
+   cells are excluded from the multi-block indent for the same
+   reason. */
+function tabBlockOf(node) {
+  const bodyEl = document.getElementById("noteBody");
+  let el = node && node.nodeType === 1 ? node : node && node.parentElement;
+  while (el && el !== bodyEl) {
+    if (/^(P|H1|H2|H3|H4|H5|H6|BLOCKQUOTE|PRE|LI)$/.test(el.tagName)) {
+      return el;
+    }
+    el = el.parentElement;
+  }
+  return null;
+}
+
+/* The blocks a range touches, innermost first choice: a candidate
+   that contains another intersecting candidate (a list item
+   holding a nested list's items, a quote wrapping a paragraph) is
+   dropped in favor of the contained one, so nothing is indented
+   twice. Blocks inside tables and inside attachment placeholders
+   never qualify. */
+function tabTouchedBlocks(bodyEl, range) {
+  const candidates = Array.prototype.filter.call(
+    bodyEl.querySelectorAll("p, h1, h2, h3, h4, h5, h6, blockquote, pre, li"),
+    function (el) {
+      if (el.closest("table")) { return false; }
+      if (el.closest(".ss-attachment")) { return false; }
+      return range.intersectsNode(el);
+    });
+  return candidates.filter(function (el) {
+    return !candidates.some(function (other) {
+      return other !== el && el.contains(other);
+    });
+  });
+}
+
+function insertLeadingTab(block) {
+  block.insertBefore(makeTabSpan(), block.firstChild);
+}
+
+/* Remove a block's leading tab, whether it sits in an ss-tab span
+   or as a raw character starting the block's first text node (the
+   shape imported or pasted content can take). Returns whether one
+   was removed. */
+function removeLeadingTab(block) {
+  const first = block.firstChild;
+  if (!first) { return false; }
+  if (isTabSpan(first)) { first.remove(); return true; }
+  if (first.nodeType === 3 && first.data.charAt(0) === "\t") {
+    first.deleteData(0, 1);
+    if (!first.data) { first.remove(); }
+    return true;
+  }
+  return false;
+}
+
+/* Park the caret at a node and offset, replacing the selection. */
+function setBodyCaret(node, offset) {
+  const sel = window.getSelection();
+  const range = document.createRange();
+  range.setStart(node, offset);
+  range.collapse(true);
+  sel.removeAllRanges();
+  sel.addRange(range);
+}
+
+/* Remove an element and park the caret where it stood. */
+function removeElementAndParkCaret(el) {
+  const range = document.createRange();
+  range.setStartBefore(el);
+  range.collapse(true);
+  el.remove();
+  const sel = window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(range);
+}
+
+/* The leaf node immediately before a node in inline order (the
+   previous sibling, descended to its last leaf), climbing inline
+   ancestors but never out of the containing block. Returns an
+   element (for example a tab span or a checkbox input) or a text
+   node, or null at the block's start. */
+function inlineNodeBefore(node) {
+  const bodyEl = document.getElementById("noteBody");
+  let n = node;
+  while (n && n !== bodyEl) {
+    if (n.previousSibling) {
+      let sib = n.previousSibling;
+      while (sib.nodeType === 1 && sib.childNodes.length &&
+             !isTabSpan(sib)) {
+        sib = sib.childNodes[sib.childNodes.length - 1];
+      }
+      return sib;
+    }
+    n = n.parentElement;
+    if (n && /^(P|H1|H2|H3|H4|H5|H6|BLOCKQUOTE|PRE|LI|TD|TH)$/
+        .test(n.tagName)) {
+      return null;
+    }
+  }
+  return null;
+}
+
+/* Shift+Tab's removal workhorse for the single-block case: remove
+   one tab immediately before the caret (an ss-tab span, or a raw
+   tab character ending the text before it), and failing that, the
+   caret block's leading tab. Returns whether anything was removed,
+   so the caller marks dirty only on a real change. */
+function removeTabBeforeCaret() {
+  const sel = window.getSelection();
+  if (!sel.rangeCount) { return false; }
+  const range = sel.getRangeAt(0);
+  if (!range.collapsed) { range.deleteContents(); }
+  const node = range.startContainer;
+  const offset = range.startOffset;
+  if (node.nodeType === 3 && offset > 0) {
+    if (node.data.charAt(offset - 1) === "\t") {
+      if (isTabSpan(node.parentElement) &&
+          node.data.replace(/\t/g, "") === "") {
+        removeElementAndParkCaret(node.parentElement);
+      } else {
+        node.deleteData(offset - 1, 1);
+        setBodyCaret(node, offset - 1);
+      }
+      return true;
+    }
+  } else {
+    const before = node.nodeType === 3
+      ? inlineNodeBefore(node) : inlineChildBefore(node, offset);
+    if (before) {
+      if (isTabSpan(before)) {
+        removeElementAndParkCaret(before);
+        return true;
+      }
+      if (before.nodeType === 3 &&
+          before.data.charAt(before.data.length - 1) === "\t") {
+        if (isTabSpan(before.parentElement) &&
+            before.data.replace(/\t/g, "") === "") {
+          removeElementAndParkCaret(before.parentElement);
+        } else {
+          before.deleteData(before.data.length - 1, 1);
+          setBodyCaret(before, before.data.length);
+        }
+        return true;
+      }
+    }
+  }
+  const block = tabBlockOf(range.startContainer);
+  if (block && removeLeadingTab(block)) { return true; }
+  return false;
+}
+
+/* The node before an element caret position (container, offset):
+   the child just left of the caret, descended to its last leaf. */
+function inlineChildBefore(container, offset) {
+  if (!container || container.nodeType !== 1 || offset <= 0) {
+    return null;
+  }
+  let child = container.childNodes[offset - 1];
+  while (child && child.nodeType === 1 && child.childNodes.length &&
+         !isTabSpan(child)) {
+    child = child.childNodes[child.childNodes.length - 1];
+  }
+  return child || null;
+}
+
+/* Insert a tab at the (collapsed) range, replacing any selection
+   inside the one block it sits in, and leave the caret after it. */
+function insertTabAtRange(range) {
+  const span = makeTabSpan();
+  range.deleteContents();
+  range.insertNode(span);
+  const sel = window.getSelection();
+  const after = document.createRange();
+  after.setStartAfter(span);
+  after.collapse(true);
+  sel.removeAllRanges();
+  sel.addRange(after);
+}
+
+/* Select a table cell's whole contents, the way Word lands in a
+   cell on Tab: typing then replaces what was there. */
+function selectTableCellContents(cell) {
+  const sel = window.getSelection();
+  const range = document.createRange();
+  range.selectNodeContents(cell);
+  sel.removeAllRanges();
+  sel.addRange(range);
+}
+
+/* Tab and Shift+Tab inside a table: cell to cell navigation in
+   document order (header cells included). Only the row append in
+   the last cell changes the note, so only it marks dirty. */
+function tabNavigateTable(cell, range, shift) {
+  const table = cell.closest("table");
+  if (!table) { return; }
+  const focusNode = shift ? range.startContainer : range.endContainer;
+  const focusCell = tableCellFromNode(focusNode) || cell;
+  const cells = Array.prototype.slice.call(
+    table.querySelectorAll("th, td"));
+  const idx = cells.indexOf(focusCell);
+  if (idx < 0) { return; }
+  const targetIdx = idx + (shift ? -1 : 1);
+  if (targetIdx < 0) { return; }
+  if (targetIdx >= cells.length) {
+    if (shift) { return; }
+    /* Tab in the last cell grows the table by one row, built with
+       the v2.2 structure rules (empty cells whose tags match the
+       reference row and its section), and lands in its first
+       cell. */
+    const lastRow = table.rows[table.rows.length - 1];
+    if (!lastRow) { return; }
+    const newRow = document.createElement("tr");
+    for (let i = 0; i < lastRow.cells.length; i++) {
+      newRow.appendChild(emptyTableCell(tableCellTagFor(lastRow, i)));
+    }
+    lastRow.parentElement.appendChild(newRow);
+    clearCellSelection();
+    selectTableCellContents(newRow.cells[0]);
+    markDirty();
+    updateTableMenu();
+    return;
+  }
+  selectTableCellContents(cells[targetIdx]);
+}
+
+/* The Tab keydown itself. Returns true when the key was the note's
+   to use (caret or selection inside an editable note body), in
+   which case the caller preventDefaults and focus never leaves
+   the note; modified Tab chords (Ctrl, Alt, Cmd) belong to the
+   browser and are left alone. */
+function handleBodyTabKey(ev) {
+  if (ev.ctrlKey || ev.metaKey || ev.altKey) { return false; }
+  const note = currentNote();
+  if (!note || note.trashed || note.archived) { return false; }
+  const bodyEl = document.getElementById("noteBody");
+  if (!bodyEl || bodyEl.contentEditable === "false") { return false; }
+  const sel = window.getSelection();
+  if (!sel || !sel.rangeCount) { return false; }
+  const range = sel.getRangeAt(0);
+  if (!bodyEl.contains(range.startContainer)) { return false; }
+  const shift = !!ev.shiftKey;
+  const cell = tableCellFromNode(range.startContainer);
+  if (cell) {
+    tabNavigateTable(cell, range, shift);
+    return true;
+  }
+  if (!range.collapsed) {
+    const blocks = tabTouchedBlocks(bodyEl, range);
+    if (blocks.length > 1) {
+      let changed = false;
+      blocks.forEach(function (block) {
+        if (shift) {
+          if (removeLeadingTab(block)) { changed = true; }
+        } else {
+          insertLeadingTab(block);
+          changed = true;
+        }
+      });
+      const joined = document.createRange();
+      joined.setStart(blocks[0], 0);
+      const last = blocks[blocks.length - 1];
+      joined.setEnd(last, last.childNodes.length);
+      sel.removeAllRanges();
+      sel.addRange(joined);
+      if (changed) { markDirty(); }
+      return true;
+    }
+  }
+  if (shift) {
+    if (removeTabBeforeCaret()) { markDirty(); }
+  } else {
+    insertTabAtRange(range);
+    markDirty();
+  }
+  return true;
+}
+
+/* ----- v2.4: drag and drop notes between notebooks --------------------------
+   One Pointer Events path for mouse, touch, and pen; the native
+   HTML5 drag events are never used (they do not fire from touch at
+   all). A pointerdown on a note card starts a CANDIDATE, nothing
+   more:
+     - mouse: the drag engages after about 6px of movement;
+     - touch and pen: the drag engages only after a stationary
+       long press of about 300ms. Movement past a small slop
+       before that drops the candidate, so the gesture stays the
+       list's own scroll, exactly as before; a pointercancel (the
+       browser claiming the gesture) aborts cleanly. Tapping a
+       card still opens the note, because a tap ends the candidate
+       without engaging.
+   Once engaged, a ghost of the card follows the pointer, the
+   source card dims, moves are preventDefaulted (and the body
+   holds touch-action none for the duration), and the notebook
+   under the pointer highlights: the sidebar rows on wide screens,
+   or, at mobile widths where the sidebar is another pane, the
+   rows of the #nbDropOverlay panel shown for the drag's duration.
+   Holding near the top or bottom edge of the notebook list auto
+   scrolls it. Dropping runs moveNoteToNotebook (the shared picker
+   move path above); dropping on the note's current notebook,
+   dropping outside any target, Escape, and pointercancel all end
+   the drag with no move. Cards in Trash and Archive never start a
+   candidate. The ghost, overlay, and highlights are furniture:
+   none of their state is serialized anywhere. */
+const NOTE_DRAG_MOUSE_PX = 6;
+const NOTE_DRAG_TOUCH_SLOP_PX = 10;
+const NOTE_DRAG_LONGPRESS_MS = 300;
+const NOTE_DRAG_EDGE_PX = 56;
+const NOTE_DRAG_EDGE_STEP_PX = 14;
+let noteDrag = null;          /* the candidate or engaged drag, if any */
+let noteDragClickBlock = false;
+  /* Set when an engaged drag ends: the pointerup that ends it is
+     followed by a click on whatever sits under the pointer (the
+     source card, which would open the note, or a sidebar row,
+     which would switch views), and that click is the drag's tail,
+     not a fresh user intent. The one-shot document capture
+     listener in initNoteDragAndDrop swallows exactly one such
+     click; any later pointerdown lapses a stale flag first (the
+     v2.3 cell drag lesson), so a genuine click is never eaten. */
+
+function noteDragScrollContainer() {
+  const overlay = document.getElementById("nbDropOverlay");
+  if (overlay && !overlay.classList.contains("hidden")) {
+    return document.getElementById("nbDropList");
+  }
+  return document.getElementById("sidebar");
+}
+
+/* One auto scroll step for the notebook list holding the targets:
+   scrolls it when the pointer is held within the edge band, and
+   reports whether it scrolled. Factored out (and state free) so
+   the edge behavior can be exercised directly. */
+function noteDragAutoScroll(clientY) {
+  const container = noteDragScrollContainer();
+  if (!container) { return false; }
+  const rect = container.getBoundingClientRect();
+  if (clientY < rect.top + NOTE_DRAG_EDGE_PX && container.scrollTop > 0) {
+    container.scrollTop -= NOTE_DRAG_EDGE_STEP_PX;
+    return true;
+  }
+  if (clientY > rect.bottom - NOTE_DRAG_EDGE_PX &&
+      container.scrollTop <
+        container.scrollHeight - container.clientHeight) {
+    container.scrollTop += NOTE_DRAG_EDGE_STEP_PX;
+    return true;
+  }
+  return false;
+}
+
+/* The drop target row under a point, by rectangle scan of the
+   visible target set (the overlay's rows while it is shown, else
+   the sidebar's notebook rows). A rectangle scan, rather than
+   elementFromPoint, keeps the rule identical everywhere: a row
+   counts when the point is inside its box. */
+function noteDragTargetAt(x, y) {
+  const overlay = document.getElementById("nbDropOverlay");
+  const inOverlay = overlay && !overlay.classList.contains("hidden");
+  const scope = inOverlay ? overlay : document.getElementById("notebookNav");
+  if (!scope) { return null; }
+  const rows = scope.querySelectorAll("[data-nb-slug]");
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i].getBoundingClientRect();
+    if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) {
+      return rows[i];
+    }
+  }
+  return null;
+}
+
+function showNbDropOverlay(dragNote) {
+  const overlay = document.getElementById("nbDropOverlay");
+  const list = document.getElementById("nbDropList");
+  if (!overlay || !list) { return; }
+  list.innerHTML = "";
+  state.notebooks.forEach(function (nb) {
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = "nb-drop-row" +
+      (dragNote && nb.slug === dragNote.notebook ? " current" : "");
+    row.setAttribute("data-nb-slug", nb.slug);
+    row.textContent = nb.name +
+      (dragNote && nb.slug === dragNote.notebook ? " (current)" : "");
+    list.appendChild(row);
+  });
+  overlay.classList.remove("hidden");
+}
+
+function hideNbDropOverlay() {
+  const overlay = document.getElementById("nbDropOverlay");
+  if (overlay) { overlay.classList.add("hidden"); }
+}
+
+function positionNoteDragGhost(x, y) {
+  if (!noteDrag || !noteDrag.ghost) { return; }
+  noteDrag.ghost.style.left = (x - noteDrag.offsetX) + "px";
+  noteDrag.ghost.style.top = (y - noteDrag.offsetY) + "px";
+}
+
+function updateNoteDragTarget(x, y) {
+  if (!noteDrag) { return; }
+  const row = noteDragTargetAt(x, y);
+  if (noteDrag.targetEl && noteDrag.targetEl !== row) {
+    noteDrag.targetEl.classList.remove("drop-hover");
+  }
+  noteDrag.targetEl = row;
+  noteDrag.targetSlug = row ? row.getAttribute("data-nb-slug") : null;
+  if (row) { row.classList.add("drop-hover"); }
+}
+
+function engageNoteDrag() {
+  if (!noteDrag || noteDrag.engaged) { return; }
+  const drag = noteDrag;
+  drag.engaged = true;
+  if (drag.timer) { clearTimeout(drag.timer); drag.timer = null; }
+  const card = drag.card;
+  const rect = card.getBoundingClientRect();
+  drag.offsetX = drag.startX - rect.left;
+  drag.offsetY = drag.startY - rect.top;
+  const ghost = card.cloneNode(true);
+  ghost.removeAttribute("id");
+  ghost.removeAttribute("data-note-id");
+  ghost.classList.remove("active");
+  ghost.classList.add("note-drag-ghost");
+  const picker = ghost.querySelector(".note-select");
+  if (picker) { picker.remove(); }
+  ghost.style.width = rect.width + "px";
+  document.body.appendChild(ghost);
+  drag.ghost = ghost;
+  card.classList.add("drag-source");
+  document.body.classList.add("note-drag-active");
+  card.style.touchAction = "none";
+  try { card.setPointerCapture(drag.pointerId); } catch (err) { }
+  if (window.innerWidth <= 900) {
+    showNbDropOverlay(findNoteById(drag.noteId));
+  }
+  if (navigator.vibrate) {
+    try { navigator.vibrate(10); } catch (err) { }
+  }
+  positionNoteDragGhost(drag.startX, drag.startY);
+}
+
+function cleanupNoteDrag() {
+  if (!noteDrag) { return; }
+  const drag = noteDrag;
+  noteDrag = null;
+  if (drag.timer) { clearTimeout(drag.timer); }
+  if (drag.targetEl) { drag.targetEl.classList.remove("drop-hover"); }
+  if (drag.ghost) { drag.ghost.remove(); }
+  if (drag.card) {
+    drag.card.classList.remove("drag-source");
+    drag.card.style.touchAction = "";
+  }
+  document.body.classList.remove("note-drag-active");
+  hideNbDropOverlay();
+  window.removeEventListener("pointermove", onNoteDragMove);
+  window.removeEventListener("pointerup", onNoteDragUp);
+  window.removeEventListener("pointercancel", onNoteDragCancel);
+  document.removeEventListener("keydown", onNoteDragKeydown, true);
+}
+
+function onNoteListPointerDown(ev) {
+  if (noteDrag) { return; }
+  if (ev.pointerType === "mouse" && ev.button !== 0) { return; }
+  if (state.view.kind === "trash" || state.view.kind === "archive") {
+    return;
+  }
+  const target = ev.target;
+  const card = target && target.closest
+    ? target.closest(".note-card") : null;
+  if (!card || !card.getAttribute("data-note-id")) { return; }
+  if (target.closest && target.closest(".note-select")) { return; }
+  const note = findNoteById(card.getAttribute("data-note-id"));
+  if (!note || note.trashed || note.archived) { return; }
+  noteDrag = {
+    noteId: note.id,
+    pointerId: ev.pointerId,
+    pointerType: ev.pointerType || "mouse",
+    startX: ev.clientX,
+    startY: ev.clientY,
+    engaged: false,
+    ghost: null,
+    offsetX: 0,
+    offsetY: 0,
+    targetSlug: null,
+    targetEl: null,
+    timer: null,
+    card: card
+  };
+  if (noteDrag.pointerType !== "mouse") {
+    noteDrag.timer = setTimeout(function () {
+      if (noteDrag) { engageNoteDrag(); }
+    }, NOTE_DRAG_LONGPRESS_MS);
+  }
+  window.addEventListener("pointermove", onNoteDragMove);
+  window.addEventListener("pointerup", onNoteDragUp);
+  window.addEventListener("pointercancel", onNoteDragCancel);
+  document.addEventListener("keydown", onNoteDragKeydown, true);
+}
+
+function onNoteDragMove(ev) {
+  if (!noteDrag || ev.pointerId !== noteDrag.pointerId) { return; }
+  if (!noteDrag.engaged) {
+    const moved = Math.hypot(ev.clientX - noteDrag.startX,
+      ev.clientY - noteDrag.startY);
+    if (noteDrag.pointerType === "mouse") {
+      if (moved > NOTE_DRAG_MOUSE_PX) { engageNoteDrag(); }
+    } else if (moved > NOTE_DRAG_TOUCH_SLOP_PX) {
+      /* The press became a scroll before the long press landed:
+         the candidate dies here and the list keeps its gesture. */
+      cleanupNoteDrag();
+      return;
+    }
+    if (!noteDrag || !noteDrag.engaged) { return; }
+  }
+  ev.preventDefault();
+  positionNoteDragGhost(ev.clientX, ev.clientY);
+  updateNoteDragTarget(ev.clientX, ev.clientY);
+  noteDragAutoScroll(ev.clientY);
+}
+
+function endNoteDrag(commit) {
+  if (!noteDrag) { return; }
+  const drag = noteDrag;
+  const wasEngaged = drag.engaged;
+  const note = findNoteById(drag.noteId);
+  const slug = drag.targetSlug;
+  cleanupNoteDrag();
+  if (!wasEngaged) { return; }
+  noteDragClickBlock = true;
+  if (commit && slug && note && slug !== note.notebook) {
+    moveNoteToNotebook(note, slug);
+  }
+}
+
+function onNoteDragUp(ev) {
+  if (!noteDrag || ev.pointerId !== noteDrag.pointerId) { return; }
+  endNoteDrag(true);
+}
+
+function onNoteDragCancel(ev) {
+  if (!noteDrag || ev.pointerId !== noteDrag.pointerId) { return; }
+  endNoteDrag(false);
+}
+
+function onNoteDragKeydown(ev) {
+  if (ev.key === "Escape" && noteDrag) {
+    ev.preventDefault();
+    endNoteDrag(false);
+  }
+}
+
+/* Wire the drag's entry points: the delegated pointerdown on the
+   note list, the overlay's Cancel button, and the one-shot click
+   suppression for a finished drag's tail click. Called once from
+   wireEvents. */
+function initNoteDragAndDrop() {
+  const listEl = document.getElementById("noteList");
+  if (listEl) {
+    listEl.addEventListener("pointerdown", onNoteListPointerDown);
+  }
+  const cancelBtn = document.getElementById("nbDropCancelBtn");
+  if (cancelBtn) {
+    cancelBtn.addEventListener("click", function () {
+      endNoteDrag(false);
+    });
+  }
+  document.addEventListener("pointerdown", function () {
+    if (!noteDrag) { noteDragClickBlock = false; }
+  }, true);
+  document.addEventListener("click", function (ev) {
+    if (noteDragClickBlock) {
+      noteDragClickBlock = false;
+      ev.stopPropagation();
+      ev.preventDefault();
+    }
+  }, true);
+}
+
 const autosave = debounce(async function () {
   const note = currentNote();
   if (!note || note.trashed || note.archived) { return; }
   const previousPath = notePath(note);
   const previousNotebook = note.notebook;
   collectEditor(note);
-  const moved = notePath(note) !== previousPath;
   setSaveState("Saving...");
   try {
-    const result = await saveNoteToRepo(note);
-    if (moved && state.online && state.repoExists) {
-      const oldFile = await storeGetFile(previousPath);
-      if (oldFile) {
-        await storeDeleteFile(previousPath, oldFile.token, "Remove note from previous notebook");
-      }
-    }
-    if (moved && (!state.online || !state.repoExists)) {
-      queueOp({ kind: "delete", path: previousPath, noteId: note.id });
-    }
+    const result = await saveNoteAndSettleMove(note, previousPath);
     if (result && result.queued) {
       setSaveState("Offline: changes queued");
     } else if (result && result.conflict) {
@@ -11957,6 +13074,11 @@ function wireEvents() {
     refreshGoogleConnection().catch(function (err) { toast(err.message, true); });
   });
 
+  /* v2.4: drag and drop notes between notebooks: the delegated
+     pointerdown on the note list, the drop overlay's Cancel
+     button, and the finished drag click suppression. */
+  initNoteDragAndDrop();
+
   /* Mobile bar. */
   document.getElementById("mobileNavBtn").addEventListener("click", function () { setMobileView("nav"); });
   document.getElementById("mobileListBtn").addEventListener("click", function () { setMobileView("list"); });
@@ -12338,6 +13460,18 @@ function wireEvents() {
   noteBodyEl.addEventListener("keydown", function (ev) {
     if (ev.key === "Enter" && !ev.shiftKey) {
       if (handleChecklistEnter()) { ev.preventDefault(); }
+    }
+  });
+
+  /* v2.4: Tab and Shift+Tab belong to the note while the caret is
+     in it (see handleBodyTabKey in the editor section): table cell
+     navigation, multi block indent and outdent, and real tab
+     characters, never a focus jump out of the editor. The handler
+     decides whether the key is the note's; only then is the
+     browser default (focus movement) prevented. */
+  noteBodyEl.addEventListener("keydown", function (ev) {
+    if (ev.key === "Tab" && handleBodyTabKey(ev)) {
+      ev.preventDefault();
     }
   });
 
