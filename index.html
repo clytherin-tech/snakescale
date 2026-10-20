@@ -40,10 +40,43 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-20-SSN-V280
-  Version: 2.8.0
+  BUILD STAMP: 2026-10-20-SSN-V290
+  Version: 2.9.0
 
   Revision history:
+    v2.9.0 2026-10-20 A link hover bar with view modes, and real
+                      link info from Microlink. The v1.3 click popup
+                      is replaced by one dark floating bar (linkBar)
+                      that appears when the mouse rests on an
+                      external link, and on click or tap as before:
+                      a globe icon, the clickable address, and icon
+                      buttons to edit (the v1.3.2 form, rehosted as
+                      the bar's edit state), copy the address, remove
+                      the link while keeping its text, and open a
+                      View Link As menu. That menu switches the link
+                      between Text (an ordinary link, the absence of
+                      the new data-ss-link-view attribute), Mention
+                      (an inline chip: the site's logo or a globe,
+                      plus a label), and Preview (a block card with
+                      cover image, title, description, and the
+                      address), with a dot marking the current mode;
+                      it also carries Copy URL and a Delete that
+                      removes the link and its text together. The
+                      faces Mention and Preview show are runtime
+                      only DOM, rebuilt by decoration on every
+                      render and stripped by the one save funnel, so
+                      a saved note holds only the anchor, its mode
+                      attribute, and any fetched info attributes
+                      (data-ss-link-title, desc, image, logo).
+                      Switching a link to Mention or Preview lazily
+                      fetches its real title, description, cover
+                      image, and logo from the Microlink metadata
+                      API (no key, only the link address is sent),
+                      stores what comes back on the anchor, and
+                      never fetches again for that link; failures
+                      of any kind fall back to the link text or
+                      hostname, silently. Note links (ssnote:) are
+                      untouched and never show the bar.
     v2.8.0 2026-10-20 Settings modal, note version history, and an
                       inline notebook selector. The notebook label
                       and selector now share one row in the editor
@@ -1662,21 +1695,28 @@ body.note-drag-active{touch-action:none;overscroll-behavior:none;}
    get a pointer cursor as the affordance that they can be opened (plain
    click shows the link popup below, Ctrl or Cmd click opens directly). */
 #noteBody a{cursor:pointer;}
-/* Link popup: a small floating card shown near a clicked link.
-   It is position:fixed and lives OUTSIDE #noteBody in the DOM (a sibling
-   in .editor-inner), so it can never be saved into a note's HTML. The
-   script sets its left/top from the clicked link's on screen position
-   and clamps it into the viewport.
-   v1.3.1 introduced the popup with an address and an Open button.
-   v1.3.2 removed the Open button: the address itself is now the
-   clickable way to open the link, and an Edit button swaps the card to
-   a small inline edit form (rules below). */
-#linkPopup{
-  position:fixed;z-index:60;
-  max-width:min(420px,92vw);padding:7px 8px 7px 12px;
-  background:var(--surface);border:1px solid var(--border);
-  border-radius:var(--radius-card);box-shadow:0 10px 28px rgba(6,32,22,.28);
+/* Link bar (v2.9): a dark floating bar shown near a hovered or
+   clicked external link, replacing the v1.3 link popup outright.
+   It is position:fixed and lives OUTSIDE #noteBody in the DOM (a
+   sibling in .editor-inner), so it can never be saved into a
+   note's HTML. The script sets its left/top from the link's on
+   screen position and clamps it into the viewport.
+   The bar is dark in both themes, the way Chris's screenshot of
+   the pattern showed it: a deep green black pill with light text
+   and icon buttons. Its normal view is one row: a globe icon, the
+   clickable address, then icon buttons for edit, copy, unlink,
+   and the View Link As menu (the menu itself hangs below the
+   bar, inside the same element, so one outside click rule and
+   one Escape order cover both). The edit form below swaps in
+   as the bar's second state, exactly as it did in the popup. */
+#linkBar{
+  position:fixed;z-index:62;
+  max-width:min(440px,94vw);padding:6px;
+  background:#0E241A;border:1px solid var(--secondary);
+  border-radius:12px;box-shadow:0 12px 30px rgba(6,32,22,.38);
+  color:#EAF3EC;
 }
+#linkBar.hidden{display:none;}
 /* v1.7: the selected image's three dot menu. Like the link popup it
    is position:fixed and lives OUTSIDE #noteBody, so it can never be
    saved into a note; the script positions it at the image's menu
@@ -1815,21 +1855,104 @@ body.note-drag-active{touch-action:none;overscroll-behavior:none;}
    .tb-swatches and .swatch styles; the grid only needs padding
    inside the sub panel. */
 #cellBgSub .tb-swatches{padding:2px;}
-/* The normal view is one row: clickable address, Edit, close. */
-#linkPopupView{display:flex;align-items:center;gap:8px;}
-#linkPopupUrl{
-  font-size:13px;font-weight:600;color:var(--primary);
+/* The bar's normal view: one row of globe, address, icon buttons. */
+#linkBarView{display:flex;align-items:center;gap:4px;}
+#linkBarGlobe{display:inline-flex;flex:none;color:#9FD4B2;padding:0 2px 0 4px;}
+#linkBarGlobe svg{display:block;}
+#linkBarUrl{
+  font-size:13px;font-weight:600;color:#EAF3EC;
   text-decoration:underline;cursor:pointer;
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:230px;
+  padding:4px 2px;
 }
-#linkPopupUrl:hover{color:var(--secondary);}
-body.dark #linkPopupUrl{color:#9FD4B2;}
-#linkPopupEdit{white-space:nowrap;}
-#linkPopupClose{
-  border:none;background:none;color:var(--muted);font-size:17px;line-height:1;
+#linkBarUrl:hover{color:#9FD4B2;}
+.link-bar-btn{
+  border:none;background:none;color:#C9DFCE;padding:0;
   width:30px;height:30px;border-radius:8px;cursor:pointer;flex:none;
+  display:inline-flex;align-items:center;justify-content:center;
 }
-#linkPopupClose:hover{background:var(--soft);color:var(--text);}
+.link-bar-btn:hover{background:rgba(87,167,115,.25);color:#FFFFFF;}
+.link-bar-btn[aria-expanded="true"]{background:rgba(87,167,115,.25);color:#FFFFFF;}
+.link-bar-btn svg{display:block;}
+/* The View Link As menu: a card hanging under the bar's right
+   edge. It is a child of the (fixed) bar, so it inherits the
+   bar's clamping and travels with it. The dot slot keeps every
+   row aligned; the current mode's row fills its dot and bolds,
+   the visual marker Chris's screenshot shows on Text. */
+#linkViewMenu{
+  position:absolute;top:calc(100% + 6px);right:0;
+  min-width:200px;padding:6px;
+  background:#0E241A;border:1px solid var(--secondary);
+  border-radius:12px;box-shadow:0 12px 30px rgba(6,32,22,.38);
+  display:flex;flex-direction:column;gap:2px;
+}
+#linkViewMenu.hidden{display:none;}
+.link-view-header{
+  font-size:11px;font-weight:700;letter-spacing:.08em;
+  color:#9FD4B2;padding:6px 10px 4px;
+}
+.link-view-item{
+  display:flex;align-items:center;gap:8px;width:100%;
+  text-align:left;border:none;background:none;color:#EAF3EC;
+  font-size:14px;padding:8px 10px;border-radius:8px;cursor:pointer;
+  white-space:nowrap;
+}
+.link-view-item:hover{background:rgba(87,167,115,.22);}
+.link-view-item.danger{color:#F0A79E;}
+.link-view-dot{
+  width:7px;height:7px;border-radius:50%;flex:none;background:transparent;
+}
+.link-view-item.active{font-weight:700;}
+.link-view-item.active .link-view-dot{background:var(--accent);}
+.link-view-sep{height:1px;background:rgba(159,212,178,.28);margin:4px 2px;}
+/* v2.9: the link view faces inside the body. A Mention or Preview
+   anchor holds two runtime only children: its original content,
+   wrapped in .ss-link-original and never displayed, and a
+   .ss-link-face built by decoration. Both vanish from the saved
+   note (the save funnel strips them), so these rules only ever
+   style the live editor. The anchor itself carries the mode in
+   its data-ss-link-view attribute, which IS saved, and these
+   attribute selectors are what dress it as a chip or a card. */
+#noteBody .ss-link-original{display:none;}
+#noteBody a[data-ss-link-view="mention"]{
+  display:inline-flex;align-items:center;
+  background:var(--soft);border:1px solid var(--border);
+  border-radius:999px;padding:1px 9px 1px 6px;margin:0 1px;
+  color:var(--primary);text-decoration:none;font-weight:600;
+}
+#noteBody a[data-ss-link-view="mention"]:hover{border-color:var(--accent);}
+.ss-link-face{display:inline-flex;align-items:center;gap:5px;user-select:none;}
+.ss-link-face-logo{
+  width:15px;height:15px;border-radius:4px;object-fit:contain;flex:none;
+}
+.ss-link-face-globe{display:inline-flex;color:var(--secondary);flex:none;}
+.ss-link-face-globe svg{display:block;}
+#noteBody a[data-ss-link-view="preview"]{
+  display:block;margin:10px 0;padding:10px 12px;
+  border:1px solid var(--border);border-radius:var(--radius-card);
+  background:var(--surface);color:var(--text);text-decoration:none;
+  box-shadow:var(--shadow);
+}
+#noteBody a[data-ss-link-view="preview"]:hover{border-color:var(--accent);}
+.ss-link-face-preview{
+  display:flex;gap:12px;align-items:flex-start;width:100%;
+}
+.ss-link-face-cover{
+  width:88px;height:88px;object-fit:cover;border-radius:8px;flex:none;
+}
+.ss-link-face-main{
+  display:flex;flex-direction:column;gap:3px;min-width:0;flex:1;
+}
+.ss-link-face-title{font-weight:700;font-size:15px;line-height:1.3;}
+.ss-link-face-desc{
+  font-size:13px;color:var(--muted);line-height:1.4;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
+  overflow:hidden;
+}
+.ss-link-face-url{
+  font-size:12px;color:var(--secondary);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
 /* v1.3.2 link edit form: replaces the normal view inside the same card
    while editing. The fields follow the app's standard input styling.
    Being part of the popup, the form is still outside #noteBody and can
@@ -2751,20 +2874,30 @@ body.dark .version-date{color:var(--accent);}
                checklists and formatting intact in v1.0. -->
           <div id="noteBody" contenteditable="true" aria-label="Note body"></div>
 
-          <!-- Link popup (v1.3.1, reworked in v1.3.2). IMPORTANT: this
-               element is a SIBLING of #noteBody, never a child, and
-               collectEditor() only reads #noteBody's innerHTML, so the
-               popup can never be saved into a note. It is shown when a
-               link in the body is clicked and always opens in its normal
-               view: the address itself is the clickable way to open the
-               link (the touch screen way to follow one), and the Edit
-               button swaps the card to a small form for changing that
-               link's text or address in place. Hidden by default. -->
-          <div id="linkPopup" class="hidden" role="dialog" aria-label="Link options">
-            <div id="linkPopupView">
-              <a id="linkPopupUrl" href="#" title="Open this link"></a>
-              <button class="btn small" id="linkPopupEdit" type="button">Edit</button>
-              <button id="linkPopupClose" type="button" aria-label="Close link popup">&times;</button>
+          <!-- Link bar (v2.9, replacing the v1.3.1/v1.3.2 link popup).
+               IMPORTANT: this element is a SIBLING of #noteBody, never a
+               child, and collectEditor() only reads #noteBody's
+               innerHTML, so the bar can never be saved into a note. It
+               appears above an external link when the mouse rests on
+               it, and on click or tap, and always opens in its normal
+               view: a globe icon, the address itself as the clickable
+               way to open the link (the touch screen way to follow
+               one), and icon buttons to edit, copy, unlink, and open
+               the View Link As menu. The pencil swaps the bar to the
+               v1.3.2 edit form (rehosted here unchanged) for changing
+               that link's text or address in place. The menu hangs
+               under the bar's right edge and switches the link's
+               display mode (Mention, Text, Preview), copies the
+               address, or deletes the link outright. Hidden by
+               default. -->
+          <div id="linkBar" class="hidden" role="dialog" aria-label="Link options">
+            <div id="linkBarView">
+              <span id="linkBarGlobe" aria-hidden="true"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c2.5 2.6 3.9 5.7 3.9 9s-1.4 6.4-3.9 9c-2.5-2.6-3.9-5.7-3.9-9S9.5 5.6 12 3z"/></svg></span>
+              <a id="linkBarUrl" href="#" title="Open this link"></a>
+              <button class="link-bar-btn" id="linkBarEditBtn" type="button" aria-label="Edit link" title="Edit link"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg></button>
+              <button class="link-bar-btn" id="linkBarCopyBtn" type="button" aria-label="Copy link address" title="Copy URL"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
+              <button class="link-bar-btn" id="linkBarUnlinkBtn" type="button" aria-label="Remove link, keep the text" title="Remove link"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 17H7A5 5 0 0 1 7 7h1"/><path d="M15 7h2a5 5 0 1 1 0 10h-1"/><line x1="4" y1="4" x2="20" y2="20"/></svg></button>
+              <button class="link-bar-btn" id="linkBarMenuBtn" type="button" aria-label="View link as" title="View link as" aria-haspopup="menu" aria-expanded="false"><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg></button>
             </div>
             <div id="linkEditForm" class="hidden">
               <div class="link-edit-field">
@@ -2779,6 +2912,15 @@ body.dark .version-date{color:var(--accent);}
                 <button class="btn small" id="linkEditCancel" type="button">Cancel</button>
                 <button class="btn small accent" id="linkEditSave" type="button">Save</button>
               </div>
+            </div>
+            <div id="linkViewMenu" class="hidden" role="menu" aria-label="View link as">
+              <div class="link-view-header">VIEW LINK AS</div>
+              <button class="link-view-item" type="button" role="menuitem" data-link-view="mention"><span class="link-view-dot" aria-hidden="true"></span>Mention</button>
+              <button class="link-view-item" type="button" role="menuitem" data-link-view="text"><span class="link-view-dot" aria-hidden="true"></span>Text</button>
+              <button class="link-view-item" type="button" role="menuitem" data-link-view="preview"><span class="link-view-dot" aria-hidden="true"></span>Preview</button>
+              <div class="link-view-sep"></div>
+              <button class="link-view-item" type="button" role="menuitem" id="linkViewCopyBtn"><span class="link-view-dot" aria-hidden="true"></span>Copy URL</button>
+              <button class="link-view-item danger" type="button" role="menuitem" id="linkViewDeleteBtn"><span class="link-view-dot" aria-hidden="true"></span>Delete</button>
             </div>
           </div>
           <!-- v1.7: the selected image's action menu, a SIBLING of
@@ -2902,7 +3044,7 @@ body.dark .version-date{color:var(--accent);}
           <label for="noteTags">Tags</label>
           <input id="noteTags" type="text" placeholder="ideas, work, personal">
         </div>
-        <span class="editor-hint">Links: Ctrl+click (Cmd+click on Mac) opens a link, or click it to open or edit it.</span>
+        <span class="editor-hint">Links: hover or click a link for its options, or Ctrl+click (Cmd+click on Mac) to open it.</span>
         <div class="editor-actions">
           <span class="tb-menu-wrap export-wrap">
             <button class="btn small" id="exportBtn" type="button" aria-haspopup="true">Export &#9662;</button>
@@ -3062,8 +3204,8 @@ body.dark .version-date{color:var(--accent);}
 "use strict";
 
 /* ============================================================================
-   SnakeScale Notes v2.8.0: application script
-   BUILD STAMP: 2026-10-20-SSN-V280
+   SnakeScale Notes v2.9.0: application script
+   BUILD STAMP: 2026-10-20-SSN-V290
 
    How this script is organized:
      1. Constants and global state
@@ -3094,8 +3236,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-20-SSN-V280";
-const APP_VERSION = "2.8.0";
+const APP_BUILD = "2026-10-20-SSN-V290";
+const APP_VERSION = "2.9.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -3573,7 +3715,7 @@ async function signOut() {
   state.attach.googleExpiresAt = 0;
   state.attach.googleFolderId = null;
   revokeAttachmentUrls();
-  hideLinkPopup();
+  hideLinkBar();
 
   localStorage.removeItem(LS_PROVIDERS);
   localStorage.removeItem(LS_CACHE);
@@ -6177,7 +6319,7 @@ function anyOverlayOpen() {
   if (noteDrag) { return true; }
   const ids = ["noteLinkModal", "settingsModal", "versionHistoryModal",
     "nbDropOverlay", "notebookMenu",
-    "railFlyout", "linkPopup", "tableMenu", "cellMenu", "attMenu",
+    "railFlyout", "linkBar", "linkViewMenu", "tableMenu", "cellMenu", "attMenu",
     "exportMenu", "sidebarMenu"];
   for (let i = 0; i < ids.length; i++) {
     const el = document.getElementById(ids[i]);
@@ -6904,8 +7046,9 @@ function renderEditor() {
   if (!note) {
     noNote.classList.remove("hidden");
     wrap.classList.add("hidden");
-    /* v1.3.1: no note on screen, so no link popup either. */
-    hideLinkPopup();
+    /* v1.3.1: no note on screen, so no link popup either.
+       v2.9: the popup's successor, the link bar, same rule. */
+    hideLinkBar();
     /* v2.2: and no table menu either. */
     hideTableMenu();
     /* v2.3: and no cell menu, chip, or cell selection. */
@@ -6923,8 +7066,9 @@ function renderEditor() {
   if (renderEditor._forId !== note.id) {
     renderEditor._forId = note.id;
     /* v1.3.1: switching notes closes any open link popup, since it
-       refers to a link in the previous note. */
-    hideLinkPopup();
+       refers to a link in the previous note. v2.9: same for the
+       link bar that replaced the popup. */
+    hideLinkBar();
     /* v1.6: an image selection (and its resize handle) belongs to the
        previous note's DOM, which is about to be replaced. v1.7: the
        image menu closes with it (deselectAttachment closes it), and
@@ -6981,6 +7125,10 @@ function renderEditor() {
        target's CURRENT title, so a rename is reflected the next time
        this note opens, without the link itself being edited. */
     decorateLinkTooltips(document.getElementById("noteBody"));
+    /* v2.9: link view faces (Mention chips, Preview cards) are
+       rebuilt beside the tooltips, from the mode and Microlink
+       info attributes the saved body carries. */
+    decorateLinkViews(document.getElementById("noteBody"));
     setSaveState(note.trashed ? "In Trash" :
       (note.archived ? "Archived" : "Saved"));
     /* v1.2: fill the attachment placeholders from the providers. This is
@@ -7020,6 +7168,9 @@ function renderEditor() {
   if (locked) { hideTableMenu(); }
   /* v2.3: the same for the cell furniture and any cell selection. */
   if (locked) { hideCellMenu(); clearCellSelection(); }
+  /* v2.9: and the link bar closes the moment a note locks, since
+     its actions all edit the note. */
+  if (locked) { hideLinkBar(); }
   /* v2.5: the notebook link's locked state was set by
      refreshNotebookLink above (it replaced the old picker's
      disabled line here). */
@@ -7205,6 +7356,9 @@ function syncSettingsControls() {
 
 function openSettingsModal() {
   closeSidebarMenu();
+  /* v2.9: a modal opening puts the link bar away, like every
+     other overlay in the app. */
+  hideLinkBar();
   syncSettingsControls();
   const modal = document.getElementById("settingsModal");
   if (modal) { modal.classList.remove("hidden"); }
@@ -7306,6 +7460,9 @@ async function openVersionHistory() {
   }
   const exportMenu = document.getElementById("exportMenu");
   if (exportMenu) { exportMenu.classList.add("hidden"); }
+  /* v2.9: the History modal is an overlay like the export menu it
+     already closes: the link bar goes away as it opens. */
+  hideLinkBar();
   versionHistoryOpenNoteId = note.id;
   versionHistoryPreviewVersionId = null;
   const preview = document.getElementById("versionHistoryPreview");
@@ -7714,7 +7871,35 @@ function canonicalizeAttachmentPlaceholders(html) {
     el.classList.remove("ss-cell-selected");
     if (!el.classList.length) { el.removeAttribute("class"); }
   });
+  /* v2.9: link view faces are runtime only presentation, exactly
+     like the cell selection above: a Mention or Preview anchor in
+     the live body holds a .ss-link-face node and its original
+     children wrapped in .ss-link-original, and neither may reach
+     the saved file. The anchor itself, its data-ss-link-view mode,
+     and its data-ss-link-* info attributes pass through untouched;
+     they ARE the saved form of the feature. */
+  stripLinkFaces(holder);
   return holder.innerHTML;
+}
+
+/* v2.9: remove every link view face under rootEl and unwrap every
+   wrapped original, restoring each decorated anchor to exactly
+   the children it was saved with. Shared by the save funnel
+   above and the print builder (which works from a clone of the
+   live, decorated body), so both see the same plain anchors the
+   text and Word exporters read from the saved body. Idempotent:
+   a body with no faces passes through unchanged. */
+function stripLinkFaces(rootEl) {
+  if (!rootEl || !rootEl.querySelectorAll) { return; }
+  rootEl.querySelectorAll(".ss-link-face").forEach(function (el) {
+    el.remove();
+  });
+  rootEl.querySelectorAll(".ss-link-original").forEach(function (el) {
+    const parent = el.parentNode;
+    if (!parent) { return; }
+    while (el.firstChild) { parent.insertBefore(el.firstChild, el); }
+    el.remove();
+  });
 }
 
 /* v1.6, reworked in v1.7.2: the width a resized image should keep,
@@ -7762,26 +7947,33 @@ function collectEditor(note) {
 }
 
 /* --------------------------------------------------------------------------
-   Opening and editing links from inside a note (v1.3.1, v1.3.2)
+   Opening and editing links from inside a note (v1.3.1, v1.3.2, v2.9)
    The note body is contenteditable, so the browser treats a plain click
    on a link as "place the caret for editing" and never follows it. This
    block gives links real behavior without disturbing editing:
      - Ctrl+click (Cmd+click on a Mac) opens the link in a new tab.
      - A plain click still places the caret exactly as before, and ALSO
-       shows the floating link popup, which is how touch screens, with
-       no Ctrl key, open and edit links.
-   v1.3.2 popup behavior: the popup shows the address as a clickable
-   link (clicking it opens the page through the same checked path as
-   Ctrl+click) plus an Edit button. Edit swaps the popup to a small
-   inline form (link text, link address, Save, Cancel) so the clicked
-   link can be retargeted or relabeled in place; a bare address like
-   example.com is completed to https://example.com on save.
+       summons the link bar, which is how touch screens, with no Ctrl
+       key, open and edit links.
+   v2.9 replaced the v1.3 floating popup with ONE dark link bar
+   (linkBar in the HTML): it also appears when the mouse rests on a
+   link, shows the address as a clickable link (clicking it opens the
+   page through the same checked path as Ctrl+click), and carries icon
+   buttons: edit (the v1.3.2 inline form, rehosted as the bar's edit
+   state, semantics unchanged), copy the address, remove the link
+   keeping its text, and a three dot menu (linkViewMenu) that switches
+   the link's display mode between Text, Mention, and Preview, copies
+   the address, or deletes the link and its text together. The display
+   modes and the Microlink info behind them live further down in this
+   block. Note links (ssnote:) never show the bar; they keep their own
+   click behavior entirely.
    Safety: only http, https, and mailto links may open, and the same
    rule validates a saved edit. Anything else (javascript:, data:, a
-   malformed string) is refused with a toast. The popup element lives
+   malformed string) is refused with a toast. The bar element lives
    outside #noteBody, and collectEditor only reads #noteBody's
-   innerHTML, so the popup can never be saved into a note, and using it
-   never marks the note dirty; only a successful link edit Save does.
+   innerHTML, so the bar can never be saved into a note, and using it
+   never marks the note dirty; only a successful link edit Save, a
+   mode switch, an unlink, a delete, or a landed info fetch does.
    -------------------------------------------------------------------------- */
 
 /* Pure protocol check, kept separate and side effect free so it can be
@@ -7816,77 +8008,193 @@ function openNoteLink(rawUrl) {
   window.open(target, "_blank", "noopener");
 }
 
-/* The href of the link the popup currently refers to. Kept in a variable
-   rather than read back from the DOM so the popup's clickable address
-   always opens the exact href of the link that was clicked. */
-let linkPopupHref = "";
+/* The href of the link the bar currently refers to. Kept in a variable
+   rather than read back from the DOM so the bar's clickable address
+   always opens the exact href of the link that summoned it. */
+let linkBarHref = "";
 
-/* v1.3.2: the anchor element the popup currently refers to. The edit
-   form needs the element itself (to read and rewrite its text and href
-   in place), not just the address string. Cleared whenever the popup
-   hides, so a stale element can never be edited by accident. */
-let linkPopupAnchor = null;
+/* The anchor element the bar currently refers to. The edit form and
+   the menu actions need the element itself (to read and rewrite its
+   text, href, and mode in place), not just the address string.
+   Cleared whenever the bar hides, so a stale element can never be
+   edited by accident. */
+let linkBarAnchor = null;
 
-function hideLinkPopup() {
-  const popup = document.getElementById("linkPopup");
-  if (popup) { popup.classList.add("hidden"); }
-  linkPopupHref = "";
-  linkPopupAnchor = null;
-  /* v1.3.2: the popup always reopens in its normal view, never in the
-     middle of an edit, so hiding always resets the mode too. */
-  setLinkPopupMode(false);
+/* v2.9 hover bookkeeping: the anchor the pointer is resting on (or
+   last rested on), and the two timers that give the bar its show
+   delay and its hide grace period. The editing flag freezes the
+   hover timers while the edit form is up: a user typing an address
+   must never have the bar vanish because the mouse drifted away. */
+let linkBarHoverAnchor = null;
+let linkBarShowTimer = null;
+let linkBarHideTimer = null;
+let linkBarShowAnchor = null;
+let linkBarEditing = false;
+
+/* True while the bar is on screen (in either of its states). */
+function linkBarVisible() {
+  const bar = document.getElementById("linkBar");
+  return !!bar && !bar.classList.contains("hidden");
 }
 
-/* v1.3.2: switch the popup between its normal view (clickable address,
-   Edit button, close button) and its edit form (text field, address
-   field, Save, Cancel). Exactly one of the two is visible at a time. */
-function setLinkPopupMode(editing) {
-  const view = document.getElementById("linkPopupView");
+/* True while the View Link As menu is open under the bar. */
+function linkViewMenuOpen() {
+  const menu = document.getElementById("linkViewMenu");
+  return !!menu && !menu.classList.contains("hidden");
+}
+
+function hideLinkBar() {
+  const bar = document.getElementById("linkBar");
+  if (bar) { bar.classList.add("hidden"); }
+  closeLinkViewMenu();
+  linkBarHref = "";
+  linkBarAnchor = null;
+  linkBarHoverAnchor = null;
+  linkBarShowAnchor = null;
+  if (linkBarShowTimer) { clearTimeout(linkBarShowTimer); linkBarShowTimer = null; }
+  if (linkBarHideTimer) { clearTimeout(linkBarHideTimer); linkBarHideTimer = null; }
+  /* v1.3.2 (carried into the bar): the bar always reopens in its
+     normal view, never in the middle of an edit, so hiding always
+     resets the mode too. */
+  setLinkBarMode(false);
+}
+
+/* v1.3.2, rehosted in v2.9: switch the bar between its normal view
+   (globe, clickable address, icon buttons) and its edit form (text
+   field, address field, Save, Cancel). Exactly one of the two is
+   visible at a time, and entering the edit state closes the view
+   menu: the form is the whole bar while it is up. */
+function setLinkBarMode(editing) {
+  linkBarEditing = !!editing;
+  if (editing) { closeLinkViewMenu(); }
+  const view = document.getElementById("linkBarView");
   const form = document.getElementById("linkEditForm");
   if (view) { view.classList.toggle("hidden", editing); }
   if (form) { form.classList.toggle("hidden", !editing); }
 }
 
-/* Position the popup just under the given link (above it when there is
-   no room below), clamped so it always stays inside the viewport. The
-   caller unhides the popup and sets its mode first, so the size
-   measured here is the size of what is actually on screen. Used both
-   when the popup opens and when it swaps between view and edit, since
-   the edit form is taller and wider than the normal view. */
-function positionLinkPopup(anchor) {
-  const popup = document.getElementById("linkPopup");
-  if (!popup || !anchor) { return; }
+/* Position the bar just ABOVE the given link (below it when there is
+   no room above), clamped so it always stays inside the viewport.
+   The caller unhides the bar and sets its mode first, so the size
+   measured here is the size of what is actually on screen. Used
+   both when the bar opens and when it swaps between view and edit,
+   since the edit form is taller and wider than the normal view. */
+function positionLinkBar(anchor) {
+  const bar = document.getElementById("linkBar");
+  if (!bar || !anchor) { return; }
   const rect = anchor.getBoundingClientRect();
-  const width = popup.offsetWidth;
-  const height = popup.offsetHeight;
+  const width = bar.offsetWidth;
+  const height = bar.offsetHeight;
   let left = Math.min(rect.left, window.innerWidth - width - 8);
   left = Math.max(8, left);
-  let top = rect.bottom + 6;
-  if (top + height > window.innerHeight - 8) {
-    top = Math.max(8, rect.top - height - 6);
+  let top = rect.top - height - 6;
+  if (top < 8) {
+    top = Math.min(rect.bottom + 6, window.innerHeight - height - 8);
+    top = Math.max(8, top);
   }
-  popup.style.left = left + "px";
-  popup.style.top = top + "px";
+  bar.style.left = left + "px";
+  bar.style.top = top + "px";
 }
 
-/* Show the popup for a clicked link, always in its normal view. */
-function showLinkPopup(anchor) {
-  const popup = document.getElementById("linkPopup");
-  if (!popup || !anchor) { return; }
+/* v2.9: is this anchor one the link bar serves? External anchors
+   only (http, https, mailto, the same set linkOpenTarget judges):
+   note links keep their own behavior, anchors inside attachment
+   placeholders are attachment furniture rather than text links,
+   anchors in a locked (Trash or Archive) note get no bar because
+   every bar action edits the note, and the History preview is not
+   #noteBody at all, so its links are already out of reach here. */
+function linkBarAnchorFor(anchor) {
+  if (!anchor || !anchor.getAttribute) { return null; }
+  const bodyEl = document.getElementById("noteBody");
+  if (!bodyEl || !bodyEl.contains(anchor)) { return null; }
+  if (anchor.closest && anchor.closest(".ss-attachment")) { return null; }
+  if (noteLinkIdOf(anchor)) { return null; }
+  const note = currentNote();
+  if (!note || note.trashed || note.archived) { return null; }
+  const href = anchor.href || anchor.getAttribute("href") || "";
+  if (!linkOpenTarget(href)) { return null; }
+  return anchor;
+}
+
+/* Show the bar for a link, always in its normal view. */
+function showLinkBar(anchor) {
+  const bar = document.getElementById("linkBar");
+  if (!bar || !anchor) { return; }
+  if (linkBarShowTimer) { clearTimeout(linkBarShowTimer); linkBarShowTimer = null; }
+  linkBarShowAnchor = null;
+  if (linkBarHideTimer) { clearTimeout(linkBarHideTimer); linkBarHideTimer = null; }
   /* anchor.href is the browser resolved absolute URL, which is both
-     what the popup should display and what clicking it will open. */
-  linkPopupHref = anchor.href || anchor.getAttribute("href") || "";
-  linkPopupAnchor = anchor;
-  const urlEl = document.getElementById("linkPopupUrl");
-  urlEl.textContent = linkPopupHref;
-  /* The displayed address is a real link element; its href mirrors the
-     address, but its click is intercepted and routed through
-     openNoteLink, so the protocol safety check always applies and the
-     app window itself never navigates. */
-  urlEl.setAttribute("href", linkPopupHref);
-  setLinkPopupMode(false);
-  popup.classList.remove("hidden");
-  positionLinkPopup(anchor);
+     what the bar should display and what clicking it will open. */
+  linkBarHref = anchor.href || anchor.getAttribute("href") || "";
+  linkBarAnchor = anchor;
+  const urlEl = document.getElementById("linkBarUrl");
+  urlEl.textContent = linkBarHref;
+  urlEl.setAttribute("title", linkBarHref);
+  /* The displayed address is a real link element; its href mirrors
+     the address, but its click is intercepted and routed through
+     openNoteLink, so the protocol safety check always applies and
+     the app window itself never navigates. */
+  urlEl.setAttribute("href", linkBarHref);
+  setLinkBarMode(false);
+  closeLinkViewMenu();
+  bar.classList.remove("hidden");
+  positionLinkBar(anchor);
+}
+
+/* v2.9 hover timing, the numbers Chris's pattern implies: a short
+   rest (350 ms) before the bar appears, so skimming across a link
+   on the way somewhere else never summons it, and a short grace
+   period (250 ms) after the pointer leaves both the link and the
+   bar, so crossing the gap between them never flickers it shut. */
+const LINK_BAR_HOVER_MS = 350;
+const LINK_BAR_GRACE_MS = 250;
+
+/* The pointer came to rest on an anchor: show its bar after the
+   hover delay (immediately when the bar is already up for another
+   link, so sliding along a row of links feels continuous). */
+function scheduleLinkBarShow(anchor) {
+  linkBarHoverAnchor = anchor;
+  if (linkBarHideTimer) { clearTimeout(linkBarHideTimer); linkBarHideTimer = null; }
+  if (linkBarVisible() && !linkBarEditing) {
+    if (linkBarAnchor !== anchor) { showLinkBar(anchor); }
+    return;
+  }
+  /* mouseover bubbles again for every child boundary crossed
+     inside the same link; a delay already running for THIS link
+     is left alone, so small movements inside a long link do not
+     keep postponing the bar. */
+  if (linkBarShowTimer && linkBarShowAnchor === anchor) { return; }
+  if (linkBarShowTimer) { clearTimeout(linkBarShowTimer); }
+  linkBarShowAnchor = anchor;
+  linkBarShowTimer = setTimeout(function () {
+    linkBarShowTimer = null;
+    linkBarShowAnchor = null;
+    if (linkBarHoverAnchor === anchor && anchor.isConnected) {
+      showLinkBar(anchor);
+    }
+  }, LINK_BAR_HOVER_MS);
+}
+
+/* The pointer left the anchor and the bar: hide after the grace
+   period, unless it comes back first (either side cancels this
+   timer when it is re-entered). The edit form freezes the grace
+   rule entirely; it closes only through its own buttons, Escape,
+   or the app level hides. */
+function scheduleLinkBarHide() {
+  if (linkBarEditing) { return; }
+  if (linkBarShowTimer) { clearTimeout(linkBarShowTimer); linkBarShowTimer = null; }
+  linkBarShowAnchor = null;
+  if (linkBarHideTimer) { clearTimeout(linkBarHideTimer); }
+  linkBarHideTimer = setTimeout(function () {
+    linkBarHideTimer = null;
+    hideLinkBar();
+  }, LINK_BAR_GRACE_MS);
+}
+
+/* Cancel a pending hide because the pointer entered the bar (or
+   came back to the anchor). */
+function cancelLinkBarHide() {
+  if (linkBarHideTimer) { clearTimeout(linkBarHideTimer); linkBarHideTimer = null; }
 }
 
 /* v1.3.2: complete an address typed into the link edit form. A value
@@ -7908,17 +8216,20 @@ function normalizeLinkInput(rawUrl) {
   return value;
 }
 
-/* v1.3.2: switch the popup to its edit form for the link it refers to.
-   Both fields are prefilled from the clicked link: the visible text,
-   and the current address. The form opening never marks the note dirty;
+/* v1.3.2, rehosted in v2.9: switch the bar to its edit form for the
+   link it refers to. Both fields are prefilled from the link: the
+   visible text (its ORIGINAL text: while a Mention or Preview face
+   is shown, the anchor's textContent also counts the face's label,
+   so the original is read through linkOriginalText), and the
+   current address. The form opening never marks the note dirty;
    only a successful Save does. */
 function startLinkEdit() {
-  if (!linkPopupAnchor) { return; }
+  if (!linkBarAnchor) { return; }
   document.getElementById("linkEditText").value =
-    linkPopupAnchor.textContent || "";
-  document.getElementById("linkEditUrl").value = linkPopupHref;
-  setLinkPopupMode(true);
-  positionLinkPopup(linkPopupAnchor);
+    linkOriginalText(linkBarAnchor);
+  document.getElementById("linkEditUrl").value = linkBarHref;
+  setLinkBarMode(true);
+  positionLinkBar(linkBarAnchor);
   document.getElementById("linkEditUrl").focus();
 }
 
@@ -7930,24 +8241,530 @@ function startLinkEdit() {
    only when the field actually differs, so an address only edit leaves
    any nested formatting inside the link exactly as it was. */
 function saveLinkEdit() {
-  const anchor = linkPopupAnchor;
-  if (!anchor) { hideLinkPopup(); return; }
+  const anchor = linkBarAnchor;
+  if (!anchor) { hideLinkBar(); return; }
   const normalized =
     normalizeLinkInput(document.getElementById("linkEditUrl").value);
   if (!linkOpenTarget(normalized)) {
     toast("That is not a valid web or email link.", true);
     return;
   }
+  const oldHref = anchor.getAttribute("href") || "";
+  const hrefChanged = normalized !== oldHref;
   anchor.setAttribute("href", normalized);
   /* v2.6.0: keep the hover tooltip in step with the new address. */
   anchor.setAttribute("title", normalized);
   const newText = document.getElementById("linkEditText").value;
-  if (newText !== (anchor.textContent || "")) {
-    anchor.textContent = newText;
+  /* v2.9: the text being compared and replaced is the link's
+     ORIGINAL text. While a face is shown that text lives in the
+     .ss-link-original wrapper; replacing the wrapper's contents
+     keeps the face node itself intact, and the face is rebuilt
+     right after, so a Mention label derived from the text (when
+     no fetched title is stored) follows the edit. In Text mode
+     there is no wrapper and this is exactly the v1.3.2 behavior:
+     the text is replaced only when the field actually differs,
+     so an address only edit leaves any nested formatting inside
+     the link exactly as it was. */
+  if (newText !== linkOriginalText(anchor)) {
+    const wrap = anchor.querySelector(":scope > .ss-link-original");
+    if (wrap) { wrap.textContent = newText; }
+    else { anchor.textContent = newText; }
   }
+  /* v2.9: fetched Microlink info describes the OLD address. When
+     the address changed, the stored info is cleared in the same
+     breath, and a link shown as Mention or Preview fetches fresh
+     info for the new address under the mode switch rules. A text
+     only edit never refetches: the info describes the address,
+     not the label. */
+  if (hrefChanged && hasStoredLinkInfo(anchor)) {
+    clearStoredLinkInfo(anchor);
+  }
+  decorateLinkView(anchor);
   markDirty();
-  hideLinkPopup();
+  hideLinkBar();
   toast("Link updated.");
+  if (hrefChanged) { maybeFetchLinkInfo(anchor); }
+}
+
+/* ----- v2.9: the View Link As menu --------------------------------------
+   The bar's three dot button opens a small menu under the bar:
+   a VIEW LINK AS header, the three display modes with a dot on
+   the current one, then Copy URL and Delete. The mode lives on
+   the anchor as data-ss-link-view ("mention" or "preview"; Text
+   is the attribute's absence), so it is part of the saved note
+   and round trips through collectEditor untouched. Everything
+   the modes SHOW is runtime only (see the faces block below). */
+
+function openLinkViewMenu() {
+  const menu = document.getElementById("linkViewMenu");
+  const btn = document.getElementById("linkBarMenuBtn");
+  if (!menu || !linkBarAnchor) { return; }
+  refreshLinkViewMenuDots();
+  menu.classList.remove("hidden");
+  if (btn) { btn.setAttribute("aria-expanded", "true"); }
+}
+
+function closeLinkViewMenu() {
+  const menu = document.getElementById("linkViewMenu");
+  const btn = document.getElementById("linkBarMenuBtn");
+  if (menu) { menu.classList.add("hidden"); }
+  if (btn) { btn.setAttribute("aria-expanded", "false"); }
+}
+
+function toggleLinkViewMenu() {
+  if (linkViewMenuOpen()) { closeLinkViewMenu(); }
+  else { openLinkViewMenu(); }
+}
+
+/* Mark the menu row for the bar link's current mode: the row
+   gets the active class, which fills its dot and bolds its name,
+   the visual marker in Chris's screenshot. */
+function refreshLinkViewMenuDots() {
+  const menu = document.getElementById("linkViewMenu");
+  if (!menu || !linkBarAnchor) { return; }
+  const mode = linkViewModeOf(linkBarAnchor);
+  menu.querySelectorAll("[data-link-view]").forEach(function (item) {
+    item.classList.toggle("active",
+      item.getAttribute("data-link-view") === mode);
+  });
+}
+
+/* Switch the bar link's display mode. Text removes the mode
+   attribute outright, so a Text link is byte for byte the anchor
+   every earlier version saved. The face is rebuilt in place, the
+   note saves through the normal path, and choosing any mode
+   closes the menu and the bar. Switching INTO Mention or Preview
+   is also the one moment link info is fetched (see the Microlink
+   block below): lazily, and only when none is stored yet. */
+function setLinkViewMode(mode) {
+  const anchor = linkBarAnchor;
+  if (!anchor) { hideLinkBar(); return; }
+  if (mode === "mention" || mode === "preview") {
+    anchor.setAttribute("data-ss-link-view", mode);
+  } else {
+    anchor.removeAttribute("data-ss-link-view");
+    mode = "text";
+  }
+  decorateLinkView(anchor);
+  markDirty();
+  hideLinkBar();
+  if (mode !== "text") { maybeFetchLinkInfo(anchor); }
+}
+
+/* Copy the bar link's address. The async clipboard API is the
+   first path; a temporary textarea with execCommand("copy") is
+   the fallback for contexts where it is missing or refuses (an
+   unfocused document, an older browser). Only a copy that
+   actually happened earns the success toast; a total failure
+   says so instead. */
+function copyLinkBarUrl() {
+  const href = linkBarHref;
+  if (!href) { return; }
+  const done = function () {
+    hideLinkBar();
+    toast("Link copied.");
+  };
+  const failed = function () {
+    toast("The link could not be copied.", true);
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(href).then(done, function () {
+      if (!copyLinkUrlFallback(href)) { failed(); return; }
+      done();
+    });
+    return;
+  }
+  if (copyLinkUrlFallback(href)) { done(); }
+  else { failed(); }
+}
+
+/* The textarea fallback for copyLinkBarUrl, kept separate so the
+   promise path above can share it. Returns whether the copy
+   command reported success. The textarea is invisible, never
+   focused visibly, and always removed. */
+function copyLinkUrlFallback(text) {
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand("copy");
+    ta.remove();
+    return !!ok;
+  } catch (err) {
+    return false;
+  }
+}
+
+/* Unlink: replace the anchor with its own original contents, so
+   the text and any inline formatting inside it stay in the note
+   and only the link goes away. While a face is shown, the
+   original contents are the wrapper's children; the face node is
+   the anchor's own child and is deliberately left behind with
+   the anchor, never moved into the text. */
+function unlinkLinkBarAnchor() {
+  const anchor = linkBarAnchor;
+  if (!anchor || !anchor.parentNode) { hideLinkBar(); return; }
+  const wrap = anchor.querySelector(":scope > .ss-link-original");
+  const source = wrap || anchor;
+  const parent = anchor.parentNode;
+  while (source.firstChild) {
+    parent.insertBefore(source.firstChild, anchor);
+  }
+  anchor.remove();
+  markDirty();
+  hideLinkBar();
+}
+
+/* Delete (the menu's, deliberately unlike Unlink): remove the
+   anchor and ALL of its contents, text included. What remains is
+   whatever surrounded the link. */
+function deleteLinkBarAnchor() {
+  const anchor = linkBarAnchor;
+  if (anchor) { anchor.remove(); }
+  markDirty();
+  hideLinkBar();
+}
+
+/* ----- v2.9: link view faces ---------------------------------------------
+   A Mention or Preview anchor displays a FACE: a runtime only
+   node (span.ss-link-face, contenteditable false) built by
+   decoration from the anchor's saved mode and Microlink info
+   attributes. While a face is shown, the anchor's original
+   children live in a sibling wrapper (span.ss-link-original,
+   display none by CSS): hidden, never removed, so the underlying
+   link, its text, and its formatting are exactly what was saved,
+   and switching back to Text restores them byte for byte. The
+   save funnel strips faces and unwraps originals (stripLinkFaces
+   beside canonicalizeAttachmentPlaceholders), so save, reload,
+   and decorate cycles are idempotent and byte stable, and the
+   exporters, which all read the anchor's own text and address,
+   treat a faced link exactly like a Text link. Fetched strings
+   only ever enter a face through textContent, never innerHTML,
+   so a hostile page title renders as literal characters. */
+
+/* The link's current display mode: "mention", "preview", or
+   "text" (the saved attribute's absence, and the fallback for
+   any value this version does not know). */
+function linkViewModeOf(anchor) {
+  const mode = anchor ? anchor.getAttribute("data-ss-link-view") : null;
+  return (mode === "mention" || mode === "preview") ? mode : "text";
+}
+
+/* The link's original text: the wrapper's text while a face is
+   shown, the anchor's own text otherwise. */
+function linkOriginalText(anchor) {
+  if (!anchor) { return ""; }
+  const wrap = anchor.querySelector(":scope > .ss-link-original");
+  return (wrap ? wrap.textContent : anchor.textContent) || "";
+}
+
+/* The label a Mention face shows, in precedence order: the
+   fetched title, then the link's own text, then the hostname
+   when the text is just the raw address (or empty). */
+function linkMentionLabel(anchor) {
+  const title = anchor.getAttribute("data-ss-link-title");
+  if (title) { return title; }
+  const href = anchor.getAttribute("href") || "";
+  const text = linkOriginalText(anchor).trim();
+  if (text && text !== href && text !== href.replace(/\/$/, "")) {
+    return text;
+  }
+  return linkHostnameOf(href) || text || href;
+}
+
+/* The hostname of a URL, or "" when it does not parse (a mailto
+   address has no hostname; callers fall back to the address). */
+function linkHostnameOf(href) {
+  try {
+    return new URL(href).hostname || "";
+  } catch (err) {
+    return "";
+  }
+}
+
+/* A small globe icon node for faces, the same drawing the link
+   bar leads with. Built as an element (never an HTML string fed
+   to innerHTML), so face construction has exactly one string
+   free path. */
+function linkGlobeIcon(size) {
+  const span = document.createElement("span");
+  span.className = "ss-link-face-globe";
+  span.setAttribute("aria-hidden", "true");
+  const NS = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("width", String(size));
+  svg.setAttribute("height", String(size));
+  svg.setAttribute("fill", "none");
+  svg.setAttribute("stroke", "currentColor");
+  svg.setAttribute("stroke-width", "1.8");
+  svg.setAttribute("stroke-linecap", "round");
+  svg.setAttribute("stroke-linejoin", "round");
+  const circle = document.createElementNS(NS, "circle");
+  circle.setAttribute("cx", "12");
+  circle.setAttribute("cy", "12");
+  circle.setAttribute("r", "9");
+  const equator = document.createElementNS(NS, "path");
+  equator.setAttribute("d", "M3 12h18");
+  const meridian = document.createElementNS(NS, "path");
+  meridian.setAttribute("d",
+    "M12 3c2.5 2.6 3.9 5.7 3.9 9s-1.4 6.4-3.9 9c-2.5-2.6-3.9-5.7-3.9-9S9.5 5.6 12 3z");
+  svg.appendChild(circle);
+  svg.appendChild(equator);
+  svg.appendChild(meridian);
+  span.appendChild(svg);
+  return span;
+}
+
+/* An image for a face (a Mention's site logo, a Preview's cover).
+   The src is set as a property, and a load error hides the image
+   rather than leaving a broken picture in the note: a stale or
+   blocked image URL degrades to the text face, nothing more. */
+function linkFaceImage(src, className, alt) {
+  const img = document.createElement("img");
+  img.className = className;
+  img.alt = alt || "";
+  img.addEventListener("error", function () {
+    img.style.display = "none";
+  });
+  img.src = src;
+  return img;
+}
+
+/* Build the Mention face for an anchor: the site's stored logo
+   when there is one, else a globe, then the label. */
+function buildMentionFace(anchor) {
+  const face = document.createElement("span");
+  face.className = "ss-link-face ss-link-face-mention";
+  face.setAttribute("data-ss-runtime", "face");
+  face.setAttribute("contenteditable", "false");
+  const logo = anchor.getAttribute("data-ss-link-logo");
+  if (logo) { face.appendChild(linkFaceImage(logo, "ss-link-face-logo", "")); }
+  else { face.appendChild(linkGlobeIcon(14)); }
+  const label = document.createElement("span");
+  label.className = "ss-link-face-label";
+  label.textContent = linkMentionLabel(anchor);
+  face.appendChild(label);
+  return face;
+}
+
+/* Build the Preview face for an anchor: a card with the stored
+   cover image when there is one, the title (the fetched title,
+   else the link's own text, else the address), the description
+   when one is stored, and the address as the footer line. Every
+   piece is optional but the title line, so a link with no fetched
+   info still renders a clean card from what the note knows. */
+function buildPreviewFace(anchor) {
+  const face = document.createElement("span");
+  face.className = "ss-link-face ss-link-face-preview";
+  face.setAttribute("data-ss-runtime", "face");
+  face.setAttribute("contenteditable", "false");
+  const href = anchor.getAttribute("href") || "";
+  const image = anchor.getAttribute("data-ss-link-image");
+  if (image) {
+    face.appendChild(linkFaceImage(image, "ss-link-face-cover", ""));
+  }
+  const main = document.createElement("span");
+  main.className = "ss-link-face-main";
+  const title = document.createElement("span");
+  title.className = "ss-link-face-title";
+  title.textContent = anchor.getAttribute("data-ss-link-title") ||
+    linkOriginalText(anchor).trim() || href;
+  main.appendChild(title);
+  const desc = anchor.getAttribute("data-ss-link-desc");
+  if (desc) {
+    const descEl = document.createElement("span");
+    descEl.className = "ss-link-face-desc";
+    descEl.textContent = desc;
+    main.appendChild(descEl);
+  }
+  const urlLine = document.createElement("span");
+  urlLine.className = "ss-link-face-url";
+  urlLine.textContent = href;
+  main.appendChild(urlLine);
+  face.appendChild(main);
+  return face;
+}
+
+/* Bring one anchor's face in line with its saved mode: Text
+   unwraps and defaces it (the plain editable link again), while
+   Mention and Preview wrap the original children if they are
+   not wrapped yet and (re)build the face. Idempotent by
+   construction: the face is rebuilt from the attributes every
+   time, and the wrapper is created only when missing. */
+function decorateLinkView(anchor) {
+  if (!anchor || !anchor.getAttribute) { return; }
+  const mode = linkViewModeOf(anchor);
+  const oldFace = anchor.querySelector(":scope > .ss-link-face");
+  if (oldFace) { oldFace.remove(); }
+  if (mode === "text") {
+    const wrap = anchor.querySelector(":scope > .ss-link-original");
+    if (wrap) {
+      while (wrap.firstChild) {
+        anchor.insertBefore(wrap.firstChild, wrap);
+      }
+      wrap.remove();
+    }
+    return;
+  }
+  let wrap = anchor.querySelector(":scope > .ss-link-original");
+  if (!wrap) {
+    wrap = document.createElement("span");
+    wrap.className = "ss-link-original";
+    wrap.setAttribute("data-ss-runtime", "original");
+    while (anchor.firstChild) { wrap.appendChild(anchor.firstChild); }
+    anchor.appendChild(wrap);
+  }
+  anchor.appendChild(mode === "mention" ?
+    buildMentionFace(anchor) : buildPreviewFace(anchor));
+}
+
+/* Decorate every link under rootEl, the face companion to
+   decorateLinkTooltips, run wherever that step runs. Note links
+   and anchors inside attachment placeholders are skipped: the
+   former have no view modes, and the latter are attachment
+   furniture, not text links. */
+function decorateLinkViews(rootEl) {
+  if (!rootEl || !rootEl.querySelectorAll) { return; }
+  rootEl.querySelectorAll("a[href]").forEach(function (anchor) {
+    if (noteLinkIdOf(anchor)) { return; }
+    if (anchor.closest && anchor.closest(".ss-attachment")) { return; }
+    decorateLinkView(anchor);
+  });
+}
+
+/* ----- v2.9: Microlink link info -----------------------------------------
+   Mention and Preview look real with real data: the page's own
+   title, description, cover image, and site logo. Browsers
+   cannot fetch that from the page directly (most sites refuse
+   cross origin reads), so the app asks the Microlink metadata
+   API, which exists for exactly this and needs no key: GET
+   https://api.microlink.io?url=<the address>, answered with
+   JSON whose data object carries title, description, image.url,
+   logo.url, and publisher. Only the link address is ever sent;
+   no note text, no Drive data.
+   The fetch is LAZY and ONE TIME per link: it runs when a link
+   is switched to Mention or Preview with no info stored yet, and
+   after an edit changes the address of a faced link (its stored
+   info was cleared with the old address). It never runs for
+   Text links, mailto links, note renders, or note opens. What
+   comes back is stored on the anchor itself (data-ss-link-title,
+   desc, image, logo), so it is part of the saved note, travels
+   with sync, and renders offline forever after. A failure of any
+   kind (network, non 200, a 429 rate limit, bad JSON, the 8
+   second timeout) stores nothing, shows nothing, and retries
+   never: the face simply renders from the link's own text, and a
+   later mode switch may try again. */
+
+const MICROLINK_API_URL = "https://api.microlink.io?url=";
+
+/* How long a link info fetch may take before it is given up on.
+   A mutable binding rather than a constant so the behavior can
+   be tuned in one place (and exercised quickly in tests). */
+let linkInfoTimeoutMs = 8000;
+
+/* Anchors with an info fetch in flight right now. A WeakSet: the
+   membership IS the guard (exactly one fetch per anchor at a
+   time), and anchors the editor has discarded take their entry
+   with them. */
+const linkInfoInFlight = new WeakSet();
+
+/* Whether the anchor carries any stored link info. Partial info
+   counts: a page that offered only a title has been fetched, and
+   the stored title is its info; it is not refetched. */
+function hasStoredLinkInfo(anchor) {
+  return !!(anchor.getAttribute("data-ss-link-title") ||
+    anchor.getAttribute("data-ss-link-desc") ||
+    anchor.getAttribute("data-ss-link-image") ||
+    anchor.getAttribute("data-ss-link-logo"));
+}
+
+/* Drop every stored info attribute (an address change makes them
+   describe a page the link no longer points at). */
+function clearStoredLinkInfo(anchor) {
+  anchor.removeAttribute("data-ss-link-title");
+  anchor.removeAttribute("data-ss-link-desc");
+  anchor.removeAttribute("data-ss-link-image");
+  anchor.removeAttribute("data-ss-link-logo");
+}
+
+/* Store one fetched field when the response actually provided a
+   non empty value; absent fields stay absent, so partial info is
+   kept exactly as partial. */
+function storeLinkInfoField(anchor, attr, value) {
+  if (typeof value === "string" && value.trim()) {
+    anchor.setAttribute(attr, value);
+  }
+}
+
+/* Fetch the anchor's link info from Microlink, when the rules
+   above call for it, and apply what returns. Fire and forget:
+   every outcome lands in the guards below or in the silent catch,
+   never in a toast. */
+function maybeFetchLinkInfo(anchor) {
+  if (!anchor || !anchor.isConnected) { return; }
+  const mode = linkViewModeOf(anchor);
+  if (mode !== "mention" && mode !== "preview") { return; }
+  if (hasStoredLinkInfo(anchor)) { return; }
+  const href = anchor.getAttribute("href") || "";
+  let parsed;
+  try {
+    parsed = new URL(href);
+  } catch (err) {
+    return;
+  }
+  /* http and https only: mailto links have no page to describe,
+     and ssnote anchors never reach here (they carry no mode). */
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    return;
+  }
+  if (linkInfoInFlight.has(anchor)) { return; }
+  linkInfoInFlight.add(anchor);
+  /* What the result must still match when it lands: the note that
+     was open, the very same anchor element, and the same address.
+     A note switch, an unlink, or a retarget in the meantime makes
+     the result stale, and it is dropped silently. */
+  const noteId = state.selectedId;
+  const controller = (typeof AbortController !== "undefined") ?
+    new AbortController() : null;
+  const timer = controller ?
+    setTimeout(function () { controller.abort(); }, linkInfoTimeoutMs) :
+    null;
+  fetch(MICROLINK_API_URL + encodeURIComponent(href), controller ?
+    { signal: controller.signal } : undefined
+  ).then(function (resp) {
+    if (!resp || !resp.ok) {
+      throw new Error("Link info request failed: " +
+        (resp ? resp.status : "no response"));
+    }
+    return resp.json();
+  }).then(function (json) {
+    const data = json && json.data;
+    if (!data) { return; }
+    if (state.selectedId !== noteId) { return; }
+    if (!anchor.isConnected) { return; }
+    if (anchor.getAttribute("href") !== href) { return; }
+    storeLinkInfoField(anchor, "data-ss-link-title", data.title);
+    storeLinkInfoField(anchor, "data-ss-link-desc", data.description);
+    storeLinkInfoField(anchor, "data-ss-link-image",
+      data.image && data.image.url);
+    storeLinkInfoField(anchor, "data-ss-link-logo",
+      data.logo && data.logo.url);
+    /* Nothing usable came back: leave the fallback face as it
+       is, store nothing, save nothing. */
+    if (!hasStoredLinkInfo(anchor)) { return; }
+    decorateLinkView(anchor);
+    markDirty();
+  }).catch(function () {
+    /* Silent by design: the fallback face is already on screen. */
+  }).then(function () {
+    if (timer) { clearTimeout(timer); }
+    linkInfoInFlight.delete(anchor);
+  });
 }
 
 
@@ -8216,11 +9033,11 @@ function insertStarterTable() {
    place. While the caret or selection sits inside a table in an
    editable note, a small floating Table button (#tableMenuBtn) parks
    at the top right corner of that table, positioned from the table's
-   own rectangle the way the link popup is positioned from its anchor.
+   own rectangle the way the link bar is positioned from its anchor.
    The button opens #tableMenu with seven actions: Add row above, Add
    row below, Add column left, Add column right, Delete row, Delete
    column, Delete table.
-   Both elements live OUTSIDE #noteBody (siblings of #linkPopup and
+   Both elements live OUTSIDE #noteBody (siblings of #linkBar and
    #attMenu inside .editor-inner), and collectEditor reads only
    #noteBody, so the furniture can never be saved into a note; the
    actions below edit only real table markup (table, thead, tbody,
@@ -10207,6 +11024,13 @@ function buildPrintDocument(note, bodyHtml) {
     el.classList.remove("ss-filtered-out");
     if (!el.classList.length) { el.removeAttribute("class"); }
   });
+  /* v2.9: the body the print view receives is a clone of the LIVE
+     body, faces and wrapped originals included. Faces are editor
+     presentation and would double every faced link's text on
+     paper, so they are stripped (and the originals unwrapped)
+     here, leaving the plain anchors, whose own text and address
+     are what print has always shown. */
+  stripLinkFaces(printHolder);
   const cleanBodyHtml = printHolder.innerHTML;
   return "<!DOCTYPE html>\n<html><head><meta charset=\"UTF-8\">" +
     "<title>" + title + "</title>" +
@@ -12975,8 +13799,12 @@ function runInsertAction(kind) {
     restoreFormatSelection();
     document.execCommand("createLink", false, url.trim());
     /* v2.6.0: the fresh anchor gets its hover tooltip (its own
-       address) at birth, from the same resolver renders use. */
+       address) at birth, from the same resolver renders use.
+       v2.9: the view decoration runs too; a fresh link is a Text
+       link, so it is a no-op for it, but the pass keeps the rule
+       that both decorations always run together. */
     decorateLinkTooltips(document.getElementById("noteBody"));
+    decorateLinkViews(document.getElementById("noteBody"));
   } else if (kind === "divider") {
     document.execCommand("insertHorizontalRule", false, null);
   } else if (kind === "datetime") {
@@ -16005,53 +16833,130 @@ function wireEvents() {
      above is untouched. Ctrl+click or Cmd+click opens the link in a new
      tab (preventDefault stops the browser from also trying to follow or
      select). A plain click is NOT prevented: the caret still lands in
-     the link text for editing exactly as before, and the link popup
+     the link text for editing exactly as before, and the link bar
      appears alongside as the way to open it (and the only way on touch
-     screens). Clicking a non link part of the body hides the popup.
+     screens). Clicking a non link part of the body hides the bar.
      v2.1.0: note links (href "ssnote:<id>") are resolved FIRST, before
-     both the modified click branch and the popup branch below: any
+     both the modified click branch and the bar branch below: any
      click on one navigates inside the app (see followNoteLink), and
-     the web link popup never appears for them. */
+     the web link bar never appears for them.
+     v2.9: the bar replaced the popup in the plain click branch, and
+     anchors the bar does not serve (attachment furniture, links in a
+     locked note) simply hide it instead of summoning it. */
   document.getElementById("noteBody").addEventListener("click", function (ev) {
     const target = ev.target;
     const anchor = (target && target.closest) ? target.closest("a") : null;
     if (!anchor) {
-      hideLinkPopup();
+      hideLinkBar();
       return;
     }
     const ssNoteId = noteLinkIdOf(anchor);
     if (ssNoteId) {
       ev.preventDefault();
-      hideLinkPopup();
+      hideLinkBar();
       followNoteLink(ssNoteId);
       return;
     }
     if (ev.ctrlKey || ev.metaKey) {
       ev.preventDefault();
-      hideLinkPopup();
+      hideLinkBar();
       openNoteLink(anchor.href || anchor.getAttribute("href") || "");
+    } else if (linkBarAnchorFor(anchor)) {
+      showLinkBar(anchor);
     } else {
-      showLinkPopup(anchor);
+      hideLinkBar();
     }
   });
 
-  /* Link popup controls (v1.3.1, reworked in v1.3.2). All of them live
-     outside #noteBody, so these clicks can never edit the note or mark
-     it dirty by themselves; only a successful edit Save marks dirty.
-     v1.3.2: the address itself is the open control. Its default anchor
+  /* v2.9: hover summons the bar too. Resting the mouse on an
+     external link starts the show delay; leaving the link starts
+     the grace hide, and entering the bar cancels it, so the pointer
+     can cross from the link up into the bar without the bar
+     flickering shut. Moving directly between two links retargets
+     the bar at once (scheduleLinkBarShow handles that case). The
+     listeners live on the body and resolve the anchor from the
+     event target, so links created after wiring are covered. */
+  document.getElementById("noteBody").addEventListener("mouseover", function (ev) {
+    const target = ev.target;
+    const anchor = (target && target.closest) ? target.closest("a") : null;
+    const served = anchor ? linkBarAnchorFor(anchor) : null;
+    if (served) { scheduleLinkBarShow(served); }
+  });
+  document.getElementById("noteBody").addEventListener("mouseout", function (ev) {
+    const target = ev.target;
+    const anchor = (target && target.closest) ? target.closest("a") : null;
+    if (!anchor) { return; }
+    const related = ev.relatedTarget;
+    /* Still inside the same anchor, or stepping into the bar:
+       neither counts as leaving. */
+    if (related && related.closest) {
+      if (related.closest("a") === anchor) { return; }
+      if (related.closest("#linkBar")) { return; }
+    }
+    if (linkBarHoverAnchor === anchor) { linkBarHoverAnchor = null; }
+    if (linkBarAnchor === anchor || linkBarVisible()) {
+      scheduleLinkBarHide();
+    }
+  });
+  document.getElementById("linkBar").addEventListener("mouseenter", function () {
+    cancelLinkBarHide();
+    if (linkBarShowTimer) { clearTimeout(linkBarShowTimer); linkBarShowTimer = null; }
+  });
+  document.getElementById("linkBar").addEventListener("mouseleave", function (ev) {
+    const related = ev.relatedTarget;
+    /* Stepping back onto the link the bar belongs to keeps it up;
+       the body's own mouseover for that anchor also re-arms it. */
+    if (related && related.closest &&
+        linkBarAnchor && related.closest("a") === linkBarAnchor) { return; }
+    scheduleLinkBarHide();
+  });
+
+  /* Link bar controls (v1.3.1, reworked in v1.3.2, rebuilt as the
+     bar in v2.9). All of them live outside #noteBody, so these clicks
+     can never edit the note or mark it dirty by themselves; only a
+     successful edit Save, a mode switch, an unlink, a delete, or a
+     landed info fetch marks dirty.
+     The address itself is the open control. Its default anchor
      navigation is prevented and the click is routed through
-     openNoteLink with the href captured when the popup was shown, so
-     the protocol safety check applies exactly as it does to Ctrl+click,
-     and the popup closes first, just as the old Open button did. */
-  document.getElementById("linkPopupUrl").addEventListener("click", function (ev) {
+     openNoteLink with the href captured when the bar was shown, so
+     the protocol safety check applies exactly as it does to
+     Ctrl+click, and the bar closes first. */
+  document.getElementById("linkBarUrl").addEventListener("click", function (ev) {
     ev.preventDefault();
-    const href = linkPopupHref;
-    hideLinkPopup();
+    const href = linkBarHref;
+    hideLinkBar();
     if (href) { openNoteLink(href); }
   });
-  /* Edit swaps the popup to its inline edit form for the clicked link. */
-  document.getElementById("linkPopupEdit").addEventListener("click", function () {
+  /* The pencil swaps the bar to its inline edit form. */
+  document.getElementById("linkBarEditBtn").addEventListener("click", function () {
     startLinkEdit();
+  });
+  /* Copy and the menu's Copy URL are the one copy action. */
+  document.getElementById("linkBarCopyBtn").addEventListener("click", function () {
+    copyLinkBarUrl();
+  });
+  document.getElementById("linkViewCopyBtn").addEventListener("click", function () {
+    copyLinkBarUrl();
+  });
+  /* The broken link button unlinks: text stays, link goes. */
+  document.getElementById("linkBarUnlinkBtn").addEventListener("click", function () {
+    unlinkLinkBarAnchor();
+  });
+  /* The three dot button toggles the View Link As menu. */
+  document.getElementById("linkBarMenuBtn").addEventListener("click", function () {
+    toggleLinkViewMenu();
+  });
+  /* The menu's mode rows carry data-link-view; one delegated
+     listener runs the switch against the bar's link. */
+  document.getElementById("linkViewMenu").addEventListener("click", function (ev) {
+    const target = ev.target;
+    const item = target && target.closest ?
+      target.closest("[data-link-view]") : null;
+    if (item) { setLinkViewMode(item.getAttribute("data-link-view")); }
+  });
+  /* The menu's Delete removes the link and its text together. */
+  document.getElementById("linkViewDeleteBtn").addEventListener("click", function () {
+    deleteLinkBarAnchor();
   });
   /* Save applies the form (normalizing and validating the address);
      saveLinkEdit itself keeps the form open on an invalid address. */
@@ -16059,27 +16964,28 @@ function wireEvents() {
     saveLinkEdit();
   });
   /* Cancel throws the form away and returns to the normal view without
-     changing the link, then repositions since the card shrinks back. */
+     changing the link, then repositions since the bar shrinks back. */
   document.getElementById("linkEditCancel").addEventListener("click", function () {
-    setLinkPopupMode(false);
-    if (linkPopupAnchor) { positionLinkPopup(linkPopupAnchor); }
-  });
-  document.getElementById("linkPopupClose").addEventListener("click", function () {
-    hideLinkPopup();
+    setLinkBarMode(false);
+    if (linkBarAnchor) { positionLinkBar(linkBarAnchor); }
   });
 
-  /* v1.3.1: clicking anywhere else in the app closes the popup. Clicks
-     inside the popup itself, and clicks on body links (handled by the
-     listener above, which repositions or reopens it), are excluded. */
+  /* v1.3.1: clicking anywhere else in the app closes the popup.
+     v2.9: same rule for the bar and its menu (one rule covers both,
+     since the menu lives inside the bar element). Clicks inside the
+     bar itself, and clicks on body links (handled by the listener
+     above, which repositions or reopens it), are excluded. This is
+     also what closes the bar when another overlay or modal opens:
+     those all open from clicks outside the bar. */
   document.addEventListener("click", function (ev) {
-    const popup = document.getElementById("linkPopup");
-    if (!popup || popup.classList.contains("hidden")) { return; }
+    const bar = document.getElementById("linkBar");
+    if (!bar || bar.classList.contains("hidden")) { return; }
     const target = ev.target;
     if (!target || !target.closest) { return; }
-    if (target.closest("#linkPopup")) { return; }
+    if (target.closest("#linkBar")) { return; }
     const anchor = target.closest("a");
     if (anchor && document.getElementById("noteBody").contains(anchor)) { return; }
-    hideLinkPopup();
+    hideLinkBar();
   });
 
   /* v1.7: the image menu's items run through one delegated listener;
@@ -16107,12 +17013,19 @@ function wireEvents() {
   });
 
   /* v1.3.1: Escape closes the popup, and scrolling the editor closes it
-     too, since its fixed position is tied to where the link was. */
+     too, since its fixed position is tied to where the link was.
+     v2.9: the same for the bar, with one refinement: Escape deals
+     with the innermost thing first, so with the view menu open it
+     closes only the menu, and the next Escape closes the bar. (The
+     Maximize handler's capture phase snapshot counts both as open
+     overlays, so neither Escape leaves Maximize.) */
   document.addEventListener("keydown", function (ev) {
-    if (ev.key === "Escape") { hideLinkPopup(); }
+    if (ev.key !== "Escape") { return; }
+    if (linkViewMenuOpen()) { closeLinkViewMenu(); return; }
+    hideLinkBar();
   });
   document.querySelector(".editor-scroll").addEventListener("scroll", function () {
-    hideLinkPopup();
+    hideLinkBar();
   });
   /* v1.7: scrolling the editor closes the image menu too, since its
      fixed position is tied to where the image was. */
