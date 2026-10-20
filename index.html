@@ -28,10 +28,33 @@
   notes are files, and there is no server and no shared database anywhere
   in this design.
 
-  BUILD STAMP: 2026-10-20-SSN-V182
-  Version: 1.8.2
+  BUILD STAMP: 2026-10-20-SSN-V183
+  Version: 1.8.3
 
   Revision history:
+    v1.8.3 2026-10-20 pCloud attachment display fix. Live testing of
+                      v1.8.2 showed pCloud sign in completing and
+                      uploads saving, but an attached image never
+                      displayed in the note. Cause: showing an image
+                      fetched the file's bytes from the temporary
+                      getfilelink address, and pCloud's file hosts
+                      send no cross origin permission headers, so
+                      the browser blocked reading the bytes (uploads
+                      were never affected; they go to the API host,
+                      which accepts browser calls). Displaying a
+                      resource does not need that permission, only
+                      reading its bytes does, so pCloud display now
+                      uses the temporary file address directly: the
+                      pCloud driver exposes getDisplayUrl, inline
+                      images load from it, Open and Download hand it
+                      to the browser, and PDF previews frame it.
+                      Google Drive display is unchanged (its byte
+                      download works and remains the only Google
+                      path). The byte download remains in the pCloud
+                      driver for true byte consumers, and no saved
+                      note can contain a pCloud address, as before,
+                      because saves rebuild placeholders as empty
+                      shells. Build stamp 2026-10-20-SSN-V183.
     v1.8.2 2026-10-20 pCloud sign in fix. The Sign in with pCloud
                       button sent the browser to an authorize address
                       spelled with an underscore where pCloud's
@@ -47,7 +70,6 @@
                       parameter pCloud documents, keeping "userid"
                       as a fallback, so the signed in account id is
                       actually recorded. No other behavior changes.
-                      Build stamp 2026-10-20-SSN-V182.
     v1.8.1 2026-10-19 Checklist in place, Trash and Archive multi
                       select, and a desktop fix for the Back to list
                       button. The toolbar Checklist button used to
@@ -1926,8 +1948,8 @@ body.dark .ss-att-provider{color:#EAF3EC;}
 "use strict";
 
 /* ============================================================================
-   SnakeScale Notes v1.8.2: application script
-   BUILD STAMP: 2026-10-20-SSN-V182
+   SnakeScale Notes v1.8.3: application script
+   BUILD STAMP: 2026-10-20-SSN-V183
 
    How this script is organized:
      1. Constants and global state
@@ -1958,8 +1980,8 @@ body.dark .ss-att-provider{color:#EAF3EC;}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-20-SSN-V182";
-const APP_VERSION = "1.8.2";
+const APP_BUILD = "2026-10-20-SSN-V183";
+const APP_VERSION = "1.8.3";
 const API_BASE = "https://api.github.com";
 const API_VERSION_HEADER = "2022-11-28";
 /* v1.4: the two storage backends. "github" is the original repository
@@ -7674,17 +7696,32 @@ async function pcloudUpload(file, storageName, onProgress) {
   });
 }
 
-/* pCloud downloads are two steps: ask for a temporary file link, then
-   fetch the bytes from the file host. That second fetch is the one
-   place where pCloud may refuse a browser (cross origin) download; the
-   error message says exactly that instead of hiding behind a generic
-   failure. This path is untested until a live pCloud account test. */
-async function pcloudDownload(fileId) {
+/* pCloud file access starts with getfilelink, which returns a
+   temporary address for the file on one of pCloud's file hosts.
+   This helper performs that call, validates the answer, and builds
+   the full address. Every pCloud read path starts here; what each
+   one does with the address differs (see pcloudDownload below and
+   the getDisplayUrl note on the provider registry). */
+async function pcloudFileUrl(fileId) {
   const data = await pcloudCall("getfilelink", { fileid: fileId });
   if (!data.hosts || !data.hosts.length || !data.path) {
     throw new Error("pCloud did not return a download link for this file.");
   }
-  const url = "https://" + data.hosts[0] + data.path;
+  return "https://" + data.hosts[0] + data.path;
+}
+
+/* pCloud byte downloads fetch the bytes from the temporary file
+   address. Live testing (v1.8.2, 2026-10-20) confirmed what this
+   comment long suspected: pCloud's file hosts send no cross origin
+   permission headers, so a browser fetch of the address is blocked
+   and this function throws. That is exactly why DISPLAY never uses
+   this path for pCloud (displaying a resource, an image, a frame,
+   or a navigation, needs no such permission; only reading bytes
+   does), and why the driver registry exposes getDisplayUrl for
+   pCloud below. This byte path stays for any true byte consumer
+   and keeps its honest error messages. */
+async function pcloudDownload(fileId) {
+  const url = await pcloudFileUrl(fileId);
   let res;
   try {
     res = await fetch(url);
@@ -7710,7 +7747,17 @@ async function pcloudDelete(fileId) {
 /* ----- provider registry ----------------------------------------------
    One consistent internal shape over both services. Everything above
    this line that touches attachments goes through this table, never
-   through provider specific code directly. */
+   through provider specific code directly.
+
+   Optional capability (v1.8.3): getDisplayUrl(fileId) returns an
+   address the browser may DISPLAY directly (an image source, a
+   frame source, or a navigation target) without reading its bytes.
+   Only pCloud provides it: its file hosts refuse cross origin byte
+   reads, but displaying their temporary addresses works fine.
+   Google Drive has no getDisplayUrl on purpose; its authenticated
+   byte download works, and the blob path stays its only path.
+   Consumers test for the capability's presence, never for the
+   provider's name. */
 const providers = {
   google: {
     label: "Google Drive",
@@ -7728,6 +7775,7 @@ const providers = {
     disconnect: pcloudDisconnect,
     upload: pcloudUpload,
     download: pcloudDownload,
+    getDisplayUrl: pcloudFileUrl,
     delete: pcloudDelete
   }
 };
@@ -7739,10 +7787,12 @@ function providerLabel(name) {
 /* ----- placeholder hydration -------------------------------------------
    When a note opens, each canonical placeholder in the body is filled
    with live content: the real image for image attachments (through an
-   authenticated provider download and a blob URL), or a file card for
-   everything else. Hydration writes ONLY into the live DOM; the save
-   path canonicalizes placeholders back to empty shells, so nothing
-   hydrated is ever persisted. */
+   authenticated provider download and a blob URL, or, for a driver
+   with a display address such as pCloud since v1.8.3, straight from
+   that address), or a file card for everything else. Hydration
+   writes ONLY into the live DOM; the save path canonicalizes
+   placeholders back to empty shells, so nothing hydrated is ever
+   persisted. */
 function makeAttButton(label, handler) {
   const b = document.createElement("button");
   b.type = "button";
@@ -7918,10 +7968,30 @@ async function hydrateOneAttachment(note, el) {
       loading.textContent = "Loading image...";
       el.appendChild(loading);
       try {
-        const blob = await driver.download(att.fileId);
-        if (!el.isConnected) { return; }   /* editor moved on meanwhile */
-        const url = URL.createObjectURL(blob);
-        state.objectUrls.push(url);
+        /* v1.8.3: two ways to show an image. A driver with
+           getDisplayUrl (pCloud) hands back a temporary address
+           and the image loads straight from it: displaying needs
+           no cross origin byte permission, and there is no object
+           URL to track or revoke. Any other driver (Google) goes
+           through the authenticated byte download and a blob URL,
+           exactly as before. */
+        let url;
+        let isObjectUrl = false;
+        if (typeof driver.getDisplayUrl === "function") {
+          url = await driver.getDisplayUrl(att.fileId);
+        } else {
+          const blob = await driver.download(att.fileId);
+          url = URL.createObjectURL(blob);
+          isObjectUrl = true;
+        }
+        if (!el.isConnected) {
+          /* Editor moved on meanwhile. A blob URL nobody will
+             display is revoked at once; a display address needs
+             no cleanup at all. */
+          if (isObjectUrl) { URL.revokeObjectURL(url); }
+          return;
+        }
+        if (isObjectUrl) { state.objectUrls.push(url); }
         const img = document.createElement("img");
         img.className = "ss-att-img";
         img.alt = att.name;
@@ -8012,7 +8082,10 @@ async function hydrateOneAttachment(note, el) {
    like image URLs; collapsing the preview revokes it immediately.
    Preview state is editor only: canonicalizeAttachmentPlaceholders
    rebuilds placeholders as empty shells on save, so the iframe, the
-   preview box, and the blob URL can never reach the saved file. */
+   preview box, and the blob URL can never reach the saved file.
+   v1.8.3: a driver with getDisplayUrl (pCloud) skips the byte
+   download entirely and frames its temporary file address instead;
+   the same shell rebuild keeps that address out of saves too. */
 function isPdfAttachment(att) {
   if (!att) { return false; }
   if ((att.mime || "").toLowerCase() === "application/pdf") { return true; }
@@ -8022,6 +8095,12 @@ function isPdfAttachment(att) {
 async function togglePdfPreview(note, att, el, btn) {
   const existing = el.querySelector(".ss-att-preview");
   if (existing) {
+    /* v1.8.3: a direct address preview (pCloud) holds its address
+       in the frame itself; blank the frame before the box goes
+       away so it stops loading from the provider at once. The blob
+       path's address is an object URL and is revoked just below. */
+    const oldFrame = existing.querySelector("iframe");
+    if (oldFrame) { oldFrame.src = "about:blank"; }
     if (existing._pdfUrl) {
       const at = state.objectUrls.indexOf(existing._pdfUrl);
       if (at >= 0) { state.objectUrls.splice(at, 1); }
@@ -8043,6 +8122,25 @@ async function togglePdfPreview(note, att, el, btn) {
   btn.disabled = true;
   btn.textContent = "Loading...";
   try {
+    /* v1.8.3: a driver with getDisplayUrl (pCloud) frames its
+       temporary file address directly; displaying it in a frame
+       needs no byte permission. Its box records no _pdfUrl, so
+       collapsing has no object URL to revoke on this path. Other
+       drivers keep the blob path below, unchanged. */
+    if (typeof driver.getDisplayUrl === "function") {
+      const directUrl = await driver.getDisplayUrl(att.fileId);
+      if (!el.isConnected) { return; }   /* editor moved on meanwhile */
+      const directBox = document.createElement("div");
+      directBox.className = "ss-att-preview";
+      const directFrame = document.createElement("iframe");
+      directFrame.className = "ss-att-pdf-frame";
+      directFrame.title = att.name;
+      directFrame.src = directUrl;
+      directBox.appendChild(directFrame);
+      el.appendChild(directBox);
+      btn.textContent = "Hide preview";
+      return;
+    }
     const blob = await driver.download(att.fileId);
     if (!el.isConnected) { return; }   /* editor moved on meanwhile */
     const pdfBlob = blob && blob.type === "application/pdf"
@@ -8338,8 +8436,10 @@ function startAttachmentResize(ev, corner) {
 }
 
 /* Open one attachment in a new browser tab through its provider,
-   following the same guards as the Download path below: the bytes
-   are fetched with the user's own sign in and shown from a
+   following the same guards as the Download path below. A driver
+   with a display address (pCloud, see the registry) hands that
+   address to the new tab directly; any other driver fetches the
+   bytes with the user's own sign in and shows them from a
    temporary object URL, revoked a minute later (a fresh tab needs
    time to load it; the note itself keeps no reference to it). */
 async function openAttachment(att) {
@@ -8359,6 +8459,14 @@ async function openAttachment(att) {
     return;
   }
   try {
+    /* v1.8.3: the display address goes straight to the new tab.
+       Navigating to it needs no byte permission, which is the
+       whole reason this path exists (see pcloudDownload). */
+    if (typeof driver.getDisplayUrl === "function") {
+      const directUrl = await driver.getDisplayUrl(att.fileId);
+      window.open(directUrl, "_blank", "noopener");
+      return;
+    }
     const blob = await driver.download(att.fileId);
     const url = URL.createObjectURL(blob);
     window.open(url, "_blank", "noopener");
@@ -8423,7 +8531,9 @@ function runAttMenuAction(action) {
 }
 
 /* Download one attachment through its provider and hand it to the
-   browser as a normal file download under its original name. */
+   browser as a normal file download under its original name. A
+   driver with a display address (pCloud) takes the anchor path
+   noted inside instead of the byte path. */
 async function downloadAttachment(att) {
   if (!state.online) {
     toast("Downloads need an internet connection. You appear to be offline.", true);
@@ -8442,6 +8552,25 @@ async function downloadAttachment(att) {
   }
   try {
     toast("Downloading " + att.name + "...");
+    /* v1.8.3: a driver with getDisplayUrl (pCloud) downloads by
+       pointing a temporary anchor at the temporary file address,
+       so the browser fetches the file itself and no byte read is
+       needed. Honest limit: browsers ignore the download
+       attribute on a cross origin address, so whether the file
+       saves to disk or opens for viewing is the file host's
+       choice; that is the best a web app can do without byte
+       access. Other drivers keep the blob path below, which
+       always saves under the attachment's own name. */
+    if (typeof driver.getDisplayUrl === "function") {
+      const directUrl = await driver.getDisplayUrl(att.fileId);
+      const linkEl = document.createElement("a");
+      linkEl.href = directUrl;
+      linkEl.download = att.name;
+      document.body.appendChild(linkEl);
+      linkEl.click();
+      linkEl.remove();
+      return;
+    }
     const blob = await driver.download(att.fileId);
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
