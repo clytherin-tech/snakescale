@@ -40,10 +40,34 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-21-SSN-V2142
-  Version: 2.14.2
+  BUILD STAMP: 2026-10-21-SSN-V2143
+  Version: 2.14.3
 
   Revision history:
+    v2.14.3 2026-10-21 Three block layer fixes from one
+                      diagnosis. The block drag is margin aware:
+                      the insertion boundary between two blocks
+                      is the midpoint of the gap between their
+                      border boxes, measured on the sibling
+                      list as it lies, so a spaced block (a
+                      paragraph, a heading) no longer needs a
+                      full margin of extra travel before it
+                      will move, the drop line renders at the
+                      boundary the commit uses, and a pointer
+                      resting in the margin gap resolves to a
+                      block instead of a dead band. Clear
+                      formatting converts per touched block,
+                      each at its own flow's target, instead of
+                      one target for the whole operation: a
+                      bare text line is judged from the flow
+                      around the caret rather than defaulting
+                      to a paragraph, a blockquote has its own
+                      branch, and a heading is judged by its
+                      own neighbours alone. And every block
+                      grip takes its column from the block's
+                      top level ancestor, so a list item's grip
+                      sits in the shared margin column instead
+                      of on its bullet or number.
     v2.14.2 2026-10-21 The block grip hover rewiring fix. The
                       v2.14.1 position resolution never ran in a
                       real browser: the grip renders at
@@ -4099,8 +4123,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-21-SSN-V2142";
-const APP_VERSION = "2.14.2";
+const APP_BUILD = "2026-10-21-SSN-V2143";
+const APP_VERSION = "2.14.3";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -16220,19 +16244,34 @@ function clearHighlightSelection() {
    carries the browser's default block margin (1em) and a line that
    used to be marginless (a list item, a typed div line) gains about
    15px of space under it: the extra gap Chris saw after clearing.
-   The fix has two parts. clearFormatBlockTarget classifies the
-   touched blocks' flow BEFORE the commands run and picks DIV for
+   The fix has two parts. A classifier classifies the touched
+   blocks' flow BEFORE the commands run and picks DIV for
    marginless flow, so the converted lines keep the spacing they
    had; paragraph flow keeps P, today's proven behavior there. And
    clearFormattingNormalize removes any block the operation left
-   empty, so no hollow shell is left holding space either. */
+   empty, so no hollow shell is left holding space either.
+
+   v2.14.3: the classification is per block now, not one target
+   for the whole operation. The single target converted every
+   block a mixed selection touched at one flow's margins: a div
+   line selected alongside a paragraph became a paragraph and
+   gained the space, a paragraph selected alongside a list item
+   became a div and lost its own, a heading was judged by
+   neighbours that included blocks outside the selection, a
+   blockquote had no branch at all and fell through to P, and a
+   caret in a bare text line (text with no block element around
+   it) touched no block at all, starved the classifier, and
+   took its hard coded P. clearConversionPlan now plans one
+   conversion per touched block, each with the target that
+   block's own flow dictates, and the bare line is judged from
+   the flow around the caret. */
 function clearFormattingExtended() {
   const bodyEl = document.getElementById("noteBody");
   restoreFormatSelection();
   const sel0 = window.getSelection();
   const range0 = (sel0 && sel0.rangeCount) ? sel0.getRangeAt(0) : null;
   const touchedBefore = clearTouchedTopBlocks(bodyEl, range0);
-  const target = clearFormatBlockTarget(bodyEl, range0);
+  const plan = clearConversionPlan(bodyEl, range0, touchedBefore);
   document.execCommand("removeFormat", false, null);
   const sel = window.getSelection();
   if (sel && sel.rangeCount) {
@@ -16252,7 +16291,7 @@ function clearFormattingExtended() {
       });
     }
   }
-  document.execCommand("formatBlock", false, target);
+  plan.forEach(function (entry) { clearApplyConversion(entry); });
   clearFormattingNormalize(bodyEl, touchedBefore);
 }
 
@@ -16274,67 +16313,183 @@ function clearTouchedTopBlocks(bodyEl, range) {
   return out;
 }
 
-/* v2.14: which block tag clear formatting converts the touched
-   blocks to. DIV when the touched blocks are marginless flow:
-   any touched block is a list item, or the touched top level
-   blocks are div lines or list containers with no heading and no
-   paragraph flow involved. P otherwise: headings and paragraphs
-   in paragraph flow keep the classic conversion, and anything
-   uncertain (a quote, a code block, a table, a lone heading)
-   defaults to P as well. A heading on its own is decided by the
-   flow around it: paragraph neighbours mean paragraph flow (P),
-   div and list neighbours mean typed line flow (DIV). */
-function clearFormatBlockTarget(bodyEl, range) {
-  if (!range) { return "P"; }
-  const blocks = clearTouchedTopBlocks(bodyEl, range);
-  if (!blocks.length) { return "P"; }
-  /* Any touched list item settles it: list items are marginless,
-     so converting one to a paragraph is exactly the spacing bug. */
-  for (let i = 0; i < blocks.length; i++) {
-    const b = blocks[i];
-    if (b.tagName === "UL" || b.tagName === "OL") {
-      const items = b.querySelectorAll("li");
-      for (let j = 0; j < items.length; j++) {
-        let hit = false;
-        try { hit = range.intersectsNode(items[j]); } catch (e) { hit = false; }
-        if (hit || (range.collapsed && items[j].contains(range.startContainer))) {
-          return "DIV";
-        }
-      }
+/* v2.14.3: the conversion plan for one clear formatting run.
+   One entry per touched top level block, each carrying the
+   target that block's own flow dictates (clearFormatTargetFor-
+   Block). A list plans per touched ITEM (clearTouchedListItems),
+   so the conversion applies to the items the range actually
+   touches and a caret in one item never dissolves the whole
+   list. Blocks that are not text flow get no entry at all: a
+   table, an attachment placeholder or figure, and a rule have
+   no block tag conversion to take, and an attachment's own
+   wrapper div is its card, not a typed line. A touched set
+   that is empty (a caret or a selection in a bare text line,
+   which has no block element to classify) plans a single bare
+   entry: the conversion runs on the live range with a target
+   judged from the flow around the caret (clearSurroundingFlow-
+   Target), never a blind default. The plan is computed from
+   the pre-command range and holds node references, not
+   positions, because the conversions themselves move nodes
+   (a list extraction splits its list around the new block);
+   entries still to come are found again by identity. */
+function clearConversionPlan(bodyEl, range, touched) {
+  const plan = [];
+  if (!range) { return plan; }
+  (touched || []).forEach(function (block) {
+    if (!block.isConnected || block.parentNode !== bodyEl) { return; }
+    if (block.classList && block.classList.contains("ss-attachment")) {
+      return;
     }
-  }
-  let hasP = false;
-  let hasHeading = false;
-  let hasDivFlow = false;
-  blocks.forEach(function (b) {
-    if (b.tagName === "P") { hasP = true; }
-    else if (/^H[1-6]$/.test(b.tagName)) { hasHeading = true; }
-    else if (b.tagName === "DIV" || b.tagName === "UL" ||
-             b.tagName === "OL") { hasDivFlow = true; }
+    const tag = block.tagName;
+    if (tag === "TABLE" || tag === "FIGURE" || tag === "HR") { return; }
+    if (tag === "UL" || tag === "OL") {
+      const items = clearTouchedListItems(block, range);
+      if (items.length) {
+        plan.push({ list: block, items: items, target: "DIV" });
+      }
+      return;
+    }
+    plan.push({ block: block,
+      target: clearFormatTargetForBlock(bodyEl, block) });
   });
-  if (hasP) { return "P"; }
-  if (!hasHeading) {
-    return hasDivFlow ? "DIV" : "P";
+  if (!plan.length && !(touched || []).length) {
+    plan.push({ bare: true,
+      target: clearSurroundingFlowTarget(bodyEl, range) });
   }
-  const neighbours = [];
-  const first = blocks[0];
-  const last = blocks[blocks.length - 1];
-  if (first.previousElementSibling) {
-    neighbours.push(first.previousElementSibling);
+  return plan;
+}
+
+/* The list items a range touches inside one list, nested items
+   included: the same test the v2.14 single target classifier
+   used to decide a whole operation on any one touched item. */
+function clearTouchedListItems(listEl, range) {
+  const items = [];
+  if (!range) { return items; }
+  Array.prototype.forEach.call(listEl.querySelectorAll("li"),
+    function (li) {
+      let hit = false;
+      try { hit = range.intersectsNode(li); } catch (e) { hit = false; }
+      if (!hit && range.collapsed) {
+        hit = li.contains(range.startContainer);
+      }
+      if (hit) { items.push(li); }
+    });
+  return items;
+}
+
+/* v2.14.3: the formatBlock target for ONE touched block, from
+   its own flow class. The fixed classes keep the cases the
+   earlier classifiers already proved: a list and a div line
+   take DIV (marginless in, marginless out), a paragraph stays
+   P. Everything else (a heading, a blockquote, a pre, any
+   other block) is judged by the flow immediately around it,
+   that block alone: clearFlowTargetAround. */
+function clearFormatTargetForBlock(bodyEl, block) {
+  const tag = block.tagName;
+  if (tag === "UL" || tag === "OL") { return "DIV"; }
+  if (tag === "DIV") { return "DIV"; }
+  if (tag === "P") { return "P"; }
+  return clearFlowTargetAround(block);
+}
+
+/* The flow target for a block judged by its own neighbours:
+   P only in real paragraph flow, meaning every neighbour
+   that exists is a paragraph. Anything else takes DIV, the
+   safe side: a div has no block margins of its own, so a
+   conversion to it can only hold or shrink the gaps beside
+   the block, never grow them, whatever the neighbours are.
+   The v2.14 heading branch let any one paragraph neighbour
+   settle P for the block; beside a marginless neighbour on
+   the other side that was exactly a proven gain (a heading
+   between a paragraph and a div line gained 10.5px under
+   itself), so one paragraph neighbour no longer suffices:
+   the flow must be paragraphs on both sides, which is also
+   the case the classic conversion was proven unchanged in
+   (a heading between paragraphs converts to P and no gap
+   moves). A block with no neighbours at all keeps the
+   classic P: there are no gaps for it to grow. */
+function clearFlowTargetAround(el) {
+  const sibs = [];
+  if (el.previousElementSibling) {
+    sibs.push(el.previousElementSibling);
   }
-  if (last.nextElementSibling) {
-    neighbours.push(last.nextElementSibling);
+  if (el.nextElementSibling) { sibs.push(el.nextElementSibling); }
+  if (!sibs.length) { return "P"; }
+  for (let i = 0; i < sibs.length; i++) {
+    if (sibs[i].tagName !== "P") { return "DIV"; }
   }
-  let neighbourP = false;
-  let neighbourDivFlow = neighbours.length > 0;
-  neighbours.forEach(function (n) {
-    if (n.tagName === "P") { neighbourP = true; }
-    if (n.tagName !== "DIV" && n.tagName !== "UL" &&
-        n.tagName !== "OL") { neighbourDivFlow = false; }
-  });
-  if (neighbourP) { return "P"; }
-  if (neighbourDivFlow) { return "DIV"; }
   return "P";
+}
+
+/* The target when the touched set is empty: the caret (or
+   the selection) sits in a bare text line, text that is a
+   direct child of the body with no block element around it,
+   so there is no block to classify and the v2.14 classifier
+   starved into its hard coded P, wrapping the line in a
+   paragraph with margins on both sides. Judge from the flow
+   at the caret instead: the element siblings on either side
+   of the body child the caret sits in. Paragraph flow (at
+   least one element sibling, and every one a paragraph)
+   keeps P, where the wrap provably grows no gap; div lines
+   or lists around it take DIV; with nothing around it at
+   all, DIV as well, the marginless reading of a typed line. */
+function clearSurroundingFlowTarget(bodyEl, range) {
+  if (!range) { return "DIV"; }
+  let before = null;
+  let after = null;
+  if (range.startContainer === bodyEl) {
+    const kids = bodyEl.childNodes;
+    for (let i = range.startOffset - 1; i >= 0; i--) {
+      if (kids[i].nodeType === 1) { before = kids[i]; break; }
+    }
+    for (let i = range.startOffset; i < kids.length; i++) {
+      if (kids[i].nodeType === 1) { after = kids[i]; break; }
+    }
+  } else {
+    let child = range.startContainer;
+    while (child && child.parentNode && child.parentNode !== bodyEl) {
+      child = child.parentNode;
+    }
+    if (!child || child.parentNode !== bodyEl) { return "DIV"; }
+    before = child.previousElementSibling;
+    after = child.nextElementSibling;
+  }
+  const sibs = [];
+  if (before) { sibs.push(before); }
+  if (after) { sibs.push(after); }
+  if (!sibs.length) { return "DIV"; }
+  for (let i = 0; i < sibs.length; i++) {
+    if (sibs[i].tagName !== "P") { return "DIV"; }
+  }
+  return "P";
+}
+
+/* Apply one planned conversion. A real engine's formatBlock
+   acts on the blocks the selection touches, so the selection
+   is set to the block's (or the item's) own contents and the
+   command runs with that entry's target: one block converts,
+   at its own margins, whatever else the user's selection
+   covered. The bare entry runs on the live selection as it
+   stands: the caret in the bare line is the range the
+   command needs to wrap it. A node the earlier conversions
+   have since detached is skipped: its content was converted
+   with the block that carried it. */
+function clearApplyConversion(entry) {
+  const sel = window.getSelection();
+  if (!sel) { return; }
+  if (entry.bare) {
+    document.execCommand("formatBlock", false, entry.target);
+    return;
+  }
+  const nodes = entry.items || [entry.block];
+  nodes.forEach(function (node) {
+    if (!node.isConnected) { return; }
+    const r = document.createRange();
+    r.selectNodeContents(node);
+    sel.removeAllRanges();
+    sel.addRange(r);
+    document.execCommand("formatBlock", false, entry.target);
+  });
 }
 
 /* v2.14: the strict emptiness test for the normalization pass.
@@ -20565,6 +20720,42 @@ function blockGripBlockAtPoint(clientX, clientY) {
     const r = el.getBoundingClientRect();
     if (clientY >= r.top && clientY <= r.bottom) { return block; }
   }
+  /* v2.14.3: no span held the pointer, so it sits in one of
+     the collapsed margin gaps between lines, which used to
+     resolve to no block at all: a hover dead band over exactly
+     the spaced lines. Assign the gap by the same boundary the
+     block drag commits on, the midpoint of the gap between
+     the two border boxes: at or above it the block above owns
+     the pointer, below it the block below does. The units are
+     the lines of the note in document order: a list's items
+     stand for the list, every other top level block stands
+     for itself. Above the first line and below the last one
+     there is still no block, as there has always been. */
+  const units = [];
+  Array.prototype.forEach.call(bodyEl.children, function (child) {
+    if (child.tagName === "UL" || child.tagName === "OL") {
+      Array.prototype.forEach.call(child.children, function (li) {
+        if (li.tagName === "LI") { units.push(li); }
+      });
+    } else if (child.tagName === "FIGURE") {
+      if (child.classList.contains("ss-attachment")) {
+        units.push(child);
+      }
+    } else if (BLOCK_DRAG_TAGS[child.tagName]) {
+      units.push(child);
+    }
+  });
+  let aboveUnit = null;
+  for (let i = 0; i < units.length; i++) {
+    const r = units[i].getBoundingClientRect();
+    if (clientY < r.top) {
+      if (!aboveUnit) { return null; }
+      const ar = aboveUnit.getBoundingClientRect();
+      return clientY <= (ar.bottom + r.top) / 2 ? aboveUnit : units[i];
+    }
+    if (clientY <= r.bottom) { return units[i]; }
+    aboveUnit = units[i];
+  }
   return null;
 }
 
@@ -20580,15 +20771,37 @@ function hideBlockGrip() {
 /* Position the grip in the margin beside the block's first line.
    Coordinates are relative to .editor-inner, the grip's positioned
    ancestor, computed from the on screen rectangles, the same seam
-   every floating editor surface uses. */
+   every floating editor surface uses.
+   v2.14.3: the X comes from the block's TOP LEVEL ancestor, not
+   from the block itself, so every grip shares the one margin
+   column. A list item's own box starts 24px right of its list's
+   edge (the lists' padding, where the bullet or number lives),
+   and a grip placed from the item's box landed on the marker:
+   at the standard geometry a paragraph's grip sits at left
+   -20px and an item's sat at 4px, inside the marker strip.
+   The ancestor walk ends at the outermost list for a nested
+   item, at the blockquote for a list inside one, at the table
+   for a list in a cell. The Y still comes from the named
+   block itself: the grip tracks the item's own first line;
+   only the column is shared. What the grip drags (the named
+   block) does not change. */
 function positionBlockGrip(block) {
   const grip = document.getElementById("blockGrip");
   const inner = document.querySelector(".editor-inner");
   if (!grip || !inner || !block) { return; }
+  const bodyEl = document.getElementById("noteBody");
   const ir = inner.getBoundingClientRect();
   const br = block.getBoundingClientRect();
+  let anchor = block;
+  if (bodyEl) {
+    while (anchor.parentNode && anchor.parentNode !== bodyEl) {
+      anchor = anchor.parentNode;
+    }
+    if (anchor.parentNode !== bodyEl) { anchor = block; }
+  }
+  const ar = anchor === block ? br : anchor.getBoundingClientRect();
   const gw = grip.offsetWidth || 16;
-  grip.style.left = (br.left - ir.left - gw - 6) + "px";
+  grip.style.left = (ar.left - ir.left - gw - 6) + "px";
   grip.style.top = (br.top - ir.top + 2) + "px";
   grip.classList.remove("hidden");
 }
@@ -20674,34 +20887,86 @@ function blockDragSiblings() {
     });
 }
 
+/* The sibling list with the dragged node left in, in document
+   order. The dragged block still occupies its slot for the
+   whole drag (nothing moves until pointerup), so this is the
+   list the insertion geometry is measured on: the boundaries
+   between consecutive blocks as they actually lie. */
+function blockDragFullSiblings() {
+  const drag = blockDrag;
+  if (!drag || !drag.container) { return []; }
+  const inBody = drag.container.id === "noteBody";
+  return Array.prototype.filter.call(drag.container.children,
+    function (el) {
+      if (inBody) {
+        if (el.tagName === "FIGURE") {
+          return el.classList.contains("ss-attachment");
+        }
+        return !!BLOCK_DRAG_TAGS[el.tagName];
+      }
+      return el.tagName === "LI";
+    });
+}
+
 function updateBlockDropLine(clientY) {
   const drag = blockDrag;
   const line = document.getElementById("blockDropLine");
   const inner = document.querySelector(".editor-inner");
   if (!drag || !line || !inner) { return; }
   const ir = inner.getBoundingClientRect();
+  /* v2.14.3: margin aware insertion. The target used to be the
+     first sibling whose own box midpoint sat below the pointer,
+     which charged a block the whole width of its margins as
+     extra travel: the boundary a spaced block (a paragraph, a
+     heading) had to cross lay a full collapsed margin deeper
+     than a marginless block's, so a short drag committed it
+     back where it started (44px to move a paragraph where a
+     div line needed 28, in the diagnosis' margin faithful
+     measurements), and the drop line drew at the target's top
+     edge, inside the empty gap, away from the boundary the
+     commit actually used. Now the boundary between two
+     consecutive blocks is the midpoint of the gap between
+     their border boxes (for blocks that touch, their shared
+     edge), measured on the sibling list as it lies, dragged
+     block included: the pointer's slot is the number of those
+     boundaries it has crossed, and the insertion target is
+     that slot in the sibling list with the dragged block
+     taken out. */
+  const full = blockDragFullSiblings();
   const sibs = blockDragSiblings();
-  let before = null;
-  for (let i = 0; i < sibs.length; i++) {
-    const r = sibs[i].getBoundingClientRect();
-    if (clientY < r.top + r.height / 2) { before = sibs[i]; break; }
+  const rects = full.map(function (el) {
+    return el.getBoundingClientRect();
+  });
+  let crossed = 0;
+  for (let i = 0; i + 1 < full.length; i++) {
+    if (clientY >= (rects[i].bottom + rects[i + 1].top) / 2) {
+      crossed++;
+    }
   }
+  const before = crossed < sibs.length ? sibs[crossed] : null;
   drag.insertBefore = before;
-  /* The line sits at the insertion edge: the top of the block the
-     dragged block will land before, or the bottom of the last
-     sibling when it will land at the end. */
-  let y;
+  /* The line renders AT the chosen boundary, so the feedback
+     and the commit can never disagree again: the gap midpoint
+     above the block the dragged block will land before (the
+     first block's top edge when it lands at the start), or
+     the last block's bottom edge when it lands at the end. */
+  let lineY;
   if (before) {
-    y = before.getBoundingClientRect().top - ir.top - 2;
-  } else if (sibs.length) {
-    y = sibs[sibs.length - 1].getBoundingClientRect().bottom - ir.top - 1;
+    const k = full.indexOf(before);
+    if (k > 0) {
+      lineY = (rects[k - 1].bottom + rects[k].top) / 2;
+    } else {
+      lineY = rects[0].top;
+    }
+  } else if (full.length) {
+    lineY = rects[rects.length - 1].bottom;
   } else {
-    y = drag.node.getBoundingClientRect().bottom - ir.top - 1;
+    lineY = drag.node.getBoundingClientRect().bottom;
   }
   const cr = drag.container.getBoundingClientRect();
   line.style.left = (cr.left - ir.left) + "px";
   line.style.width = cr.width + "px";
-  line.style.top = y + "px";
+  line.style.top = (lineY - ir.top - 1) + "px";
   line.classList.remove("hidden");
 }
 
