@@ -14,7 +14,7 @@
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="SnakeScale">
+<meta name="apple-mobile-web-app-title" content="SnakeScale Notes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2064%20108'%3E%3Cdefs%3E%3ClinearGradient%20id='g'%20x1='1'%20y1='0'%20x2='0'%20y2='1'%3E%3Cstop%20offset='0'%20stop-color='%2357A773'/%3E%3Cstop%20offset='.38'%20stop-color='%232E7D4F'/%3E%3Cstop%20offset='1'%20stop-color='%2314532D'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect%20x='0'%20y='0'%20width='20'%20height='20'%20rx='5'%20fill='url(%23g)'/%3E%3Crect%20x='22'%20y='0'%20width='20'%20height='20'%20rx='5'%20fill='url(%23g)'/%3E%3Crect%20x='44'%20y='0'%20width='20'%20height='20'%20rx='5'%20fill='url(%23g)'/%3E%3Crect%20x='0'%20y='22'%20width='20'%20height='20'%20rx='5'%20fill='url(%23g)'/%3E%3Crect%20x='0'%20y='44'%20width='20'%20height='20'%20rx='5'%20fill='url(%23g)'/%3E%3Crect%20x='22'%20y='44'%20width='20'%20height='20'%20rx='5'%20fill='url(%23g)'/%3E%3Crect%20x='44'%20y='44'%20width='20'%20height='20'%20rx='5'%20fill='url(%23g)'/%3E%3Crect%20x='44'%20y='66'%20width='20'%20height='20'%20rx='5'%20fill='url(%23g)'/%3E%3Crect%20x='0'%20y='88'%20width='20'%20height='20'%20rx='5'%20fill='url(%23g)'/%3E%3Crect%20x='22'%20y='88'%20width='20'%20height='20'%20rx='5'%20fill='url(%23g)'/%3E%3Crect%20x='44'%20y='88'%20width='20'%20height='20'%20rx='5'%20fill='url(%23g)'/%3E%3Cpath%20d='M13%2020%20L20%2013%20L13%2013%20Z'%20fill='%23FFFFFF'%20fill-opacity='.28'/%3E%3Cpath%20d='M35%2020%20L42%2013%20L35%2013%20Z'%20fill='%23FFFFFF'%20fill-opacity='.28'/%3E%3Cpath%20d='M57%2020%20L64%2013%20L57%2013%20Z'%20fill='%23FFFFFF'%20fill-opacity='.28'/%3E%3Cpath%20d='M13%2042%20L20%2035%20L13%2035%20Z'%20fill='%23FFFFFF'%20fill-opacity='.28'/%3E%3Cpath%20d='M13%2064%20L20%2057%20L13%2057%20Z'%20fill='%23FFFFFF'%20fill-opacity='.28'/%3E%3Cpath%20d='M35%2064%20L42%2057%20L35%2057%20Z'%20fill='%23FFFFFF'%20fill-opacity='.28'/%3E%3Cpath%20d='M57%2064%20L64%2057%20L57%2057%20Z'%20fill='%23FFFFFF'%20fill-opacity='.28'/%3E%3Cpath%20d='M57%2086%20L64%2079%20L57%2079%20Z'%20fill='%23FFFFFF'%20fill-opacity='.28'/%3E%3Cpath%20d='M13%20108%20L20%20101%20L13%20101%20Z'%20fill='%23FFFFFF'%20fill-opacity='.28'/%3E%3Cpath%20d='M35%20108%20L42%20101%20L35%20101%20Z'%20fill='%23FFFFFF'%20fill-opacity='.28'/%3E%3Cpath%20d='M57%20108%20L64%20101%20L57%20101%20Z'%20fill='%23FFFFFF'%20fill-opacity='.28'/%3E%3C/svg%3E">
@@ -40,10 +40,29 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-21-SSN-V2161
-  Version: 2.16.1
+  BUILD STAMP: 2026-10-21-SSN-V2170
+  Version: 2.17.0
 
   Revision history:
+    v2.17.0 2026-10-21 Six refinements. Refresh connection moves
+                      from the labeled button beside the Synced
+                      pill into the sidebar three dot menu, as an
+                      item under Sync now, running the same shared
+                      refresh flow. Text selection takes a light
+                      green instead of the browser's blue. Checklist
+                      checkboxes gain real space before their text
+                      (stylesheet only; saved notes are unchanged).
+                      The Tags field grows a picker: focusing it
+                      lists the tags already in use, typing filters
+                      by the token being typed, and a click inserts
+                      the tag. The "@" note popup gains a search box
+                      pinned at its top, mirroring the typed query
+                      and able to drive the filter itself. And the
+                      app names itself SnakeScale Notes everywhere
+                      it speaks of itself (the brand is SnakeScale;
+                      this app is SnakeScale Notes): title, install
+                      names, wordmarks, setup and sign in copy,
+                      walkthrough, Settings, and the project docs.
     v2.16.1 2026-10-21 The open note refreshes on sync when it
                       is clean. The editor's standing rule never
                       refills the fields of the note already
@@ -1215,6 +1234,13 @@ input,select,textarea{font:inherit;color:var(--text);}
 /* One visible focus treatment keeps keyboard position obvious without
    changing the calm Deep Forest color story. */
 :focus-visible{outline:3px solid rgba(87,167,115,.58);outline-offset:2px;}
+/* v2.17: selected text takes a light green from the brand family
+   (the accent #57A773 lightened about 62 percent toward white)
+   instead of the browser's default blue. The ink on it is the
+   deep green text color in both themes, since the wash itself is
+   light in both; it applies app wide, editor, fields, and all. */
+::selection{background:#BFDECA;color:#10231A;}
+::-moz-selection{background:#BFDECA;color:#10231A;}
 
 /* ---------- generic buttons and fields ---------- */
 .btn{
@@ -1422,18 +1448,10 @@ body.dark .gate-brand .wordmark{color:#EAF3EC;}
   padding:1px 7px;font-size:16px;line-height:1;cursor:pointer;
 }
 .sidebar-menu-btn:hover{border-color:var(--accent);}
-/* v2.15: the labeled Refresh connection button beside the Synced
-   pill, in the same quiet dark chip family as the menu button.
-   Its label span swaps to "Refreshing..." while the shared
-   refresh flow runs, exactly as the Settings button's does. */
-.sidebar-refresh-btn{
-  background:#0A2E21;border:1px solid #2A5240;color:#EAF3EC;
-  border-radius:var(--radius-button);min-height:26px;
-  padding:3px 10px;font-size:12.5px;font-weight:600;line-height:1.2;
-  cursor:pointer;white-space:nowrap;
-}
-.sidebar-refresh-btn:hover{border-color:var(--accent);}
-.sidebar-refresh-btn:disabled{opacity:.65;cursor:default;}
+/* v2.15 placed a labeled Refresh connection button beside the
+   Synced pill here; v2.17 removed it again at Chris's word: the
+   action lives in the three dot menu now, as the item under Sync
+   now, so its look is the shared .att-menu-item look. */
 #sidebarMenu{
   position:absolute;z-index:60;right:0;bottom:calc(100% + 6px);
   min-width:212px;padding:6px;
@@ -2005,6 +2023,19 @@ body.note-drag-active{touch-action:none;overscroll-behavior:none;}
   font-size:11px;font-weight:700;letter-spacing:.08em;
   color:var(--muted);padding:5px 10px 3px;
 }
+/* v2.17: the mention popup's search box, pinned at the card's
+   top. Typing after "@" mirrors into it; typing in it filters
+   the same list. */
+.mention-search{padding:2px 2px 4px;}
+.mention-search input{
+  width:100%;padding:7px 10px;font-size:14px;color:var(--text);
+  background:var(--bg);border:1px solid var(--border);
+  border-radius:8px;outline:none;
+}
+.mention-search input:focus{
+  border-color:var(--secondary);
+  box-shadow:0 0 0 3px rgba(87,167,115,.22);
+}
 .mention-list{display:flex;flex-direction:column;gap:2px;
   max-height:300px;overflow-y:auto;}
 .mention-row{
@@ -2044,7 +2075,11 @@ body.note-drag-active{touch-action:none;overscroll-behavior:none;}
 }
 #noteBody ul.ss-checklist input[type="checkbox"],
 #noteBody ul:has(> li > input[type="checkbox"]) input[type="checkbox"]{
-  margin-right:2px;vertical-align:-1px;
+  /* v2.17: real breathing room between the box and its text (the
+     caret and the first letters sat right against the box at 2px).
+     Pure presentation in this stylesheet: nothing about the saved
+     note changes. */
+  margin-right:8px;vertical-align:-1px;
 }
 #noteBody li.done input[type="checkbox"]{accent-color:var(--secondary);}
 /* v1.3.1: links inside the editable body keep the standard link look and
@@ -2454,7 +2489,7 @@ body.note-drag-active{touch-action:none;overscroll-behavior:none;}
    sidebar's Synced pill; its #saveState rule lives with the
    sidebar styles). A quiet label and a modestly sized input, so
    the footer row keeps its height and the actions stay right. */
-.foot-tags{display:flex;align-items:center;gap:8px;}
+.foot-tags{display:flex;align-items:center;gap:8px;position:relative;}
 .foot-tags label{font-size:12px;font-weight:700;color:var(--muted);}
 .foot-tags input{
   width:210px;max-width:44vw;padding:6px 8px;
@@ -2467,6 +2502,25 @@ body.note-drag-active{touch-action:none;overscroll-behavior:none;}
   box-shadow:0 0 0 3px rgba(87,167,115,.22);
 }
 .foot-tags input:disabled{opacity:.55;}
+/* v2.17: the Tags picker's dropdown. It hangs above the footer
+   field (the footer sits at the editor's bottom edge, so the list
+   opens upward), wide as the field row, in the mention popup's
+   card look, with one full width row per tag. It lives outside
+   #noteBody, so nothing of it can be saved into a note. */
+#tagPicker{
+  position:absolute;z-index:63;left:0;bottom:calc(100% + 6px);
+  width:min(300px,80vw);max-height:224px;overflow-y:auto;padding:6px;
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius-card);box-shadow:0 10px 28px rgba(6,32,22,.28);
+  display:flex;flex-direction:column;gap:2px;
+}
+#tagPicker.hidden{display:none;}
+.tag-picker-row{
+  display:block;width:100%;text-align:left;border:none;background:none;
+  color:var(--text);font-size:13.5px;padding:6px 10px;border-radius:8px;
+  cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.tag-picker-row:hover{background:var(--soft);}
 .editor-actions{display:flex;gap:6px;flex-wrap:wrap;align-items:center;}
 #maximizeBtn{display:inline-flex;align-items:center;gap:5px;}
 #maximizeIcon{display:inline-flex;}
@@ -3169,15 +3223,15 @@ body.dark .version-date{color:var(--accent);}
     </div>
     <h1>Set up SnakeScale Notes</h1>
     <p>
-      SnakeScale has no server and no account of its own. Your notes live
+      SnakeScale Notes has no server and no account of its own. Your notes live
       in your own Google Drive, in a folder named <strong>SnakeScale
       Notes</strong>, and attachments live in an <strong>attachments</strong>
       subfolder of that same folder.
     </p>
     <p>
-      Sign in with Google is the only sign in. There is no SnakeScale app
-      password. Continue to the Google sign in step and approve access;
-      SnakeScale then connects Drive and creates your first notebook and
+      Sign in with Google is the only sign in. There is no SnakeScale Notes
+      app password. Continue to the Google sign in step and approve access;
+      SnakeScale Notes then connects Drive and creates your first notebook and
       starter note. Local copies on this device are encrypted with a
       random device key kept only on this device, which is not a login.
     </p>
@@ -3239,7 +3293,7 @@ body.dark .version-date{color:var(--accent);}
   <!-- Mobile top bar: brand plus pane switcher, small screens only. -->
   <div id="mobileBar">
     <span class="logo-slot" aria-hidden="true"></span>
-    <span class="brand-mini">Snake<span>Scale</span></span>
+    <span class="brand-mini">Snake<span>Scale</span> Notes</span>
     <button class="btn" id="mobileNavBtn" type="button">Notebooks</button>
     <button class="btn" id="mobileListBtn" type="button">Notes</button>
     <button class="btn" id="mobileNewBtn" type="button">New</button>
@@ -3249,7 +3303,7 @@ body.dark .version-date{color:var(--accent);}
   <aside id="sidebar">
     <div class="sidebar-head">
       <span class="logo-slot"></span>
-      <span class="wordmark">Snake<span>Scale</span></span>
+      <span class="wordmark">Snake<span>Scale</span> Notes</span>
     </div>
 
     <button id="newNoteBtn" class="btn accent block" type="button">+ New Note</button>
@@ -3287,24 +3341,27 @@ body.dark .version-date{color:var(--accent);}
            moved Sync now in as the first item. v2.8: Refresh
            connection and Dark mode moved out of this menu into
            the new Settings modal, and a Settings item took their
-           place here. The menu is now Sync now, Install app
+           place here. The menu is now Sync now, Refresh
+           connection (v2.17, under Sync now), Install app
            (present only while the browser offers installation),
            Settings, Collapse sidebar (the v2.5 rail toggle), and
            Sign out. The icon rail keeps its own icon buttons;
            its refresh and theme buttons now call the shared
            refresh and theme functions directly, while its other
            leaf buttons still click their counterparts here.
-           v2.15: a labeled Refresh connection button sits in
-           this row again, between the pill and the menu button,
-           running that same shared refresh flow (Chris asked
-           for it back beside the sync indicator now that the
-           connection also renews itself silently). -->
+           v2.15: a labeled Refresh connection button sat in
+           this row, between the pill and the menu button.
+           v2.17: that button is gone again (Chris's call), and
+           Refresh connection is a menu item under Sync now,
+           running the same shared refresh flow; its working
+           feedback is the Synced pill and the closing toast,
+           the way Sync now's has always been. -->
       <div class="sync-row">
         <div class="sync-pill" id="syncPill" data-state="idle"><span class="sync-dot" aria-hidden="true"></span><span class="sync-label">Not synced yet</span></div>
-        <button class="sidebar-refresh-btn" id="sidebarRefreshBtn" type="button" title="Refresh connection"><span id="sidebarRefreshBtnLabel">Refresh connection</span></button>
         <button class="sidebar-menu-btn" id="sidebarMenuBtn" type="button" aria-haspopup="true" aria-expanded="false" title="More actions" aria-label="More actions">&#8943;</button>
         <div id="sidebarMenu" class="hidden" role="menu" aria-label="Sidebar actions">
           <button class="att-menu-item" id="sidebarSyncItem" type="button" role="menuitem">Sync now</button>
+          <button class="att-menu-item" id="sidebarRefreshItem" type="button" role="menuitem">Refresh connection</button>
           <button class="att-menu-item hidden" id="sidebarInstallItem" type="button" role="menuitem">Install app</button>
           <button class="att-menu-item" id="sidebarSettingsItem" type="button" role="menuitem">Settings</button>
           <button class="att-menu-item" id="sidebarCollapseItem" type="button" role="menuitem">Collapse sidebar</button>
@@ -4002,6 +4059,11 @@ body.dark .version-date{color:var(--accent);}
         <div class="foot-tags">
           <label for="noteTags">Tags</label>
           <input id="noteTags" type="text" placeholder="ideas, work, personal">
+          <!-- v2.17: the tags picker, filled by the script with
+               the tags already in use. It opens when the field is
+               focused and lives outside #noteBody, so nothing of
+               it can be saved into a note. -->
+          <div id="tagPicker" class="hidden" role="listbox" aria-label="Tags already in use"></div>
         </div>
         <div class="editor-actions">
           <span class="tb-menu-wrap export-wrap">
@@ -4119,7 +4181,7 @@ body.dark .version-date{color:var(--accent);}
          there) in place. -->
     <section class="settings-section" aria-labelledby="settingsStartTitle">
       <h3 id="settingsStartTitle">Getting started</h3>
-      <p>New here, or want the tour again? Replay the first run walkthrough, or add the starter note that shows what SnakeScale can do.</p>
+      <p>New here, or want the tour again? Replay the first run walkthrough, or add the starter note that shows what SnakeScale Notes can do.</p>
       <div class="settings-start-row">
         <button class="btn" id="settingsWalkthroughBtn" type="button">Replay the walkthrough</button>
         <button class="btn" id="settingsStarterNoteBtn" type="button">Add the starter note</button>
@@ -4244,8 +4306,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-21-SSN-V2161";
-const APP_VERSION = "2.16.1";
+const APP_BUILD = "2026-10-21-SSN-V2170";
+const APP_VERSION = "2.17.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -4601,7 +4663,7 @@ function logoSvg(size) {
   });
   const w = 5 * step - gap, h = 7 * step - gap;
   return '<svg width="' + size + '" height="' + Math.round(size * h / w) +
-    '" viewBox="0 0 ' + w + ' ' + h + '" role="img" aria-label="SnakeScale logo">' +
+    '" viewBox="0 0 ' + w + ' ' + h + '" role="img" aria-label="SnakeScale Notes logo">' +
     parts + '</svg>';
 }
 
@@ -4689,7 +4751,7 @@ function wipeDeviceKey() {
    reloads them. */
 async function signOut() {
   const ok = confirm(
-    "Sign out of SnakeScale on this device? Your notes stay safe in " +
+    "Sign out of SnakeScale Notes on this device? Your notes stay safe in " +
     "Google Drive. Local copies on this device will be cleared, including " +
     "any edits still waiting to sync, so sync first if the sync pill is " +
     "not green.");
@@ -6834,7 +6896,7 @@ function unarchiveNote(note) {
    ticked), a small table, and an ordinary Text mode web link. The
    note is pinned and carries the welcome and examples tags.
    -------------------------------------------------------------------------- */
-const STARTER_NOTE_TITLE = "Start here: see what SnakeScale can do";
+const STARTER_NOTE_TITLE = "Start here: see what SnakeScale Notes can do";
 const STARTER_NOTE_TAGS = ["welcome", "examples"];
 const STARTER_NOTE_BODY =
   "<p>Welcome to <b>SnakeScale Notes</b>. This note lives in your own " +
@@ -6863,7 +6925,7 @@ const STARTER_NOTE_BODY =
   "<tr><td>This tour</td><td>The starter note, in Personal</td></tr>" +
   "</tbody></table>" +
   "<h2>Links that show more</h2>" +
-  "<p>The SnakeScale home page: <a href=\"https://nine34.com/snakescale\">" +
+  "<p>The SnakeScale Notes home page: <a href=\"https://nine34.com/snakescale\">" +
   "SnakeScale Notes, in one page</a>. Rest the mouse on any link in a " +
   "note (or tap it) and a small bar appears: from its menu you can " +
   "switch the link between Text, Mention, and Preview views, and " +
@@ -7487,6 +7549,9 @@ function anyOverlayOpen() {
     /* v2.14.1: the audio card menu joins the set for the same
        reason: an Escape that closes it never exits Maximize. */
     "attCardMenu",
+    /* v2.17: the tags picker joins the set for the same reason:
+       an Escape that closes it never exits Maximize. */
+    "tagPicker",
     "exportMenu", "sidebarMenu"];
   for (let i = 0; i < ids.length; i++) {
     const el = document.getElementById(ids[i]);
@@ -8511,6 +8576,8 @@ function renderEditor() {
     closeImageEditor();
     /* v2.12: the "@" note popup belongs to the previous note too. */
     closeMentionPopup();
+    /* v2.17: the tags picker belongs to the previous note too. */
+    closeTagPicker();
     attachBodyGuard = true;
     /* v1.2: the previous note's image blob URLs are released before the
        editor switches, so long sessions do not accumulate them. */
@@ -8693,8 +8760,10 @@ function toggleNotebookMenu() {
    it, and choosing an item closes it (each item's own handler,
    wired in wireEvents and in the PWA block, does the closing).
    v2.8: Refresh connection and Dark mode left this menu for the
-   Settings modal (see the v2.8 block below); the menu now holds
-   Sync now, Install app, Settings, Collapse sidebar, and
+   Settings modal (see the v2.8 block below). v2.17: Refresh
+   connection is back in this menu, under Sync now (Dark mode
+   stays in Settings); the menu now holds Sync now, Refresh
+   connection, Install app, Settings, Collapse sidebar, and
    Sign out.
    -------------------------------------------------------------------------- */
 function openSidebarMenu() {
@@ -8771,7 +8840,7 @@ function setVersionsFeedback(text) {
 }
 function versionsLimitFeedback(limit) {
   if (limit === 0) { return "Version history is off."; }
-  return "SnakeScale keeps up to " + limit + " version" +
+  return "SnakeScale Notes keeps up to " + limit + " version" +
     (limit === 1 ? "" : "s") + " per note.";
 }
 
@@ -8882,7 +8951,7 @@ const ONBOARDING_STEPS = [
     title: "Welcome to SnakeScale Notes",
     lines: [
       "Your notes live in your own Google Drive, in a folder the app " +
-        "creates for you. They are never stored on a SnakeScale server.",
+        "creates for you. They are never stored on a SnakeScale Notes server.",
       "The developer cannot see your notes, and your Google sign in is " +
         "the only account you need."
     ]
@@ -11409,6 +11478,121 @@ function followNoteLink(noteId) {
   toast("That note no longer exists.", true);
 }
 
+/* ----- v2.17: the Tags field picker ---------------------------------
+   Focusing (or clicking into) the editor footer's Tags field
+   opens a dropdown of the tags already in use across the live
+   notes, so an existing tag can be picked instead of retyped
+   (and mistyped). The field keeps its plain text behavior:
+   typing still works exactly as before, and typing filters the
+   list by the token under way (the text after the last comma).
+   Tags already complete in the field are not offered again. A
+   pick replaces the token with the tag plus the standard ", "
+   separator and marks the note dirty through the field's normal
+   save path; the dropdown stays open after a pick, its list
+   refreshed, and it closes on Escape, on a mousedown anywhere
+   outside it and the field, and when nothing is left to offer.
+   Read only notes never see it: their field is disabled, and a
+   disabled field never opens the picker. The element lives in
+   the editor footer, outside #noteBody, so nothing of it can be
+   saved into a note. */
+
+function tagPickerOpen() {
+  const picker = document.getElementById("tagPicker");
+  return !!picker && !picker.classList.contains("hidden");
+}
+
+function closeTagPicker() {
+  const picker = document.getElementById("tagPicker");
+  if (picker) { picker.classList.add("hidden"); }
+}
+
+/* Every tag in use on a live note, deduplicated case insensitively
+   (the first spelling seen wins) and sorted alphabetically. */
+function knownTags() {
+  const seen = new Map();
+  (state.notes || []).forEach(function (note) {
+    (note.tags || []).forEach(function (tag) {
+      const key = String(tag).toLowerCase();
+      if (!seen.has(key)) { seen.set(key, String(tag)); }
+    });
+  });
+  return Array.from(seen.values()).sort(function (a, b) {
+    return a.toLowerCase().localeCompare(b.toLowerCase());
+  });
+}
+
+/* The field split at its last comma: the tags already complete
+   (everything before the last comma) and the token being typed
+   (everything after it). */
+function tagFieldParts() {
+  const input = document.getElementById("noteTags");
+  const value = input ? input.value : "";
+  const cut = value.lastIndexOf(",");
+  const head = cut >= 0 ? value.slice(0, cut) : "";
+  const token = (cut >= 0 ? value.slice(cut + 1) : value).trim();
+  const complete = head.split(",").map(function (t) { return t.trim(); })
+    .filter(function (t) { return t.length > 0; });
+  return { complete: complete, token: token };
+}
+
+/* The tags on offer right now: the known tags, minus the ones
+   already complete in the field, filtered by the token (a
+   case insensitive substring match, like the mention popup's). */
+function tagSuggestions() {
+  const parts = tagFieldParts();
+  const done = parts.complete.map(function (t) { return t.toLowerCase(); });
+  const needle = parts.token.toLowerCase();
+  return knownTags().filter(function (tag) {
+    if (done.indexOf(tag.toLowerCase()) >= 0) { return false; }
+    if (needle && tag.toLowerCase().indexOf(needle) < 0) { return false; }
+    return true;
+  });
+}
+
+function renderTagPicker() {
+  const picker = document.getElementById("tagPicker");
+  const input = document.getElementById("noteTags");
+  if (!picker || !input) { return; }
+  if (input.disabled) { closeTagPicker(); return; }
+  const suggestions = tagSuggestions();
+  if (!suggestions.length) { closeTagPicker(); return; }
+  picker.innerHTML = "";
+  suggestions.forEach(function (tag) {
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = "tag-picker-row";
+    row.setAttribute("role", "option");
+    row.setAttribute("data-tag", tag);
+    row.textContent = tag;
+    picker.appendChild(row);
+  });
+  picker.classList.remove("hidden");
+}
+
+function openTagPicker() {
+  const input = document.getElementById("noteTags");
+  if (!input || input.disabled) { return; }
+  renderTagPicker();
+}
+
+/* A pick: the token in the field is replaced by the chosen tag,
+   followed by the standard separator, so the next token starts
+   empty and the picker can immediately offer what remains. The
+   caret lands after the separator, focus stays in the field,
+   and the note is marked dirty so the change saves. */
+function pickTag(tag) {
+  const input = document.getElementById("noteTags");
+  if (!input) { return; }
+  const parts = tagFieldParts();
+  const head = parts.complete.length ? parts.complete.join(", ") + ", " : "";
+  input.value = head + tag + ", ";
+  const end = input.value.length;
+  try { input.setSelectionRange(end, end); } catch (err) { /* older engines */ }
+  input.focus();
+  markDirty();
+  renderTagPicker();
+}
+
 /* ----- v2.12: the "@" note popup ---------------------------------------
    Typing "@" in a note opens a Results card under the caret, the
    interaction in Chris's screenshot: a Create new note row
@@ -11429,7 +11613,13 @@ function followNoteLink(noteId) {
    deleted, or the caret moved out of the token.
 
    The card itself is #mentionPopup, a sibling of #noteBody, so
-   nothing of it can ever be saved into a note. Its keys are taken
+   nothing of it can ever be saved into a note. v2.17: a search
+   box (#mentionSearch) sits pinned at the card's top: the typed
+   query mirrors into it, and typing in the box filters the same
+   list (the box then drives until a fresh "@" token takes over
+   again); the chrome is built once and only the rows rebuild,
+   so the box keeps focus across re-renders, and Escape returns
+   focus and caret to the editor. Its keys are taken
    in a capture phase document listener (see wireEvents), so while
    it is open, Enter and Tab belong to it and never reach the
    editor's own Enter and Tab handling (checklist Enter, table and
@@ -11440,6 +11630,16 @@ let mentionRows = [];
 let mentionHighlight = 0;
 let mentionLastQuery = null;
 let mentionLastNode = null;
+/* v2.17: the popup's search box state. mentionBoxQuery is null
+   while the editor token drives the filter, and the box's own
+   text once the user types in the box; mentionListEl is the
+   popup's persistent list container (the chrome, search box
+   included, is built once and only the rows are rebuilt, so
+   the box never loses focus to a re-render); mentionLastRange
+   remembers the caret range the popup was positioned from. */
+let mentionBoxQuery = null;
+let mentionListEl = null;
+let mentionLastRange = null;
 
 const MENTION_NOTE_ICON =
   "<svg viewBox=\"0 0 24 24\" width=\"16\" height=\"16\" fill=\"none\" " +
@@ -11471,6 +11671,68 @@ function closeMentionPopup() {
   mentionHighlight = 0;
   mentionLastQuery = null;
   mentionLastNode = null;
+  mentionBoxQuery = null;
+  mentionLastRange = null;
+  const searchEl = mentionSearchEl();
+  if (searchEl) { searchEl.value = ""; }
+}
+
+function mentionSearchEl() {
+  return document.getElementById("mentionSearch");
+}
+
+/* The query the list is filtered by: the search box's own text
+   once the user has typed in it, otherwise the "@" token's. */
+function mentionEffectiveQuery() {
+  if (mentionBoxQuery !== null) { return mentionBoxQuery; }
+  return mentionTrigger ? mentionTrigger.query : "";
+}
+
+function resetMentionHighlight() {
+  mentionHighlight = mentionRows.findIndex(function (row) {
+    return row.kind === "note";
+  });
+  if (mentionHighlight < 0) { mentionHighlight = 0; }
+}
+
+/* The popup's fixed chrome, built once: the search box pinned at
+   the top (v2.17), the Results header, and the list container.
+   Only the rows are rebuilt per render, so the search box is
+   never recreated under the user's fingers. */
+function ensureMentionChrome(popup) {
+  if (mentionListEl && popup.contains(mentionListEl)) { return; }
+  popup.innerHTML = "";
+  const searchWrap = document.createElement("div");
+  searchWrap.className = "mention-search";
+  const input = document.createElement("input");
+  input.type = "text";
+  input.id = "mentionSearch";
+  input.placeholder = "Search notes";
+  input.setAttribute("aria-label", "Search notes");
+  input.setAttribute("autocomplete", "off");
+  input.addEventListener("input", onMentionSearchInput);
+  searchWrap.appendChild(input);
+  popup.appendChild(searchWrap);
+  const head = document.createElement("div");
+  head.className = "mention-head";
+  head.textContent = "Results";
+  popup.appendChild(head);
+  mentionListEl = document.createElement("div");
+  mentionListEl.className = "mention-list";
+  popup.appendChild(mentionListEl);
+}
+
+/* Typing in the popup's search box filters the same candidate
+   list the "@" token filters; the editor token (and so the
+   insertion point) is untouched, and the highlight restarts on
+   the first note row, exactly as a changed token query does. */
+function onMentionSearchInput() {
+  const input = mentionSearchEl();
+  if (!input) { return; }
+  mentionBoxQuery = input.value;
+  mentionRows = mentionCandidates(mentionBoxQuery);
+  resetMentionHighlight();
+  renderMentionPopup(null);
 }
 
 /* The rows for one query: the Create row first (only while a query
@@ -11504,6 +11766,15 @@ function mentionCandidates(query) {
 function updateMentionPopup() {
   const popup = document.getElementById("mentionPopup");
   if (!popup) { return; }
+  /* v2.17: while the popup's search box holds focus, the box
+     drives the list through its own input listener and this
+     tracker stands down: the document selection no longer
+     describes the editor caret, and judging the token by it
+     would close the popup out from under the search. */
+  const searchEl = mentionSearchEl();
+  if (mentionPopupOpen() && searchEl && document.activeElement === searchEl) {
+    return;
+  }
   const note = currentNote();
   const bodyEl = document.getElementById("noteBody");
   if (!note || note.trashed || note.archived || !bodyEl ||
@@ -11543,16 +11814,17 @@ function updateMentionPopup() {
   if (query !== mentionLastQuery || node !== mentionLastNode) {
     mentionLastQuery = query;
     mentionLastNode = node;
+    /* A fresh token query hands the filter back to the editor:
+       any text the search box was driving with is superseded,
+       and the box mirrors the token again. */
+    mentionBoxQuery = null;
     /* The highlight starts on the first matching note, the row the
        screenshot shows carrying "enter to add"; with no match it
        starts on the Create row, the only row there is. It resets
        when the query changes or the token under the caret is a new
        one (a different text node), never while the same token
        stands still. */
-    mentionHighlight = mentionRows.findIndex(function (row) {
-      return row.kind === "note";
-    });
-    if (mentionHighlight < 0) { mentionHighlight = 0; }
+    resetMentionHighlight();
   }
   renderMentionPopup(range);
 }
@@ -11560,13 +11832,17 @@ function updateMentionPopup() {
 function renderMentionPopup(range) {
   const popup = document.getElementById("mentionPopup");
   if (!popup) { return; }
-  popup.innerHTML = "";
-  const head = document.createElement("div");
-  head.className = "mention-head";
-  head.textContent = "Results";
-  popup.appendChild(head);
-  const list = document.createElement("div");
-  list.className = "mention-list";
+  ensureMentionChrome(popup);
+  if (range) { mentionLastRange = range; }
+  /* The search box mirrors the effective query, except while it
+     itself holds focus (its own text is then the query, and
+     rewriting it mid typing would fight the user's caret). */
+  const searchEl = mentionSearchEl();
+  if (searchEl && document.activeElement !== searchEl) {
+    searchEl.value = mentionEffectiveQuery();
+  }
+  const list = mentionListEl;
+  list.innerHTML = "";
   mentionRows.forEach(function (row, i) {
     const btn = document.createElement("button");
     btn.type = "button";
@@ -11585,7 +11861,7 @@ function renderMentionPopup(range) {
     line1.className = "mention-title";
     const line2 = document.createElement("span");
     if (row.kind === "create") {
-      line1.textContent = mentionTrigger ? mentionTrigger.query : "";
+      line1.textContent = mentionEffectiveQuery();
       line2.className = "mention-create-sub";
       line2.textContent = "Create new note";
     } else {
@@ -11598,10 +11874,9 @@ function renderMentionPopup(range) {
     btn.appendChild(texts);
     list.appendChild(btn);
   });
-  popup.appendChild(list);
   popup.classList.remove("hidden");
   setMentionHighlight(mentionHighlight);
-  positionMentionPopup(range);
+  positionMentionPopup(range || mentionLastRange);
 }
 
 /* Park the card under the caret's line, flipped above it when the
@@ -11719,8 +11994,7 @@ function pickMentionRow(i) {
   }
   let created = null;
   try {
-    created = createMentionTargetNote(
-      mentionTrigger ? mentionTrigger.query : "");
+    created = createMentionTargetNote(mentionEffectiveQuery());
   } catch (err) {
     toast("Could not create that note: " + err.message, true);
   }
@@ -11738,7 +12012,19 @@ function pickMentionRow(i) {
 function onMentionPopupKeydown(ev) {
   if (!mentionPopupOpen()) { return; }
   if (ev.key === "Escape") {
+    const trig = mentionTrigger;
     closeMentionPopup();
+    /* v2.17: Escape hands focus and the caret back to the editor,
+       which is what makes closing from the popup's search box
+       land the user where they were typing. With the caret
+       already in the editor this simply re-places it on the same
+       spot. */
+    const bodyEl0 = document.getElementById("noteBody");
+    if (trig && bodyEl0 && bodyEl0.contains(trig.node)) {
+      bodyEl0.focus();
+      placeCaretIn(trig.node, Math.min(trig.caretOffset,
+        trig.node.nodeValue ? trig.node.nodeValue.length : 0));
+    }
     ev.preventDefault();
     ev.stopPropagation();
     return;
@@ -11746,7 +12032,14 @@ function onMentionPopupKeydown(ev) {
   if (ev.key !== "ArrowDown" && ev.key !== "ArrowUp" &&
       ev.key !== "Enter" && ev.key !== "Tab") { return; }
   const bodyEl = document.getElementById("noteBody");
-  if (!bodyEl || !ev.target || !bodyEl.contains(ev.target)) { return; }
+  /* v2.17: the arrows and Enter also work from the popup's search
+     box (Tab stays the editor's alone there, so keyboard users
+     can still tab away from the box). */
+  const searchEl = mentionSearchEl();
+  const fromSearch = !!searchEl && ev.target === searchEl;
+  if (fromSearch && ev.key === "Tab") { return; }
+  if (!bodyEl || !ev.target ||
+      (!bodyEl.contains(ev.target) && !fromSearch)) { return; }
   ev.preventDefault();
   ev.stopPropagation();
   if (ev.key === "ArrowDown") {
@@ -17282,7 +17575,7 @@ function loadProviderTokenBlob() {
 
 async function storeProviderToken(provider, token) {
   if (!state.sessionKey) {
-    throw new Error("SnakeScale is not ready to save a provider sign in on this device yet.");
+    throw new Error("SnakeScale Notes is not ready to save a provider sign in on this device yet.");
   }
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const cipher = await crypto.subtle.encrypt(
@@ -17886,11 +18179,15 @@ async function autoSyncTick() {
    elements are looked up once here and restored in the finally
    block, so the working state lands correctly even if the modal
    is closed while a refresh is still running. The icon rail's
-   refresh button calls this same function directly. v2.15: the
-   labeled button in the sidebar footer (sidebarRefreshBtn) runs
-   this flow too, and the busy state below is applied to both
-   labeled buttons, so whichever one started the refresh, both
-   read "Refreshing..." and sit disabled until it finishes.
+   refresh button calls this same function directly. v2.15 added
+   a labeled button in the sidebar footer running this flow too;
+   v2.17 removed that button and put Refresh connection back in
+   the sidebar three dot menu, as the item under Sync now
+   (sidebarRefreshItem). A menu item carries no busy label: the
+   menu closes the moment it is chosen, and the run's feedback
+   is the Synced pill (the refresh ends in a sync) and the
+   closing "Connection refreshed." toast, the same feedback
+   Sync now has always given from that menu.
    Chris reached this build the hard way: his Google token expired
    mid session (browser token flows hand out no refresh token, so
    tokens live about an hour), the app told him to sign in again,
@@ -17921,9 +18218,6 @@ async function refreshGoogleConnection() {
   const busyControls = [
     { btn: document.getElementById("settingsRefreshBtn"),
       label: document.getElementById("settingsRefreshLabel"),
-      original: null },
-    { btn: document.getElementById("sidebarRefreshBtn"),
-      label: document.getElementById("sidebarRefreshBtnLabel"),
       original: null }
   ];
   busyControls.forEach(function (c) {
@@ -22318,7 +22612,7 @@ function wireEvents() {
       await createDeviceKey();
       saveSettings();
       showGoogleConnectScreen(
-        "One step left: sign in with Google. SnakeScale will create " +
+        "One step left: sign in with Google. SnakeScale Notes will create " +
         "the SnakeScale Notes folder in your Drive and your first " +
         "notebook and starter note.");
     } catch (err) {
@@ -22517,6 +22811,17 @@ function wireEvents() {
     closeSidebarMenu();
     syncNow(true);
   });
+  /* v2.17: Refresh connection sits under Sync now in this menu
+     (the v2.15 labeled button beside the pill is gone). Like
+     every item here it closes the menu first, then runs the same
+     shared refreshGoogleConnection the Settings button runs; a
+     run already in flight is refused by that function's own
+     guard, and the run's feedback is the Synced pill and its
+     closing toast. */
+  document.getElementById("sidebarRefreshItem").addEventListener("click", function () {
+    closeSidebarMenu();
+    refreshGoogleConnection().catch(function (err) { toast(err.message, true); });
+  });
   document.getElementById("sidebarMenuBtn").addEventListener("click", function (ev) {
     ev.stopPropagation();
     toggleSidebarMenu();
@@ -22571,11 +22876,10 @@ function wireEvents() {
   document.getElementById("settingsRefreshBtn").addEventListener("click", function () {
     refreshGoogleConnection().catch(function (err) { toast(err.message, true); });
   });
-  /* v2.15: the sidebar footer's labeled Refresh connection
-     button runs the same shared flow. */
-  document.getElementById("sidebarRefreshBtn").addEventListener("click", function () {
-    refreshGoogleConnection().catch(function (err) { toast(err.message, true); });
-  });
+  /* v2.15's sidebarRefreshBtn wiring lived here; v2.17 removed
+     that button, and its flow is run from the sidebar menu's
+     Refresh connection item instead (wired with the menu items
+     above). */
   document.getElementById("settingsVersionsInput").addEventListener("change",
     applyVersionsLimitFromInput);
   /* v2.16: the auto-sync toggle in Settings Connection. */
@@ -22642,6 +22946,49 @@ function wireEvents() {
     document.getElementById(id).addEventListener("input", markDirty);
     document.getElementById(id).addEventListener("change", markDirty);
   });
+
+  /* v2.17: the Tags field picker. Focus or a click into the
+     field opens it (a disabled field, which is every read only
+     note, never does); typing re-filters it; a pick is taken on
+     mousedown, before any blur can close the list, and the
+     mousedown is swallowed so the field keeps focus and caret;
+     a mousedown anywhere outside the picker and the field
+     closes it, and Escape closes it from the capture phase so
+     no other Escape handler also fires on the same press. */
+  const noteTagsInput = document.getElementById("noteTags");
+  noteTagsInput.addEventListener("focus", openTagPicker);
+  noteTagsInput.addEventListener("click", openTagPicker);
+  noteTagsInput.addEventListener("input", function () {
+    if (tagPickerOpen()) { renderTagPicker(); }
+  });
+  document.getElementById("tagPicker").addEventListener("mousedown", function (ev) {
+    ev.preventDefault();
+    const target = ev.target;
+    const rowEl = target && target.closest ?
+      target.closest("[data-tag]") : null;
+    if (rowEl) { pickTag(rowEl.getAttribute("data-tag")); }
+  });
+  /* The outside mousedown closer also recognizes a picked row
+     by its own class: pickTag's re-render detaches the row that
+     was pressed before this listener sees the event bubble up,
+     so its #tagPicker ancestor no longer resolves and a plain
+     ancestor check would close the picker the pick just
+     refreshed. */
+  document.addEventListener("mousedown", function (ev) {
+    if (!tagPickerOpen()) { return; }
+    const target = ev.target;
+    if (!target || !target.closest) { return; }
+    if (target.closest("#tagPicker") ||
+        target.closest(".tag-picker-row") ||
+        target === noteTagsInput) { return; }
+    closeTagPicker();
+  });
+  document.addEventListener("keydown", function (ev) {
+    if (ev.key !== "Escape" || !tagPickerOpen()) { return; }
+    closeTagPicker();
+    ev.preventDefault();
+    ev.stopPropagation();
+  }, true);
 
   /* v2.5: the notebook link and its menu. The link toggles the
      menu; a click anywhere outside the wrap closes it, and so
@@ -22814,6 +23161,12 @@ function wireEvents() {
   });
   const mentionPopupEl = document.getElementById("mentionPopup");
   mentionPopupEl.addEventListener("mousedown", function (ev) {
+    /* v2.17: the search box must be allowed to take focus, so a
+       mousedown on it is not swallowed; every other mousedown in
+       the popup still is, so clicking a row never moves the
+       editor selection before the click lands. */
+    const t = ev.target;
+    if (t && t.closest && t.closest(".mention-search")) { return; }
     ev.preventDefault();
   });
   mentionPopupEl.addEventListener("click", function (ev) {
