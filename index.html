@@ -40,10 +40,37 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-21-SSN-V2143
-  Version: 2.14.3
+  BUILD STAMP: 2026-10-21-SSN-V2150
+  Version: 2.15.0
 
   Revision history:
+    v2.15.0 2026-10-21 Automatic silent reconnect, and the
+                      Refresh connection button returns to the
+                      expanded sidebar. Google access tokens
+                      live about an hour and the browser token
+                      flow hands out no refresh token, so the
+                      session used to lapse mid work until the
+                      user pressed Refresh connection by hand.
+                      Every successful sign in now schedules
+                      one silent renewal a few minutes ahead of
+                      the token's recorded expiry; returning
+                      to the tab with a token expired or inside
+                      that margin attempts one too, throttled
+                      to one attempt a minute; and a Drive
+                      request answered 401 attempts one silent
+                      renewal and retries the request once
+                      with the fresh token before falling back
+                      to the established expired path. The
+                      automatic paths only ever ask GIS for a
+                      token with an empty prompt, through one
+                      shared in flight guard, so they can never
+                      raise an interactive prompt, and sign
+                      out clears the pending timer. Beside the
+                      Synced pill in the sidebar footer sits a
+                      labeled Refresh connection button again,
+                      running the same refresh flow as the
+                      Settings button, busy state included;
+                      the icon rail's button is unchanged.
     v2.14.3 2026-10-21 Three block layer fixes from one
                       diagnosis. The block drag is margin aware:
                       the insertion boundary between two blocks
@@ -1343,6 +1370,18 @@ body.dark .gate-brand .wordmark{color:#EAF3EC;}
   padding:1px 7px;font-size:16px;line-height:1;cursor:pointer;
 }
 .sidebar-menu-btn:hover{border-color:var(--accent);}
+/* v2.15: the labeled Refresh connection button beside the Synced
+   pill, in the same quiet dark chip family as the menu button.
+   Its label span swaps to "Refreshing..." while the shared
+   refresh flow runs, exactly as the Settings button's does. */
+.sidebar-refresh-btn{
+  background:#0A2E21;border:1px solid #2A5240;color:#EAF3EC;
+  border-radius:var(--radius-button);min-height:26px;
+  padding:3px 10px;font-size:12.5px;font-weight:600;line-height:1.2;
+  cursor:pointer;white-space:nowrap;
+}
+.sidebar-refresh-btn:hover{border-color:var(--accent);}
+.sidebar-refresh-btn:disabled{opacity:.65;cursor:default;}
 #sidebarMenu{
   position:absolute;z-index:60;right:0;bottom:calc(100% + 6px);
   min-width:212px;padding:6px;
@@ -3189,9 +3228,15 @@ body.dark .version-date{color:var(--accent);}
            Sign out. The icon rail keeps its own icon buttons;
            its refresh and theme buttons now call the shared
            refresh and theme functions directly, while its other
-           leaf buttons still click their counterparts here. -->
+           leaf buttons still click their counterparts here.
+           v2.15: a labeled Refresh connection button sits in
+           this row again, between the pill and the menu button,
+           running that same shared refresh flow (Chris asked
+           for it back beside the sync indicator now that the
+           connection also renews itself silently). -->
       <div class="sync-row">
         <div class="sync-pill" id="syncPill" data-state="idle"><span class="sync-dot" aria-hidden="true"></span><span class="sync-label">Not synced yet</span></div>
+        <button class="sidebar-refresh-btn" id="sidebarRefreshBtn" type="button" title="Refresh connection"><span id="sidebarRefreshBtnLabel">Refresh connection</span></button>
         <button class="sidebar-menu-btn" id="sidebarMenuBtn" type="button" aria-haspopup="true" aria-expanded="false" title="More actions" aria-label="More actions">&#8943;</button>
         <div id="sidebarMenu" class="hidden" role="menu" aria-label="Sidebar actions">
           <button class="att-menu-item" id="sidebarSyncItem" type="button" role="menuitem">Sync now</button>
@@ -4123,8 +4168,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-21-SSN-V2143";
-const APP_VERSION = "2.14.3";
+const APP_BUILD = "2026-10-21-SSN-V2150";
+const APP_VERSION = "2.15.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -4607,6 +4652,9 @@ async function signOut() {
   /* v2.8: histories and baselines belong to the signed in account;
      none of them may leak into the next sign in on this device. */
   clearVersionRuntimeState();
+  /* v2.15: signing out cancels the pending automatic renewal,
+     so no silent ask can resurrect the session just left. */
+  clearGoogleRenewalTimer();
   state.attach.googleExpiresAt = 0;
   state.attach.googleFolderId = null;
   revokeAttachmentUrls();
@@ -17095,6 +17143,12 @@ async function googleConnect(options) {
   resetDriveNotesCache();               /* v1.4: notes folders too */
   saveSettings();
   await storeProviderToken("google", resp.access_token);
+  /* v2.15: every successful connect (a gate sign in, a silent
+     renewal, a manual refresh: all of them funnel through here)
+     (re)schedules the automatic silent renewal below, so the
+     session rolls forward on its own instead of lapsing at the
+     hour while the app sits open. */
+  scheduleGoogleRenewal();
   /* v2.0: the attachments folder is NOT prepared here. It is created
      lazily, on the first attachment upload or by the one time legacy
      consolidation in the connect flow, so a sign in by itself never
@@ -17117,6 +17171,111 @@ async function googleTrySilentSignIn() {
   }
 }
 
+/* v2.15: automatic silent renewal. Google's browser token flow
+   hands out no refresh token, so an access token lives about an
+   hour; until this build the session simply lapsed at the hour
+   and the next Drive call surfaced the "sign in expired" path
+   until the user pressed Refresh connection by hand. Renewal is
+   still the same silent ask (googleTrySilentSignIn, an empty GIS
+   prompt: a token only when Google can issue one without showing
+   an interaction), now attempted on its own in three places:
+     - a timer set for a few minutes ahead of the recorded
+       expiry after every successful connect;
+     - a return to the tab when the token is expired or inside
+       that same margin (browsers throttle timers in background
+       tabs, so the timer alone cannot be trusted), throttled to
+       one attempt a minute;
+     - a Drive request answered 401 (gdriveFetch), which retries
+       the request once with the fresh token.
+   All three run through renewGoogleSilently, one shared in
+   flight guard, so they can never race each other into parallel
+   token requests, and none of them can ever raise an
+   interactive prompt: the interactive consent attempt belongs
+   to the manual Refresh connection flow alone. A failed
+   automatic renewal changes nothing: no timer is rescheduled
+   (googleConnect did not run), the session state is left
+   exactly as it was, and the remaining triggers, or the manual
+   button, get their own chance later. */
+const GOOGLE_RENEW_MARGIN_MS = 5 * 60 * 1000;
+let googleRenewalTimer = null;
+let googleRenewalInFlight = null;
+let googleRenewalLastAttemptAt = 0;
+
+/* When the next renewal should fire, in milliseconds from now.
+   The plain rule is expiry minus the five minute margin. When
+   that moment is already past, or less than a minute away (a
+   very short lived token, a clock that jumped), firing at half
+   the remaining life keeps the renewal ahead of the expiry
+   instead of hard on its heels; the one second floor keeps a
+   nearly dead token from spinning the timer. */
+function googleRenewalDelayMs() {
+  const remaining = state.attach.googleExpiresAt - Date.now();
+  let delay = remaining - GOOGLE_RENEW_MARGIN_MS;
+  if (delay < 60 * 1000) {
+    delay = Math.max(1000, Math.floor(remaining / 2));
+  }
+  return delay;
+}
+
+function clearGoogleRenewalTimer() {
+  if (googleRenewalTimer !== null) {
+    clearTimeout(googleRenewalTimer);
+    googleRenewalTimer = null;
+  }
+}
+
+function scheduleGoogleRenewal() {
+  clearGoogleRenewalTimer();
+  if (!state.providerTokens.google || !state.attach.googleExpiresAt) {
+    return;
+  }
+  googleRenewalTimer = setTimeout(function () {
+    googleRenewalTimer = null;
+    renewGoogleSilently().catch(function () { return false; });
+  }, googleRenewalDelayMs());
+}
+
+/* The one silent renewal every automatic trigger shares. A
+   trigger that arrives while a renewal is already running gets
+   that renewal's promise instead of starting a second one.
+   Resolves true when a fresh token was recorded (which also
+   rescheduled the timer, through googleConnect), false when
+   the silent ask failed. Never throws. */
+function renewGoogleSilently() {
+  if (googleRenewalInFlight) { return googleRenewalInFlight; }
+  googleRenewalLastAttemptAt = Date.now();
+  googleRenewalInFlight = (async function () {
+    try {
+      return await googleTrySilentSignIn();
+    } catch (e) {
+      return false;
+    } finally {
+      googleRenewalInFlight = null;
+    }
+  })();
+  return googleRenewalInFlight;
+}
+
+/* The visibility trigger: the tab came back to the foreground.
+   Renew only when a session exists on this device (a token in
+   memory or in the encrypted store) and the token is expired or
+   inside the renewal margin, and at most once a minute: the
+   timer and the 401 recovery stamp the same last attempt time,
+   so a tab return right after either of them renewed does not
+   immediately ask again. */
+function maybeRenewGoogleOnVisible() {
+  if (document.visibilityState !== "visible") { return; }
+  if (!state.providerTokens.google && !loadProviderTokenBlob().google) {
+    return;
+  }
+  if (state.attach.googleExpiresAt &&
+      Date.now() <= state.attach.googleExpiresAt - GOOGLE_RENEW_MARGIN_MS) {
+    return;
+  }
+  if (Date.now() - googleRenewalLastAttemptAt < 60 * 1000) { return; }
+  renewGoogleSilently().catch(function () { return false; });
+}
+
 /* v2.2: Refresh connection. Through v2.6.0 it was a standalone
    sidebar button next to Sign out; v2.7 moved it into the sidebar
    footer's three dot menu, and v2.8 moved it again, into the
@@ -17125,7 +17284,11 @@ async function googleTrySilentSignIn() {
    elements are looked up once here and restored in the finally
    block, so the working state lands correctly even if the modal
    is closed while a refresh is still running. The icon rail's
-   refresh button calls this same function directly.
+   refresh button calls this same function directly. v2.15: the
+   labeled button in the sidebar footer (sidebarRefreshBtn) runs
+   this flow too, and the busy state below is applied to both
+   labeled buttons, so whichever one started the refresh, both
+   read "Refreshing..." and sit disabled until it finishes.
    Chris reached this build the hard way: his Google token expired
    mid session (browser token flows hand out no refresh token, so
    tokens live about an hour), the app told him to sign in again,
@@ -17153,11 +17316,21 @@ let refreshConnectionRunning = false;
 async function refreshGoogleConnection() {
   if (refreshConnectionRunning) { return; }
   refreshConnectionRunning = true;
-  const btn = document.getElementById("settingsRefreshBtn");
-  const labelEl = document.getElementById("settingsRefreshLabel");
-  const originalLabel = labelEl ? labelEl.textContent : "Refresh connection";
-  if (btn) { btn.disabled = true; }
-  if (labelEl) { labelEl.textContent = "Refreshing..."; }
+  const busyControls = [
+    { btn: document.getElementById("settingsRefreshBtn"),
+      label: document.getElementById("settingsRefreshLabel"),
+      original: null },
+    { btn: document.getElementById("sidebarRefreshBtn"),
+      label: document.getElementById("sidebarRefreshBtnLabel"),
+      original: null }
+  ];
+  busyControls.forEach(function (c) {
+    if (c.btn) { c.btn.disabled = true; }
+    if (c.label) {
+      c.original = c.label.textContent;
+      c.label.textContent = "Refreshing...";
+    }
+  });
   try {
     /* (a) Persist the open note locally before touching the token,
        through the same local save path the app uses before locking:
@@ -17219,14 +17392,21 @@ async function refreshGoogleConnection() {
       "changes are saved on this device; try again in a moment.", true);
   } finally {
     refreshConnectionRunning = false;
-    if (btn) { btn.disabled = false; }
-    if (labelEl) { labelEl.textContent = originalLabel; }
+    busyControls.forEach(function (c) {
+      if (c.btn) { c.btn.disabled = false; }
+      if (c.label && c.original !== null) {
+        c.label.textContent = c.original;
+      }
+    });
   }
 }
 
 async function googleDisconnect() {
   const token = await getProviderToken("google");
   clearProviderToken("google");
+  /* v2.15: the session this disconnect drops is the one the
+     renewal timer serves; cancel the timer with the token. */
+  clearGoogleRenewalTimer();
   state.attach.googleExpiresAt = 0;
   state.attach.googleFolderId = null;
   resetDriveNotesCache();
@@ -17254,21 +17434,37 @@ async function googleGetStatus() {
 }
 
 /* Shared Drive fetch: attaches the token, converts a 401 into the
-   readable "sign in expired" path, and normalizes network failures. */
+   readable "sign in expired" path, and normalizes network failures.
+   v2.15: a first 401 no longer gives up on the spot. One silent
+   renewal is attempted (renewGoogleSilently, the shared guard,
+   empty prompt only), and when it lands a fresh token the
+   request is retried exactly once with it: every caller through
+   here sends a string body or no body, so a retry replays the
+   request faithfully. Only when the renewal fails, or the
+   retry is answered 401 as well, does the established path run:
+   token cleared, expiry zeroed, the reconnect error thrown.
+   One renewal and one retry per call, never a loop. */
 async function gdriveFetch(url, options) {
-  const token = await getGoogleAccessToken();
   options = options || {};
-  const headers = Object.assign({}, options.headers || {},
-    { "Authorization": "Bearer " + token });
-  let res;
-  try {
-    res = await fetch(url, Object.assign({}, options, { headers: headers }));
-  } catch (e) {
-    const err = new Error("Network error talking to Google Drive. You appear to be offline.");
-    err.offline = true;
-    throw err;
+  async function attempt() {
+    const token = await getGoogleAccessToken();
+    const headers = Object.assign({}, options.headers || {},
+      { "Authorization": "Bearer " + token });
+    try {
+      return await fetch(url, Object.assign({}, options, { headers: headers }));
+    } catch (e) {
+      const err = new Error("Network error talking to Google Drive. You appear to be offline.");
+      err.offline = true;
+      throw err;
+    }
   }
+  let res = await attempt();
   if (res.status === 401) {
+    const renewed = await renewGoogleSilently();
+    if (renewed) {
+      res = await attempt();
+      if (res.status !== 401) { return res; }
+    }
     clearProviderToken("google");
     state.attach.googleExpiresAt = 0;
     saveSettings();
@@ -21767,6 +21963,11 @@ function wireEvents() {
   document.getElementById("settingsRefreshBtn").addEventListener("click", function () {
     refreshGoogleConnection().catch(function (err) { toast(err.message, true); });
   });
+  /* v2.15: the sidebar footer's labeled Refresh connection
+     button runs the same shared flow. */
+  document.getElementById("sidebarRefreshBtn").addEventListener("click", function () {
+    refreshGoogleConnection().catch(function (err) { toast(err.message, true); });
+  });
   document.getElementById("settingsVersionsInput").addEventListener("change",
     applyVersionsLimitFromInput);
 
@@ -22887,6 +23088,14 @@ function wireEvents() {
   window.addEventListener("offline", function () {
     state.online = false;
     refreshSyncPill();
+  });
+
+  /* v2.15: returning to the tab is a renewal trigger (see
+     maybeRenewGoogleOnVisible): background tabs get their
+     timers throttled, so the scheduled renewal may not have
+     run while the user was away. */
+  document.addEventListener("visibilitychange", function () {
+    maybeRenewGoogleOnVisible();
   });
 }
 
