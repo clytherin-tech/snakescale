@@ -71,6 +71,7 @@ Everything lives in one folder in your Google Drive, named SnakeScale Notes.
 - Image transcription (new in v2.11.0): the image menu's Transcribe loads the Tesseract.js OCR library from the jsDelivr CDN the first time it is used, and only then. The recognition itself runs entirely in your browser on the image you chose; the image and its text are never sent anywhere. Nothing about it is loaded at startup, and it needs an internet connection only for that first library download.
 - Settings or storage left on a device by a version before v2.0 (including an old app password vault record) are cleaned up automatically on first load; your Google settings, cache, and notes are not affected.
 - SnakeScale Notes is not affiliated with Evernote Corporation.
+- The published [Privacy Policy](https://clytherin-tech.github.io/snakescale/privacy.html) and [Terms of Service](https://clytherin-tech.github.io/snakescale/terms.html) live in this repo as privacy.html and terms.html.
 
 ## License
 
