@@ -40,10 +40,50 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-20-SSN-V290
-  Version: 2.9.0
+  BUILD STAMP: 2026-10-20-SSN-V2100
+  Version: 2.10.0
 
   Revision history:
+    v2.10.0 2026-10-20 The link hover bar and view modes come to
+                      note links. A Link to Note anchor (ssnote:)
+                      now summons the same linkBar on hover rest
+                      that web links get (a plain click still opens
+                      the target note at once, in every mode), with
+                      a page icon and the target's CURRENT title as
+                      its label; the label button opens the target
+                      through the same navigation a click runs. The
+                      pencil edits a note link's text and offers a
+                      Change note control that reopens the note
+                      picker to retarget it (text that just repeated
+                      the old target's title follows to the new one;
+                      your own words never move). Copy, from the
+                      bar, the menu, or the Mention card below,
+                      copies the note link itself as a rich anchor
+                      with the target's title as the plain text
+                      fallback, so pasting into another note
+                      recreates a working note link. The View Link
+                      As menu for a note link gains a fourth mode,
+                      Title, between Text and Preview: Mention,
+                      Text, Title, Preview, then Copy URL and
+                      Delete (the last two now carry icons in both
+                      link kinds' menus). Mention shows a page icon
+                      and a label (your custom text, or the
+                      target's live title) and, on hover instead of
+                      the bar, a floating preview card: the
+                      target's notebook, Copy Link and menu
+                      buttons, its title, an excerpt of its body,
+                      and its updated time. Title is a full width
+                      bar with the target's title in bold and its
+                      notebook beside it; Preview is a card with
+                      the title, the updated time, the excerpt,
+                      and the notebook at the bottom. Every face is
+                      resolved live from the target note (live,
+                      Trash, and Archive lists, like the tooltips),
+                      is runtime only and stripped by the same save
+                      funnel, and a target that no longer exists
+                      falls back to plain Text in every mode.
+                      Nothing about a note link ever touches the
+                      network: no Microlink lookup is involved.
     v2.9.0 2026-10-20 A link hover bar with view modes, and real
                       link info from Microlink. The v1.3 click popup
                       is replaced by one dark floating bar (linkBar)
@@ -1875,12 +1915,17 @@ body.note-drag-active{touch-action:none;overscroll-behavior:none;}
 .link-bar-btn[aria-expanded="true"]{background:rgba(87,167,115,.25);color:#FFFFFF;}
 .link-bar-btn svg{display:block;}
 /* The View Link As menu: a card hanging under the bar's right
-   edge. It is a child of the (fixed) bar, so it inherits the
-   bar's clamping and travels with it. The dot slot keeps every
-   row aligned; the current mode's row fills its dot and bolds,
-   the visual marker Chris's screenshot shows on Text. */
+   edge. Through v2.9 it was a child of the bar and inherited
+   the bar's position; v2.10 moves it out to be the bar's
+   sibling with its own fixed position, set by the script at
+   open time, because the note link Mention card (below) must
+   open the very same menu while the bar stays hidden. The dot
+   slot keeps the mode rows aligned; the current mode's row
+   fills its dot and bolds, the visual marker Chris's
+   screenshot shows on Text. Copy URL and Delete carry icons
+   instead of dots, as in Chris's note link menu screenshot. */
 #linkViewMenu{
-  position:absolute;top:calc(100% + 6px);right:0;
+  position:fixed;z-index:63;
   min-width:200px;padding:6px;
   background:#0E241A;border:1px solid var(--secondary);
   border-radius:12px;box-shadow:0 12px 30px rgba(6,32,22,.38);
@@ -1902,6 +1947,9 @@ body.note-drag-active{touch-action:none;overscroll-behavior:none;}
 .link-view-dot{
   width:7px;height:7px;border-radius:50%;flex:none;background:transparent;
 }
+.link-view-icon{display:inline-flex;flex:none;color:#C9DFCE;}
+.link-view-item.danger .link-view-icon{color:#F0A79E;}
+.link-view-icon svg{display:block;}
 .link-view-item.active{font-weight:700;}
 .link-view-item.active .link-view-dot{background:var(--accent);}
 .link-view-sep{height:1px;background:rgba(159,212,178,.28);margin:4px 2px;}
@@ -1914,26 +1962,31 @@ body.note-drag-active{touch-action:none;overscroll-behavior:none;}
    its data-ss-link-view attribute, which IS saved, and these
    attribute selectors are what dress it as a chip or a card. */
 #noteBody .ss-link-original{display:none;}
-#noteBody a[data-ss-link-view="mention"]{
+/* v2.10: the chip and card anchor rules in this block dress WEB
+   links. Since v2.10 note links carry view modes too, the web
+   rules exclude ssnote: anchors explicitly (the href prefix is
+   the one trait every note link has, class or not); the note
+   link faces further below have their own rules. */
+#noteBody a[data-ss-link-view="mention"]:not([href^="ssnote:"]){
   display:inline-flex;align-items:center;
   background:var(--soft);border:1px solid var(--border);
   border-radius:999px;padding:1px 9px 1px 6px;margin:0 1px;
   color:var(--primary);text-decoration:none;font-weight:600;
 }
-#noteBody a[data-ss-link-view="mention"]:hover{border-color:var(--accent);}
+#noteBody a[data-ss-link-view="mention"]:not([href^="ssnote:"]):hover{border-color:var(--accent);}
 .ss-link-face{display:inline-flex;align-items:center;gap:5px;user-select:none;}
 .ss-link-face-logo{
   width:15px;height:15px;border-radius:4px;object-fit:contain;flex:none;
 }
 .ss-link-face-globe{display:inline-flex;color:var(--secondary);flex:none;}
 .ss-link-face-globe svg{display:block;}
-#noteBody a[data-ss-link-view="preview"]{
+#noteBody a[data-ss-link-view="preview"]:not([href^="ssnote:"]){
   display:block;margin:10px 0;padding:10px 12px;
   border:1px solid var(--border);border-radius:var(--radius-card);
   background:var(--surface);color:var(--text);text-decoration:none;
   box-shadow:var(--shadow);
 }
-#noteBody a[data-ss-link-view="preview"]:hover{border-color:var(--accent);}
+#noteBody a[data-ss-link-view="preview"]:not([href^="ssnote:"]):hover{border-color:var(--accent);}
 .ss-link-face-preview{
   display:flex;gap:12px;align-items:flex-start;width:100%;
 }
@@ -1953,6 +2006,92 @@ body.note-drag-active{touch-action:none;overscroll-behavior:none;}
   font-size:12px;color:var(--secondary);
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
 }
+/* v2.10: note link faces. A note link's Mention, Title, and
+   Preview are dressed here, keyed off the ssnote: href prefix
+   so they can never collide with the web link rules above.
+   Every string in them is resolved live from the target note
+   by decoration, and the faces are the same runtime only
+   .ss-link-face nodes the save funnel strips, so these rules,
+   like the web ones, only ever style the live editor.
+   Mention stays inline: a page icon and a label, the accent
+   link look the note link already had. Title is a full width
+   bar: page icon, the target's title in bold, its notebook
+   name muted beside it. Preview is a block card: title and
+   updated time on one row, the excerpt under them, and a
+   notebook row at the bottom. */
+#noteBody a[href^="ssnote:"][data-ss-link-view="title"],
+#noteBody a[href^="ssnote:"][data-ss-link-view="preview"]{
+  display:block;margin:10px 0;padding:11px 13px;
+  border:1px solid var(--border);border-radius:var(--radius-card);
+  background:var(--surface);color:var(--text);text-decoration:none;
+  box-shadow:var(--shadow);
+}
+#noteBody a[href^="ssnote:"][data-ss-link-view="title"]:hover,
+#noteBody a[href^="ssnote:"][data-ss-link-view="preview"]:hover{
+  border-color:var(--accent);
+}
+.ss-link-face-page{display:inline-flex;color:var(--secondary);flex:none;}
+.ss-link-face-page svg{display:block;}
+.ss-link-face-note-mention{gap:4px;}
+.ss-link-face-note-title{
+  display:flex;align-items:center;gap:8px;width:100%;
+}
+.ss-link-face-note-title .nl-face-title{
+  font-weight:700;font-size:15px;line-height:1.3;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.ss-link-face-note-title .nl-face-notebook{
+  font-size:13px;color:var(--muted);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.ss-link-face-note-preview{
+  display:flex;flex-direction:column;gap:6px;width:100%;
+  align-items:stretch;
+}
+.nl-face-head{
+  display:flex;align-items:baseline;justify-content:space-between;gap:12px;
+}
+.nl-face-head .nl-face-title{
+  font-weight:700;font-size:15px;line-height:1.3;min-width:0;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.nl-face-time{font-size:12px;color:var(--muted);white-space:nowrap;flex:none;}
+.nl-face-excerpt{font-size:13.5px;line-height:1.45;color:var(--text);}
+.nl-face-foot{
+  display:flex;align-items:center;gap:6px;
+  font-size:12.5px;color:var(--muted);
+}
+.nl-face-foot .ss-link-face-page{color:var(--muted);}
+/* v2.10: the note link Mention hover card. Dark like the link
+   bar it stands in for (the two are siblings in the editor,
+   both outside #noteBody, both fixed position set by the
+   script): the target's notebook at the top left, Copy Link
+   and three dot buttons at the top right, then the target's
+   title, an excerpt of its body, and its updated time. It
+   appears under the hovered Mention (above it when there is
+   no room) and follows the bar's hover discipline. */
+#noteLinkCard{
+  position:fixed;z-index:62;width:min(330px,94vw);padding:10px 12px;
+  background:#0E241A;border:1px solid var(--secondary);
+  border-radius:12px;box-shadow:0 12px 30px rgba(6,32,22,.38);
+  color:#EAF3EC;
+}
+#noteLinkCard.hidden{display:none;}
+.nl-card-head{
+  display:flex;align-items:center;justify-content:space-between;gap:8px;
+}
+#noteLinkCardNotebook{
+  font-size:12.5px;color:#9FD4B2;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.nl-card-actions{display:flex;gap:2px;flex:none;}
+#noteLinkCardTitle{font-weight:700;font-size:15px;line-height:1.3;margin-top:6px;}
+#noteLinkCardExcerpt{font-size:13px;line-height:1.45;color:#C9DFCE;margin-top:3px;}
+#noteLinkCardTime{font-size:12px;color:#9FD4B2;margin-top:7px;}
+/* v2.10: while the bar serves a note link, its main label is a
+   note title rather than an address, so it drops the underline
+   the address wears. */
+#linkBar.note-mode #linkBarUrl{text-decoration:none;}
 /* v1.3.2 link edit form: replaces the normal view inside the same card
    while editing. The fields follow the app's standard input styling.
    Being part of the popup, the form is still outside #noteBody and can
@@ -1969,6 +2108,13 @@ body.note-drag-active{touch-action:none;overscroll-behavior:none;}
   box-shadow:0 0 0 3px rgba(87,167,115,.22);
 }
 .link-edit-actions{display:flex;gap:8px;justify-content:flex-end;}
+/* v2.10: the note link edit row: the target's title beside a
+   Change note button that reopens the note picker. */
+.link-edit-note-line{display:flex;align-items:center;gap:8px;}
+#linkEditNoteName{
+  flex:1;min-width:0;font-size:13.5px;font-weight:600;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
 /* v1.3.1: the one line link hint in the editor footer, beside the save
    state. It wraps away on narrow screens so the footer never crowds. */
 .editor-hint{font-size:12.5px;color:var(--muted);}
@@ -2908,20 +3054,63 @@ body.dark .version-date{color:var(--accent);}
                 <label for="linkEditUrl">Link address</label>
                 <input type="text" id="linkEditUrl" autocomplete="off" spellcheck="false">
               </div>
+              <!-- v2.10: a note link's edit state swaps the address
+                   row for this one: the note it points at, and a
+                   Change note button that reopens the Link to Note
+                   picker as a retarget picker. Exactly one of the
+                   two rows is visible, decided when the form
+                   opens. -->
+              <div class="link-edit-field hidden" id="linkEditNoteRow">
+                <label>Links to</label>
+                <div class="link-edit-note-line">
+                  <span id="linkEditNoteName"></span>
+                  <button class="btn small" id="linkEditChangeNoteBtn" type="button">Change note</button>
+                </div>
+              </div>
               <div class="link-edit-actions">
                 <button class="btn small" id="linkEditCancel" type="button">Cancel</button>
                 <button class="btn small accent" id="linkEditSave" type="button">Save</button>
               </div>
             </div>
-            <div id="linkViewMenu" class="hidden" role="menu" aria-label="View link as">
-              <div class="link-view-header">VIEW LINK AS</div>
-              <button class="link-view-item" type="button" role="menuitem" data-link-view="mention"><span class="link-view-dot" aria-hidden="true"></span>Mention</button>
-              <button class="link-view-item" type="button" role="menuitem" data-link-view="text"><span class="link-view-dot" aria-hidden="true"></span>Text</button>
-              <button class="link-view-item" type="button" role="menuitem" data-link-view="preview"><span class="link-view-dot" aria-hidden="true"></span>Preview</button>
-              <div class="link-view-sep"></div>
-              <button class="link-view-item" type="button" role="menuitem" id="linkViewCopyBtn"><span class="link-view-dot" aria-hidden="true"></span>Copy URL</button>
-              <button class="link-view-item danger" type="button" role="menuitem" id="linkViewDeleteBtn"><span class="link-view-dot" aria-hidden="true"></span>Delete</button>
+          </div>
+          <!-- v2.10: the View Link As menu is the link bar's
+               SIBLING now, not its child (through v2.9 it hung
+               inside the bar). The note link Mention card below
+               opens this same menu while the bar stays hidden,
+               which a child of the bar could never do. The script
+               positions it under whichever surface summoned it.
+               The Title row is a note link only mode; the script
+               hides it for web links. Copy URL and Delete carry
+               icons, as in Chris's note link menu screenshot. -->
+          <div id="linkViewMenu" class="hidden" role="menu" aria-label="View link as">
+            <div class="link-view-header">VIEW LINK AS</div>
+            <button class="link-view-item" type="button" role="menuitem" data-link-view="mention"><span class="link-view-dot" aria-hidden="true"></span>Mention</button>
+            <button class="link-view-item" type="button" role="menuitem" data-link-view="text"><span class="link-view-dot" aria-hidden="true"></span>Text</button>
+            <button class="link-view-item" type="button" role="menuitem" data-link-view="title"><span class="link-view-dot" aria-hidden="true"></span>Title</button>
+            <button class="link-view-item" type="button" role="menuitem" data-link-view="preview"><span class="link-view-dot" aria-hidden="true"></span>Preview</button>
+            <div class="link-view-sep"></div>
+            <button class="link-view-item" type="button" role="menuitem" id="linkViewCopyBtn"><span class="link-view-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></span>Copy URL</button>
+            <button class="link-view-item danger" type="button" role="menuitem" id="linkViewDeleteBtn"><span class="link-view-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="M6 7l1 13h10l1-13"/><path d="M10 11v6"/><path d="M14 11v6"/></svg></span>Delete</button>
+          </div>
+          <!-- v2.10: the note link Mention hover card. Resting the
+               mouse on a note link shown as a Mention shows this
+               card under it INSTEAD of the link bar: the target
+               note's notebook, Copy Link and menu buttons, its
+               title, an excerpt of its body, and its updated
+               time, all resolved live from the target. A sibling
+               of #noteBody like the bar, so it can never be saved
+               into a note. Hidden by default. -->
+          <div id="noteLinkCard" class="hidden" role="dialog" aria-label="Linked note preview">
+            <div class="nl-card-head">
+              <span id="noteLinkCardNotebook"></span>
+              <span class="nl-card-actions">
+                <button class="link-bar-btn" id="noteLinkCardCopyBtn" type="button" aria-label="Copy link to this note" title="Copy Link"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
+                <button class="link-bar-btn" id="noteLinkCardMenuBtn" type="button" aria-label="More options" title="More options" aria-haspopup="menu" aria-expanded="false"><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg></button>
+              </span>
             </div>
+            <div id="noteLinkCardTitle"></div>
+            <div id="noteLinkCardExcerpt"></div>
+            <div id="noteLinkCardTime"></div>
           </div>
           <!-- v1.7: the selected image's action menu, a SIBLING of
                #noteBody like the link popup, so it can never be saved
@@ -3236,8 +3425,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-20-SSN-V290";
-const APP_VERSION = "2.9.0";
+const APP_BUILD = "2026-10-20-SSN-V2100";
+const APP_VERSION = "2.10.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -6319,7 +6508,8 @@ function anyOverlayOpen() {
   if (noteDrag) { return true; }
   const ids = ["noteLinkModal", "settingsModal", "versionHistoryModal",
     "nbDropOverlay", "notebookMenu",
-    "railFlyout", "linkBar", "linkViewMenu", "tableMenu", "cellMenu", "attMenu",
+    "railFlyout", "linkBar", "linkViewMenu", "noteLinkCard",
+    "tableMenu", "cellMenu", "attMenu",
     "exportMenu", "sidebarMenu"];
   for (let i = 0; i < ids.length; i++) {
     const el = document.getElementById(ids[i]);
@@ -7965,8 +8155,18 @@ function collectEditor(note) {
    the link's display mode between Text, Mention, and Preview, copies
    the address, or deletes the link and its text together. The display
    modes and the Microlink info behind them live further down in this
-   block. Note links (ssnote:) never show the bar; they keep their own
-   click behavior entirely.
+   block.
+   v2.10: note links (ssnote:) join the bar. Through v2.9 they never
+   showed it; now the same bar serves them, with a page icon and the
+   target note's current title for a label, an edit state that edits
+   the text and can retarget the link through the note picker, a copy
+   that copies the note link itself, and a fourth display mode,
+   Title, in their menu. Their click behavior does not change at
+   all: a plain click on a note link still opens the target note
+   immediately, in every mode, and the bar is a hover rest surface
+   for them. A note link shown as a Mention does not even do that:
+   hovering it shows a floating preview card of the target note
+   instead of the bar (see the card block below the bar's).
    Safety: only http, https, and mailto links may open, and the same
    rule validates a saved edit. Anything else (javascript:, data:, a
    malformed string) is refused with a toast. The bar element lives
@@ -8047,6 +8247,11 @@ function hideLinkBar() {
   const bar = document.getElementById("linkBar");
   if (bar) { bar.classList.add("hidden"); }
   closeLinkViewMenu();
+  /* v2.10: the Mention hover card is the same UI wearing another
+     face, so the one hide closes it too. Every app level hide
+     (note switch, lock, scroll, Escape, another overlay) therefore
+     puts the card away without a second rule anywhere. */
+  hideNoteLinkCard();
   linkBarHref = "";
   linkBarAnchor = null;
   linkBarHoverAnchor = null;
@@ -8097,23 +8302,90 @@ function positionLinkBar(anchor) {
 }
 
 /* v2.9: is this anchor one the link bar serves? External anchors
-   only (http, https, mailto, the same set linkOpenTarget judges):
-   note links keep their own behavior, anchors inside attachment
-   placeholders are attachment furniture rather than text links,
-   anchors in a locked (Trash or Archive) note get no bar because
-   every bar action edits the note, and the History preview is not
-   #noteBody at all, so its links are already out of reach here. */
+   (http, https, mailto, the same set linkOpenTarget judges):
+   anchors inside attachment placeholders are attachment
+   furniture rather than text links, anchors in a locked (Trash
+   or Archive) note get no bar because every bar action edits
+   the note, and the History preview is not #noteBody at all,
+   so its links are already out of reach here.
+   v2.10: note links are served too, under the same lock and
+   furniture rules. The bar is only ever a hover surface for
+   them (their click still opens the target, handled before
+   this is consulted in the click listener), and one of their
+   modes, Mention, swaps the bar for its hover card at schedule
+   time instead; this function only answers "is the link UI
+   allowed here at all". */
 function linkBarAnchorFor(anchor) {
   if (!anchor || !anchor.getAttribute) { return null; }
   const bodyEl = document.getElementById("noteBody");
   if (!bodyEl || !bodyEl.contains(anchor)) { return null; }
   if (anchor.closest && anchor.closest(".ss-attachment")) { return null; }
-  if (noteLinkIdOf(anchor)) { return null; }
   const note = currentNote();
   if (!note || note.trashed || note.archived) { return null; }
+  if (noteLinkIdOf(anchor)) { return anchor; }
   const href = anchor.href || anchor.getAttribute("href") || "";
   if (!linkOpenTarget(href)) { return null; }
   return anchor;
+}
+
+/* v2.10: the bar's face for the link it refers to: which icon
+   leads it, what its main label says, and what the copy button
+   calls itself. A web link leads with the globe and shows its
+   resolved address (the displayed address is a real link
+   element whose href mirrors the address; its click is
+   intercepted and routed through openNoteLink, so the protocol
+   safety check always applies and the app window itself never
+   navigates). A note link leads with a page icon and shows the
+   target note's CURRENT title, resolved live the same way the
+   tooltips resolve it (live notes, Trash, and Archive),
+   falling back to the link's own text when the target is gone;
+   the bar wears the note-mode class then, so the label reads
+   as a title rather than an address. */
+let linkBarGlobeMarkup = null;
+const LINK_BAR_PAGE_ICON =
+  "<svg viewBox=\"0 0 24 24\" width=\"16\" height=\"16\" fill=\"none\" " +
+  "stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" " +
+  "stroke-linejoin=\"round\"><path d=\"M7 3h7l4 4v14H7z\"/>" +
+  "<path d=\"M14 3v4h4\"/><path d=\"M9.5 12h5\"/>" +
+  "<path d=\"M9.5 15.5h5\"/></svg>";
+
+function refreshLinkBarFace() {
+  const anchor = linkBarAnchor;
+  const bar = document.getElementById("linkBar");
+  const iconEl = document.getElementById("linkBarGlobe");
+  const urlEl = document.getElementById("linkBarUrl");
+  const copyBtn = document.getElementById("linkBarCopyBtn");
+  if (!anchor || !urlEl) { return; }
+  if (linkBarGlobeMarkup === null && iconEl) {
+    linkBarGlobeMarkup = iconEl.innerHTML;
+  }
+  const noteId = noteLinkIdOf(anchor);
+  if (noteId) {
+    const target = findNoteById(noteId);
+    const label = target ? (target.title || "Untitled note") :
+      linkOriginalText(anchor);
+    if (iconEl) { iconEl.innerHTML = LINK_BAR_PAGE_ICON; }
+    urlEl.textContent = label;
+    urlEl.setAttribute("title", label);
+    urlEl.setAttribute("href", "#");
+    if (bar) { bar.classList.add("note-mode"); }
+    if (copyBtn) {
+      copyBtn.setAttribute("title", "Copy link");
+      copyBtn.setAttribute("aria-label", "Copy link to this note");
+    }
+    return;
+  }
+  if (iconEl && linkBarGlobeMarkup !== null) {
+    iconEl.innerHTML = linkBarGlobeMarkup;
+  }
+  urlEl.textContent = linkBarHref;
+  urlEl.setAttribute("title", linkBarHref);
+  urlEl.setAttribute("href", linkBarHref);
+  if (bar) { bar.classList.remove("note-mode"); }
+  if (copyBtn) {
+    copyBtn.setAttribute("title", "Copy URL");
+    copyBtn.setAttribute("aria-label", "Copy link address");
+  }
 }
 
 /* Show the bar for a link, always in its normal view. */
@@ -8123,18 +8395,19 @@ function showLinkBar(anchor) {
   if (linkBarShowTimer) { clearTimeout(linkBarShowTimer); linkBarShowTimer = null; }
   linkBarShowAnchor = null;
   if (linkBarHideTimer) { clearTimeout(linkBarHideTimer); linkBarHideTimer = null; }
-  /* anchor.href is the browser resolved absolute URL, which is both
-     what the bar should display and what clicking it will open. */
-  linkBarHref = anchor.href || anchor.getAttribute("href") || "";
+  /* v2.10: the bar and the Mention hover card are two faces of
+     the one link UI; showing one puts the other away. */
+  hideNoteLinkCard();
   linkBarAnchor = anchor;
-  const urlEl = document.getElementById("linkBarUrl");
-  urlEl.textContent = linkBarHref;
-  urlEl.setAttribute("title", linkBarHref);
-  /* The displayed address is a real link element; its href mirrors
-     the address, but its click is intercepted and routed through
-     openNoteLink, so the protocol safety check always applies and
-     the app window itself never navigates. */
-  urlEl.setAttribute("href", linkBarHref);
+  /* anchor.href is the browser resolved absolute URL for a web
+     link, which is both what the bar should display and what
+     clicking it will open. A note link has no meaningful
+     resolved URL: its raw ssnote: attribute is its identity,
+     so that is what is kept for it. */
+  linkBarHref = noteLinkIdOf(anchor) ?
+    (anchor.getAttribute("href") || "") :
+    (anchor.href || anchor.getAttribute("href") || "");
+  refreshLinkBarFace();
   setLinkBarMode(false);
   closeLinkViewMenu();
   bar.classList.remove("hidden");
@@ -8155,6 +8428,14 @@ const LINK_BAR_GRACE_MS = 250;
 function scheduleLinkBarShow(anchor) {
   linkBarHoverAnchor = anchor;
   if (linkBarHideTimer) { clearTimeout(linkBarHideTimer); linkBarHideTimer = null; }
+  /* v2.10: sliding directly from a Mention's hover card onto a
+     bar link swaps the surface at once, the same continuity
+     rule as sliding between two bar links below. */
+  if (noteLinkCardVisible()) {
+    hideNoteLinkCard();
+    showLinkBar(anchor);
+    return;
+  }
   if (linkBarVisible() && !linkBarEditing) {
     if (linkBarAnchor !== anchor) { showLinkBar(anchor); }
     return;
@@ -8197,6 +8478,191 @@ function cancelLinkBarHide() {
   if (linkBarHideTimer) { clearTimeout(linkBarHideTimer); linkBarHideTimer = null; }
 }
 
+/* ----- v2.10: the note link Mention hover card --------------------------
+   Resting the mouse on a note link shown as a Mention does NOT
+   summon the bar above. It shows this card instead, under the
+   mention (above it when there is no room): the target note's
+   notebook at the top left, a Copy Link button and a three dot
+   More options button at the top right, then the target's
+   title, a plain text excerpt of its body, and its updated
+   time at the bottom, exactly the layout of Chris's screenshot.
+   Everything on it is resolved live from the target note at
+   show time (the findNoteById lookup the tooltips use: live
+   notes, Trash, and Archive), so it can never go stale, and
+   nothing on it is ever saved anywhere.
+   The card is the bar's sibling in every rule that matters:
+   the same hover rest before it appears, the same grace
+   period after the pointer leaves both the mention and the
+   card, Escape closes any menu it spawned before it, and
+   hideLinkBar (which every note switch, lock, scroll, and
+   overlay opening funnels through) closes it. While the card
+   is up, the mention IS the link UI's current link
+   (linkBarAnchor and linkBarHref point at it), so the shared
+   View Link As menu, copy, unlink, and delete run against it
+   with no second implementation. A Mention whose target no
+   longer exists has no face (decoration falls back to Text),
+   and hovering it summons the bar instead, never this card. */
+
+let noteLinkCardAnchor = null;
+let noteLinkCardHoverAnchor = null;
+let noteLinkCardShowTimer = null;
+
+/* True while the Mention hover card is on screen. */
+function noteLinkCardVisible() {
+  const card = document.getElementById("noteLinkCard");
+  return !!card && !card.classList.contains("hidden");
+}
+
+/* Put the card away and forget which mention it belonged to.
+   Called from hideLinkBar (the one central hide) and from
+   showLinkBar (the two surfaces never coexist). */
+function hideNoteLinkCard() {
+  const card = document.getElementById("noteLinkCard");
+  if (card) { card.classList.add("hidden"); }
+  noteLinkCardAnchor = null;
+  noteLinkCardHoverAnchor = null;
+  if (noteLinkCardShowTimer) {
+    clearTimeout(noteLinkCardShowTimer);
+    noteLinkCardShowTimer = null;
+  }
+}
+
+/* The notebook name a note is shown with: a trashed or
+   archived note shows the notebook it came from, where Restore
+   or Unarchive will return it, the same effective notebook
+   refreshNotebookLink computes for the open note. */
+function notebookNameForNote(note) {
+  if (!note) { return ""; }
+  const slug = note.trashed ? (note.trashedFrom || note.notebook) :
+    (note.archived ? (note.archivedFrom || note.notebook) :
+      note.notebook);
+  const nb = state.notebooks.find(function (n) {
+    return n.slug === slug;
+  });
+  return nb ? nb.name : (slug || "");
+}
+
+/* The updated time the note link cards show, in the relative
+   day style Chris's screenshot uses: the locale time plus
+   "Today" ("1:11 PM Today"), the same plus "Yesterday" for
+   yesterday, and for anything older the date from formatDate
+   (the notes list formatter) plus the time. */
+function noteLinkTimeLabel(iso) {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) { return ""; }
+  const time = d.toLocaleTimeString([], {
+    hour: "numeric", minute: "2-digit"
+  });
+  const now = new Date();
+  if (d.toDateString() === now.toDateString()) {
+    return time + " Today";
+  }
+  const yesterday = new Date(now.getTime());
+  yesterday.setDate(yesterday.getDate() - 1);
+  if (d.toDateString() === yesterday.toDateString()) {
+    return time + " Yesterday";
+  }
+  return formatDate(iso) + ", " + time;
+}
+
+/* A card excerpt of a note's body: htmlToText (the plain text
+   helper the notes list snippets and the version history
+   excerpts share), capped at 160 characters with an ellipsis
+   when cut. An empty body yields an empty string, and the
+   card simply shows a blank excerpt line. */
+function noteLinkExcerpt(note) {
+  const text = htmlToText((note && note.body) || "");
+  if (!text) { return ""; }
+  return text.length > 160 ? text.slice(0, 157) + "..." : text;
+}
+
+/* Show the hover card for a Mention. The caller has already
+   resolved that this anchor is a Mention with a living target;
+   the resolution is repeated here so the card can never show
+   stale or missing data, and a target that vanished in the
+   meantime falls back to the bar, the Text mode surface. */
+function showNoteLinkCard(anchor) {
+  const card = document.getElementById("noteLinkCard");
+  const noteId = anchor ? noteLinkIdOf(anchor) : null;
+  const target = noteId ? findNoteById(noteId) : null;
+  if (!card || !anchor || !target) {
+    if (anchor) { showLinkBar(anchor); }
+    return;
+  }
+  if (noteLinkCardShowTimer) {
+    clearTimeout(noteLinkCardShowTimer);
+    noteLinkCardShowTimer = null;
+  }
+  if (linkBarHideTimer) { clearTimeout(linkBarHideTimer); linkBarHideTimer = null; }
+  /* The bar steps aside (the menu closes with it): the two
+     surfaces never coexist. */
+  const bar = document.getElementById("linkBar");
+  if (bar) { bar.classList.add("hidden"); }
+  closeLinkViewMenu();
+  /* The mention becomes the link UI's current link, so the
+     card's menu and every shared action run against it. */
+  linkBarAnchor = anchor;
+  linkBarHref = anchor.getAttribute("href") || "";
+  noteLinkCardAnchor = anchor;
+  document.getElementById("noteLinkCardNotebook").textContent =
+    notebookNameForNote(target);
+  document.getElementById("noteLinkCardTitle").textContent =
+    target.title || "Untitled note";
+  document.getElementById("noteLinkCardExcerpt").textContent =
+    noteLinkExcerpt(target);
+  document.getElementById("noteLinkCardTime").textContent =
+    noteLinkTimeLabel(target.updated);
+  card.classList.remove("hidden");
+  positionNoteLinkCard(anchor);
+}
+
+/* Position the card just BELOW the mention (above it when
+   there is no room below), clamped into the viewport, the
+   mirror of positionLinkBar. */
+function positionNoteLinkCard(anchor) {
+  const card = document.getElementById("noteLinkCard");
+  if (!card || !anchor) { return; }
+  const rect = anchor.getBoundingClientRect();
+  const width = card.offsetWidth;
+  const height = card.offsetHeight;
+  let left = Math.min(rect.left, window.innerWidth - width - 8);
+  left = Math.max(8, left);
+  let top = rect.bottom + 6;
+  if (top + height > window.innerHeight - 8) {
+    top = Math.max(8, rect.top - height - 6);
+  }
+  card.style.left = left + "px";
+  card.style.top = top + "px";
+}
+
+/* The pointer came to rest on a Mention: show its card after
+   the same hover rest the bar uses (and at once when sliding
+   directly from the bar, the bar's own continuity rule). The
+   edit form freezes the card exactly as it freezes the bar:
+   a user mid edit never has UI swapped under them. */
+function scheduleNoteLinkCardShow(anchor) {
+  noteLinkCardHoverAnchor = anchor;
+  cancelLinkBarHide();
+  if (noteLinkCardVisible() && noteLinkCardAnchor === anchor) {
+    return;
+  }
+  if (linkBarVisible() && !linkBarEditing) {
+    hideLinkBar();
+    showNoteLinkCard(anchor);
+    return;
+  }
+  if (noteLinkCardShowTimer) {
+    clearTimeout(noteLinkCardShowTimer);
+  }
+  noteLinkCardShowTimer = setTimeout(function () {
+    noteLinkCardShowTimer = null;
+    if (linkBarEditing) { return; }
+    if (noteLinkCardHoverAnchor === anchor && anchor.isConnected) {
+      showNoteLinkCard(anchor);
+    }
+  }, LINK_BAR_HOVER_MS);
+}
+
 /* v1.3.2: complete an address typed into the link edit form. A value
    that already carries a scheme (https:, mailto:, but also anything
    else with a scheme, valid or not) is left exactly as typed, so the
@@ -8222,15 +8688,36 @@ function normalizeLinkInput(rawUrl) {
    is shown, the anchor's textContent also counts the face's label,
    so the original is read through linkOriginalText), and the
    current address. The form opening never marks the note dirty;
-   only a successful Save does. */
+   only a successful Save does.
+   v2.10: a note link's edit state is different in kind, not just
+   in data: there is no address to type, so the address row is
+   swapped for the note row (the target's current title and a
+   Change note button that reopens the picker as a retarget
+   picker; see the note link block below), and focus goes to
+   the text field. Exactly one of the two rows is ever visible,
+   decided here, every time the form opens. */
 function startLinkEdit() {
   if (!linkBarAnchor) { return; }
+  const isNoteLink = !!noteLinkIdOf(linkBarAnchor);
   document.getElementById("linkEditText").value =
     linkOriginalText(linkBarAnchor);
   document.getElementById("linkEditUrl").value = linkBarHref;
+  const urlRow = document.getElementById("linkEditUrl")
+    .closest(".link-edit-field");
+  if (urlRow) { urlRow.classList.toggle("hidden", isNoteLink); }
+  const noteRow = document.getElementById("linkEditNoteRow");
+  if (noteRow) { noteRow.classList.toggle("hidden", !isNoteLink); }
+  if (isNoteLink) {
+    const noteId = noteLinkIdOf(linkBarAnchor);
+    const target = noteId ? findNoteById(noteId) : null;
+    document.getElementById("linkEditNoteName").textContent =
+      target ? (target.title || "Untitled note") :
+        "That note no longer exists";
+  }
   setLinkBarMode(true);
   positionLinkBar(linkBarAnchor);
-  document.getElementById("linkEditUrl").focus();
+  (isNoteLink ? document.getElementById("linkEditText") :
+    document.getElementById("linkEditUrl")).focus();
 }
 
 /* v1.3.2: apply the edit form to the clicked link. The typed address is
@@ -8243,6 +8730,36 @@ function startLinkEdit() {
 function saveLinkEdit() {
   const anchor = linkBarAnchor;
   if (!anchor) { hideLinkBar(); return; }
+  /* v2.10: a note link's Save applies the text field only. There
+     is no address to normalize or validate (retargeting is the
+     Change note button's job, and it applies immediately when a
+     note is picked). The text lands in the same place the web
+     path puts it: the original wrapper while a face is shown,
+     the anchor itself in Text mode, and only when it actually
+     differs, so a no change Save neither dirties nor rewrites. */
+  if (noteLinkIdOf(anchor)) {
+    const newText = document.getElementById("linkEditText").value;
+    const changed = newText !== linkOriginalText(anchor);
+    if (changed) {
+      const wrap = anchor.querySelector(":scope > .ss-link-original");
+      if (wrap) { wrap.textContent = newText; }
+      else { anchor.textContent = newText; }
+      /* The text changed, so its Mention derivation verdict is
+         refreshed with it: text that now just repeats the
+         target's title is title derived, anything else is the
+         user's own (see captureNoteLinkDerivation). */
+      const editTarget = findNoteById(noteLinkIdOf(anchor));
+      anchor.__ssNoteDerivedText = newText;
+      anchor.__ssNoteTitleDerived = newText.trim() === "" ||
+        (!!editTarget &&
+          newText === (editTarget.title || "Untitled note"));
+      decorateLinkView(anchor);
+      markDirty();
+    }
+    hideLinkBar();
+    if (changed) { toast("Link updated."); }
+    return;
+  }
   const normalized =
     normalizeLinkInput(document.getElementById("linkEditUrl").value);
   if (!linkOpenTarget(normalized)) {
@@ -8300,8 +8817,47 @@ function openLinkViewMenu() {
   const btn = document.getElementById("linkBarMenuBtn");
   if (!menu || !linkBarAnchor) { return; }
   refreshLinkViewMenuDots();
+  /* v2.10: Title is a note link only mode. The row is in the
+     shared markup, so it is hidden whenever the menu serves a
+     web link, every time the menu opens (the menu's link can
+     change between openings without the menu closing). */
+  const titleItem = menu.querySelector("[data-link-view=\"title\"]");
+  if (titleItem) {
+    titleItem.classList.toggle("hidden",
+      !noteLinkIdOf(linkBarAnchor));
+  }
   menu.classList.remove("hidden");
   if (btn) { btn.setAttribute("aria-expanded", "true"); }
+  const cardBtn = document.getElementById("noteLinkCardMenuBtn");
+  if (cardBtn) { cardBtn.setAttribute("aria-expanded", "true"); }
+  positionLinkViewMenu();
+}
+
+/* v2.10: place the menu under the surface that summoned it:
+   the bar, or the Mention hover card when the card is the
+   visible surface (the bar is hidden then). The menu is fixed
+   positioned and right aligned to its host, clamped into the
+   viewport, and flips above the host when there is no room
+   below, the same clamping the bar itself uses. */
+function positionLinkViewMenu() {
+  const menu = document.getElementById("linkViewMenu");
+  if (!menu || menu.classList.contains("hidden")) { return; }
+  const card = document.getElementById("noteLinkCard");
+  const host = (card && !card.classList.contains("hidden")) ?
+    card : document.getElementById("linkBar");
+  if (!host) { return; }
+  const rect = host.getBoundingClientRect();
+  const width = menu.offsetWidth;
+  const height = menu.offsetHeight;
+  let left = Math.min(rect.right - width,
+    window.innerWidth - width - 8);
+  left = Math.max(8, left);
+  let top = rect.bottom + 6;
+  if (top + height > window.innerHeight - 8) {
+    top = Math.max(8, rect.top - height - 6);
+  }
+  menu.style.left = left + "px";
+  menu.style.top = top + "px";
 }
 
 function closeLinkViewMenu() {
@@ -8309,6 +8865,8 @@ function closeLinkViewMenu() {
   const btn = document.getElementById("linkBarMenuBtn");
   if (menu) { menu.classList.add("hidden"); }
   if (btn) { btn.setAttribute("aria-expanded", "false"); }
+  const cardBtn = document.getElementById("noteLinkCardMenuBtn");
+  if (cardBtn) { cardBtn.setAttribute("aria-expanded", "false"); }
 }
 
 function toggleLinkViewMenu() {
@@ -8335,11 +8893,18 @@ function refreshLinkViewMenuDots() {
    note saves through the normal path, and choosing any mode
    closes the menu and the bar. Switching INTO Mention or Preview
    is also the one moment link info is fetched (see the Microlink
-   block below): lazily, and only when none is stored yet. */
+   block below): lazily, and only when none is stored yet.
+   v2.10: Title is a fourth saved value, valid only on a note
+   link (the menu never offers it to a web link, and a stray
+   request here is refused the same way, degrading to Text).
+   Note links never fetch: maybeFetchLinkInfo judges the
+   ssnote: scheme out before any network call, and their faces
+   render from the target note instead. */
 function setLinkViewMode(mode) {
   const anchor = linkBarAnchor;
   if (!anchor) { hideLinkBar(); return; }
-  if (mode === "mention" || mode === "preview") {
+  if (mode === "mention" || mode === "preview" ||
+      (mode === "title" && noteLinkIdOf(anchor))) {
     anchor.setAttribute("data-ss-link-view", mode);
   } else {
     anchor.removeAttribute("data-ss-link-view");
@@ -8399,6 +8964,72 @@ function copyLinkUrlFallback(text) {
   }
 }
 
+/* v2.10: the one copy action behind the bar's copy button and
+   the menu's Copy URL: a web link copies its address (above);
+   a note link copies the link itself (below). */
+function copyLinkBarLink() {
+  if (linkBarAnchor && noteLinkIdOf(linkBarAnchor)) {
+    copyNoteLink(linkBarAnchor);
+    return;
+  }
+  copyLinkBarUrl();
+}
+
+/* v2.10: copy a note link. A note link has no URL to copy, so
+   what is copied is the link itself: a rich text HTML payload
+   holding an anchor with the same ssnote: href, its class, and
+   its own text, with the target note's title (or the link's
+   text when the target is gone) as the plain text fallback.
+   Pasted into another SnakeScale note, the HTML recreates a
+   working note link; pasted anywhere else, the title is what
+   lands. The fallback chain mirrors the address copy: the
+   rich clipboard write first, then a plain writeText, then
+   the textarea fallback, and the success toast only ever
+   follows a write that actually happened. */
+function copyNoteLink(anchor) {
+  if (!anchor) { return; }
+  const noteId = noteLinkIdOf(anchor);
+  const target = noteId ? findNoteById(noteId) : null;
+  const linkText = linkOriginalText(anchor);
+  const plain = target ? (target.title || "Untitled note") :
+    linkText;
+  const html = "<a href=\"" + SSNOTE_HREF_PREFIX + noteId +
+    "\" class=\"ss-note-link\">" +
+    escapeHtml(linkText || plain) + "</a>";
+  const done = function () {
+    hideLinkBar();
+    toast("Link copied.");
+  };
+  const failed = function () {
+    toast("The link could not be copied.", true);
+  };
+  const plainFallback = function () {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(plain).then(done, function () {
+        if (copyLinkUrlFallback(plain)) { done(); }
+        else { failed(); }
+      });
+      return;
+    }
+    if (copyLinkUrlFallback(plain)) { done(); }
+    else { failed(); }
+  };
+  if (navigator.clipboard && navigator.clipboard.write &&
+      typeof ClipboardItem !== "undefined") {
+    try {
+      const item = new ClipboardItem({
+        "text/html": new Blob([html], { type: "text/html" }),
+        "text/plain": new Blob([plain], { type: "text/plain" })
+      });
+      navigator.clipboard.write([item]).then(done, plainFallback);
+    } catch (err) {
+      plainFallback();
+    }
+    return;
+  }
+  plainFallback();
+}
+
 /* Unlink: replace the anchor with its own original contents, so
    the text and any inline formatting inside it stay in the note
    and only the link goes away. While a face is shown, the
@@ -8448,10 +9079,15 @@ function deleteLinkBarAnchor() {
 
 /* The link's current display mode: "mention", "preview", or
    "text" (the saved attribute's absence, and the fallback for
-   any value this version does not know). */
+   any value this version does not know). v2.10 adds "title",
+   a note link only mode: the value on a web link is not a
+   mode this app offers there and degrades to "text", the same
+   unknown value rule. */
 function linkViewModeOf(anchor) {
   const mode = anchor ? anchor.getAttribute("data-ss-link-view") : null;
-  return (mode === "mention" || mode === "preview") ? mode : "text";
+  if (mode === "mention" || mode === "preview") { return mode; }
+  if (mode === "title" && noteLinkIdOf(anchor)) { return "title"; }
+  return "text";
 }
 
 /* The link's original text: the wrapper's text while a face is
@@ -8590,17 +9226,227 @@ function buildPreviewFace(anchor) {
   return face;
 }
 
+/* ----- v2.10: note link faces ------------------------------------
+   A note link's faces are built from the TARGET NOTE, resolved
+   live at decoration time through findNoteById (live notes,
+   Trash, and Archive, the lookup the tooltips use), so a
+   renamed or moved target shows its new title and notebook the
+   next time the containing note renders, without the link
+   itself being touched. The faces are the same runtime only
+   .ss-link-face nodes the web faces are (same wrapper, same
+   save funnel stripping), and every string enters through
+   textContent. A target that no longer exists in any list
+   gives no face at all: every mode falls back to the plain
+   Text rendering, the mirror of the tooltip fallback. */
+
+/* A small page icon node for note faces, the same drawing the
+   link bar leads with for a note link, built as elements like
+   linkGlobeIcon so face construction stays string free. */
+function linkPageIcon(size) {
+  const span = document.createElement("span");
+  span.className = "ss-link-face-page";
+  span.setAttribute("aria-hidden", "true");
+  const NS = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("width", String(size));
+  svg.setAttribute("height", String(size));
+  svg.setAttribute("fill", "none");
+  svg.setAttribute("stroke", "currentColor");
+  svg.setAttribute("stroke-width", "1.8");
+  svg.setAttribute("stroke-linecap", "round");
+  svg.setAttribute("stroke-linejoin", "round");
+  const outline = document.createElementNS(NS, "path");
+  outline.setAttribute("d", "M7 3h7l4 4v14H7z");
+  const fold = document.createElementNS(NS, "path");
+  fold.setAttribute("d", "M14 3v4h4");
+  const line1 = document.createElementNS(NS, "path");
+  line1.setAttribute("d", "M9.5 12h5");
+  const line2 = document.createElementNS(NS, "path");
+  line2.setAttribute("d", "M9.5 15.5h5");
+  svg.appendChild(outline);
+  svg.appendChild(fold);
+  svg.appendChild(line1);
+  svg.appendChild(line2);
+  span.appendChild(svg);
+  return span;
+}
+
+/* Whether a note link's text is TITLE DERIVED (it just repeats
+   the target's title, so a Mention label follows the target
+   live) or the user's own custom text (the label is the text,
+   and a rename never moves it). The evidence is the saved
+   anchor: the picker and the retarget flow set the text and
+   the title attribute to the same title, and a bar text edit
+   changes only the text, so while the saved title attribute
+   survives, text === title attribute means derived. The
+   tooltip pass (decorateLinkTooltips) overwrites that
+   attribute with the LIVE title on every render, so the
+   verdict is captured here, before the overwrite, onto the
+   anchor as runtime only properties (never saved): the
+   verdict, and the exact text it was computed from. A later
+   capture for the SAME text is skipped (the attribute has
+   been rewritten since; the first verdict stands), and the
+   edit and retarget flows refresh the verdict themselves when
+   they change the text. A link carrying no title attribute at
+   all (hand written or imported) is judged against the live
+   title, the best evidence available for it. */
+function captureNoteLinkDerivation(anchor) {
+  const raw = linkOriginalText(anchor);
+  if (anchor.__ssNoteDerivedText === raw) { return; }
+  const savedTitle = anchor.getAttribute("title");
+  let derived;
+  if (raw.trim() === "") {
+    derived = true;
+  } else if (savedTitle !== null) {
+    derived = raw === savedTitle;
+  } else {
+    const noteId = noteLinkIdOf(anchor);
+    const target = noteId ? findNoteById(noteId) : null;
+    derived = !!target && raw === (target.title || "Untitled note");
+  }
+  anchor.__ssNoteDerivedText = raw;
+  anchor.__ssNoteTitleDerived = derived;
+}
+
+/* The label a note Mention shows: the target's live title for
+   a title derived link (the picker born label, and any text
+   the retarget flow followed), so a rename shows through on
+   the next render; the link's own custom text otherwise. With
+   no captured verdict (a face built before any tooltip pass),
+   the literal comparison against the live title decides. */
+function noteMentionLabel(anchor, target) {
+  const raw = linkOriginalText(anchor);
+  const text = raw.trim();
+  const title = target.title || "Untitled note";
+  if (!text) { return title; }
+  if (anchor.__ssNoteDerivedText === raw) {
+    return anchor.__ssNoteTitleDerived ? title : text;
+  }
+  return text === title ? title : text;
+}
+
+/* Build the note Mention face: a page icon and the label. */
+function buildNoteMentionFace(anchor, target) {
+  const face = document.createElement("span");
+  face.className = "ss-link-face ss-link-face-note-mention";
+  face.setAttribute("data-ss-runtime", "face");
+  face.setAttribute("contenteditable", "false");
+  face.appendChild(linkPageIcon(14));
+  const label = document.createElement("span");
+  label.className = "ss-link-face-label";
+  label.textContent = noteMentionLabel(anchor, target);
+  face.appendChild(label);
+  return face;
+}
+
+/* Build the note Title face: a full width bar with a page
+   icon, the target's title in bold, and its notebook name
+   muted beside it, per Chris's Title card screenshot. */
+function buildNoteTitleFace(target) {
+  const face = document.createElement("span");
+  face.className = "ss-link-face ss-link-face-note-title";
+  face.setAttribute("data-ss-runtime", "face");
+  face.setAttribute("contenteditable", "false");
+  face.appendChild(linkPageIcon(16));
+  const title = document.createElement("span");
+  title.className = "nl-face-title";
+  title.textContent = target.title || "Untitled note";
+  face.appendChild(title);
+  const nb = document.createElement("span");
+  nb.className = "nl-face-notebook";
+  nb.textContent = notebookNameForNote(target);
+  face.appendChild(nb);
+  return face;
+}
+
+/* Build the note Preview face: a card with the target's title
+   and its updated time on the head row, an excerpt of its
+   body under them, and a notebook row (icon and name) at the
+   bottom, per Chris's first screenshot. */
+function buildNotePreviewFace(target) {
+  const face = document.createElement("span");
+  face.className = "ss-link-face ss-link-face-note-preview";
+  face.setAttribute("data-ss-runtime", "face");
+  face.setAttribute("contenteditable", "false");
+  const head = document.createElement("span");
+  head.className = "nl-face-head";
+  const title = document.createElement("span");
+  title.className = "nl-face-title";
+  title.textContent = target.title || "Untitled note";
+  head.appendChild(title);
+  const time = document.createElement("span");
+  time.className = "nl-face-time";
+  time.textContent = noteLinkTimeLabel(target.updated);
+  head.appendChild(time);
+  face.appendChild(head);
+  const excerpt = document.createElement("span");
+  excerpt.className = "nl-face-excerpt";
+  excerpt.textContent = noteLinkExcerpt(target);
+  face.appendChild(excerpt);
+  const foot = document.createElement("span");
+  foot.className = "nl-face-foot";
+  foot.appendChild(linkPageIcon(13));
+  const nbName = document.createElement("span");
+  nbName.textContent = notebookNameForNote(target);
+  foot.appendChild(nbName);
+  face.appendChild(foot);
+  return face;
+}
+
+/* Decorate one note link: Text (and every mode whose target
+   is gone) unwraps to the plain link; Mention, Title, and
+   Preview wrap the originals and build the mode's face from
+   the target's live data. */
+function decorateNoteLinkView(anchor, noteId) {
+  const mode = linkViewModeOf(anchor);
+  const target = mode === "text" ? null : findNoteById(noteId);
+  if (mode === "text" || !target) {
+    const wrap = anchor.querySelector(":scope > .ss-link-original");
+    if (wrap) {
+      while (wrap.firstChild) {
+        anchor.insertBefore(wrap.firstChild, wrap);
+      }
+      wrap.remove();
+    }
+    return;
+  }
+  let wrap = anchor.querySelector(":scope > .ss-link-original");
+  if (!wrap) {
+    wrap = document.createElement("span");
+    wrap.className = "ss-link-original";
+    wrap.setAttribute("data-ss-runtime", "original");
+    while (anchor.firstChild) { wrap.appendChild(anchor.firstChild); }
+    anchor.appendChild(wrap);
+  }
+  if (mode === "mention") {
+    anchor.appendChild(buildNoteMentionFace(anchor, target));
+  } else if (mode === "title") {
+    anchor.appendChild(buildNoteTitleFace(target));
+  } else {
+    anchor.appendChild(buildNotePreviewFace(target));
+  }
+}
+
 /* Bring one anchor's face in line with its saved mode: Text
    unwraps and defaces it (the plain editable link again), while
    Mention and Preview wrap the original children if they are
    not wrapped yet and (re)build the face. Idempotent by
    construction: the face is rebuilt from the attributes every
-   time, and the wrapper is created only when missing. */
+   time, and the wrapper is created only when missing.
+   v2.10: note links branch to their own decoration above;
+   the old face comes off first either way, here, so a mode
+   switch never stacks faces. */
 function decorateLinkView(anchor) {
   if (!anchor || !anchor.getAttribute) { return; }
-  const mode = linkViewModeOf(anchor);
   const oldFace = anchor.querySelector(":scope > .ss-link-face");
   if (oldFace) { oldFace.remove(); }
+  const noteId = noteLinkIdOf(anchor);
+  if (noteId) {
+    decorateNoteLinkView(anchor, noteId);
+    return;
+  }
+  const mode = linkViewModeOf(anchor);
   if (mode === "text") {
     const wrap = anchor.querySelector(":scope > .ss-link-original");
     if (wrap) {
@@ -8624,14 +9470,14 @@ function decorateLinkView(anchor) {
 }
 
 /* Decorate every link under rootEl, the face companion to
-   decorateLinkTooltips, run wherever that step runs. Note links
-   and anchors inside attachment placeholders are skipped: the
-   former have no view modes, and the latter are attachment
-   furniture, not text links. */
+   decorateLinkTooltips, run wherever that step runs. Anchors
+   inside attachment placeholders are skipped: they are
+   attachment furniture, not text links. Note links are
+   decorated here since v2.10 (Text, Mention, Title, Preview);
+   through v2.9 they were skipped as modeless. */
 function decorateLinkViews(rootEl) {
   if (!rootEl || !rootEl.querySelectorAll) { return; }
   rootEl.querySelectorAll("a[href]").forEach(function (anchor) {
-    if (noteLinkIdOf(anchor)) { return; }
     if (anchor.closest && anchor.closest(".ss-attachment")) { return; }
     decorateLinkView(anchor);
   });
@@ -8718,7 +9564,9 @@ function maybeFetchLinkInfo(anchor) {
     return;
   }
   /* http and https only: mailto links have no page to describe,
-     and ssnote anchors never reach here (they carry no mode). */
+     and note links, which carry modes since v2.10, are judged
+     out by their ssnote: scheme here: no note link ever
+     fetches, in any mode, ever. */
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
     return;
   }
@@ -8777,7 +9625,10 @@ function maybeFetchLinkInfo(anchor) {
    flows use, and picking a note restores that range and inserts the
    anchor into it. Clicking a note link never shows the web link popup:
    the note body's link click listener resolves ssnote: hrefs FIRST (see
-   wireEvents), ahead of both the Ctrl+click path and the popup path. */
+   wireEvents), ahead of both the Ctrl+click path and the popup path.
+   (v2.10: the popup's successor, the link bar, DOES serve note
+   links on hover rest; the click rule above is untouched, and
+   the picker gained the retarget job described below.) */
 
 const SSNOTE_HREF_PREFIX = "ssnote:";
 
@@ -8798,6 +9649,14 @@ function noteLinkIdOf(anchor) {
    collapsed, in which case the target note's title becomes the label). */
 let noteLinkPending = null;
 
+/* v2.10: the picker's second job. The link bar's note link edit
+   state reopens this same picker to RETARGET an existing link:
+   while this holds the anchor being retargeted, picking a row
+   rewrites that anchor instead of inserting a new one (see
+   pickNoteLinkTarget). It is cleared by closeNoteLinkPicker,
+   so a cancelled retarget can never leak into a later insert. */
+let noteLinkRetargetAnchor = null;
+
 function openNoteLinkPicker() {
   const host = currentNote();
   if (!host) {
@@ -8808,6 +9667,7 @@ function openNoteLinkPicker() {
     toast("Links cannot be inserted while a note is in Trash or the Archive.", true);
     return;
   }
+  noteLinkRetargetAnchor = null;
   const bodyEl = document.getElementById("noteBody");
   /* runInsertAction has just restored the saved selection, so the live
      selection IS the user's caret. Read the label from it first, then
@@ -8833,6 +9693,65 @@ function openNoteLinkPicker() {
 function closeNoteLinkPicker() {
   document.getElementById("noteLinkModal").classList.add("hidden");
   noteLinkPending = null;
+  noteLinkRetargetAnchor = null;
+}
+
+/* v2.10: open the picker to retarget the link bar's note link
+   (the Change note button in its edit state). No caret is
+   captured and no label is read: the results list is the same
+   one the insert flow shows (the open note itself excluded),
+   and picking a row applies the retarget at once. The bar
+   stays open in its edit state behind the modal, and the
+   retarget lands back on it (see applyNoteLinkRetarget); a
+   cancelled picker simply leaves the edit state untouched. */
+function openNoteLinkRetargetPicker() {
+  if (!linkBarAnchor || !noteLinkIdOf(linkBarAnchor)) { return; }
+  noteLinkPending = null;
+  noteLinkRetargetAnchor = linkBarAnchor;
+  const search = document.getElementById("noteLinkSearch");
+  search.value = "";
+  renderNoteLinkResults("");
+  document.getElementById("noteLinkModal").classList.remove("hidden");
+  search.focus();
+}
+
+/* v2.10: apply a retarget pick: the anchor's href moves to the
+   chosen note, its tooltip follows (renders re-resolve it
+   anyway), and its face is rebuilt for the new target. The
+   text rule: text that just repeated the OLD target's title
+   was never really the user's own words, so it follows to
+   the new target's title; any other text is the user's and
+   is left exactly as it was. The bar is then shown afresh for
+   the link (its label is the new title by construction), in
+   its normal view, and the change saves like any link edit. */
+function applyNoteLinkRetarget(target) {
+  const anchor = noteLinkRetargetAnchor;
+  closeNoteLinkPicker();
+  if (!anchor || !anchor.isConnected) { return; }
+  const oldId = noteLinkIdOf(anchor);
+  const oldTarget = oldId ? findNoteById(oldId) : null;
+  const oldTitle = oldTarget ?
+    (oldTarget.title || "Untitled note") : null;
+  const currentText = linkOriginalText(anchor);
+  anchor.setAttribute("href", SSNOTE_HREF_PREFIX + target.id);
+  anchor.setAttribute("title", target.title || "Untitled note");
+  if (oldTitle !== null && currentText === oldTitle) {
+    const newTitle = target.title || "Untitled note";
+    const wrap = anchor.querySelector(":scope > .ss-link-original");
+    if (wrap) { wrap.textContent = newTitle; }
+    else { anchor.textContent = newTitle; }
+  }
+  /* Refresh the Mention derivation verdict for the retargeted
+     link: text that followed (or already matched) the new
+     target's title is title derived; kept custom text is not. */
+  const finalText = linkOriginalText(anchor);
+  anchor.__ssNoteDerivedText = finalText;
+  anchor.__ssNoteTitleDerived = finalText.trim() === "" ||
+    finalText === (target.title || "Untitled note");
+  decorateLinkView(anchor);
+  markDirty();
+  showLinkBar(anchor);
+  toast("Link updated.");
 }
 
 /* The picker's results: live notes only (state.notes never holds Trash
@@ -8888,6 +9807,13 @@ function renderNoteLinkResults(filterText) {
    captured range is no longer usable, the same fallback the
    attachment placeholder inserter uses. */
 function pickNoteLinkTarget(target) {
+  /* v2.10: a retarget pick rewrites the existing link instead
+     of inserting a new one; applyNoteLinkRetarget closes the
+     picker itself. */
+  if (noteLinkRetargetAnchor) {
+    applyNoteLinkRetarget(target);
+    return;
+  }
   const pending = noteLinkPending;
   closeNoteLinkPicker();
   const bodyEl = document.getElementById("noteBody");
@@ -13210,6 +14136,11 @@ function linkTooltipFor(anchor) {
 function decorateLinkTooltips(rootEl) {
   if (!rootEl || !rootEl.querySelectorAll) { return; }
   rootEl.querySelectorAll("a[href]").forEach(function (anchor) {
+    /* v2.10: a note link's Mention label derivation is captured
+       BEFORE the setAttribute below overwrites the saved title
+       attribute with the live one; see captureNoteLinkDerivation
+       in the link faces block. */
+    if (noteLinkIdOf(anchor)) { captureNoteLinkDerivation(anchor); }
     const tip = linkTooltipFor(anchor);
     if (tip) { anchor.setAttribute("title", tip); }
     else { anchor.removeAttribute("title"); }
@@ -16842,7 +17773,13 @@ function wireEvents() {
      the web link bar never appears for them.
      v2.9: the bar replaced the popup in the plain click branch, and
      anchors the bar does not serve (attachment furniture, links in a
-     locked note) simply hide it instead of summoning it. */
+     locked note) simply hide it instead of summoning it.
+     v2.10: the note link branch above is unchanged in behavior
+     (a click still opens the target at once, in every display
+     mode, and hideLinkBar puts away the bar AND the Mention
+     card, since it is the one central hide); what changed is
+     only that the bar now also serves note links on hover,
+     through the mouseover listener below. */
   document.getElementById("noteBody").addEventListener("click", function (ev) {
     const target = ev.target;
     const anchor = (target && target.closest) ? target.closest("a") : null;
@@ -16875,25 +17812,44 @@ function wireEvents() {
      flickering shut. Moving directly between two links retargets
      the bar at once (scheduleLinkBarShow handles that case). The
      listeners live on the body and resolve the anchor from the
-     event target, so links created after wiring are covered. */
+     event target, so links created after wiring are covered.
+     v2.10: note links are served here too, with one routing
+     rule: a note link shown as a Mention whose target still
+     exists schedules its hover CARD, not the bar. Every other
+     served link, note links in Text, Title, and Preview modes
+     included, schedules the bar. */
   document.getElementById("noteBody").addEventListener("mouseover", function (ev) {
     const target = ev.target;
     const anchor = (target && target.closest) ? target.closest("a") : null;
     const served = anchor ? linkBarAnchorFor(anchor) : null;
-    if (served) { scheduleLinkBarShow(served); }
+    if (!served) { return; }
+    const servedNoteId = noteLinkIdOf(served);
+    if (servedNoteId && linkViewModeOf(served) === "mention" &&
+        findNoteById(servedNoteId)) {
+      scheduleNoteLinkCardShow(served);
+      return;
+    }
+    scheduleLinkBarShow(served);
   });
   document.getElementById("noteBody").addEventListener("mouseout", function (ev) {
     const target = ev.target;
     const anchor = (target && target.closest) ? target.closest("a") : null;
     if (!anchor) { return; }
     const related = ev.relatedTarget;
-    /* Still inside the same anchor, or stepping into the bar:
-       neither counts as leaving. */
+    /* Still inside the same anchor, or stepping into the bar,
+       its menu, or the Mention card: none of those count as
+       leaving. (The menu is the bar's sibling since v2.10, so
+       it needs its own line here.) */
     if (related && related.closest) {
       if (related.closest("a") === anchor) { return; }
       if (related.closest("#linkBar")) { return; }
+      if (related.closest("#linkViewMenu")) { return; }
+      if (related.closest("#noteLinkCard")) { return; }
     }
     if (linkBarHoverAnchor === anchor) { linkBarHoverAnchor = null; }
+    if (noteLinkCardHoverAnchor === anchor) {
+      noteLinkCardHoverAnchor = null;
+    }
     if (linkBarAnchor === anchor || linkBarVisible()) {
       scheduleLinkBarHide();
     }
@@ -16911,6 +17867,34 @@ function wireEvents() {
     scheduleLinkBarHide();
   });
 
+  /* v2.10: the View Link As menu is the bar's sibling now, so it
+     keeps the hover discipline with its own pair: entering it
+     cancels a pending hide (crossing from the bar or the card
+     down into the menu never flickers anything shut), and
+     leaving it starts the grace hide, exactly like leaving the
+     bar. The Mention card gets the same pair, mirrored: its
+     mouseleave steps back onto its mention without hiding. */
+  document.getElementById("linkViewMenu").addEventListener("mouseenter", function () {
+    cancelLinkBarHide();
+  });
+  document.getElementById("linkViewMenu").addEventListener("mouseleave", function () {
+    scheduleLinkBarHide();
+  });
+  document.getElementById("noteLinkCard").addEventListener("mouseenter", function () {
+    cancelLinkBarHide();
+    if (noteLinkCardShowTimer) {
+      clearTimeout(noteLinkCardShowTimer);
+      noteLinkCardShowTimer = null;
+    }
+  });
+  document.getElementById("noteLinkCard").addEventListener("mouseleave", function (ev) {
+    const related = ev.relatedTarget;
+    if (related && related.closest &&
+        noteLinkCardAnchor &&
+        related.closest("a") === noteLinkCardAnchor) { return; }
+    scheduleLinkBarHide();
+  });
+
   /* Link bar controls (v1.3.1, reworked in v1.3.2, rebuilt as the
      bar in v2.9). All of them live outside #noteBody, so these clicks
      can never edit the note or mark it dirty by themselves; only a
@@ -16923,20 +17907,48 @@ function wireEvents() {
      Ctrl+click, and the bar closes first. */
   document.getElementById("linkBarUrl").addEventListener("click", function (ev) {
     ev.preventDefault();
+    /* v2.10: for a note link the label is the target's title
+       button: it opens the target through the same navigation
+       a body click runs (followNoteLink owns the Trash and
+       Archive answers), and does nothing at all when the
+       target is gone from every list. */
+    const anchor = linkBarAnchor;
+    const noteId = anchor ? noteLinkIdOf(anchor) : null;
     const href = linkBarHref;
     hideLinkBar();
+    if (noteId) {
+      if (findNoteById(noteId)) { followNoteLink(noteId); }
+      return;
+    }
     if (href) { openNoteLink(href); }
   });
   /* The pencil swaps the bar to its inline edit form. */
   document.getElementById("linkBarEditBtn").addEventListener("click", function () {
     startLinkEdit();
   });
-  /* Copy and the menu's Copy URL are the one copy action. */
+  /* Copy and the menu's Copy URL are the one copy action.
+     v2.10: the action dispatches by link kind (an address for
+     a web link, the note link itself for a note link), and
+     the Mention card's Copy Link button runs the note copy
+     against the card's mention directly. */
   document.getElementById("linkBarCopyBtn").addEventListener("click", function () {
-    copyLinkBarUrl();
+    copyLinkBarLink();
   });
   document.getElementById("linkViewCopyBtn").addEventListener("click", function () {
-    copyLinkBarUrl();
+    copyLinkBarLink();
+  });
+  document.getElementById("noteLinkCardCopyBtn").addEventListener("click", function () {
+    if (noteLinkCardAnchor) { copyNoteLink(noteLinkCardAnchor); }
+  });
+  /* The card's three dot button opens the same View Link As
+     menu (positioned under the card by openLinkViewMenu). */
+  document.getElementById("noteLinkCardMenuBtn").addEventListener("click", function () {
+    toggleLinkViewMenu();
+  });
+  /* The note link edit state's Change note button reopens the
+     picker as a retarget picker for the bar's link. */
+  document.getElementById("linkEditChangeNoteBtn").addEventListener("click", function () {
+    openNoteLinkRetargetPicker();
   });
   /* The broken link button unlinks: text stays, link goes. */
   document.getElementById("linkBarUnlinkBtn").addEventListener("click", function () {
@@ -16976,13 +17988,28 @@ function wireEvents() {
      bar itself, and clicks on body links (handled by the listener
      above, which repositions or reopens it), are excluded. This is
      also what closes the bar when another overlay or modal opens:
-     those all open from clicks outside the bar. */
+     those all open from clicks outside the bar.
+     v2.10: the menu is the bar's sibling now, and the Mention
+     card can be the only surface up, so the guard passes when
+     either surface is visible, and the exclusions name the menu
+     and the card separately. The note link picker is excluded
+     as a whole: while the modal is open no bar can be summoned
+     (the modal covers the note), and the one bar that can exist
+     during a picker click is the retarget bar, which a row
+     click has JUST shown for the retargeted link; closing it
+     again in the same click would undo the retarget's landing.
+     (The insert flow never has a bar behind its picker, so the
+     exclusion changes nothing there.) */
   document.addEventListener("click", function (ev) {
     const bar = document.getElementById("linkBar");
-    if (!bar || bar.classList.contains("hidden")) { return; }
+    if ((!bar || bar.classList.contains("hidden")) &&
+        !noteLinkCardVisible()) { return; }
     const target = ev.target;
     if (!target || !target.closest) { return; }
     if (target.closest("#linkBar")) { return; }
+    if (target.closest("#linkViewMenu")) { return; }
+    if (target.closest("#noteLinkCard")) { return; }
+    if (target.closest("#noteLinkModal")) { return; }
     const anchor = target.closest("a");
     if (anchor && document.getElementById("noteBody").contains(anchor)) { return; }
     hideLinkBar();
