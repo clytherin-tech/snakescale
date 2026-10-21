@@ -40,10 +40,34 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-20-SSN-V2110
-  Version: 2.11.0
+  BUILD STAMP: 2026-10-21-SSN-V2120
+  Version: 2.12.0
 
   Revision history:
+    v2.12.0 2026-10-21 Three changes. Typing "@" in a note opens
+                      a Results popup under the caret: a Create
+                      new note row carrying the typed text, then
+                      the notes whose titles match what follows
+                      the "@" (archived notes included, Trash
+                      never), most recently updated first, eight
+                      rows at a time. Arrows move the highlight,
+                      Enter, Tab, or a click inserts, Escape
+                      closes, and while the popup is up its keys
+                      are consumed before the editor's own Tab and
+                      Enter handling sees them. Inserting replaces
+                      the "@query" with a note link and a trailing
+                      space; Create new note makes the note in the
+                      current note's notebook, without leaving the
+                      note being edited, and links to it. Second:
+                      new note links are born in Mention view, from
+                      the @ popup and from the Link to Note picker
+                      alike; links already saved keep the view they
+                      have, and nothing rewrites them. Third: the
+                      image menu loses its Small, Medium, Large,
+                      and Original size items (and their code);
+                      the corner grips are the way to resize an
+                      image now, and a grip drag still converts a
+                      Fill width image to a sized, centered one.
     v2.11.0 2026-10-20 The image three dot menu grows into the
                       full menu from Chris's reference screenshot,
                       and every item in it works. In order: Full
@@ -1737,6 +1761,39 @@ body.note-drag-active{touch-action:none;overscroll-behavior:none;}
 .note-link-row .nl-meta{display:block;font-size:12px;color:var(--muted);
   margin-top:2px;}
 .note-link-empty{font-size:13px;color:var(--muted);margin:6px 0;}
+/* v2.12: the "@" note popup. A fixed card in the image menu's
+   look, parked under the caret line by the script (flipping above
+   it when the line is near the window's bottom). The Results
+   header matches the link view menu's section header; rows are
+   full width buttons whose highlighted row carries the soft fill
+   and the "enter to add" hint, per Chris's screenshot. */
+#mentionPopup{
+  position:fixed;z-index:63;width:min(340px,94vw);padding:6px;
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius-card);box-shadow:0 10px 28px rgba(6,32,22,.28);
+}
+#mentionPopup.hidden{display:none;}
+.mention-head{
+  font-size:11px;font-weight:700;letter-spacing:.08em;
+  color:var(--muted);padding:5px 10px 3px;
+}
+.mention-list{display:flex;flex-direction:column;gap:2px;
+  max-height:300px;overflow-y:auto;}
+.mention-row{
+  display:flex;align-items:center;gap:9px;width:100%;text-align:left;
+  border:none;background:none;color:var(--text);font-size:14px;
+  padding:7px 10px;border-radius:8px;cursor:pointer;
+}
+.mention-row svg{flex:none;opacity:.85;}
+.mention-row.current{background:var(--soft);}
+.mention-texts{flex:1;min-width:0;display:flex;flex-direction:column;}
+.mention-title{font-weight:600;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap;}
+.mention-nb{font-size:12px;color:var(--muted);margin-top:1px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.mention-create-sub{font-size:12px;color:var(--accent);margin-top:1px;}
+.mention-hint{flex:none;display:inline-flex;align-items:center;gap:5px;
+  font-size:12px;color:var(--muted);white-space:nowrap;}
 /* v1.6 checklists: a checklist is a list of checkboxes, not a bulleted
    list, so its items never show a bullet or marker in front of the
    checkbox. Toolbars have tagged new checklists with the ss-checklist
@@ -3321,6 +3378,14 @@ body.dark .version-date{color:var(--accent);}
             <div id="noteLinkCardExcerpt"></div>
             <div id="noteLinkCardTime"></div>
           </div>
+          <!-- v2.12: the "@" note popup. While the user types an
+               "@" token in the note body, this card floats under
+               the caret with a Results list: a Create new note row
+               carrying the typed text, then the matching notes.
+               The script fills and positions it; it is a sibling
+               of #noteBody like the link bar, so it can never be
+               saved into a note. Hidden by default. -->
+          <div id="mentionPopup" class="hidden" role="listbox" aria-label="Link a note"></div>
           <!-- v1.7: the selected image's action menu, a SIBLING of
                #noteBody like the link popup, so it can never be saved
                into a note. Buttons carry data-action values; one
@@ -3329,21 +3394,17 @@ body.dark .version-date{color:var(--accent);}
                v2.11: the menu is rebuilt to the full menu from
                Chris's reference screenshot (see the image menu
                section of the script): preview, the image editor,
-               crop, the size presets (their data-action hooks and
-               behavior unchanged), transcribe, caption, the
-               alignment submenu, rename, download, print,
-               thumbnail, the VIEW AS modes, and Delete file. This
-               menu only ever opens for image figures; file cards
-               keep their own inline buttons and never see it. -->
+               crop, transcribe, caption, the alignment submenu,
+               rename, download, print, thumbnail, the VIEW AS
+               modes, and Delete file. (v2.12: the Small, Medium,
+               Large, and Original size items are gone; the corner
+               grips are the way to resize an image.) This menu
+               only ever opens for image figures; file cards keep
+               their own inline buttons and never see it. -->
           <div id="attMenu" class="hidden" role="menu" aria-label="Image options">
             <button class="att-menu-item" type="button" data-action="preview"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M16 3h3a2 2 0 0 1 2 2v3"/><path d="M8 21H5a2 2 0 0 1-2-2v-3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg><span class="att-menu-label">Full screen preview</span></button>
             <button class="att-menu-item" type="button" data-action="edit"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg><span class="att-menu-label">Edit &amp; Annotate</span></button>
             <button class="att-menu-item" type="button" data-action="crop"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M18 22V8a2 2 0 0 0-2-2H2"/></svg><span class="att-menu-label">Crop</span></button>
-            <div class="att-menu-sep"></div>
-            <button class="att-menu-item" type="button" data-action="small"><span class="att-menu-label">Small (25%)</span></button>
-            <button class="att-menu-item" type="button" data-action="medium"><span class="att-menu-label">Medium (50%)</span></button>
-            <button class="att-menu-item" type="button" data-action="large"><span class="att-menu-label">Large (100%)</span></button>
-            <button class="att-menu-item" type="button" data-action="original"><span class="att-menu-label">Original size</span></button>
             <div class="att-menu-sep"></div>
             <button class="att-menu-item" type="button" data-action="transcribe"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 20 12 4l7 16"/><path d="M7.6 14h8.8"/></svg><span class="att-menu-label">Transcribe</span></button>
             <button class="att-menu-item" type="button" data-action="caption" id="attCaptionItem"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 15h6"/></svg><span class="att-menu-label">Show caption</span><span class="att-dot" aria-hidden="true"></span></button>
@@ -3720,8 +3781,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-20-SSN-V2110";
-const APP_VERSION = "2.11.0";
+const APP_BUILD = "2026-10-21-SSN-V2120";
+const APP_VERSION = "2.12.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -6822,6 +6883,8 @@ function anyOverlayOpen() {
        and the image editor overlay join the overlay set, so an
        Escape that closes any of them never also exits Maximize. */
     "attAlignMenu", "imgLightbox", "imgEditorModal",
+    /* v2.12: the "@" note popup joins the set for the same reason. */
+    "mentionPopup",
     "exportMenu", "sidebarMenu"];
   for (let i = 0; i < ids.length; i++) {
     const el = document.getElementById(ids[i]);
@@ -7644,6 +7707,8 @@ function renderEditor() {
        image menu, in deselectAttachment above.) */
     closeImageLightbox();
     closeImageEditor();
+    /* v2.12: the "@" note popup belongs to the previous note too. */
+    closeMentionPopup();
     attachBodyGuard = true;
     /* v1.2: the previous note's image blob URLs are released before the
        editor switches, so long sessions do not accumulate them. */
@@ -7729,6 +7794,8 @@ function renderEditor() {
   /* v2.9: and the link bar closes the moment a note locks, since
      its actions all edit the note. */
   if (locked) { hideLinkBar(); }
+  /* v2.12: a locked note never carries the "@" popup either. */
+  if (locked) { closeMentionPopup(); }
   /* v2.5: the notebook link's locked state was set by
      refreshNotebookLink above (it replaced the old picker's
      disabled line here). */
@@ -10250,6 +10317,11 @@ function pickNoteLinkTarget(target) {
      Later renders re-resolve it (decorateLinkTooltips), so a rename
      still shows through without this anchor being touched again. */
   anchor.setAttribute("title", target.title || "Untitled note");
+  /* v2.12: new note links are born in Mention view (Chris's
+     direction), here and in the "@" popup alike. Links saved by
+     earlier versions keep the mode they carry; nothing rewrites
+     them, and the View Link As menu still switches any link. */
+  anchor.setAttribute("data-ss-link-view", "mention");
   anchor.textContent = (pending && pending.label) ||
     target.title || "Untitled note";
   let placed = false;
@@ -10307,6 +10379,355 @@ function followNoteLink(noteId) {
     return;
   }
   toast("That note no longer exists.", true);
+}
+
+/* ----- v2.12: the "@" note popup ---------------------------------------
+   Typing "@" in a note opens a Results card under the caret, the
+   interaction in Chris's screenshot: a Create new note row
+   carrying the typed text, then the notes whose titles match what
+   follows the "@", most recently updated first. Enter, Tab, or a
+   click replaces the "@query" with a note link (born in Mention
+   view, like every new note link since this version) and a
+   trailing space; Create new note makes the note first, in the
+   notebook of the note being edited, without leaving it.
+
+   The token rule: the "@" starts a token when it is the first
+   character of its text node or follows whitespace, and the query
+   is the run of non-whitespace characters between it and the
+   caret (possibly empty). The popup never opens with the caret in
+   a code block (a pre element), in an attachment placeholder, in
+   an existing link, or in a locked (Trash or Archive) note, and it
+   closes when the pattern breaks: a space after the "@", the "@"
+   deleted, or the caret moved out of the token.
+
+   The card itself is #mentionPopup, a sibling of #noteBody, so
+   nothing of it can ever be saved into a note. Its keys are taken
+   in a capture phase document listener (see wireEvents), so while
+   it is open, Enter and Tab belong to it and never reach the
+   editor's own Enter and Tab handling (checklist Enter, table and
+   list Tab) underneath. */
+
+let mentionTrigger = null;
+let mentionRows = [];
+let mentionHighlight = 0;
+let mentionLastQuery = null;
+let mentionLastNode = null;
+
+const MENTION_NOTE_ICON =
+  "<svg viewBox=\"0 0 24 24\" width=\"16\" height=\"16\" fill=\"none\" " +
+  "stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" " +
+  "stroke-linejoin=\"round\"><path d=\"M7 3h7l4 4v13a1 1 0 0 1-1 1H7" +
+  "a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z\"/><path d=\"M14 3v4h4\"/></svg>";
+const MENTION_CREATE_ICON =
+  "<svg viewBox=\"0 0 24 24\" width=\"16\" height=\"16\" fill=\"none\" " +
+  "stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" " +
+  "stroke-linejoin=\"round\"><path d=\"M7 3h7l4 4v13a1 1 0 0 1-1 1H7" +
+  "a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z\"/><path d=\"M14 3v4h4\"/>" +
+  "<path d=\"M12 12v6M9 15h6\"/></svg>";
+const MENTION_ENTER_ICON =
+  "<svg viewBox=\"0 0 24 24\" width=\"14\" height=\"14\" fill=\"none\" " +
+  "stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" " +
+  "stroke-linejoin=\"round\"><path d=\"M9 10l-5 5 5 5\"/>" +
+  "<path d=\"M4 15h11a5 5 0 0 0 5-5V4\"/></svg>";
+
+function mentionPopupOpen() {
+  const popup = document.getElementById("mentionPopup");
+  return !!popup && !popup.classList.contains("hidden");
+}
+
+function closeMentionPopup() {
+  const popup = document.getElementById("mentionPopup");
+  if (popup) { popup.classList.add("hidden"); }
+  mentionTrigger = null;
+  mentionRows = [];
+  mentionHighlight = 0;
+  mentionLastQuery = null;
+  mentionLastNode = null;
+}
+
+/* The rows for one query: the Create row first (only while a query
+   is typed), then up to eight matching notes. A note matches when
+   its title, lowercased, contains the query, lowercased; an
+   untitled note's title is empty, and an empty string contains
+   only the empty query, so untitled notes surface only while
+   nothing has been typed past the "@" and never flood filtered
+   results. Trashed notes never match; archived notes do, like the
+   rest of the app treats them: present, but read only. */
+function mentionCandidates(query) {
+  const needle = String(query || "").toLowerCase();
+  const matches = state.notes.concat(state.archive).filter(function (note) {
+    if (note.trashed) { return false; }
+    return (note.title || "").toLowerCase().indexOf(needle) >= 0;
+  }).slice().sort(function (a, b) {
+    return String(b.updated || "").localeCompare(String(a.updated || ""));
+  }).slice(0, 8);
+  const rows = [];
+  if (query) { rows.push({ kind: "create" }); }
+  matches.forEach(function (note) {
+    rows.push({ kind: "note", note: note });
+  });
+  return rows;
+}
+
+/* The tracker: run on the body's input events and on document
+   selection changes, so typing, deleting, and caret moves all
+   re-evaluate the token under the caret. Anything that is not a
+   live "@" token closes the popup. */
+function updateMentionPopup() {
+  const popup = document.getElementById("mentionPopup");
+  if (!popup) { return; }
+  const note = currentNote();
+  const bodyEl = document.getElementById("noteBody");
+  if (!note || note.trashed || note.archived || !bodyEl ||
+      bodyEl.contentEditable === "false") {
+    closeMentionPopup();
+    return;
+  }
+  const sel = window.getSelection();
+  if (!sel || !sel.rangeCount) { closeMentionPopup(); return; }
+  const range = sel.getRangeAt(0);
+  const node = range.startContainer;
+  if (!range.collapsed || !node || node.nodeType !== 3 ||
+      !bodyEl.contains(node)) {
+    closeMentionPopup();
+    return;
+  }
+  const host = node.parentElement;
+  if (!host || (host.closest &&
+      host.closest("pre, a, .ss-attachment"))) {
+    closeMentionPopup();
+    return;
+  }
+  const before = node.nodeValue.slice(0, range.startOffset);
+  const at = before.lastIndexOf("@");
+  if (at < 0) { closeMentionPopup(); return; }
+  if (at > 0 && !/\s/.test(before.charAt(at - 1))) {
+    closeMentionPopup();
+    return;
+  }
+  const query = before.slice(at + 1);
+  if (/\s/.test(query)) { closeMentionPopup(); return; }
+  mentionTrigger = {
+    node: node, atOffset: at, caretOffset: range.startOffset, query: query
+  };
+  mentionRows = mentionCandidates(query);
+  if (!mentionRows.length) { closeMentionPopup(); return; }
+  if (query !== mentionLastQuery || node !== mentionLastNode) {
+    mentionLastQuery = query;
+    mentionLastNode = node;
+    /* The highlight starts on the first matching note, the row the
+       screenshot shows carrying "enter to add"; with no match it
+       starts on the Create row, the only row there is. It resets
+       when the query changes or the token under the caret is a new
+       one (a different text node), never while the same token
+       stands still. */
+    mentionHighlight = mentionRows.findIndex(function (row) {
+      return row.kind === "note";
+    });
+    if (mentionHighlight < 0) { mentionHighlight = 0; }
+  }
+  renderMentionPopup(range);
+}
+
+function renderMentionPopup(range) {
+  const popup = document.getElementById("mentionPopup");
+  if (!popup) { return; }
+  popup.innerHTML = "";
+  const head = document.createElement("div");
+  head.className = "mention-head";
+  head.textContent = "Results";
+  popup.appendChild(head);
+  const list = document.createElement("div");
+  list.className = "mention-list";
+  mentionRows.forEach(function (row, i) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "mention-row" +
+      (row.kind === "create" ? " mention-create" : "");
+    btn.setAttribute("data-mi", String(i));
+    btn.setAttribute("role", "option");
+    const icon = document.createElement("span");
+    icon.setAttribute("aria-hidden", "true");
+    icon.innerHTML = row.kind === "create" ?
+      MENTION_CREATE_ICON : MENTION_NOTE_ICON;
+    btn.appendChild(icon);
+    const texts = document.createElement("span");
+    texts.className = "mention-texts";
+    const line1 = document.createElement("span");
+    line1.className = "mention-title";
+    const line2 = document.createElement("span");
+    if (row.kind === "create") {
+      line1.textContent = mentionTrigger ? mentionTrigger.query : "";
+      line2.className = "mention-create-sub";
+      line2.textContent = "Create new note";
+    } else {
+      line1.textContent = row.note.title || "Untitled note";
+      line2.className = "mention-nb";
+      line2.textContent = notebookNameForNote(row.note);
+    }
+    texts.appendChild(line1);
+    texts.appendChild(line2);
+    btn.appendChild(texts);
+    list.appendChild(btn);
+  });
+  popup.appendChild(list);
+  popup.classList.remove("hidden");
+  setMentionHighlight(mentionHighlight);
+  positionMentionPopup(range);
+}
+
+/* Park the card under the caret's line, flipped above it when the
+   line sits too near the window's bottom, the way the app's other
+   fixed cards clamp into the viewport. */
+function positionMentionPopup(range) {
+  const popup = document.getElementById("mentionPopup");
+  if (!popup || !range) { return; }
+  const rect = range.getBoundingClientRect();
+  const width = popup.offsetWidth;
+  const height = popup.offsetHeight;
+  let left = Math.min(rect.left, window.innerWidth - width - 8);
+  left = Math.max(8, left);
+  let top = rect.bottom + 6;
+  if (top + height > window.innerHeight - 8) {
+    top = Math.max(8, rect.top - height - 6);
+  }
+  popup.style.left = left + "px";
+  popup.style.top = top + "px";
+}
+
+function setMentionHighlight(i) {
+  const popup = document.getElementById("mentionPopup");
+  if (!popup || !mentionRows.length) { return; }
+  mentionHighlight = ((i % mentionRows.length) + mentionRows.length) %
+    mentionRows.length;
+  popup.querySelectorAll(".mention-row").forEach(function (rowEl) {
+    const mine = Number(rowEl.getAttribute("data-mi")) === mentionHighlight;
+    rowEl.classList.toggle("current", mine);
+    const old = rowEl.querySelector(".mention-hint");
+    if (old) { old.remove(); }
+    if (mine) {
+      const hint = document.createElement("span");
+      hint.className = "mention-hint";
+      const label = document.createElement("span");
+      label.textContent = "enter to add";
+      hint.appendChild(label);
+      const icon = document.createElement("span");
+      icon.setAttribute("aria-hidden", "true");
+      icon.innerHTML = MENTION_ENTER_ICON;
+      hint.appendChild(icon);
+      rowEl.appendChild(hint);
+    }
+  });
+}
+
+/* Replace the tracked "@query" with a note link to the target and
+   a trailing space, the caret landing after the space. The link is
+   built exactly as the Link to Note picker builds one, plus the
+   Mention mode every new note link is born with since v2.12, and
+   the render decoration passes run over the body so the Mention
+   face shows at once rather than on the next open. */
+function insertMentionNoteLink(target) {
+  const trig = mentionTrigger;
+  const bodyEl = document.getElementById("noteBody");
+  closeMentionPopup();
+  if (!trig || !bodyEl || !bodyEl.contains(trig.node)) { return; }
+  const anchor = document.createElement("a");
+  anchor.setAttribute("href", SSNOTE_HREF_PREFIX + target.id);
+  anchor.setAttribute("class", "ss-note-link");
+  anchor.setAttribute("title", target.title || "Untitled note");
+  anchor.setAttribute("data-ss-link-view", "mention");
+  anchor.textContent = target.title || "Untitled note";
+  const end = Math.min(trig.caretOffset,
+    trig.node.nodeValue ? trig.node.nodeValue.length : 0);
+  const range = document.createRange();
+  range.setStart(trig.node, trig.atOffset);
+  range.setEnd(trig.node, end);
+  const sel = window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(range);
+  range.deleteContents();
+  range.insertNode(anchor);
+  const space = document.createTextNode(" ");
+  anchor.after(space);
+  placeCaretIn(space, 1);
+  decorateLinkTooltips(bodyEl);
+  decorateLinkViews(bodyEl);
+  markDirty();
+}
+
+/* Create the note the Create row promises: the query as its title,
+   in the notebook of the note being edited (the first notebook
+   when that somehow resolves to nothing). The instant create
+   pattern of createNoteInRepo, minus the navigation: the note is
+   in state and cache at once, the list re-renders, and the
+   storage write runs in the background with the same failure
+   wording. The note being edited stays open throughout. */
+function createMentionTargetNote(title) {
+  if (!state.notebooks.length) { createNotebook("Personal"); }
+  const host = currentNote();
+  let slug = host ? host.notebook : null;
+  const known = state.notebooks.some(function (b) {
+    return b.slug === slug;
+  });
+  if (!slug || !known) { slug = state.notebooks[0].slug; }
+  const note = makeNote(slug, title);
+  state.notes.unshift(note);
+  saveCache();
+  renderNoteList();
+  saveNoteToRepo(note, { skipConflictCheck: true, fresh: true })
+    .then(function () { saveCache(); })
+    .catch(function (err) {
+      toast("Note created locally; save failed: " + err.message, true);
+    });
+  return note;
+}
+
+function pickMentionRow(i) {
+  const row = mentionRows[i];
+  if (!row) { return; }
+  if (row.kind === "note") {
+    insertMentionNoteLink(row.note);
+    return;
+  }
+  let created = null;
+  try {
+    created = createMentionTargetNote(
+      mentionTrigger ? mentionTrigger.query : "");
+  } catch (err) {
+    toast("Could not create that note: " + err.message, true);
+  }
+  if (!created) { closeMentionPopup(); return; }
+  insertMentionNoteLink(created);
+}
+
+/* The popup's keys, taken on the capture phase at the document
+   (see the wiring in wireEvents), so while the popup is open the
+   editor's own keydown handlers (checklist Enter, the Tab
+   handler) never see Enter, Tab, or the arrows at all. Escape is
+   the popup's wherever it lands; the Maximize capture snapshot
+   counts the popup as an open overlay, so that Escape never also
+   exits Maximize. */
+function onMentionPopupKeydown(ev) {
+  if (!mentionPopupOpen()) { return; }
+  if (ev.key === "Escape") {
+    closeMentionPopup();
+    ev.preventDefault();
+    ev.stopPropagation();
+    return;
+  }
+  if (ev.key !== "ArrowDown" && ev.key !== "ArrowUp" &&
+      ev.key !== "Enter" && ev.key !== "Tab") { return; }
+  const bodyEl = document.getElementById("noteBody");
+  if (!bodyEl || !ev.target || !bodyEl.contains(ev.target)) { return; }
+  ev.preventDefault();
+  ev.stopPropagation();
+  if (ev.key === "ArrowDown") {
+    setMentionHighlight(mentionHighlight + 1);
+  } else if (ev.key === "ArrowUp") {
+    setMentionHighlight(mentionHighlight - 1);
+  } else {
+    pickMentionRow(mentionHighlight);
+  }
 }
 
 /* ----- v2.1.0: Insert menu block items (table, code block) ---------------
@@ -16460,8 +16881,8 @@ function normalizeImageFigureSize(el) {
 /* v1.7.2: give an image block a chosen size, in pixels: the width
    lands on the block, and the block's inline max-width is lifted
    so the stylesheet's column cap cannot fight the choice. Grip
-   drags and the image menu's size presets both land here, so
-   there is exactly one way a size is ever applied. */
+   drags land here (through v2.11 the menu's size presets did too),
+   so there is exactly one way a size is ever applied. */
 function applyImageFigureWidth(el, px) {
   el.style.width = Math.round(px) + "px";
   el.style.maxWidth = "none";
@@ -17081,10 +17502,10 @@ function toggleAttAlignMenu() {
    saved state; two conversions are deliberate:
      - Fill width discards the figure's chosen pixel width (and the
        max-width lift a chosen size carries): filling the column IS
-       the size choice while Fill is on. Coming back out, choosing
-       a size preset or starting a grip drag converts a Fill figure
-       to Center at its current rendered width (see the preset
-       handling in runAttMenuAction and startAttachmentResize).
+       the size choice while Fill is on. Coming back out, starting
+       a grip drag converts a Fill figure to Center at its current
+       rendered width (see startAttachmentResize). (Through
+       v2.11 the size presets did this too; v2.12 removed them.)
      - Left align is stored as ABSENCE of the attribute, the
        original rendering; the value "left" is still honored when a
        file carries it (see the CSS), it is just never written. */
@@ -17099,9 +17520,9 @@ function applyImageAlign(el, mode) {
 }
 
 /* Convert a Fill width figure back to a sized one, at the width it
-   currently renders, centered. Shared by the size presets and the
-   grip drag: both are about to set an explicit pixel width, which
-   Fill's full column rule would otherwise fight. */
+   currently renders, centered. The grip drag calls this first: it
+   is about to set an explicit pixel width, which Fill's full
+   column rule would otherwise fight. */
 function convertFillFigureToSized(el) {
   if (!el || el.getAttribute("data-ss-align") !== "fill") { return; }
   const px = el.getBoundingClientRect().width;
@@ -17210,17 +17631,14 @@ async function openAttachment(att) {
 
 /* One click in the shared image menu. v2.11 rebuilt the menu to
    the full feature set; the dispatch below routes each item to its
-   section. Size presets set the image width as a share of the
-   editor column width, computed to pixels at click time; since
-   v1.7.2 the width lands on the block through
-   applyImageFigureWidth, exactly like a grip drag, so
-   canonicalization carries it into the saved note the same way.
-   The Original preset (v1.7.2) sets the block to the image's
-   natural width instead. Delete file routes through the undoable
-   deletion engine (see the attachments section below) and drops
-   the selection, since the block is leaving the note. The Image
+   section. Delete file routes through the undoable deletion
+   engine (see the attachments section below) and drops the
+   selection, since the block is leaving the note. The Image
    alignment item is the one action that does NOT close the menu:
-   it opens the alignment submenu beside it instead. */
+   it opens the alignment submenu beside it instead.
+   v2.12: the Small, Medium, Large, and Original size items (and
+   their branches here) are removed at Chris's direction: resizing
+   an image is the corner grips' job now. */
 function runAttMenuAction(action) {
   if (action === "align") {
     toggleAttAlignMenu();
@@ -17283,35 +17701,6 @@ function runAttMenuAction(action) {
   }
   if (action === "viewPreview") {
     setImageView(note, att, el, "preview");
-    return;
-  }
-  if (action === "small" || action === "medium" || action === "large") {
-    if (!el) { return; }
-    const bodyEl = document.getElementById("noteBody");
-    if (!bodyEl || !bodyEl.clientWidth) { return; }
-    /* v2.11: a size preset on a Fill width figure converts it to a
-       sized, centered figure first (see applyImageAlign). */
-    convertFillFigureToSized(el);
-    const pct = action === "small" ? 25 : (action === "medium" ? 50 : 100);
-    applyImageFigureWidth(el, Math.round(bodyEl.clientWidth * pct / 100));
-    markDirty();
-    return;
-  }
-  if (action === "original") {
-    if (!el) { return; }
-    convertFillFigureToSized(el);
-    const img = el.querySelector("img.ss-att-img");
-    /* The image's natural width, the size it was uploaded at. When
-       the browser cannot report one (the image failed to load, for
-       instance), fall back to the width currently on screen, which
-       simply makes the current size the chosen one. */
-    const natural = img && img.naturalWidth ? img.naturalWidth : 0;
-    const current = el.getBoundingClientRect().width ||
-      (el.style && el.style.width ? parseFloat(el.style.width) : 0);
-    const width = natural || current;
-    if (!width) { return; }
-    applyImageFigureWidth(el, width);
-    markDirty();
     return;
   }
   if (action === "remove") {
@@ -19192,6 +19581,51 @@ function wireEvents() {
      untouched. */
   document.getElementById("noteBody").addEventListener("input", function () {
     queueAttachmentBodyCheck();
+  });
+
+  /* v2.12: the "@" note popup wiring. Typing in the body and every
+     selection change re-run the token tracker; the keys are taken
+     on the document's capture phase (see onMentionPopupKeydown),
+     so an open popup consumes Enter, Tab, and the arrows before
+     the body's own keydown handlers run; scrolling the editor
+     closes it, like the link bar and the image menu, since its
+     fixed position belongs to the caret line it opened under; a
+     click anywhere outside the popup and the body closes it too
+     (a click inside the body is the tracker's business: it moves
+     the caret, and the selection change re-evaluates the token).
+     The popup's own mousedown is swallowed so clicking a row
+     never moves the editor selection before the click lands. */
+  document.getElementById("noteBody").addEventListener("input",
+    updateMentionPopup);
+  document.addEventListener("selectionchange", updateMentionPopup);
+  document.addEventListener("keydown", onMentionPopupKeydown, true);
+  document.querySelector(".editor-scroll").addEventListener("scroll",
+    function () { closeMentionPopup(); });
+  document.addEventListener("click", function (ev) {
+    if (!mentionPopupOpen()) { return; }
+    const target = ev.target;
+    if (!target || !target.closest) { return; }
+    if (target.closest("#mentionPopup") ||
+        target.closest("#noteBody")) { return; }
+    closeMentionPopup();
+  });
+  const mentionPopupEl = document.getElementById("mentionPopup");
+  mentionPopupEl.addEventListener("mousedown", function (ev) {
+    ev.preventDefault();
+  });
+  mentionPopupEl.addEventListener("click", function (ev) {
+    const target = ev.target;
+    const rowEl = target && target.closest ?
+      target.closest("[data-mi]") : null;
+    if (rowEl) { pickMentionRow(Number(rowEl.getAttribute("data-mi"))); }
+  });
+  mentionPopupEl.addEventListener("mouseover", function (ev) {
+    const target = ev.target;
+    const rowEl = target && target.closest ?
+      target.closest("[data-mi]") : null;
+    if (rowEl) {
+      setMentionHighlight(Number(rowEl.getAttribute("data-mi")));
+    }
   });
 
   /* Checklist toggling: a click on a checkbox inside the body flips the
