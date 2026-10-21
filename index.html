@@ -40,10 +40,38 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-21-SSN-V2150
-  Version: 2.15.0
+  BUILD STAMP: 2026-10-21-SSN-V2160
+  Version: 2.16.0
 
   Revision history:
+    v2.16.0 2026-10-21 Idle auto-sync on Drive changes. While
+                      the app is open it asks the Drive change
+                      feed, about every 30 seconds, whether
+                      anything inside the SnakeScale folder
+                      changed (an edit made on another device,
+                      or by another tool, to a file this app
+                      owns), and when something did it syncs
+                      on its own, but only once the user has
+                      been idle for about ten seconds: never
+                      mid typing, never over a voice recording,
+                      a drag, or an open dialog, and a change
+                      noticed while a gate is shut waits for
+                      the next idle moment. The sync is the
+                      ordinary Sync now path with its flush
+                      before load order intact, run quietly
+                      (no toast), and an open note whose
+                      reload comes back unchanged keeps its
+                      editor, cursor included, exactly as it
+                      stood. The poll itself is one small call
+                      and a sync only ever runs when the feed
+                      reports an in corpus change; the app's
+                      own saves, which the feed also reports,
+                      are recognized by revision and skipped.
+                      Auto-sync is a Settings toggle in the
+                      Connection section, on by default; the
+                      change token lives in memory only and
+                      re-baselines at every boot, after the
+                      boot sync.
     v2.15.0 2026-10-21 Automatic silent reconnect, and the
                       Refresh connection button returns to the
                       expanded sidebar. Google access tokens
@@ -2918,6 +2946,19 @@ body.dark .settings-section h3{color:var(--accent);}
 .onboarding-dots span.current{background:var(--primary);border-color:var(--primary);}
 .onboarding-foot #onboardingSkipBtn{margin-right:auto;}
 .settings-feedback{min-height:18px;font-weight:600;}
+/* v2.16: the auto-sync checkbox row in Settings Connection. A
+   real checkbox carries the state (ticked or not), accented in
+   the palette's primary like the checklist boxes, with its
+   label as the click target. */
+.settings-autosync{margin-top:14px;}
+.settings-check{
+  display:flex;align-items:center;gap:9px;cursor:pointer;
+  font-size:14.5px;font-weight:600;
+}
+.settings-check input{
+  width:17px;height:17px;margin:0;cursor:pointer;
+  accent-color:var(--primary);flex:none;
+}
 .theme-segmented{
   display:inline-flex;gap:3px;padding:3px;border:1px solid var(--border);
   border-radius:999px;background:var(--soft);
@@ -4025,6 +4066,17 @@ body.dark .version-date{color:var(--accent);}
       <h3 id="settingsConnectionTitle">Connection</h3>
       <p>Reconnect to Google Drive without reloading the page. The open note is saved on this device first, and nothing is wiped.</p>
       <button class="btn" id="settingsRefreshBtn" type="button"><span id="settingsRefreshLabel">Refresh connection</span></button>
+      <!-- v2.16: the idle auto-sync toggle. A plain checkbox
+           input (accented like the checklist boxes), so the on
+           or off state is the control itself, never a silently
+           remembered choice. -->
+      <div class="settings-autosync">
+        <label class="settings-check" for="settingsAutoSyncToggle">
+          <input type="checkbox" id="settingsAutoSyncToggle">
+          <span>Auto-sync when changes appear</span>
+        </label>
+        <div class="settings-help">Check Google Drive about every 30 seconds and sync automatically when your notes change elsewhere, only when you are idle.</div>
+      </div>
     </section>
 
     <section class="settings-section" aria-labelledby="settingsHistoryTitle">
@@ -4168,8 +4220,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-21-SSN-V2150";
-const APP_VERSION = "2.15.0";
+const APP_BUILD = "2026-10-21-SSN-V2160";
+const APP_VERSION = "2.16.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -4282,6 +4334,12 @@ const state = {
                             // seeded during the boot, never by this
                             // flag being absent, so an existing or
                             // upgraded store can never spring it.
+  autoSync: true,           // v2.16: idle auto-sync on Drive
+                            // changes, remembered in settings and
+                            // edited by the Settings Connection
+                            // toggle. On unless a stored settings
+                            // record explicitly says false; see
+                            // the auto-sync block for the engine.
   trashSelection: [],       // v1.8.1: ids of the notes checked in the
                             // Trash view, for Delete Selected
   archiveSelection: [],     // v1.8.1: ids of the notes checked in the
@@ -4655,6 +4713,8 @@ async function signOut() {
   /* v2.15: signing out cancels the pending automatic renewal,
      so no silent ask can resurrect the session just left. */
   clearGoogleRenewalTimer();
+  /* v2.16: and the auto-sync watcher stops with the session. */
+  stopAutoSync();
   state.attach.googleExpiresAt = 0;
   state.attach.googleFolderId = null;
   revokeAttachmentUrls();
@@ -4753,6 +4813,11 @@ function loadSettings() {
      triggers the walkthrough (seeding during the boot does), it
      only records that the tour already happened here. */
   if (s.onboardingSeen === true) { state.onboardingSeen = true; }
+  /* v2.16: idle auto-sync. The default is on, so only an
+     explicitly stored false turns it off; a record written
+     before this setting existed (no autoSync field at all)
+     keeps the on default, exactly like a fresh device. */
+  if (s.autoSync === false) { state.autoSync = false; }
 }
 
 
@@ -4763,7 +4828,8 @@ function saveSettings() {
     listSort: state.listSort,   // v1.8: the remembered notes list sort
     sidebarRail: state.sidebarRail,   // v2.5: the icon rail choice
     versionsLimit: state.versionsLimit,   // v2.8: versions kept per note
-    onboardingSeen: state.onboardingSeen   // v2.13: the walkthrough record
+    onboardingSeen: state.onboardingSeen,   // v2.13: the walkthrough record
+    autoSync: state.autoSync   // v2.16: the idle auto-sync choice
   }));
 }
 
@@ -5892,6 +5958,9 @@ async function loadAllFromRepo() {
   state.notes = notes;
   state.trash = trash;
   state.archive = archive;
+  /* v2.16: the auto-sync corpus is whatever this load just
+     resolved; see rebuildAutoSyncKnownIds. */
+  rebuildAutoSyncKnownIds();
   /* v2.8: a fresh load is the last saved state, so it reseeds the
      version baselines; cached histories are dropped too, because
      another device may have written or pruned them since this
@@ -6928,6 +6997,11 @@ async function connectAndLoad() {
     if (await loadCacheWithKey()) { renderAll(); }
     showScreen("app");
     await syncNow(false);
+    /* v2.16: the boot sync just refreshed the store in memory,
+       so the auto-sync watcher baselines its change token from
+       this moment and starts polling (when the setting is on).
+       Changes from before this boot are already in hand. */
+    startAutoSync();
     hideLoading();
     if (starter) {
       openNote(starter.id);
@@ -6952,6 +7026,10 @@ async function connectAndLoad() {
       state.repoExists = true;
       showScreen("app");
       renderAll();
+      /* v2.16: the cached app is still a connected app once the
+         store is reachable again; the watcher's ticks simply
+         no-op until storeSyncReady passes. */
+      startAutoSync();
       hideLoading();
       toast("Could not reach Google Drive (" + err.message +
         "). Showing your cached notes.", true);
@@ -8162,6 +8240,22 @@ function renderEditor() {
   noNote.classList.add("hidden");
   wrap.classList.remove("hidden");
 
+  /* v2.16: the auto-sync editor guard. runAutoSync arms it with
+     the open note's id and storage revision before its sync;
+     when the reload brings that same note back at that same
+     revision, nothing the editor shows can have changed, so
+     the render stops here: no field refill, no chrome churn,
+     and the DOM and the user's selection stay exactly as they
+     stood. A note that did change elsewhere carries a new
+     revision, the guard misses, and the normal render below
+     runs (which, by the rule right under this one, still never
+     refills the body of the note already open). Manual syncs
+     never arm the guard. */
+  if (autoSyncEditorGuard && autoSyncEditorGuard.id === note.id &&
+      note.sha && autoSyncEditorGuard.sha === note.sha) {
+    return;
+  }
+
   /* Only refill the fields when a different note is being opened, so a
      re-render during typing never moves the cursor or clobbers input. */
   if (renderEditor._forId !== note.id) {
@@ -8465,6 +8559,9 @@ function syncSettingsControls() {
   const input = document.getElementById("settingsVersionsInput");
   if (input) { input.value = String(currentVersionsLimit()); }
   setVersionsFeedback(versionsLimitFeedback(currentVersionsLimit()));
+  /* v2.16: the auto-sync checkbox shows the saved choice. */
+  const autoSyncToggle = document.getElementById("settingsAutoSyncToggle");
+  if (autoSyncToggle) { autoSyncToggle.checked = state.autoSync !== false; }
 }
 
 function openSettingsModal() {
@@ -8482,6 +8579,21 @@ function openSettingsModal() {
 function closeSettingsModal() {
   const modal = document.getElementById("settingsModal");
   if (modal) { modal.classList.add("hidden"); }
+}
+
+/* v2.16: the auto-sync checkbox's change handler. The choice
+   persists at once, like every Settings control, and takes
+   effect live: on re-baselines the change token and starts
+   the poller, off stops it and forgets the token and any
+   pending change, so a later on starts from that moment
+   rather than replaying everything missed while it was off. */
+function applyAutoSyncFromToggle() {
+  const toggle = document.getElementById("settingsAutoSyncToggle");
+  if (!toggle) { return; }
+  state.autoSync = !!toggle.checked;
+  saveSettings();
+  if (state.autoSync) { startAutoSync(); }
+  else { stopAutoSync(); }
 }
 
 /* The versions input's change handler. A valid value is a whole
@@ -17276,6 +17388,272 @@ function maybeRenewGoogleOnVisible() {
   renewGoogleSilently().catch(function () { return false; });
 }
 
+/* --------------------------------------------------------------------------
+   v2.16: idle auto-sync on Drive changes
+
+   Until this build, a change made outside this tab (the same
+   account on a phone, a second browser, another tool writing to
+   a file this app owns) only appeared here when the user
+   pressed Sync now or reloaded. The watcher below closes that
+   gap the cheap way: it polls the Drive change feed, one small
+   call about every 30 seconds, and runs the ordinary sync only
+   when the feed reports a change that touches this store.
+
+   The pieces, in the order a tick meets them:
+
+   - The change token. getStartPageToken hands out a token
+     meaning "now"; changes.list from that token reports only
+     what changed since. The token lives in memory only and is
+     re-baselined at every boot, after the boot sync (which has
+     just loaded the whole store anyway, so nothing is missed),
+     and whenever the toggle is switched back on. A 410 from
+     changes.list means the token went stale; the answer is a
+     fresh baseline and no sync from that poll.
+   - The corpus test. A change counts only when it touches the
+     SnakeScale tree: its file id is in the known id set (the
+     notes root, the folder ids, index.json, every note file,
+     and attachment files, rebuilt by loadAllFromRepo after
+     every load), or it is a live file whose parent is a known
+     folder (which is how a file newly adopted into the tree
+     announces itself). Removed changes for known files count.
+     One refinement: the feed also reports this app's own
+     saves, so a change naming a loaded note file whose
+     reported revision is the revision already held is not a
+     change for us and never triggers a reload on its own.
+   - The gates. A sync runs only when the user has been idle
+     for AUTO_SYNC_IDLE_MS (activity is keydown, pointerdown,
+     and input events on the document, stamped by
+     noteUserActivity), the tab is visible, no sync is running,
+     no voice recording is in progress, and no overlay is open
+     (anyOverlayOpen: the modals, the image editor, the link
+     bar and its menus, the mention popup, and both drags,
+     block and note). A change noticed while a gate is shut
+     sets autoSyncPendingChange and the same 30 second tick
+     runs it once the gates open.
+   - The sync itself is the existing syncNow(false): the same
+     flush before load order, no toast, the pill showing the
+     activity as usual. While it runs, the editor guard
+     (autoSyncEditorGuard) remembers the open note's id and
+     storage revision; renderEditor compares and, when the
+     reload brought that note back unchanged, leaves the
+     editor exactly as it stood, DOM and selection alike.
+
+   Every failure here is quiet by design: a poll that errors
+   (beyond the 410 re-baseline) syncs nothing, toasts nothing,
+   and simply tries again at the next tick, and the changes
+   calls ride gdriveFetch, so a 401 takes the v2.15 silent
+   renewal path like any other Drive call. Nothing here can
+   raise an interactive prompt.
+   -------------------------------------------------------------------------- */
+const AUTO_SYNC_POLL_MS = 30 * 1000;
+const AUTO_SYNC_IDLE_MS = 10 * 1000;
+let autoSyncTimer = null;          /* the 30 second interval, or null */
+let autoSyncPageToken = null;      /* in memory only, see above */
+let autoSyncPendingChange = false; /* a change is waiting on the gates */
+let autoSyncPollRunning = false;   /* one poll (or its sync) at a time */
+let autoSyncKnownIds = new Set();  /* the corpus, rebuilt per load */
+let autoSyncNoteIdByFileId = Object.create(null); /* file id -> note id */
+let autoSyncEditorGuard = null;    /* {id, sha} during an auto-sync */
+let lastUserActivityAt = Date.now();
+
+/* The idle clock's stamp, wired in wireEvents. */
+function noteUserActivity() {
+  lastUserActivityAt = Date.now();
+}
+
+/* Rebuild the corpus from the store as just loaded. The Drive
+   driver's own caches carry every id a load resolved: the root,
+   the folder ids by path, and the file ids by path (index.json
+   and every note file among them). Attachment file ids ride in
+   the loaded notes' records. The reverse map from a note's
+   Drive file id back to the note id (the file name without its
+   .md) is what the already reflected test below looks up. */
+function rebuildAutoSyncKnownIds() {
+  const ids = new Set();
+  if (driveCache.rootId) { ids.add(driveCache.rootId); }
+  Object.keys(driveCache.folderIds).forEach(function (path) {
+    ids.add(driveCache.folderIds[path]);
+  });
+  const byFile = Object.create(null);
+  Object.keys(driveCache.fileIds).forEach(function (path) {
+    const id = driveCache.fileIds[path];
+    ids.add(id);
+    const m = /([^/]+)\.md$/i.exec(path);
+    if (m) { byFile[id] = m[1]; }
+  });
+  [state.notes, state.trash, state.archive].forEach(function (list) {
+    (list || []).forEach(function (note) {
+      (note.attachments || []).forEach(function (att) {
+        if (att && att.fileId) { ids.add(att.fileId); }
+      });
+    });
+  });
+  autoSyncKnownIds = ids;
+  autoSyncNoteIdByFileId = byFile;
+}
+
+/* The corpus test for one change record, as described above. */
+function autoSyncChangeTouchesStore(change) {
+  if (!change || !change.fileId) { return false; }
+  let inCorpus = autoSyncKnownIds.has(change.fileId);
+  if (!inCorpus && !change.removed && change.file &&
+      Array.isArray(change.file.parents)) {
+    inCorpus = change.file.parents.some(function (parentId) {
+      return autoSyncKnownIds.has(parentId);
+    });
+  }
+  if (!inCorpus) { return false; }
+  if (change.removed) { return true; }
+  /* Already reflected: our own save echoing back, or any write
+     whose revision is the one this device already holds. */
+  const noteId = autoSyncNoteIdByFileId[change.fileId];
+  if (noteId && change.file) {
+    const note = findNoteById(noteId);
+    const token = driveTokenFromMetadata(change.file);
+    if (note && token && note.sha === token) { return false; }
+  }
+  return true;
+}
+
+/* Ask Drive for a fresh "now" token. Failures stay quiet and
+   leave the token null; the next tick baselines again. */
+async function baselineAutoSync() {
+  try {
+    const data = await gdriveJson(
+      "https://www.googleapis.com/drive/v3/changes/startPageToken");
+    if (data && data.startPageToken) {
+      autoSyncPageToken = data.startPageToken;
+    }
+  } catch (e) { /* quiet by design; retried at the next tick */ }
+}
+
+/* (Re)start the poller: any running interval is replaced, the
+   token re-baselines, and ticks begin. With the setting off
+   this only stops, so callers (the connect flow, the refresh
+   flow, the toggle) can call it unconditionally. */
+function startAutoSync() {
+  if (autoSyncTimer !== null) {
+    clearInterval(autoSyncTimer);
+    autoSyncTimer = null;
+  }
+  if (!state.autoSync) { return; }
+  baselineAutoSync();
+  autoSyncTimer = setInterval(autoSyncTick, AUTO_SYNC_POLL_MS);
+}
+
+/* Stop the poller outright and forget its token and any
+   pending change: sign out, disconnect, and the toggle's off
+   all land here. */
+function stopAutoSync() {
+  if (autoSyncTimer !== null) {
+    clearInterval(autoSyncTimer);
+    autoSyncTimer = null;
+  }
+  autoSyncPageToken = null;
+  autoSyncPendingChange = false;
+}
+
+/* May an auto-sync run right now? Every condition from the
+   section comment, in one place so the tick has one question
+   to ask. */
+function autoSyncGatesOpen() {
+  if (document.visibilityState !== "visible") { return false; }
+  if (state.syncing) { return false; }
+  if (voiceCapture) { return false; }
+  if (anyOverlayOpen()) { return false; }
+  if (Date.now() - lastUserActivityAt < AUTO_SYNC_IDLE_MS) {
+    return false;
+  }
+  return true;
+}
+
+/* One pass over the change feed from the stored token,
+   following its pages. Resolves true when any change touched
+   the store. The stored token advances only when the whole
+   pass succeeds; a 410 re-baselines instead (the caller's
+   token is stale, and a fresh one makes this poll a no-op). */
+async function pollAutoSyncChanges() {
+  let token = autoSyncPageToken;
+  let touches = false;
+  for (;;) {
+    let res;
+    try {
+      res = await gdriveFetch(
+        "https://www.googleapis.com/drive/v3/changes?pageToken=" +
+        encodeURIComponent(token) + "&pageSize=100&fields=" +
+        encodeURIComponent(
+          "nextPageToken,newStartPageToken,changes(fileId,removed," +
+          "file(id,name,mimeType,parents,trashed,headRevisionId," +
+          "modifiedTime))"));
+    } catch (e) {
+      /* A failed renewal's reconnect error and plain network
+         failures both land here; both are quiet at this level. */
+      return false;
+    }
+    if (res.status === 410) {
+      await baselineAutoSync();
+      return false;
+    }
+    if (!res.ok) { return false; }
+    const data = await res.json();
+    (data.changes || []).forEach(function (change) {
+      if (autoSyncChangeTouchesStore(change)) { touches = true; }
+    });
+    if (data.nextPageToken) { token = data.nextPageToken; continue; }
+    if (data.newStartPageToken) {
+      autoSyncPageToken = data.newStartPageToken;
+    }
+    return touches;
+  }
+}
+
+/* Run the sync an auto-sync owes, with the editor guard armed
+   for its render (see renderEditor). The pending flag clears
+   as the sync starts: a change that lands during the sync is
+   a new debt, collected by a later poll. */
+async function runAutoSync() {
+  const open = currentNote();
+  autoSyncEditorGuard = open ? { id: open.id, sha: open.sha } : null;
+  autoSyncPendingChange = false;
+  try {
+    await syncNow(false);
+  } finally {
+    autoSyncEditorGuard = null;
+  }
+}
+
+/* One poll tick. Polling itself needs the setting on, a ready
+   store, a visible tab, and no sync already running; a tick
+   that finds a pending change and open gates spends itself on
+   the sync instead of a feed call. */
+async function autoSyncTick() {
+  if (!state.autoSync) { return; }
+  if (autoSyncPollRunning) { return; }
+  if (!storeSyncReady()) { return; }
+  if (document.visibilityState !== "visible") { return; }
+  if (state.syncing) { return; }
+  autoSyncPollRunning = true;
+  try {
+    if (autoSyncPendingChange) {
+      if (autoSyncGatesOpen()) { await runAutoSync(); }
+      return;
+    }
+    if (!autoSyncPageToken) {
+      await baselineAutoSync();
+      return;
+    }
+    const touches = await pollAutoSyncChanges();
+    if (touches) {
+      autoSyncPendingChange = true;
+      if (autoSyncGatesOpen()) { await runAutoSync(); }
+    }
+  } catch (e) {
+    /* A tick never surfaces an error; the next one retries. */
+  } finally {
+    autoSyncPollRunning = false;
+  }
+}
+
 /* v2.2: Refresh connection. Through v2.6.0 it was a standalone
    sidebar button next to Sign out; v2.7 moved it into the sidebar
    footer's three dot menu, and v2.8 moved it again, into the
@@ -17385,6 +17763,10 @@ async function refreshGoogleConnection() {
     await driveEnsureNotesRoot();
     state.repoExists = true;
     await syncNow(false);
+    /* v2.16: a proved connection restarts the auto-sync
+       watcher on a fresh baseline, so a refresh also heals a
+       watcher whose polls have been failing quietly. */
+    startAutoSync();
     refreshSyncPill();
     toast("Connection refreshed.");
   } catch (err) {
@@ -17407,6 +17789,8 @@ async function googleDisconnect() {
   /* v2.15: the session this disconnect drops is the one the
      renewal timer serves; cancel the timer with the token. */
   clearGoogleRenewalTimer();
+  /* v2.16: the auto-sync watcher serves the same session. */
+  stopAutoSync();
   state.attach.googleExpiresAt = 0;
   state.attach.googleFolderId = null;
   resetDriveNotesCache();
@@ -21970,6 +22354,9 @@ function wireEvents() {
   });
   document.getElementById("settingsVersionsInput").addEventListener("change",
     applyVersionsLimitFromInput);
+  /* v2.16: the auto-sync toggle in Settings Connection. */
+  document.getElementById("settingsAutoSyncToggle").addEventListener("change",
+    applyAutoSyncFromToggle);
 
   /* v2.13: the Settings Getting started actions, and the first run
      walkthrough's controls. The walkthrough follows the Settings
@@ -23096,6 +23483,17 @@ function wireEvents() {
      run while the user was away. */
   document.addEventListener("visibilitychange", function () {
     maybeRenewGoogleOnVisible();
+  });
+
+  /* v2.16: the auto-sync idle clock (see the auto-sync block).
+     Key presses, pointer presses, and input events anywhere in
+     the document count as activity; the listeners sit in the
+     capture phase so a handler deeper in the tree cannot
+     swallow an event before the clock sees it. Ordinary caret
+     movement by click is a pointer press, and typing is both
+     keydown and input, so the clock reads any real editing. */
+  ["keydown", "pointerdown", "input"].forEach(function (type) {
+    document.addEventListener(type, noteUserActivity, true);
   });
 }
 
