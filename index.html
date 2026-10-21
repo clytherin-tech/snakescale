@@ -40,10 +40,36 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-21-SSN-V2140
-  Version: 2.14.0
+  BUILD STAMP: 2026-10-21-SSN-V2141
+  Version: 2.14.1
 
   Revision history:
+    v2.14.1 2026-10-21 Three refinements from Chris's first
+                      hands on pass over v2.14.0. The voice
+                      recording bar is a floating card now: it
+                      opens at the text cursor's line in the
+                      note (below the line, flipped above it
+                      near the window's bottom; at the top of
+                      the body when there is no caret to read)
+                      and stays anchored there for the whole
+                      recording. The block grip's hover tracker
+                      resolves the hovered block by pointer
+                      position when the pointer is over the
+                      editor column but not over the note body
+                      itself: the grip floats in the left margin
+                      outside the body, and the old target only
+                      test hid it the moment the pointer crossed
+                      that margin on its way to grab it. Audio
+                      attachment cards trade their Download and
+                      Remove buttons for a three dot menu at the
+                      card's top right: Download, Rename, Delete
+                      (the same undoable delete), and Transcribe,
+                      which reads a saved recording's words with
+                      an on device speech model (transformers.js
+                      and whisper-tiny.en, loaded from a CDN on
+                      first use only) and inserts them under
+                      the card. In read only notes the menu
+                      opens with Download alone enabled.
     v2.14.0 2026-10-21 Voice notes, draggable blocks, and two
                       fixes. A Voice note button beside Insert
                       records from the microphone with a live
@@ -1921,13 +1947,13 @@ body.note-drag-active{touch-action:none;overscroll-behavior:none;}
    is position:fixed and lives OUTSIDE #noteBody, so it can never be
    saved into a note; the script positions it at the image's menu
    button and closes it under the same rules as the link popup. */
-#attMenu{
+#attMenu, #attCardMenu{
   position:fixed;z-index:60;min-width:180px;padding:6px;
   background:var(--surface);border:1px solid var(--border);
   border-radius:var(--radius-card);box-shadow:0 10px 28px rgba(6,32,22,.28);
   display:flex;flex-direction:column;gap:2px;
 }
-#attMenu.hidden{display:none;}
+#attMenu.hidden, #attCardMenu.hidden{display:none;}
 .att-menu-item{
   display:block;width:100%;text-align:left;border:none;background:none;
   color:var(--text);font-size:14px;padding:8px 10px;border-radius:8px;
@@ -2348,14 +2374,20 @@ body.dark #conflictBanner{background:#3A2F10;color:#FFE1A8;}
   background:var(--soft);padding:8px 12px;margin-bottom:12px;
   font-size:13.5px;font-weight:600;
 }
-/* v2.14: the voice note bar, shown above the body while a recording
-   runs. The record dot pulses so the recording state is obvious at
-   a glance; the transcript grows in place, final words at full
-   strength and the words still being recognized dimmed. */
+/* v2.14: the voice note bar, shown while a recording runs. The
+   record dot pulses so the recording state is obvious at a
+   glance; the transcript grows in place, final words at full
+   strength and the words still being recognized dimmed.
+   v2.14.1: the bar floats at the caret's line in the note (see
+   positionVoiceBar) instead of sitting in the page flow above
+   the body, so it is styled like the app's other fixed cards:
+   the opaque surface, the card shadow, and a capped width. */
 .voice-bar{
+  position:fixed;z-index:64;width:min(600px,94vw);
   display:flex;align-items:flex-start;gap:10px;
   border:1px solid var(--border);border-radius:var(--radius-card);
-  background:var(--soft);padding:8px 12px;margin-bottom:12px;
+  background:var(--surface);padding:8px 12px;
+  box-shadow:0 10px 28px rgba(6,32,22,.28);
   font-size:14px;
 }
 .voice-dot{
@@ -2475,6 +2507,25 @@ body.dark .ss-att-provider{color:#EAF3EC;}
 .ss-att-menu-btn .ss-dot{
   width:4px;height:4px;border-radius:50%;background:var(--text);flex:none;
 }
+/* v2.14.1: the audio card's three dot menu button. It wears the
+   same pill look as the image block's button (above) under its
+   own class, so none of the image selection wiring that keys on
+   .ss-att-menu-btn can mistake a file card for a selected image.
+   The card is position:relative (the .ss-attachment rule), so the
+   button parks at its top right corner; the card's head keeps
+   clear of it by the padding rule under this one. */
+.ss-card-menu-btn{
+  position:absolute;top:4px;right:4px;z-index:7;
+  display:flex;align-items:center;gap:3px;
+  min-width:30px;height:24px;padding:0 8px;cursor:pointer;
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius-pill);box-shadow:0 2px 8px rgba(6,32,22,.18);
+}
+.ss-card-menu-btn:hover{border-color:var(--accent);}
+.ss-card-menu-btn .ss-dot{
+  width:4px;height:4px;border-radius:50%;background:var(--text);flex:none;
+}
+#noteBody .ss-attachment.ss-att-audio .ss-att-head{padding-right:44px;}
 
 /* ---------- v2.11 image menu: the full menu, its alignment
    submenu, captions, alignment, and the Title view face ----------
@@ -2484,10 +2535,12 @@ body.dark .ss-att-provider{color:#EAF3EC;}
    (sidebar, table, cell) keep their plainer rows untouched. */
 #attMenu{max-height:calc(100vh - 16px);overflow-y:auto;min-width:230px;}
 #attMenu .att-menu-item,
+#attCardMenu .att-menu-item,
 #attAlignMenu .att-menu-item{
   display:flex;align-items:center;gap:9px;
 }
 #attMenu .att-menu-item svg,
+#attCardMenu .att-menu-item svg,
 #attAlignMenu .att-menu-item svg{flex:none;opacity:.85;}
 .att-menu-label{flex:1;}
 .att-menu-head{
@@ -3437,9 +3490,12 @@ body.dark .version-date{color:var(--accent);}
                full strength, the words still being recognized
                dimmed, and a note line for when transcription is
                unavailable or stops), and Stop and Cancel. It is a
-               sibling of #noteBody in .editor-inner, like the
-               upload panel, so nothing in it can ever be saved
-               into a note. -->
+               sibling of #noteBody in .editor-inner, so nothing in
+               it can ever be saved into a note. v2.14.1: it is a
+               fixed card the script parks at the caret's line
+               when the recording starts (see positionVoiceBar)
+               and leaves anchored there until the recording
+               ends. -->
           <div id="voiceBar" class="voice-bar hidden" role="status">
             <span class="voice-dot" aria-hidden="true"></span>
             <span id="voiceTimer" class="voice-timer">00:00</span>
@@ -3615,6 +3671,25 @@ body.dark .version-date{color:var(--accent);}
             <div class="att-menu-sep"></div>
             <button class="att-menu-item" type="button" data-align="wrap-right"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="5" width="7" height="7" rx="1"/><path d="M13 7h8M13 11h8M3 17h18"/></svg><span class="att-menu-label">Wrap text right</span><span class="att-dot" aria-hidden="true"></span></button>
             <button class="att-menu-item" type="button" data-align="wrap-left"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 7h8M3 11h8M3 17h18"/><rect x="14" y="5" width="7" height="7" rx="1"/></svg><span class="att-menu-label">Wrap text left</span><span class="att-dot" aria-hidden="true"></span></button>
+          </div>
+
+          <!-- v2.14.1: the audio attachment card's three dot menu,
+               a sibling of #noteBody like the image menu, so it
+               can never be saved into a note. Audio cards carry
+               no Download or Remove buttons anymore; their
+               actions live here: Download, Rename, Delete (the
+               undoable delete), and Transcribe (a saved
+               recording's words read on device; see
+               transcribeAudioAttachment). Buttons carry
+               data-card-action values; one delegated listener in
+               the script runs them against the card the menu was
+               opened from. In a read only note the menu opens
+               with Download alone enabled. Hidden by default. -->
+          <div id="attCardMenu" class="hidden" role="menu" aria-label="Audio attachment options">
+            <button class="att-menu-item" type="button" data-card-action="download"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v11"/><path d="m7 10 5 5 5-5"/><path d="M4 21h16"/></svg><span class="att-menu-label">Download</span></button>
+            <button class="att-menu-item" type="button" data-card-action="rename"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg><span class="att-menu-label">Rename</span></button>
+            <button class="att-menu-item danger" type="button" data-card-action="delete"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13"/><path d="M10 11v6M14 11v6"/></svg><span class="att-menu-label">Delete</span></button>
+            <button class="att-menu-item" type="button" data-card-action="transcribe"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10v4"/><path d="M8.5 7v10"/><path d="M13 4v16"/><path d="M17.5 7v10"/><path d="M21 10v4"/></svg><span class="att-menu-label">Transcribe</span></button>
           </div>
 
           <!-- v2.11: the full screen image preview. A dark lightbox
@@ -3999,8 +4074,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-21-SSN-V2140";
-const APP_VERSION = "2.14.0";
+const APP_BUILD = "2026-10-21-SSN-V2141";
+const APP_VERSION = "2.14.1";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -7195,6 +7270,9 @@ function anyOverlayOpen() {
     /* v2.14: the voice note bar joins the set for the same reason:
        an Escape that cancels a recording never exits Maximize. */
     "voiceBar",
+    /* v2.14.1: the audio card menu joins the set for the same
+       reason: an Escape that closes it never exits Maximize. */
+    "attCardMenu",
     "exportMenu", "sidebarMenu"];
   for (let i = 0; i < ids.length; i++) {
     const el = document.getElementById(ids[i]);
@@ -8002,6 +8080,9 @@ function renderEditor() {
        reconciliation can never mistake a note swap for a mass
        deletion while the new body is being built. */
     deselectAttachment();
+    /* v2.14.1: an open audio card menu belongs to the previous
+       note's card in the same way; it closes with the swap. */
+    closeAttCardMenu();
     /* v2.2: the floating Table button and menu belong to the previous
        note's tables; they close with the note swap, exactly like the
        link popup above. */
@@ -17889,7 +17970,18 @@ async function hydrateOneAttachment(note, el) {
     return;
   }
 
+  /* v2.14.1: whether this card is the audio card, whose actions
+     live on a three dot menu instead of inline buttons (see the
+     actions branch below). The app's one audio test decides, the
+     mime type with the file name extension as its fallback, so a
+     card and its inline player always agree about what it is.
+     The class dresses the card: its head keeps clear of the menu
+     button parked at the top right corner. */
+  const audioCard = isAudioAttachment(att);
+  if (audioCard) { el.classList.add("ss-att-audio"); }
+
   const head = document.createElement("div");
+  if (audioCard) { head.classList.add("ss-att-head"); }
   const nameSpan = document.createElement("span");
   nameSpan.className = "ss-att-name";
   nameSpan.textContent = att.name;
@@ -17903,39 +17995,51 @@ async function hydrateOneAttachment(note, el) {
   meta.className = "ss-att-meta";
   meta.textContent = humanSize(att.size) + (att.mime ? " - " + att.mime : "");
 
-  const actions = document.createElement("div");
-  actions.className = "ss-att-actions";
-  actions.appendChild(makeAttButton("Download", function () {
-    downloadAttachment(att);
-  }));
-  /* Trashed and archived notes are read only: Download still works,
-     Remove does not (restore or unarchive the note first). This keeps
-     Trash and Archive state consistent, since such notes never
-     autosave. */
-  if (!note.trashed && !note.archived) {
-    actions.appendChild(makeAttButton("Remove", function () {
-      removeAttachment(note, att);
-    }));
-  }
-  /* v1.6: PDF attachments can be read in line. The Preview toggle
-     sits with the other card actions (and, like Download, stays
-     available in Trash and Archive, which are read only but still
-     readable). The document itself is fetched only when the toggle
-     is expanded; see togglePdfPreview. A fetch that fails shows the
-   existing style error toast and leaves the card collapsed, with the
-   Download button working exactly as before. */
-  if (isPdfAttachment(att)) {
-    const previewBtn = makeAttButton("Preview", function () {
-      togglePdfPreview(note, att, el, previewBtn);
-    });
-    actions.appendChild(previewBtn);
-  }
-
   el.appendChild(head);
   el.appendChild(meta);
-  el.appendChild(actions);
+  if (audioCard) {
+    /* v2.14.1: an audio card renders no Download and no Remove
+       buttons. Its actions live on the three dot menu button at
+       the card's top right corner (see the audio card menu
+       section below): Download, Rename, Delete (the same
+       undoable delete the Remove button ran), and Transcribe.
+       The button is on the card in read only notes too, because
+       Download stays available there, exactly as it did on the
+       buttons row; the menu itself decides which of its items
+       are enabled when it opens. */
+    el.appendChild(buildAttCardMenuButton(note, att, el));
+  } else {
+    const actions = document.createElement("div");
+    actions.className = "ss-att-actions";
+    actions.appendChild(makeAttButton("Download", function () {
+      downloadAttachment(att);
+    }));
+    /* Trashed and archived notes are read only: Download still works,
+       Remove does not (restore or unarchive the note first). This keeps
+       Trash and Archive state consistent, since such notes never
+       autosave. */
+    if (!note.trashed && !note.archived) {
+      actions.appendChild(makeAttButton("Remove", function () {
+        removeAttachment(note, att);
+      }));
+    }
+    /* v1.6: PDF attachments can be read in line. The Preview toggle
+       sits with the other card actions (and, like Download, stays
+       available in Trash and Archive, which are read only but still
+       readable). The document itself is fetched only when the toggle
+       is expanded; see togglePdfPreview. A fetch that fails shows the
+     existing style error toast and leaves the card collapsed, with the
+     Download button working exactly as before. */
+    if (isPdfAttachment(att)) {
+      const previewBtn = makeAttButton("Preview", function () {
+        togglePdfPreview(note, att, el, previewBtn);
+      });
+      actions.appendChild(previewBtn);
+    }
+    el.appendChild(actions);
+  }
   /* v2.14: an audio card (a voice note, or any audio file) gains
-     an inline player under its actions, so a recording can be
+     an inline player under its name, so a recording can be
      played where it sits. The bytes come down the same provider
      download path as an image's, and the object URL joins
      state.objectUrls, so it is revoked on note switch and sign
@@ -18241,6 +18345,9 @@ function deselectAttachment() {
    viewport the way the link popup is. The caller unhides it first
    only through here, so the size measured is the size on screen. */
 function showAttMenu(anchor) {
+  /* v2.14.1: the two attachment menus never stack; opening one
+     closes the other. */
+  closeAttCardMenu();
   const menu = document.getElementById("attMenu");
   if (!menu || !anchor) { return; }
   /* v2.11: the menu's stateful rows (the caption check, the
@@ -18695,7 +18802,9 @@ function toggleNoteThumbnail(note, att) {
    and is deliberately NOT rewritten when it happens to match the
    old name. */
 async function renameAttachment(note, att, el) {
-  const next = prompt("Rename image", att.name);
+  /* v2.14.1: the prompt names the general thing, since the audio
+     card menu runs this same flow for recordings now. */
+  const next = prompt("Rename attachment", att.name);
   if (next === null || next === undefined) { return; }
   const name = String(next).trim();
   if (!name || name === att.name) { return; }
@@ -18915,6 +19024,313 @@ async function transcribeImage(note, att, el) {
     if (worker && typeof worker.terminate === "function") {
       try { await worker.terminate(); } catch (e) { /* already gone */ }
     }
+  }
+}
+
+/* ----- v2.14.1: the audio card menu --------------------------------
+   An audio attachment's card carries no inline buttons (see
+   hydrateOneAttachment): a three dot button at its top right
+   opens this one shared menu, #attCardMenu, a fixed card outside
+   #noteBody like the image menu, so it can never be saved into a
+   note. The menu remembers the note, the record, and the card it
+   was opened from, the image menu's own pattern. Download runs
+   the ordinary download path; Rename runs the image menu's
+   rename flow and repaints the name the card shows; Delete is
+   the undoable attachment delete, the very call the card's old
+   Remove button made; Transcribe reads the saved recording's
+   words on device (the section after this one). In a read only
+   note (Trash, Archive) the menu still opens, with Download
+   alone enabled: the file card rule has always been that
+   Download works there while anything that changes the note or
+   the record does not, and the disabled rows wear the menu's
+   existing disabled style. */
+let attCardMenuNote = null;
+let attCardMenuAtt = null;
+let attCardMenuEl = null;
+
+/* The card's three dot button, wearing the image button's pill
+   look under its own class (see the CSS note), so no image
+   selection wiring can mistake a file card for an image. Its
+   mousedown is swallowed like the card buttons', so opening the
+   menu never moves the editor caret. */
+function buildAttCardMenuButton(note, att, el) {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "ss-card-menu-btn";
+  btn.title = "Audio options";
+  btn.setAttribute("aria-label", "Audio options");
+  for (let i = 0; i < 3; i++) {
+    const dot = document.createElement("span");
+    dot.className = "ss-dot";
+    btn.appendChild(dot);
+  }
+  btn.addEventListener("mousedown", function (ev) { ev.preventDefault(); });
+  btn.addEventListener("click", function (ev) {
+    ev.preventDefault();
+    ev.stopPropagation();
+    const menu = document.getElementById("attCardMenu");
+    if (attCardMenuEl === el && menu &&
+        !menu.classList.contains("hidden")) {
+      closeAttCardMenu();
+      return;
+    }
+    attCardMenuNote = note;
+    attCardMenuAtt = att;
+    attCardMenuEl = el;
+    showAttCardMenu(btn);
+  });
+  return btn;
+}
+
+function attCardMenuIsOpen() {
+  const menu = document.getElementById("attCardMenu");
+  return !!menu && !menu.classList.contains("hidden");
+}
+
+/* Show the card menu under its button, clamped into the viewport
+   the way the image menu is; opening it closes the image menu,
+   and the two never stack. The read only state of the note the
+   menu was opened from is applied to the items here, at open
+   time: in Trash and Archive only Download stays enabled. */
+function showAttCardMenu(anchor) {
+  closeAttMenu();
+  const menu = document.getElementById("attCardMenu");
+  if (!menu || !anchor) { return; }
+  const readOnly = !attCardMenuNote || attCardMenuNote.trashed ||
+    attCardMenuNote.archived;
+  menu.querySelectorAll("button[data-card-action]").forEach(
+    function (btn) {
+      btn.disabled = readOnly &&
+        btn.getAttribute("data-card-action") !== "download";
+    });
+  menu.classList.remove("hidden");
+  const rect = anchor.getBoundingClientRect();
+  const width = menu.offsetWidth;
+  const height = menu.offsetHeight;
+  let left = Math.min(rect.right - width, window.innerWidth - width - 8);
+  left = Math.max(8, left);
+  let top = rect.bottom + 6;
+  if (top + height > window.innerHeight - 8) {
+    top = Math.max(8, rect.top - height - 6);
+  }
+  menu.style.left = left + "px";
+  menu.style.top = top + "px";
+}
+
+function closeAttCardMenu() {
+  const menu = document.getElementById("attCardMenu");
+  if (menu) { menu.classList.add("hidden"); }
+  attCardMenuNote = null;
+  attCardMenuAtt = null;
+  attCardMenuEl = null;
+}
+
+/* One click in the card menu: capture the target, close, then
+   run, the image menu's dispatch shape. */
+function runAttCardMenuAction(action) {
+  const note = attCardMenuNote;
+  const att = attCardMenuAtt;
+  const el = attCardMenuEl;
+  closeAttCardMenu();
+  if (!note || !att) { return; }
+  if (action === "download") {
+    downloadAttachment(att).catch(function (err) {
+      toast(err.message, true);
+    });
+    return;
+  }
+  if (action === "rename") {
+    renameAttachment(note, att, el).then(function () {
+      /* The card's name is its own DOM, built at hydration; the
+         rename flow updates the record (and an image's alt text
+         and Title face), so repaint the name the card shows. */
+      if (el && el.isConnected) {
+        const nameSpan = el.querySelector(".ss-att-name");
+        if (nameSpan) { nameSpan.textContent = att.name; }
+      }
+    }).catch(function (err) { toast(err.message, true); });
+    return;
+  }
+  if (action === "delete") {
+    scheduleAttachmentDelete(note, att);
+    return;
+  }
+  if (action === "transcribe") {
+    transcribeAudioAttachment(note, att, el).catch(function (err) {
+      toast("Transcribe failed: " + err.message, true);
+    });
+  }
+}
+
+/* ----- v2.14.1: transcribe a saved recording -----------------------
+   The browser's live speech recognition (the one a voice note
+   records with) cannot read a saved file, so a recording's words
+   are read by a real speech model instead: transformers.js with
+   the whisper-tiny.en model, loaded from its CDN the first time
+   Transcribe is used, and only then, exactly the bargain the
+   image Transcribe made with Tesseract. Everything after the
+   load happens on the device: the model files come down from
+   the model host once (the library caches them), the recording
+   is fetched through the attachment's own provider download and
+   decoded in the browser, and no audio ever leaves the device.
+   It fails closed, like the image run: offline, a failed load,
+   or a failed read shows an error and inserts nothing. */
+const SPEECH_LIB_URL =
+  "https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2/dist/transformers.min.js";
+const SPEECH_LIB_DIST =
+  "https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2/dist/";
+const SPEECH_MODEL_ID = "Xenova/whisper-tiny.en";
+const SPEECH_SAMPLE_RATE = 16000;
+
+let speechLibPromise = null;
+
+/* Load the speech library and hand back its namespace. The
+   package ships only a module build, so it is imported
+   dynamically; a library already present on window under the
+   Transformers name is used as is (the test seam, the Tesseract
+   check's shape). The ONNX runtime's wasm binaries live in the
+   same CDN folder as the bundle, so the runtime is pointed at
+   that folder explicitly rather than left to look beside the
+   page. */
+function loadSpeechLib() {
+  if (window.Transformers && window.Transformers.pipeline) {
+    return Promise.resolve(window.Transformers);
+  }
+  if (speechLibPromise) { return speechLibPromise; }
+  speechLibPromise = (async function () {
+    const lib = await import(SPEECH_LIB_URL);
+    if (!lib || typeof lib.pipeline !== "function") {
+      throw new Error("The speech recognition library did not initialize.");
+    }
+    try {
+      lib.env.backends.onnx.wasm.wasmPaths = SPEECH_LIB_DIST;
+    } catch (e) { /* a runtime without the knob keeps its default */ }
+    return lib;
+  })();
+  /* A failed load may be retried on the next Transcribe. */
+  speechLibPromise.catch(function () { speechLibPromise = null; });
+  return speechLibPromise;
+}
+
+/* The transcription pipeline, built once and kept: the model
+   download rides this first build (reported through the status
+   line), and later runs reuse the pipeline. A failed build is
+   not kept, so the next Transcribe tries again. */
+let speechPipelinePromise = null;
+function speechTranscriber() {
+  if (speechPipelinePromise) { return speechPipelinePromise; }
+  speechPipelinePromise = (async function () {
+    const lib = await loadSpeechLib();
+    return lib.pipeline("automatic-speech-recognition", SPEECH_MODEL_ID, {
+      progress_callback: function (info) {
+        if (info && info.status === "progress" &&
+            typeof info.progress === "number") {
+          showTranscribeStatus("Downloading the speech model: " +
+            Math.round(info.progress) + "%");
+        }
+      }
+    });
+  })();
+  speechPipelinePromise.catch(function () {
+    speechPipelinePromise = null;
+  });
+  return speechPipelinePromise;
+}
+
+/* Decode a recording's bytes to the mono 16 kHz samples the
+   model expects. The bytes decode at the browser's own rate
+   first; anything not already single channel 16 kHz is rendered
+   through an offline context at 16 kHz, which resamples and
+   mixes down in the one render. Kept as its own named door,
+   like the image editor's helpers, so tests can stand in for
+   the browser's audio stack. */
+async function decodeSpeechAudio(blob) {
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC) {
+    throw new Error("This browser cannot decode audio for transcription.");
+  }
+  const arrayBuffer = await blob.arrayBuffer();
+  const decodeCtx = new AC();
+  let decoded;
+  try {
+    decoded = await decodeCtx.decodeAudioData(arrayBuffer);
+  } finally {
+    if (decodeCtx.close) {
+      try { decodeCtx.close(); } catch (e) { /* already closed */ }
+    }
+  }
+  if (decoded.sampleRate === SPEECH_SAMPLE_RATE) {
+    if (decoded.numberOfChannels === 1) {
+      return decoded.getChannelData(0);
+    }
+    const mono = new Float32Array(decoded.length);
+    for (let c = 0; c < decoded.numberOfChannels; c++) {
+      const data = decoded.getChannelData(c);
+      for (let i = 0; i < decoded.length; i++) { mono[i] += data[i]; }
+    }
+    for (let i = 0; i < mono.length; i++) {
+      mono[i] = mono[i] / decoded.numberOfChannels;
+    }
+    return mono;
+  }
+  const targetLength = Math.max(1,
+    Math.ceil(decoded.duration * SPEECH_SAMPLE_RATE));
+  const offline = new OfflineAudioContext(1, targetLength,
+    SPEECH_SAMPLE_RATE);
+  const src = offline.createBufferSource();
+  src.buffer = decoded;
+  src.connect(offline.destination);
+  src.start(0);
+  const rendered = await offline.startRendering();
+  return rendered.getChannelData(0);
+}
+
+async function transcribeAudioAttachment(note, att, el) {
+  if (!state.online) {
+    toast("Transcribing needs an internet connection: the speech " +
+      "model loads on first use. You appear to be offline.", true);
+    return;
+  }
+  let blob;
+  try {
+    blob = await fetchAttachmentBlob(att);
+  } catch (err) {
+    toast(err.message, true);
+    return;
+  }
+  showTranscribeStatus("Loading the speech model " +
+    "(the first use downloads it)...");
+  try {
+    const transcriber = await speechTranscriber();
+    showTranscribeStatus("Transcribing \"" + att.name + "\"...");
+    const samples = await decodeSpeechAudio(blob);
+    const result = await transcriber(samples, {
+      chunk_length_s: 30,
+      stride_length_s: 5
+    });
+    const text = result && typeof result.text === "string"
+      ? result.text.trim() : "";
+    if (!text) {
+      toast("No speech was recognized in this recording.");
+      return;
+    }
+    if (!el || !el.isConnected || currentNote() !== note) {
+      toast("The recording is no longer in the open note, so the " +
+        "transcribed text was not inserted.", true);
+      return;
+    }
+    /* The words become a new paragraph right after the card,
+       built from a text assignment: recognized speech is data,
+       never markup, the image transcribe's own rule. */
+    const p = document.createElement("p");
+    p.textContent = text;
+    el.after(p);
+    markDirty();
+    toast("Text inserted below the recording.");
+  } catch (err) {
+    toast("Transcribe failed: " + err.message, true);
+  } finally {
+    hideTranscribeStatus();
   }
 }
 
@@ -20076,6 +20492,54 @@ function blockGripTargetBlock(node) {
   return BLOCK_DRAG_TAGS[top.tagName] ? top : null;
 }
 
+/* v2.14.1: the block a pointer POSITION belongs to, for pointers
+   over the editor column but not over the note body itself. The
+   grip floats in the left margin, which is .editor-inner space
+   outside #noteBody, and the hover tracker below used to judge
+   purely by event target: crossing that margin on the way to
+   grab the grip read as "not over the body", the grip hid mid
+   crossing, and being display:none it could never be hovered
+   back. So when the target is outside the body, the block is
+   resolved geometrically instead: list items first (an item's
+   span wins over the list that contains it), then the top level
+   blocks, each in document order, the winner being the block
+   whose on screen vertical span holds the pointer's Y. The
+   pointer must be inside .editor-inner and no further right
+   than the note body's right edge (the column's own right side
+   is body, and anything there resolves by target as before).
+   Above the first block or below the last one there is no
+   block, and the grip hides, exactly as a target over the
+   body's own empty space has always hidden it. */
+function blockGripBlockAtPoint(clientX, clientY) {
+  const bodyEl = document.getElementById("noteBody");
+  const inner = document.querySelector(".editor-inner");
+  if (!bodyEl || !inner) { return null; }
+  const ir = inner.getBoundingClientRect();
+  if (clientX < ir.left || clientX > ir.right ||
+      clientY < ir.top || clientY > ir.bottom) { return null; }
+  const br = bodyEl.getBoundingClientRect();
+  if (clientX > br.right) { return null; }
+  const items = bodyEl.querySelectorAll("li");
+  for (let i = 0; i < items.length; i++) {
+    const r = items[i].getBoundingClientRect();
+    if (clientY >= r.top && clientY <= r.bottom) { return items[i]; }
+  }
+  const kids = bodyEl.children;
+  for (let i = 0; i < kids.length; i++) {
+    const el = kids[i];
+    let block = null;
+    if (el.tagName === "FIGURE") {
+      block = el.classList.contains("ss-attachment") ? el : null;
+    } else if (BLOCK_DRAG_TAGS[el.tagName]) {
+      block = el;
+    }
+    if (!block) { continue; }
+    const r = el.getBoundingClientRect();
+    if (clientY >= r.top && clientY <= r.bottom) { return block; }
+  }
+  return null;
+}
+
 function hideBlockGrip() {
   const grip = document.getElementById("blockGrip");
   if (grip) { grip.classList.add("hidden"); }
@@ -20109,12 +20573,22 @@ function onGripHoverPointerMove(ev) {
      is not a hover: the grip stays out of its way. */
   if (ev.buttons) { hideBlockGrip(); return; }
   const bodyEl = document.getElementById("noteBody");
-  if (!bodyEl || bodyEl.contentEditable === "false" ||
-      !bodyEl.contains(ev.target)) {
+  if (!bodyEl || bodyEl.contentEditable === "false") {
     hideBlockGrip();
     return;
   }
-  const block = blockGripTargetBlock(ev.target);
+  let block;
+  if (bodyEl.contains(ev.target)) {
+    block = blockGripTargetBlock(ev.target);
+  } else {
+    /* v2.14.1: the pointer is over the editor column but not over
+       the body itself: the margin strip the grip floats in, on
+       the way to grab it (or the column's other furniture).
+       Resolve the block by position, so the crossing keeps the
+       grip for the block whose line the pointer is level with,
+       and blockGripBlock names that block when the press lands. */
+    block = blockGripBlockAtPoint(ev.clientX, ev.clientY);
+  }
   if (!block) {
     blockGripBlock = null;
     hideBlockGrip();
@@ -20374,6 +20848,58 @@ function onVoiceRecognitionError(capture, ev) {
     "). The recording continues; only the audio will be attached.");
 }
 
+/* v2.14.1: park the recording bar at the caret's line. The saved
+   format range is the caret the recording will land at, saved at
+   the top of startVoiceNote before the microphone prompt can
+   steal focus; its rectangle is read the way the mention popup
+   reads its range's. The bar goes just under the caret's line,
+   at the caret's left edge, flipped above the line when it would
+   spill past the window's bottom, and clamped inside the
+   viewport: the mention popup's own rules. A saved range whose
+   rectangle reads as all zeros (no measurable caret), or no
+   saved range at all, falls back to the top of the note body.
+   The bar is position:fixed and is placed once, here: it stays
+   anchored where the recording started and never chases the
+   caret afterwards. */
+function positionVoiceBar() {
+  const bar = document.getElementById("voiceBar");
+  const bodyEl = document.getElementById("noteBody");
+  if (!bar) { return; }
+  const width = bar.offsetWidth;
+  const height = bar.offsetHeight;
+  let rect = null;
+  if (savedFormatRange && bodyEl &&
+      bodyEl.contains(savedFormatRange.startContainer)) {
+    /* The rectangle read is a nicety, never a gate: a range that
+       cannot be measured, for any reason, falls back to the body
+       anchor below instead of breaking the recording's start. */
+    try {
+      const r = savedFormatRange.getBoundingClientRect();
+      if (r && (r.top || r.bottom || r.left || r.right)) { rect = r; }
+    } catch (e) { rect = null; }
+  }
+  let left;
+  let top;
+  if (rect) {
+    left = Math.min(rect.left, window.innerWidth - width - 8);
+    left = Math.max(8, left);
+    top = rect.bottom + 6;
+    if (top + height > window.innerHeight - 8) {
+      top = Math.max(8, rect.top - height - 6);
+    }
+  } else if (bodyEl) {
+    const br = bodyEl.getBoundingClientRect();
+    left = Math.min(br.left, window.innerWidth - width - 8);
+    left = Math.max(8, left);
+    top = br.top + 8;
+    if (top + height > window.innerHeight - 8) {
+      top = Math.max(8, window.innerHeight - height - 8);
+    }
+  } else { return; }
+  bar.style.left = left + "px";
+  bar.style.top = top + "px";
+}
+
 async function startVoiceNote() {
   if (voiceCapture) { return; }
   /* The same guards as the attach flow, run before anything is
@@ -20500,6 +21026,10 @@ async function startVoiceNote() {
   document.getElementById("voiceInterimText").textContent = "";
   document.getElementById("voiceTimer").textContent = "00:00";
   document.getElementById("voiceBar").classList.remove("hidden");
+  /* v2.14.1: the bar opens at the caret's line, not in the flow
+     above the body. It is unhidden first so the size positionVoiceBar
+     measures is the size on screen. */
+  positionVoiceBar();
   document.getElementById("voiceNoteBtn").disabled = true;
   capture.timer = setInterval(function () {
     const el = document.getElementById("voiceTimer");
@@ -21497,6 +22027,37 @@ function wireEvents() {
     runAttAlignChoice(btn.getAttribute("data-align"));
   });
 
+  /* v2.14.1: the audio card menu's items run through one delegated
+     listener, like the image menu's; a disabled item (the read
+     only note state) never runs. */
+  document.getElementById("attCardMenu").addEventListener("click", function (ev) {
+    const target = ev.target;
+    const btn = target && target.closest ?
+      target.closest("button[data-card-action]") : null;
+    if (!btn || btn.disabled) { return; }
+    runAttCardMenuAction(btn.getAttribute("data-card-action"));
+  });
+
+  /* v2.14.1: clicking anywhere else closes the card menu,
+     mirroring the image menu's rule. Clicks inside the menu
+     itself, and on a card's menu button (which toggles the menu
+     for its own card), are excluded. */
+  document.addEventListener("click", function (ev) {
+    const menu = document.getElementById("attCardMenu");
+    if (!menu || menu.classList.contains("hidden")) { return; }
+    const target = ev.target;
+    if (!target || !target.closest) { return; }
+    if (target.closest("#attCardMenu")) { return; }
+    if (target.closest(".ss-card-menu-btn")) { return; }
+    closeAttCardMenu();
+  });
+
+  /* v2.14.1: Escape closes the card menu as well, like the
+     image menu. */
+  document.addEventListener("keydown", function (ev) {
+    if (ev.key === "Escape") { closeAttCardMenu(); }
+  });
+
   /* v2.11: Escape discipline for the image surfaces, innermost
      first: the editor and the lightbox are modal and close (the
      editor discards, exactly like its Cancel), and the alignment
@@ -21774,7 +22335,10 @@ function wireEvents() {
     if (!note || note.trashed || note.archived) { return; }
     if (ev.target && ev.target.closest &&
         (ev.target.closest(".ss-grip") ||
-         ev.target.closest(".ss-att-menu-btn"))) {
+         ev.target.closest(".ss-att-menu-btn") ||
+         /* v2.14.1: the audio card's menu button gets the same
+            protection as the image's. */
+         ev.target.closest(".ss-card-menu-btn"))) {
       ev.preventDefault();
       return;
     }

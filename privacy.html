@@ -53,6 +53,12 @@
   Chrome). The app itself sends nothing anywhere for transcription, and
   the typed words it produces are saved only to your note, in your
   Drive.</p>
+  <p>A saved recording can also be transcribed later, from its card's
+  menu. That feature loads a speech model from a public content delivery
+  network the first time you use it. From then on the transcription runs
+  entirely on your device: the app decodes the recording in your browser
+  and the model reads it there. The recording itself is not sent anywhere
+  by the app.</p>
 
   <h2>Information stored on your device</h2>
   <p>So the app opens quickly and works offline, it stores a small amount of
@@ -83,7 +89,10 @@
     Transcribe feature on an image, the app downloads the text recognition
     software from the jsDelivr content delivery network. The transcription
     itself runs entirely on your device; the image being transcribed is not
-    uploaded anywhere.</li>
+    uploaded anywhere. The same network delivers the speech recognition
+    software when you transcribe a saved audio recording, and the model it
+    uses is downloaded on first use; that transcription also runs entirely
+    on your device, and the recording is not uploaded anywhere.</li>
     <li><strong>Your browser's speech recognition service</strong>: when
     you record a voice note in a browser that offers transcription, the
     audio is processed by the browser's own built in speech recognition
