@@ -40,10 +40,41 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-20-SSN-V2100
-  Version: 2.10.0
+  BUILD STAMP: 2026-10-20-SSN-V2110
+  Version: 2.11.0
 
   Revision history:
+    v2.11.0 2026-10-20 The image three dot menu grows into the
+                      full menu from Chris's reference screenshot,
+                      and every item in it works. In order: Full
+                      screen preview (a dark lightbox over the
+                      note), Edit & Annotate and Crop (one shared
+                      editor overlay on a canvas copy of the
+                      image: a pen in five colors and three widths,
+                      text labels, undo and clear for annotate; a
+                      draggable, resizable crop box for crop),
+                      the size presets as before, Transcribe (the
+                      image's text read by Tesseract.js, loaded
+                      from a CDN only on first use, and inserted
+                      as a paragraph under the image), Show caption
+                      (an editable figcaption saved with the note),
+                      Image alignment (a side submenu: Left,
+                      Center, Right, Fill width, Wrap text right,
+                      Wrap text left, persisted as data-ss-align),
+                      Rename (the record, and best effort the Drive
+                      file), Download and Print as before and a
+                      print of just the image, Set as note
+                      thumbnail (shown on the note's list card,
+                      stored as a thumbnail line in the front
+                      matter), a VIEW AS section (Title collapses
+                      the image to a name bar through a runtime
+                      only face, Preview is the image itself,
+                      persisted as data-ss-view), and Delete file
+                      in red, still the undoable delete. An editor
+                      save uploads the flattened image as a NEW
+                      Drive file and swaps the record in place; the
+                      original file is deliberately never deleted,
+                      so a bad edit can never destroy the only copy.
     v2.10.0 2026-10-20 The link hover bar and view modes come to
                       note links. A Link to Note anchor (ssnote:)
                       now summons the same linkBar on hover rest
@@ -2263,6 +2294,184 @@ body.dark .ss-att-provider{color:#EAF3EC;}
 .ss-att-menu-btn .ss-dot{
   width:4px;height:4px;border-radius:50%;background:var(--text);flex:none;
 }
+
+/* ---------- v2.11 image menu: the full menu, its alignment
+   submenu, captions, alignment, and the Title view face ----------
+   The menu keeps the v1.7 #attMenu card; its items now carry an
+   inline SVG icon and a label, laid out as rows. Scoped to #attMenu
+   and #attAlignMenu so the other menus that share .att-menu-item
+   (sidebar, table, cell) keep their plainer rows untouched. */
+#attMenu{max-height:calc(100vh - 16px);overflow-y:auto;min-width:230px;}
+#attMenu .att-menu-item,
+#attAlignMenu .att-menu-item{
+  display:flex;align-items:center;gap:9px;
+}
+#attMenu .att-menu-item svg,
+#attAlignMenu .att-menu-item svg{flex:none;opacity:.85;}
+.att-menu-label{flex:1;}
+.att-menu-head{
+  font-size:11px;font-weight:700;letter-spacing:.08em;
+  color:var(--muted);padding:7px 10px 2px;
+}
+.att-menu-arrow{margin-left:auto;color:var(--muted);font-size:15px;}
+/* The state dot: shown only on the row that carries the current
+   state (Show caption while on, the current alignment, the current
+   view mode). Same device as the link view menu's dot. */
+.att-dot{
+  width:7px;height:7px;border-radius:50%;background:var(--secondary);
+  flex:none;visibility:hidden;
+}
+.att-menu-item.current .att-dot{visibility:visible;}
+.att-menu-item.current{font-weight:600;}
+/* The alignment submenu: its own fixed card beside the menu, in
+   the same look; the script positions it and flips it at the
+   viewport edge. */
+#attAlignMenu{
+  position:fixed;z-index:61;min-width:190px;padding:6px;
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius-card);box-shadow:0 10px 28px rgba(6,32,22,.28);
+  display:flex;flex-direction:column;gap:2px;
+  max-height:calc(100vh - 16px);overflow-y:auto;
+}
+#attAlignMenu.hidden{display:none;}
+
+/* Captions: a quiet line under the image, part of the note. The
+   muted "Caption" placeholder for an empty caption is editor only
+   presentation (a CSS pseudo element); the saved text stays empty. */
+#noteBody figcaption.ss-caption{
+  font-size:13px;color:var(--muted);line-height:1.4;
+  padding:5px 2px 1px;cursor:text;
+}
+#noteBody figcaption.ss-caption:empty::before{
+  content:"Caption";opacity:.6;
+}
+
+/* Alignment, keyed entirely on the saved data-ss-align attribute.
+   The figure's inline style keeps owning the chosen width (the
+   v1.7.2 rule); these rules own placement only. Left is the
+   default rendering: absence of the attribute and the explicit
+   "left" value look the same. */
+#noteBody .ss-attachment.ss-att-image[data-ss-align="left"]{
+  display:block;margin-left:0;margin-right:auto;
+}
+#noteBody .ss-attachment.ss-att-image[data-ss-align="center"]{
+  display:block;margin-left:auto;margin-right:auto;
+}
+#noteBody .ss-attachment.ss-att-image[data-ss-align="right"]{
+  display:block;margin-left:auto;margin-right:0;
+}
+#noteBody .ss-attachment.ss-att-image[data-ss-align="fill"]{
+  display:block;width:100%;margin-left:0;margin-right:0;
+}
+/* Wrap modes float the figure and let the note text flow around
+   it: wrap-right puts the text on the figure's right (figure
+   floats left), wrap-left the reverse. The 55 percent cap uses
+   !important because a sized figure carries an inline max-width of
+   none (the decoration pass lifts the column cap for chosen
+   sizes), and the wrap cap must win over that lift while wrapping;
+   the stored size itself is untouched. */
+#noteBody .ss-attachment.ss-att-image[data-ss-align="wrap-right"]{
+  float:left;margin:4px 14px 8px 0;max-width:55% !important;
+}
+#noteBody .ss-attachment.ss-att-image[data-ss-align="wrap-left"]{
+  float:right;margin:4px 0 8px 14px;max-width:55% !important;
+}
+/* On narrow screens there is no room to wrap around an image, so
+   the wrap modes collapse to a plain block. */
+@media (max-width:700px){
+  #noteBody .ss-attachment.ss-att-image[data-ss-align="wrap-right"],
+  #noteBody .ss-attachment.ss-att-image[data-ss-align="wrap-left"]{
+    float:none;display:block;max-width:100% !important;
+    margin-left:0;margin-right:0;
+  }
+}
+
+/* The Title view face: a slim bar standing in for the image (an
+   image icon and the file name), built at decoration time and
+   stripped at save time. While it shows, the image itself is
+   hidden by the rule under it. */
+.ss-att-title-face{
+  display:flex;align-items:center;gap:8px;width:100%;
+  padding:8px 10px;border:1px solid var(--border);
+  border-radius:8px;background:var(--surface);
+  color:var(--text);font-size:13.5px;box-sizing:border-box;
+}
+.ss-att-title-face svg{flex:none;color:var(--muted);}
+.ss-att-title-name{
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+#noteBody .ss-attachment.ss-att-image[data-ss-view="title"] img.ss-att-img{
+  display:none;
+}
+
+/* The notes list card thumbnail (Set as note thumbnail). */
+.note-card.has-thumb{display:flex;gap:11px;align-items:flex-start;}
+.note-card .card-thumb{
+  width:56px;height:56px;object-fit:cover;border-radius:8px;
+  flex:none;background:var(--soft);
+}
+.note-card .card-main{flex:1;min-width:0;}
+
+/* The full screen image preview: a dark lightbox over everything,
+   the image contained in the viewport. */
+#imgLightbox{
+  position:fixed;inset:0;z-index:95;background:rgba(5,18,12,.92);
+  display:flex;align-items:center;justify-content:center;
+}
+#imgLightbox.hidden{display:none;}
+#imgLightboxImg{max-width:94vw;max-height:92vh;object-fit:contain;
+  border-radius:6px;box-shadow:0 18px 60px rgba(0,0,0,.5);}
+#imgLightboxClose{
+  position:absolute;top:14px;right:16px;width:38px;height:38px;
+  border-radius:50%;border:1px solid rgba(255,255,255,.35);
+  background:rgba(255,255,255,.08);color:#fff;font-size:19px;
+  cursor:pointer;line-height:1;
+}
+#imgLightboxClose:hover{background:rgba(255,255,255,.2);}
+
+/* The image editor overlay (annotate and crop share the shell). */
+#imgEditorModal .modal-card{max-width:860px;}
+.img-editor-stage{
+  position:relative;display:flex;justify-content:center;
+  background:#0A1F18;border-radius:10px;padding:10px;
+  max-height:62vh;overflow:auto;
+}
+.img-editor-canvas-wrap{position:relative;line-height:0;}
+#imgEditorCanvas{max-width:100%;height:auto;border-radius:4px;
+  touch-action:none;}
+.img-editor-tools{
+  display:flex;flex-wrap:wrap;gap:8px;align-items:center;
+  margin:12px 0 4px;
+}
+.img-editor-tools.hidden{display:none;}
+.img-color{
+  width:24px;height:24px;border-radius:50%;cursor:pointer;
+  border:2px solid var(--border);padding:0;flex:none;
+}
+.img-color.current{border-color:var(--accent);
+  box-shadow:0 0 0 2px rgba(87,167,115,.35);}
+.img-width-btn.current,
+.img-tool-btn.current{
+  background:var(--soft);border-color:var(--accent);font-weight:700;
+}
+.img-crop-box{
+  position:absolute;border:2px solid var(--accent);
+  box-shadow:0 0 0 9999px rgba(5,18,12,.55);cursor:move;
+  touch-action:none;box-sizing:border-box;
+}
+.img-crop-box.hidden{display:none;}
+.img-crop-handle{
+  position:absolute;width:14px;height:14px;border-radius:3px;
+  background:#fff;border:2px solid var(--accent);touch-action:none;
+}
+.img-crop-handle[data-corner="nw"]{left:-8px;top:-8px;cursor:nwse-resize;}
+.img-crop-handle[data-corner="ne"]{right:-8px;top:-8px;cursor:nesw-resize;}
+.img-crop-handle[data-corner="sw"]{left:-8px;bottom:-8px;cursor:nesw-resize;}
+.img-crop-handle[data-corner="se"]{right:-8px;bottom:-8px;cursor:nwse-resize;}
+.img-editor-actions{
+  display:flex;gap:10px;justify-content:flex-end;margin-top:14px;
+}
+
 /* The inline PDF preview frame: full column width, tall enough to
    read a page, filled on demand by the Preview toggle. */
 .ss-att-pdf-frame{
@@ -3116,17 +3325,103 @@ body.dark .version-date{color:var(--accent);}
                #noteBody like the link popup, so it can never be saved
                into a note. Buttons carry data-action values; one
                delegated listener in the script runs them against the
-               image the menu was opened from. Hidden by default. -->
+               image the menu was opened from. Hidden by default.
+               v2.11: the menu is rebuilt to the full menu from
+               Chris's reference screenshot (see the image menu
+               section of the script): preview, the image editor,
+               crop, the size presets (their data-action hooks and
+               behavior unchanged), transcribe, caption, the
+               alignment submenu, rename, download, print,
+               thumbnail, the VIEW AS modes, and Delete file. This
+               menu only ever opens for image figures; file cards
+               keep their own inline buttons and never see it. -->
           <div id="attMenu" class="hidden" role="menu" aria-label="Image options">
-            <button class="att-menu-item" type="button" data-action="open">Open</button>
-            <button class="att-menu-item" type="button" data-action="download">Download</button>
+            <button class="att-menu-item" type="button" data-action="preview"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M16 3h3a2 2 0 0 1 2 2v3"/><path d="M8 21H5a2 2 0 0 1-2-2v-3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg><span class="att-menu-label">Full screen preview</span></button>
+            <button class="att-menu-item" type="button" data-action="edit"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg><span class="att-menu-label">Edit &amp; Annotate</span></button>
+            <button class="att-menu-item" type="button" data-action="crop"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M18 22V8a2 2 0 0 0-2-2H2"/></svg><span class="att-menu-label">Crop</span></button>
             <div class="att-menu-sep"></div>
-            <button class="att-menu-item" type="button" data-action="small">Small (25%)</button>
-            <button class="att-menu-item" type="button" data-action="medium">Medium (50%)</button>
-            <button class="att-menu-item" type="button" data-action="large">Large (100%)</button>
-            <button class="att-menu-item" type="button" data-action="original">Original size</button>
+            <button class="att-menu-item" type="button" data-action="small"><span class="att-menu-label">Small (25%)</span></button>
+            <button class="att-menu-item" type="button" data-action="medium"><span class="att-menu-label">Medium (50%)</span></button>
+            <button class="att-menu-item" type="button" data-action="large"><span class="att-menu-label">Large (100%)</span></button>
+            <button class="att-menu-item" type="button" data-action="original"><span class="att-menu-label">Original size</span></button>
             <div class="att-menu-sep"></div>
-            <button class="att-menu-item danger" type="button" data-action="remove">Remove</button>
+            <button class="att-menu-item" type="button" data-action="transcribe"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 20 12 4l7 16"/><path d="M7.6 14h8.8"/></svg><span class="att-menu-label">Transcribe</span></button>
+            <button class="att-menu-item" type="button" data-action="caption" id="attCaptionItem"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 15h6"/></svg><span class="att-menu-label">Show caption</span><span class="att-dot" aria-hidden="true"></span></button>
+            <button class="att-menu-item" type="button" data-action="align" id="attAlignItem" aria-haspopup="true" aria-expanded="false"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h10M4 18h16"/></svg><span class="att-menu-label">Image alignment</span><span class="att-menu-arrow" aria-hidden="true">&#8250;</span></button>
+            <button class="att-menu-item" type="button" data-action="rename"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg><span class="att-menu-label">Rename</span></button>
+            <button class="att-menu-item" type="button" data-action="download"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v11"/><path d="m7 10 5 5 5-5"/><path d="M4 21h16"/></svg><span class="att-menu-label">Download</span></button>
+            <button class="att-menu-item" type="button" data-action="print"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9V3h12v6"/><rect x="3" y="9" width="18" height="8" rx="2"/><path d="M6 14h12v7H6z"/></svg><span class="att-menu-label">Print</span></button>
+            <button class="att-menu-item" type="button" data-action="thumbnail"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-4.5-4.5L6 21"/></svg><span class="att-menu-label" id="attThumbnailLabel">Set as note thumbnail</span></button>
+            <div class="att-menu-sep"></div>
+            <div class="att-menu-head">VIEW AS</div>
+            <button class="att-menu-item" type="button" data-action="viewTitle" id="attViewTitleItem"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 12h6"/></svg><span class="att-menu-label">Title</span><span class="att-dot" aria-hidden="true"></span></button>
+            <button class="att-menu-item" type="button" data-action="viewPreview" id="attViewPreviewItem"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-4.5-4.5L6 21"/></svg><span class="att-menu-label">Preview</span><span class="att-dot" aria-hidden="true"></span></button>
+            <div class="att-menu-sep"></div>
+            <button class="att-menu-item danger" type="button" data-action="remove"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13"/><path d="M10 11v6M14 11v6"/></svg><span class="att-menu-label">Delete file</span></button>
+          </div>
+
+          <!-- v2.11: the alignment submenu for the image menu, its
+               own fixed card beside #attMenu (a sibling of
+               #noteBody like the menu itself, so it can never be
+               saved into a note). Items carry data-align values;
+               the dot marks the current alignment when it opens.
+               Hidden by default. -->
+          <div id="attAlignMenu" class="hidden" role="menu" aria-label="Image alignment">
+            <button class="att-menu-item" type="button" data-align="left"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 6h16M4 12h9M4 18h13"/></svg><span class="att-menu-label">Left align</span><span class="att-dot" aria-hidden="true"></span></button>
+            <button class="att-menu-item" type="button" data-align="center"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 6h18M7 12h10M5 18h14"/></svg><span class="att-menu-label">Center align</span><span class="att-dot" aria-hidden="true"></span></button>
+            <button class="att-menu-item" type="button" data-align="right"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 6h16M11 12h9M7 18h13"/></svg><span class="att-menu-label">Right align</span><span class="att-dot" aria-hidden="true"></span></button>
+            <button class="att-menu-item" type="button" data-align="fill"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg><span class="att-menu-label">Fill width</span><span class="att-dot" aria-hidden="true"></span></button>
+            <div class="att-menu-sep"></div>
+            <button class="att-menu-item" type="button" data-align="wrap-right"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="5" width="7" height="7" rx="1"/><path d="M13 7h8M13 11h8M3 17h18"/></svg><span class="att-menu-label">Wrap text right</span><span class="att-dot" aria-hidden="true"></span></button>
+            <button class="att-menu-item" type="button" data-align="wrap-left"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 7h8M3 11h8M3 17h18"/><rect x="14" y="5" width="7" height="7" rx="1"/></svg><span class="att-menu-label">Wrap text left</span><span class="att-dot" aria-hidden="true"></span></button>
+          </div>
+
+          <!-- v2.11: the full screen image preview. A dark lightbox
+               over the whole app; the script fills the image from
+               the attachment's blob and closes it on backdrop
+               click, the close button, or Escape. -->
+          <div id="imgLightbox" class="hidden" role="dialog" aria-label="Image preview">
+            <img id="imgLightboxImg" alt="">
+            <button id="imgLightboxClose" type="button" aria-label="Close preview">&times;</button>
+          </div>
+
+          <!-- v2.11: the image editor overlay, shared by Edit &
+               Annotate and Crop. A modal like the app's other
+               modals; the stage holds the canvas and, in crop mode,
+               the crop box over it. -->
+          <div id="imgEditorModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="imgEditorTitle">
+            <div class="modal-card">
+              <h2 id="imgEditorTitle">Edit image</h2>
+              <p class="modal-sub" id="imgEditorSub"></p>
+              <div class="img-editor-stage">
+                <div class="img-editor-canvas-wrap" id="imgEditorCanvasWrap">
+                  <canvas id="imgEditorCanvas"></canvas>
+                  <div class="img-crop-box hidden" id="imgCropBox">
+                    <div class="img-crop-handle" data-corner="nw"></div>
+                    <div class="img-crop-handle" data-corner="ne"></div>
+                    <div class="img-crop-handle" data-corner="sw"></div>
+                    <div class="img-crop-handle" data-corner="se"></div>
+                  </div>
+                </div>
+              </div>
+              <div class="img-editor-tools hidden" id="imgEditorTools">
+                <button class="img-color current" type="button" data-color="#111111" style="background:#111111" aria-label="Black"></button>
+                <button class="img-color" type="button" data-color="#FFFFFF" style="background:#FFFFFF" aria-label="White"></button>
+                <button class="img-color" type="button" data-color="#D23B2E" style="background:#D23B2E" aria-label="Red"></button>
+                <button class="img-color" type="button" data-color="#2456C8" style="background:#2456C8" aria-label="Blue"></button>
+                <button class="img-color" type="button" data-color="#FFD83D" style="background:#FFD83D" aria-label="Yellow highlight"></button>
+                <button class="btn small img-width-btn current" type="button" data-width="3">Thin</button>
+                <button class="btn small img-width-btn" type="button" data-width="6">Medium</button>
+                <button class="btn small img-width-btn" type="button" data-width="12">Thick</button>
+                <button class="btn small img-tool-btn" type="button" id="imgEditorTextBtn">Text</button>
+                <button class="btn small" type="button" id="imgEditorUndoBtn">Undo</button>
+                <button class="btn small" type="button" id="imgEditorClearBtn">Clear</button>
+              </div>
+              <div class="img-editor-actions">
+                <button class="btn" type="button" id="imgEditorCancelBtn">Cancel</button>
+                <button class="btn primary" type="button" id="imgEditorSaveBtn">Save</button>
+              </div>
+            </div>
           </div>
 
           <!-- v2.2: the floating Table button and its menu, also
@@ -3425,8 +3720,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-20-SSN-V2100";
-const APP_VERSION = "2.10.0";
+const APP_BUILD = "2026-10-20-SSN-V2110";
+const APP_VERSION = "2.11.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -4803,6 +5098,12 @@ function serializeNote(note) {
   if (atts.length) {
     lines.push("attachments: " + JSON.stringify(atts));
   }
+  /* v2.11: the note thumbnail is one attachment id (set from the
+     image menu's Set as note thumbnail). Written only when set, so
+     notes without one keep byte identical front matter. */
+  if (note.thumbnail) {
+    lines.push("thumbnail: " + note.thumbnail);
+  }
   lines.push("---");
   lines.push("");
   lines.push(note.body || "");
@@ -4824,6 +5125,7 @@ function parseNoteFile(text, sha, fallbackId, trashed, archived) {
     pinned: false,
     body: "",
     attachments: [],   /* v1.2: attachment metadata, see serializeNote */
+    thumbnail: null,   /* v2.11: thumbnail attachment id, or null */
     sha: sha || null,
     trashed: !!trashed,
     trashedFrom: null,
@@ -4852,6 +5154,8 @@ function parseNoteFile(text, sha, fallbackId, trashed, archived) {
     note.pinned = meta.pinned === "true";
     if (meta.trashedFrom) { note.trashedFrom = meta.trashedFrom; }
     if (meta.archivedFrom) { note.archivedFrom = meta.archivedFrom; }
+    /* v2.11: the thumbnail attachment id, one plain value. */
+    if (meta.thumbnail) { note.thumbnail = meta.thumbnail; }
     /* v1.2: attachment metadata. A malformed line must never break the
        note: it is counted as a warning (surfaced once after load) and the
        note opens with no attachment metadata. */
@@ -5402,6 +5706,9 @@ async function saveConflictCopy(note, originalPath) {
     pinned: false,
     body: note.body,
     attachments: sanitizeAttachments(note.attachments),   /* v1.2 */
+    /* v2.11: the copy references the same attachment records, so a
+       thumbnail choice carries over and still resolves. */
+    thumbnail: note.thumbnail || null,
     sha: null,
     trashed: false,
     trashedFrom: null,
@@ -5673,6 +5980,7 @@ function makeNote(notebookSlug, title, body) {
     pinned: false,
     body: body || "",
     attachments: [],   /* v1.2: new notes start with no attachments */
+    thumbnail: null,   /* v2.11: no thumbnail until one is chosen */
     sha: null,
     trashed: false,
     trashedFrom: null,
@@ -6510,6 +6818,10 @@ function anyOverlayOpen() {
     "nbDropOverlay", "notebookMenu",
     "railFlyout", "linkBar", "linkViewMenu", "noteLinkCard",
     "tableMenu", "cellMenu", "attMenu",
+    /* v2.11: the image alignment submenu, the full screen preview,
+       and the image editor overlay join the overlay set, so an
+       Escape that closes any of them never also exits Maximize. */
+    "attAlignMenu", "imgLightbox", "imgEditorModal",
     "exportMenu", "sidebarMenu"];
   for (let i = 0; i < ids.length; i++) {
     const el = document.getElementById(ids[i]);
@@ -7092,6 +7404,37 @@ function viewTitle() {
    key, so the filter panel survives its own control changes. */
 let lastRenderedListViewKey = null;
 
+/* v2.11: object URLs minted for list card thumbnails, keyed by
+   attachment id. The list re-renders wholesale on every change,
+   so the whole set is revoked and rebuilt each render, the same
+   discipline the editor applies to its own attachment URLs. */
+const listThumbUrls = new Map();
+function revokeListThumbUrls() {
+  listThumbUrls.forEach(function (url) { URL.revokeObjectURL(url); });
+  listThumbUrls.clear();
+}
+
+/* Load one card thumbnail into its img element, through the
+   attachment fetch path. Failures of any kind (signed out,
+   offline, a deleted file) simply leave the card without a
+   thumbnail: a list decoration must never become an error. */
+async function loadListThumb(imgEl, att) {
+  try {
+    if (listThumbUrls.has(att.id)) {
+      imgEl.src = listThumbUrls.get(att.id);
+      return;
+    }
+    const driver = providers[att.provider];
+    if (!driver) { return; }
+    const status = await driver.getStatus();
+    if (!status || !status.connected) { return; }
+    const blob = await driver.download(att.fileId);
+    const url = URL.createObjectURL(blob);
+    listThumbUrls.set(att.id, url);
+    if (imgEl.isConnected) { imgEl.src = url; }
+  } catch (err) { /* no thumbnail, no error: see the comment above */ }
+}
+
 function renderNoteList() {
   const viewKey = state.view.kind + ":" + (state.view.value || "");
   if (lastRenderedListViewKey !== null &&
@@ -7101,6 +7444,9 @@ function renderNoteList() {
     clearListSelections();
   }
   lastRenderedListViewKey = viewKey;
+  /* v2.11: the previous render's thumbnail URLs are released
+     before the list is rebuilt. */
+  revokeListThumbUrls();
   const listEl = document.getElementById("noteList");
   const list = visibleNotes();
   document.getElementById("listTitle").textContent = viewTitle();
@@ -7174,6 +7520,23 @@ function renderNoteList() {
       picker.appendChild(box);
       card.appendChild(picker);
     }
+    /* v2.11: the card's main column. With a thumbnail the card
+       becomes a row (thumb at the side, this column beside it);
+       without one the column IS the card, exactly as before. */
+    let main = card;
+    const thumbAtt = note.thumbnail ? (note.attachments || [])
+      .find(function (a) { return a.id === note.thumbnail; }) : null;
+    if (thumbAtt && isImageAttachment(thumbAtt)) {
+      card.classList.add("has-thumb");
+      const thumb = document.createElement("img");
+      thumb.className = "card-thumb";
+      thumb.alt = "";
+      card.appendChild(thumb);
+      loadListThumb(thumb, thumbAtt);
+      main = document.createElement("div");
+      main.className = "card-main";
+      card.appendChild(main);
+    }
     const titleRow = document.createElement("div");
     titleRow.className = "card-title";
     if (note.pinned && !note.trashed && !note.archived) {
@@ -7185,19 +7548,19 @@ function renderNoteList() {
     const titleText = document.createElement("span");
     titleText.textContent = note.title || "Untitled note";
     titleRow.appendChild(titleText);
-    card.appendChild(titleRow);
+    main.appendChild(titleRow);
 
     const date = document.createElement("div");
     date.className = "card-date";
     date.textContent = formatDate(note.updated);
-    card.appendChild(date);
+    main.appendChild(date);
 
     const snippetText = htmlToText(note.body).slice(0, 140);
     if (snippetText) {
       const snip = document.createElement("div");
       snip.className = "card-snippet";
       snip.textContent = snippetText;
-      card.appendChild(snip);
+      main.appendChild(snip);
     }
     if (note.tags.length) {
       const row = document.createElement("div");
@@ -7208,7 +7571,7 @@ function renderNoteList() {
         chip.textContent = t;
         row.appendChild(chip);
       });
-      card.appendChild(row);
+      main.appendChild(row);
     }
     card.addEventListener("click", function () { openNote(note.id); });
     listEl.appendChild(card);
@@ -7276,6 +7639,11 @@ function renderEditor() {
     clearCellSelection();
     /* v2.5: the notebook menu belongs to the previous note too. */
     closeNotebookMenu();
+    /* v2.11: the image lightbox and the image editor belong to the
+       previous note too. (The alignment submenu closes with the
+       image menu, in deselectAttachment above.) */
+    closeImageLightbox();
+    closeImageEditor();
     attachBodyGuard = true;
     /* v1.2: the previous note's image blob URLs are released before the
        editor switches, so long sessions do not accumulate them. */
@@ -8038,6 +8406,26 @@ function setMobileView(which) {
    by v1.6 or v1.7 carried the width on the block's style in the file
    too; only their live DOM put it on the image, and the decoration
    pass migrates that form the next time such a note is edited.) */
+/* v2.11: the image presentation state that DOES persist, as plain
+   attributes on the figure itself: data-ss-align (the alignment
+   chosen in the image menu's submenu) and data-ss-view ("title"
+   collapses the image to a name bar; absent means the image
+   itself, the Preview mode). Absence of data-ss-align is the
+   original rendering and reads as Left align in the submenu (see
+   imageAlignOf). Anything outside these value sets is not a state
+   this app writes and is dropped at save time, like an unknown
+   width form. */
+const IMAGE_ALIGN_VALUES = ["left", "center", "right", "fill",
+  "wrap-left", "wrap-right"];
+function imageAlignOf(el) {
+  const v = el ? el.getAttribute("data-ss-align") : null;
+  return IMAGE_ALIGN_VALUES.indexOf(v) >= 0 ? v : "left";
+}
+function imageViewOf(el) {
+  return el && el.getAttribute("data-ss-view") === "title"
+    ? "title" : "preview";
+}
+
 function canonicalizeAttachmentPlaceholders(html) {
   const holder = document.createElement("div");
   holder.innerHTML = html || "";
@@ -8049,6 +8437,29 @@ function canonicalizeAttachmentPlaceholders(html) {
     clean.setAttribute("contenteditable", "false");
     const width = savedImageWidthOf(el);
     if (width) { clean.setAttribute("style", "width:" + width); }
+    /* v2.11: the alignment and view mode attributes are saved
+       state and ride onto the clean shell; the runtime Title face
+       inside the figure does not (it is rebuilt by decoration on
+       every render, like the link faces stripped below). */
+    const align = el.getAttribute("data-ss-align");
+    if (align && IMAGE_ALIGN_VALUES.indexOf(align) >= 0) {
+      clean.setAttribute("data-ss-align", align);
+    }
+    if (el.getAttribute("data-ss-view") === "title") {
+      clean.setAttribute("data-ss-view", "title");
+    }
+    /* v2.11: a caption is real note content, the one figure child
+       that is not editor furniture: its element and its text carry
+       onto the shell, rebuilt from the text alone so no runtime
+       markup can ride along inside it. */
+    if (el.getAttribute("data-ss-caption") === "1") {
+      clean.setAttribute("data-ss-caption", "1");
+      const cap = el.querySelector("figcaption.ss-caption");
+      const capOut = document.createElement("figcaption");
+      capOut.setAttribute("class", "ss-caption");
+      capOut.textContent = cap ? cap.textContent : "";
+      clean.appendChild(capOut);
+    }
     el.replaceWith(clean);
   });
   /* v2.3: the multi-cell selection highlight (ss-cell-selected) is
@@ -8088,6 +8499,20 @@ function stripLinkFaces(rootEl) {
     const parent = el.parentNode;
     if (!parent) { return; }
     while (el.firstChild) { parent.insertBefore(el.firstChild, el); }
+    el.remove();
+  });
+}
+
+/* v2.11: the image Title view face is runtime only presentation in
+   exactly the link faces' sense: the bar that stands in for the
+   image while data-ss-view="title" is set. The save funnel's shell
+   rebuild already drops it (it lives inside the figure), and the
+   print builder strips it explicitly here because it works from a
+   clone of the live body: on paper a Title mode image prints as
+   the image itself, exactly like Preview. Idempotent. */
+function stripImageTitleFaces(rootEl) {
+  if (!rootEl || !rootEl.querySelectorAll) { return; }
+  rootEl.querySelectorAll(".ss-att-title-face").forEach(function (el) {
     el.remove();
   });
 }
@@ -11957,6 +12382,9 @@ function buildPrintDocument(note, bodyHtml) {
      here, leaving the plain anchors, whose own text and address
      are what print has always shown. */
   stripLinkFaces(printHolder);
+  /* v2.11: a Title mode image prints as the image (see
+     stripImageTitleFaces); its runtime bar never reaches paper. */
+  stripImageTitleFaces(printHolder);
   const cleanBodyHtml = printHolder.innerHTML;
   return "<!DOCTYPE html>\n<html><head><meta charset=\"UTF-8\">" +
     "<title>" + title + "</title>" +
@@ -15560,6 +15988,20 @@ async function googleDelete(fileId) {
   }
 }
 
+/* v2.11: rename one Drive file through its metadata. The name set
+   here is the file's storage name (the attId__name form uploads
+   create), so a rename from the image menu keeps the Drive file's
+   name in step with the record's storageName. */
+async function googleRename(fileId, newName) {
+  await gdriveJson(
+    "https://www.googleapis.com/drive/v3/files/" +
+    encodeURIComponent(fileId) + "?fields=id,name", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json; charset=UTF-8" },
+      body: JSON.stringify({ name: newName })
+    });
+}
+
 /* ----- Google Drive NOTES driver (new in v1.4) ---------------------------
    This driver implements the neutral store operations from section 6
    on Google Drive. The layout:
@@ -15916,7 +16358,8 @@ const providers = {
     disconnect: googleDisconnect,
     upload: googleUpload,
     download: googleDownload,
-    delete: googleDelete
+    delete: googleDelete,
+    rename: googleRename   /* v2.11 */
   }
 };
 
@@ -16053,9 +16496,70 @@ async function hydrateAttachments(note) {
   }
 }
 
+/* v2.11: the Title view face's image icon, in the same inline SVG
+   style as the menu icons. */
+const IMAGE_FACE_ICON = "<svg viewBox=\"0 0 24 24\" width=\"16\" height=\"16\" " +
+  "fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" " +
+  "stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\">" +
+  "<rect x=\"3\" y=\"3\" width=\"18\" height=\"18\" rx=\"2\"/>" +
+  "<circle cx=\"9\" cy=\"9\" r=\"2\"/><path d=\"m21 15-4.5-4.5L6 21\"/></svg>";
+
+/* v2.11: apply (or remove) the runtime Title face on an image
+   block, from its saved data-ss-view state. The face is a slim bar
+   with an image icon and the attachment's name, standing in for
+   the image while the mode is Title; the image element itself
+   stays in the block, hidden by CSS, so flipping back to Preview
+   is instant and nothing about the face ever reaches the saved
+   note (canonicalization rebuilds the shell without it). Called at
+   the end of hydration, the one moment a block's contents are
+   complete. */
+function applyImageTitleFace(el, att) {
+  if (!el) { return; }
+  const old = el.querySelector(".ss-att-title-face");
+  if (!att || imageViewOf(el) !== "title") {
+    if (old) { old.remove(); }
+    return;
+  }
+  if (old) {
+    const nameEl = old.querySelector(".ss-att-title-name");
+    if (nameEl) { nameEl.textContent = att.name; }
+    return;
+  }
+  const face = document.createElement("div");
+  face.className = "ss-att-title-face";
+  face.innerHTML = IMAGE_FACE_ICON;
+  const name = document.createElement("span");
+  name.className = "ss-att-title-name";
+  name.textContent = att.name;
+  face.appendChild(name);
+  el.appendChild(face);
+}
+
+/* v2.11: re-append an image block's caption after hydration has
+   rebuilt the block's contents. The caption's text was captured
+   before the wipe (see hydrateOneAttachment); a caption that has
+   never had its text set in this session falls back to the
+   record's name, which is also what toggling the caption on
+   creates it with. No-op while the caption is off. */
+function appendImageCaption(el, att, capText) {
+  if (!el || el.getAttribute("data-ss-caption") !== "1") { return; }
+  const cap = document.createElement("figcaption");
+  cap.setAttribute("class", "ss-caption");
+  cap.textContent = (capText !== null && capText !== undefined)
+    ? capText : (att ? att.name : "");
+  el.appendChild(cap);
+}
+
 async function hydrateOneAttachment(note, el) {
   const attId = el.getAttribute("data-attachment-id");
   const att = (note.attachments || []).find(function (a) { return a.id === attId; });
+  /* v2.11: capture the caption before anything rebuilds the
+     block's children: the caption element lives inside the figure,
+     and hydration below wipes innerHTML as it always has. Its
+     on/off state rides on the figure's own attribute, which the
+     wipe never touches. */
+  const capEl = el.querySelector("figcaption.ss-caption");
+  const capText = capEl ? capEl.textContent : null;
   /* v1.7.2: there is deliberately no width handling here. A resized
      image's chosen width rides on the block's own style (it has
      since v1.6 in the saved file), the decoration call just below
@@ -16137,6 +16641,11 @@ async function hydrateOneAttachment(note, el) {
         fail.textContent = "This image could not be loaded: " + err.message;
         el.appendChild(fail);
       }
+      /* v2.11: the block's contents are complete: the Title face
+         (when the view mode is Title) and the caption (when on)
+         go back on, in that order, under the image. */
+      applyImageTitleFace(el, att);
+      appendImageCaption(el, att, capText);
       return;
     }
     const note1 = document.createElement("div");
@@ -16145,6 +16654,8 @@ async function hydrateOneAttachment(note, el) {
       ? "Sign in with " + providerLabel(att.provider) + " to view this image."
       : "The storage provider for this image is not available in this version.";
     el.appendChild(note1);
+    applyImageTitleFace(el, att);
+    appendImageCaption(el, att, capText);
     return;
   }
 
@@ -16460,6 +16971,10 @@ function deselectAttachment() {
 function showAttMenu(anchor) {
   const menu = document.getElementById("attMenu");
   if (!menu || !anchor) { return; }
+  /* v2.11: the menu's stateful rows (the caption check, the
+     thumbnail label, the view mode dots) are refreshed from the
+     figure and the note every time it opens. */
+  refreshAttMenuStates();
   menu.classList.remove("hidden");
   const rect = anchor.getBoundingClientRect();
   const width = menu.offsetWidth;
@@ -16475,11 +16990,131 @@ function showAttMenu(anchor) {
 }
 
 function closeAttMenu() {
+  closeAttAlignMenu();
   const menu = document.getElementById("attMenu");
   if (menu) { menu.classList.add("hidden"); }
   attMenuNote = null;
   attMenuAtt = null;
   attMenuEl = null;
+}
+
+/* v2.11: refresh the image menu's stateful rows from the figure
+   the menu was opened from and its note: Show caption carries its
+   dot while the caption is on, the thumbnail row names the action
+   that applies (set, or remove when this image already is the
+   note's thumbnail), and the VIEW AS rows dot the current mode. */
+function refreshAttMenuStates() {
+  const note = attMenuNote;
+  const att = attMenuAtt;
+  const el = attMenuEl;
+  if (!note || !att || !el) { return; }
+  const capItem = document.getElementById("attCaptionItem");
+  if (capItem) {
+    capItem.classList.toggle("current",
+      el.getAttribute("data-ss-caption") === "1");
+  }
+  const thumbLabel = document.getElementById("attThumbnailLabel");
+  if (thumbLabel) {
+    thumbLabel.textContent = note.thumbnail === att.id
+      ? "Remove note thumbnail" : "Set as note thumbnail";
+  }
+  const view = imageViewOf(el);
+  const titleItem = document.getElementById("attViewTitleItem");
+  const previewItem = document.getElementById("attViewPreviewItem");
+  if (titleItem) { titleItem.classList.toggle("current", view === "title"); }
+  if (previewItem) { previewItem.classList.toggle("current", view === "preview"); }
+}
+
+/* ----- v2.11: the alignment submenu --------------------------------
+   A second fixed card beside the image menu, listing the six
+   alignments with a dot on the current one (read through
+   imageAlignOf, so a figure with no saved alignment dots Left).
+   Escape closes the submenu before the menu (see the keydown
+   wiring), and choosing an alignment applies it, closes both
+   menus, and saves through the ordinary dirty path. */
+function attAlignMenuOpen() {
+  const sub = document.getElementById("attAlignMenu");
+  return !!sub && !sub.classList.contains("hidden");
+}
+
+function showAttAlignMenu() {
+  const menu = document.getElementById("attMenu");
+  const sub = document.getElementById("attAlignMenu");
+  const item = document.getElementById("attAlignItem");
+  if (!menu || !sub || !item || !attMenuEl) { return; }
+  const current = imageAlignOf(attMenuEl);
+  sub.querySelectorAll("button[data-align]").forEach(function (btn) {
+    btn.classList.toggle("current",
+      btn.getAttribute("data-align") === current);
+  });
+  sub.classList.remove("hidden");
+  item.setAttribute("aria-expanded", "true");
+  const mRect = menu.getBoundingClientRect();
+  const iRect = item.getBoundingClientRect();
+  const width = sub.offsetWidth;
+  const height = sub.offsetHeight;
+  let left = mRect.right + 6;
+  if (left + width > window.innerWidth - 8) {
+    left = Math.max(8, mRect.left - width - 6);
+  }
+  let top = iRect.top - 6;
+  if (top + height > window.innerHeight - 8) {
+    top = Math.max(8, window.innerHeight - height - 8);
+  }
+  sub.style.left = left + "px";
+  sub.style.top = top + "px";
+}
+
+function closeAttAlignMenu() {
+  const sub = document.getElementById("attAlignMenu");
+  if (sub) { sub.classList.add("hidden"); }
+  const item = document.getElementById("attAlignItem");
+  if (item) { item.setAttribute("aria-expanded", "false"); }
+}
+
+function toggleAttAlignMenu() {
+  if (attAlignMenuOpen()) { closeAttAlignMenu(); }
+  else { showAttAlignMenu(); }
+}
+
+/* Apply one alignment choice to a figure. The attribute is the
+   saved state; two conversions are deliberate:
+     - Fill width discards the figure's chosen pixel width (and the
+       max-width lift a chosen size carries): filling the column IS
+       the size choice while Fill is on. Coming back out, choosing
+       a size preset or starting a grip drag converts a Fill figure
+       to Center at its current rendered width (see the preset
+       handling in runAttMenuAction and startAttachmentResize).
+     - Left align is stored as ABSENCE of the attribute, the
+       original rendering; the value "left" is still honored when a
+       file carries it (see the CSS), it is just never written. */
+function applyImageAlign(el, mode) {
+  if (!el) { return; }
+  if (mode === "left") { el.removeAttribute("data-ss-align"); }
+  else { el.setAttribute("data-ss-align", mode); }
+  if (mode === "fill") {
+    el.style.removeProperty("width");
+    el.style.removeProperty("max-width");
+  }
+}
+
+/* Convert a Fill width figure back to a sized one, at the width it
+   currently renders, centered. Shared by the size presets and the
+   grip drag: both are about to set an explicit pixel width, which
+   Fill's full column rule would otherwise fight. */
+function convertFillFigureToSized(el) {
+  if (!el || el.getAttribute("data-ss-align") !== "fill") { return; }
+  const px = el.getBoundingClientRect().width;
+  el.setAttribute("data-ss-align", "center");
+  if (px) { applyImageFigureWidth(el, px); }
+}
+
+function runAttAlignChoice(mode) {
+  const el = attMenuEl;
+  closeAttMenu();
+  if (!el || IMAGE_ALIGN_VALUES.indexOf(mode) < 0) { return; }
+  applyImageAlign(el, mode);
+  markDirty();
 }
 
 /* v1.7.2: the sanity ceiling for a grip drag, in pixels. Sizing is
@@ -16516,6 +17151,10 @@ function startAttachmentResize(ev, corner) {
   ev.stopPropagation();
   const el = selectedAttachmentEl;
   if (!el) { return; }
+  /* v2.11: a grip drag on a Fill width figure converts it to a
+     sized, centered figure at its rendered width first, so the
+     drag has a pixel width to work from (see applyImageAlign). */
+  convertFillFigureToSized(el);
   const img = el.querySelector("img.ss-att-img");
   if (!img) { return; }
   const startX = ev.clientX;
@@ -16569,33 +17208,90 @@ async function openAttachment(att) {
   }
 }
 
-/* One click in the shared image menu. Size presets set the image
-   width as a share of the editor column width, computed to pixels
-   at click time; since v1.7.2 the width lands on the block through
+/* One click in the shared image menu. v2.11 rebuilt the menu to
+   the full feature set; the dispatch below routes each item to its
+   section. Size presets set the image width as a share of the
+   editor column width, computed to pixels at click time; since
+   v1.7.2 the width lands on the block through
    applyImageFigureWidth, exactly like a grip drag, so
    canonicalization carries it into the saved note the same way.
    The Original preset (v1.7.2) sets the block to the image's
-   natural width instead. Remove routes through the undoable
+   natural width instead. Delete file routes through the undoable
    deletion engine (see the attachments section below) and drops
-   the selection, since the block is leaving the note. */
+   the selection, since the block is leaving the note. The Image
+   alignment item is the one action that does NOT close the menu:
+   it opens the alignment submenu beside it instead. */
 function runAttMenuAction(action) {
+  if (action === "align") {
+    toggleAttAlignMenu();
+    return;
+  }
   const note = attMenuNote;
   const att = attMenuAtt;
   const el = attMenuEl;
   closeAttMenu();
   if (!note || !att) { return; }
-  if (action === "open") {
-    openAttachment(att).catch(function (err) { toast(err.message, true); });
+  if (action === "preview") {
+    openImageLightbox(note, att, el).catch(function (err) {
+      toast(err.message, true);
+    });
+    return;
+  }
+  if (action === "edit") {
+    openImageEditor(note, att, el, "annotate").catch(function (err) {
+      toast(err.message, true);
+    });
+    return;
+  }
+  if (action === "crop") {
+    openImageEditor(note, att, el, "crop").catch(function (err) {
+      toast(err.message, true);
+    });
     return;
   }
   if (action === "download") {
     downloadAttachment(att).catch(function (err) { toast(err.message, true); });
     return;
   }
+  if (action === "print") {
+    printImage(note, att).catch(function (err) { toast(err.message, true); });
+    return;
+  }
+  if (action === "transcribe") {
+    transcribeImage(note, att, el).catch(function (err) {
+      toast("Transcribe failed: " + err.message, true);
+    });
+    return;
+  }
+  if (action === "caption") {
+    toggleImageCaption(el, att);
+    return;
+  }
+  if (action === "rename") {
+    renameAttachment(note, att, el).catch(function (err) {
+      toast(err.message, true);
+    });
+    return;
+  }
+  if (action === "thumbnail") {
+    toggleNoteThumbnail(note, att);
+    return;
+  }
+  if (action === "viewTitle") {
+    setImageView(note, att, el, "title");
+    return;
+  }
+  if (action === "viewPreview") {
+    setImageView(note, att, el, "preview");
+    return;
+  }
   if (action === "small" || action === "medium" || action === "large") {
     if (!el) { return; }
     const bodyEl = document.getElementById("noteBody");
     if (!bodyEl || !bodyEl.clientWidth) { return; }
+    /* v2.11: a size preset on a Fill width figure converts it to a
+       sized, centered figure first (see applyImageAlign). */
+    convertFillFigureToSized(el);
     const pct = action === "small" ? 25 : (action === "medium" ? 50 : 100);
     applyImageFigureWidth(el, Math.round(bodyEl.clientWidth * pct / 100));
     markDirty();
@@ -16603,6 +17299,7 @@ function runAttMenuAction(action) {
   }
   if (action === "original") {
     if (!el) { return; }
+    convertFillFigureToSized(el);
     const img = el.querySelector("img.ss-att-img");
     /* The image's natural width, the size it was uploaded at. When
        the browser cannot report one (the image failed to load, for
@@ -16620,6 +17317,760 @@ function runAttMenuAction(action) {
   if (action === "remove") {
     deselectAttachment();
     scheduleAttachmentDelete(note, att);
+  }
+}
+
+/* v2.11: fetch one attachment's bytes through its provider, with
+   the guards the Open and Download paths have always applied
+   (the app must be online, the provider must exist and be signed
+   in), as a thrown Error with a user ready message. Shared by the
+   lightbox, the image editor, image printing, and transcribe,
+   which each present the failure their own way. */
+async function fetchAttachmentBlob(att) {
+  if (!state.online) {
+    throw new Error("This needs an internet connection. You appear to be offline.");
+  }
+  const driver = providers[att.provider];
+  if (!driver) {
+    throw new Error("Unknown storage provider for this attachment.");
+  }
+  const status = await driver.getStatus();
+  if (!status.connected) {
+    throw new Error("Sign in with " + providerLabel(att.provider) +
+      " to use \"" + att.name + "\".");
+  }
+  return driver.download(att.fileId);
+}
+
+/* ----- v2.11: full screen preview --------------------------------
+   A dark lightbox showing the image contained in the viewport.
+   The already hydrated image's own blob URL is reused when there
+   is one (it is owned by the note's URL set and revoked by the
+   note switch, so the lightbox never revokes it); otherwise the
+   bytes are fetched and the fresh URL is the lightbox's own,
+   revoked when it closes. */
+let lightboxOwnUrl = null;
+
+async function openImageLightbox(note, att, el) {
+  const box = document.getElementById("imgLightbox");
+  const img = document.getElementById("imgLightboxImg");
+  if (!box || !img) { return; }
+  const liveImg = el ? el.querySelector("img.ss-att-img") : null;
+  const liveSrc = liveImg && liveImg.src &&
+    liveImg.src.indexOf("blob:") === 0 ? liveImg.src : null;
+  if (liveSrc) {
+    img.src = liveSrc;
+  } else {
+    let blob;
+    try {
+      blob = await fetchAttachmentBlob(att);
+    } catch (err) {
+      toast(err.message, true);
+      return;
+    }
+    lightboxOwnUrl = URL.createObjectURL(blob);
+    img.src = lightboxOwnUrl;
+  }
+  img.alt = att.name;
+  box.classList.remove("hidden");
+}
+
+function closeImageLightbox() {
+  const box = document.getElementById("imgLightbox");
+  if (box) { box.classList.add("hidden"); }
+  const img = document.getElementById("imgLightboxImg");
+  if (img) { img.removeAttribute("src"); }
+  if (lightboxOwnUrl) {
+    URL.revokeObjectURL(lightboxOwnUrl);
+    lightboxOwnUrl = null;
+  }
+}
+
+function imageLightboxOpen() {
+  const box = document.getElementById("imgLightbox");
+  return !!box && !box.classList.contains("hidden");
+}
+
+/* ----- v2.11: captions --------------------------------------------
+   Toggling the caption on creates the figcaption with the
+   record's name as its first text; toggling off removes the
+   attribute and the element together, so an off caption leaves
+   nothing behind in the saved note. The caption text itself is
+   edited by clicking it (see the wiring), never by typing in
+   place: the figure is contenteditable false by design. */
+function toggleImageCaption(el, att) {
+  if (!el) { return; }
+  if (el.getAttribute("data-ss-caption") === "1") {
+    el.removeAttribute("data-ss-caption");
+    const cap = el.querySelector("figcaption.ss-caption");
+    if (cap) { cap.remove(); }
+  } else {
+    el.setAttribute("data-ss-caption", "1");
+    appendImageCaption(el, att, null);
+  }
+  markDirty();
+}
+
+function editImageCaption(figEl) {
+  const note = currentNote();
+  if (!note || note.trashed || note.archived) { return; }
+  const next = prompt("Caption", figEl.textContent);
+  if (next === null || next === undefined) { return; }
+  if (next === figEl.textContent) { return; }
+  figEl.textContent = next;
+  markDirty();
+}
+
+/* ----- v2.11: view as (Title and Preview) --------------------------
+   The mode is the data-ss-view attribute: "title" is stored,
+   Preview is its absence (the ordinary image, byte identical to
+   what earlier versions saved). Switching rebuilds the runtime
+   face and saves through the ordinary dirty path. */
+function setImageView(note, att, el, mode) {
+  if (!el) { return; }
+  if (mode === "title") { el.setAttribute("data-ss-view", "title"); }
+  else { el.removeAttribute("data-ss-view"); }
+  applyImageTitleFace(el, att);
+  markDirty();
+}
+
+/* ----- v2.11: note thumbnail ---------------------------------------
+   The choice lives on the note object and in its front matter
+   (the thumbnail line, see serializeNote). The list card shows it
+   while the id resolves to an image record on the note; removing
+   the choice, or the attachment going away, quietly ends it. */
+function toggleNoteThumbnail(note, att) {
+  if (!note || !att) { return; }
+  note.thumbnail = note.thumbnail === att.id ? null : att.id;
+  if (currentNote() === note) { markDirty(); }
+  renderNoteList();
+}
+
+/* ----- v2.11: rename ------------------------------------------------
+   The record's name is what captions start from, what the Title
+   face shows, and what downloads are called. The Drive file is
+   renamed to the new storage name on a best effort basis: a Drive
+   failure never rolls the record back, and no toast reports the
+   Drive part. The caption text is the note's own content by now
+   and is deliberately NOT rewritten when it happens to match the
+   old name. */
+async function renameAttachment(note, att, el) {
+  const next = prompt("Rename image", att.name);
+  if (next === null || next === undefined) { return; }
+  const name = String(next).trim();
+  if (!name || name === att.name) { return; }
+  att.name = name;
+  att.storageName = att.id + "__" + sanitizeFileName(name);
+  if (el) {
+    const img = el.querySelector("img.ss-att-img");
+    if (img) { img.alt = name; }
+    applyImageTitleFace(el, att);
+  }
+  if (currentNote() === note) { markDirty(); }
+  const driver = providers[att.provider];
+  if (driver && typeof driver.rename === "function" && state.online) {
+    try {
+      await driver.rename(att.fileId, att.storageName);
+    } catch (err) { /* best effort, see the section comment */ }
+  }
+}
+
+/* ----- v2.11: print one image ---------------------------------------
+   The single image counterpart of the note print view: the same
+   one named builder shape (a whole standalone document string,
+   unit testable), opened through the same window mechanism
+   exportNotePdf uses. The image rides a fresh object URL from the
+   fetched bytes; the parent revokes it a minute later, the same
+   patience openAttachment gives a fresh tab, since the print
+   window needs time to load and print it. */
+function buildImagePrintDocument(note, att, imgUrl) {
+  const title = escapeHtml(note.title || "Untitled note");
+  return "<!DOCTYPE html>\n<html><head><meta charset=\"UTF-8\">" +
+    "<title>" + title + "</title>" +
+    "<style>" +
+    "body{font-family:Georgia,'Times New Roman',serif;color:#10231A;" +
+    "max-width:720px;margin:40px auto;padding:0 24px;line-height:1.55;}" +
+    "h1{font-size:22px;margin:0 0 16px;}" +
+    "img{max-width:100%;height:auto;display:block;}" +
+    "@media print{body{margin:0 auto;}}" +
+    "</style></head><body>" +
+    "<h1>" + title + "</h1>" +
+    "<img src=\"" + imgUrl + "\" alt=\"" + escapeHtml(att.name) + "\">" +
+    "<script>window.addEventListener('load',function(){" +
+    "setTimeout(function(){window.print();},60);});</scr" + "ipt>" +
+    "</body></html>";
+}
+
+async function printImage(note, att) {
+  let blob;
+  try {
+    blob = await fetchAttachmentBlob(att);
+  } catch (err) {
+    toast(err.message, true);
+    return;
+  }
+  const url = URL.createObjectURL(blob);
+  const win = window.open("", "_blank");
+  if (!win) {
+    URL.revokeObjectURL(url);
+    toast("The print window was blocked by the browser. Allow popups " +
+      "for this site, then choose Print again.", true);
+    return;
+  }
+  win.document.open();
+  win.document.write(buildImagePrintDocument(note, att, url));
+  win.document.close();
+  try { win.focus(); } catch (err) { /* focus is best effort */ }
+  setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
+}
+
+/* ----- v2.11: transcribe (image text recognition) -------------------
+   Reading the text out of an image needs a real OCR engine; the
+   app ships none, so Tesseract.js is loaded from its CDN the
+   first time Transcribe is used, and only then. Nothing is fetched
+   at startup, the service worker never sees the traffic (cross
+   origin requests pass it by, as always), and signing out or
+   closing the app leaves nothing behind: the worker is terminated
+   after every run. The one outside dependency in this menu, and
+   it fails closed: offline, a failed load, or a failed read shows
+   an error and inserts nothing. */
+const TESSERACT_SCRIPT_URL =
+  "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js";
+const TESSERACT_WORKER_URL =
+  "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/worker.min.js";
+const TESSERACT_CORE_URL =
+  "https://cdn.jsdelivr.net/npm/tesseract.js-core@5/";
+
+let tesseractLoadPromise = null;
+
+function loadTesseract() {
+  if (window.Tesseract && window.Tesseract.createWorker) {
+    return Promise.resolve(window.Tesseract);
+  }
+  if (tesseractLoadPromise) { return tesseractLoadPromise; }
+  tesseractLoadPromise = new Promise(function (resolve, reject) {
+    const script = document.createElement("script");
+    script.src = TESSERACT_SCRIPT_URL;
+    script.onload = function () {
+      if (window.Tesseract && window.Tesseract.createWorker) {
+        resolve(window.Tesseract);
+      } else {
+        reject(new Error("The text recognition library did not initialize."));
+      }
+    };
+    script.onerror = function () {
+      reject(new Error("The text recognition library could not be loaded."));
+    };
+    document.head.appendChild(script);
+  });
+  /* A failed load may be retried on the next Transcribe. */
+  tesseractLoadPromise.catch(function () { tesseractLoadPromise = null; });
+  return tesseractLoadPromise;
+}
+
+/* Start a worker, tolerating the v5 API's argument shapes: the
+   documented createWorker(languages, oem, options) first, then the
+   plainer forms. The first shape that yields a worker with a
+   recognize method wins; anything else is a load failure. */
+async function createTesseractWorker(T, onProgress) {
+  const options = {
+    workerPath: TESSERACT_WORKER_URL,
+    corePath: TESSERACT_CORE_URL,
+    logger: onProgress
+  };
+  const attempts = [];
+  const oem = T.OEM ? (T.OEM.DEFAULT !== undefined
+    ? T.OEM.DEFAULT : T.OEM.LSTM_ONLY) : undefined;
+  if (oem !== undefined) {
+    attempts.push(function () { return T.createWorker("eng", oem, options); });
+  }
+  attempts.push(function () { return T.createWorker("eng", options); });
+  attempts.push(function () { return T.createWorker("eng"); });
+  let lastErr = null;
+  for (const attempt of attempts) {
+    try {
+      const worker = await attempt();
+      if (worker && typeof worker.recognize === "function") { return worker; }
+    } catch (err) { lastErr = err; }
+  }
+  throw lastErr || new Error("The text recognition worker could not start.");
+}
+
+/* The transcribe run's own status line in the toast box, updated
+   as the OCR logger reports progress and removed when the run
+   ends, however it ends. */
+let transcribeStatusEl = null;
+function showTranscribeStatus(text) {
+  const box = document.getElementById("toastBox");
+  if (!box) { return; }
+  if (!transcribeStatusEl) {
+    transcribeStatusEl = document.createElement("div");
+    transcribeStatusEl.className = "toast";
+    box.appendChild(transcribeStatusEl);
+  }
+  transcribeStatusEl.textContent = text;
+}
+function hideTranscribeStatus() {
+  if (transcribeStatusEl && transcribeStatusEl.parentNode) {
+    transcribeStatusEl.parentNode.removeChild(transcribeStatusEl);
+  }
+  transcribeStatusEl = null;
+}
+
+async function transcribeImage(note, att, el) {
+  if (!state.online) {
+    toast("Transcribing needs an internet connection: the text " +
+      "recognition library loads on first use. You appear to be offline.", true);
+    return;
+  }
+  let blob;
+  try {
+    blob = await fetchAttachmentBlob(att);
+  } catch (err) {
+    toast(err.message, true);
+    return;
+  }
+  showTranscribeStatus("Loading text recognition...");
+  let worker = null;
+  try {
+    const T = await loadTesseract();
+    worker = await createTesseractWorker(T, function (m) {
+      if (m && m.status === "recognizing text" &&
+          typeof m.progress === "number") {
+        showTranscribeStatus("Reading the text in \"" + att.name +
+          "\": " + Math.round(m.progress * 100) + "%");
+      }
+    });
+    const result = await worker.recognize(blob);
+    const text = result && result.data &&
+      typeof result.data.text === "string" ? result.data.text : "";
+    const trimmed = text.trim();
+    if (!trimmed) {
+      toast("No text found in the image.");
+      return;
+    }
+    if (!el || !el.isConnected || currentNote() !== note) {
+      toast("The image is no longer in the open note, so the " +
+        "recognized text was not inserted.", true);
+      return;
+    }
+    /* The recognized text becomes a new paragraph right after the
+       image, built from text nodes line by line: OCR output is
+       data, never markup. */
+    const p = document.createElement("p");
+    const lines = trimmed.split(/\r?\n/);
+    lines.forEach(function (line, idx) {
+      p.appendChild(document.createTextNode(line));
+      if (idx < lines.length - 1) {
+        p.appendChild(document.createElement("br"));
+      }
+    });
+    el.after(p);
+    markDirty();
+    toast("Text inserted below the image.");
+  } catch (err) {
+    toast("Transcribe failed: " + err.message, true);
+  } finally {
+    hideTranscribeStatus();
+    if (worker && typeof worker.terminate === "function") {
+      try { await worker.terminate(); } catch (e) { /* already gone */ }
+    }
+  }
+}
+
+/* ----- v2.11: the image editor (Edit & Annotate, and Crop) ----------
+   One overlay, two modes, both working on a canvas copy of the
+   image loaded from its own blob (an object URL from the
+   attachment fetch), so the canvas is never tainted and the
+   original is never touched until Save.
+
+   Annotate draws freehand strokes and text labels over the image.
+   Every mark (a stroke or a label) lands in one list, so Undo
+   always takes back the most recent mark, whatever kind it was.
+   Crop keeps a rectangle in fractions of the image and maps it to
+   source pixels only at Apply time, so the box can be dragged
+   freely at any display size.
+
+   Save flattens the result (PNG, or JPEG at quality 0.92 when the
+   original record is a JPEG) and uploads it as a NEW Drive file
+   through the ordinary attachment upload path; only when the
+   upload has succeeded does the record swap to the new file in
+   place (same attachment id, same block). The old Drive file is
+   deliberately NOT deleted: it stays in the attachments folder as
+   the only copy of the unedited image, which is the protection
+   Chris approved against a bad edit. Any failure before the swap
+   leaves the note, the block, and the record exactly as they were,
+   and the editor stays open so the work is not lost.
+
+   The three small helpers below are the editor's only doors to
+   the canvas and image machinery; they exist so the behavior can
+   be exercised in tests that stub them. */
+function imageEditorContext(canvas) {
+  return canvas ? canvas.getContext("2d") : null;
+}
+
+function imageEditorLoadImage(url) {
+  return new Promise(function (resolve, reject) {
+    const img = new Image();
+    img.onload = function () { resolve(img); };
+    img.onerror = function () {
+      reject(new Error("The image could not be loaded for editing."));
+    };
+    img.src = url;
+  });
+}
+
+function imageEditorToBlob(canvas, type, quality) {
+  return new Promise(function (resolve, reject) {
+    if (typeof canvas.toBlob === "function") {
+      canvas.toBlob(function (blob) {
+        if (blob) { resolve(blob); }
+        else { reject(new Error("The edited image could not be prepared.")); }
+      }, type, quality);
+      return;
+    }
+    try {
+      const url = canvas.toDataURL(type, quality);
+      const comma = url.indexOf(",");
+      const bin = atob(url.slice(comma + 1));
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) { bytes[i] = bin.charCodeAt(i); }
+      resolve(new Blob([bytes], { type: type }));
+    } catch (err) { reject(err); }
+  });
+}
+
+/* The yellow pen color is a highlighter: it draws translucent. */
+const IMAGE_HIGHLIGHT_COLOR = "#FFD83D";
+
+let imgEditorState = null;
+
+function imageEditorOpen() {
+  const modal = document.getElementById("imgEditorModal");
+  return !!modal && !modal.classList.contains("hidden") && !!imgEditorState;
+}
+
+async function openImageEditor(note, att, el, mode) {
+  if (!state.online) {
+    toast("Editing an image needs an internet connection: the new " +
+      "version is uploaded when you save. You appear to be offline.", true);
+    return;
+  }
+  let blob;
+  try {
+    blob = await fetchAttachmentBlob(att);
+  } catch (err) {
+    toast(err.message, true);
+    return;
+  }
+  const url = URL.createObjectURL(blob);
+  let img;
+  try {
+    img = await imageEditorLoadImage(url);
+  } catch (err) {
+    URL.revokeObjectURL(url);
+    toast(err.message, true);
+    return;
+  }
+  imgEditorState = {
+    note: note, att: att, el: el, mode: mode,
+    img: img, url: url,
+    marks: [], current: null,
+    color: "#111111", widthPx: 3, tool: "pen",
+    crop: { fx: 0.1, fy: 0.1, fw: 0.8, fh: 0.8 },
+    saving: false
+  };
+  const canvas = document.getElementById("imgEditorCanvas");
+  canvas.width = img.naturalWidth || img.width || 1;
+  canvas.height = img.naturalHeight || img.height || 1;
+  document.getElementById("imgEditorTitle").textContent =
+    mode === "crop" ? "Crop image" : "Edit & Annotate";
+  document.getElementById("imgEditorSub").textContent = att.name +
+    ". Saving replaces the image in this note; the original file " +
+    "stays in your Drive attachments folder.";
+  document.getElementById("imgEditorTools")
+    .classList.toggle("hidden", mode !== "annotate");
+  document.getElementById("imgCropBox")
+    .classList.toggle("hidden", mode !== "crop");
+  const saveBtn = document.getElementById("imgEditorSaveBtn");
+  saveBtn.disabled = false;
+  saveBtn.textContent = mode === "crop" ? "Apply" : "Save";
+  document.getElementById("imgEditorModal").classList.remove("hidden");
+  if (mode === "crop") { positionImageCropBox(); }
+  else { redrawImageEditor(); }
+}
+
+function closeImageEditor() {
+  const modal = document.getElementById("imgEditorModal");
+  if (modal) { modal.classList.add("hidden"); }
+  if (imgEditorState && imgEditorState.url) {
+    URL.revokeObjectURL(imgEditorState.url);
+  }
+  imgEditorState = null;
+}
+
+/* --- annotate drawing --- */
+function drawImageMark(ctx, mark) {
+  if (mark.kind === "label") {
+    ctx.fillStyle = mark.color;
+    ctx.font = "600 " + mark.size + "px sans-serif";
+    ctx.textBaseline = "top";
+    ctx.fillText(mark.text, mark.x, mark.y);
+    return;
+  }
+  const pts = mark.points;
+  if (!pts.length) { return; }
+  ctx.strokeStyle = mark.color;
+  ctx.lineWidth = mark.width;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.globalAlpha = mark.highlight ? 0.45 : 1;
+  ctx.beginPath();
+  ctx.moveTo(pts[0].x, pts[0].y);
+  for (let i = 1; i < pts.length; i++) { ctx.lineTo(pts[i].x, pts[i].y); }
+  if (pts.length === 1) { ctx.lineTo(pts[0].x + 0.1, pts[0].y + 0.1); }
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+}
+
+function redrawImageEditor() {
+  const st = imgEditorState;
+  if (!st) { return; }
+  const canvas = document.getElementById("imgEditorCanvas");
+  const ctx = imageEditorContext(canvas);
+  if (!ctx) { return; }
+  ctx.drawImage(st.img, 0, 0, canvas.width, canvas.height);
+  st.marks.forEach(function (mark) { drawImageMark(ctx, mark); });
+  if (st.current) { drawImageMark(ctx, st.current); }
+}
+
+function imageEditorPoint(ev) {
+  const canvas = document.getElementById("imgEditorCanvas");
+  const rect = canvas.getBoundingClientRect();
+  const sx = rect.width ? canvas.width / rect.width : 1;
+  const sy = rect.height ? canvas.height / rect.height : 1;
+  return {
+    x: (ev.clientX - rect.left) * sx,
+    y: (ev.clientY - rect.top) * sy
+  };
+}
+
+function onImageEditorPointerDown(ev) {
+  const st = imgEditorState;
+  if (!st || st.mode !== "annotate" || st.saving) { return; }
+  ev.preventDefault();
+  const pt = imageEditorPoint(ev);
+  if (st.tool === "text") {
+    const text = prompt("Label text");
+    if (text && text.trim()) {
+      st.marks.push({
+        kind: "label", text: text.trim(), x: pt.x, y: pt.y,
+        color: st.color,
+        size: Math.max(14, Math.round(
+          (document.getElementById("imgEditorCanvas").width * 0.028) *
+          (st.widthPx / 3)))
+      });
+      redrawImageEditor();
+    }
+    return;
+  }
+  st.current = {
+    kind: "stroke", color: st.color, width: st.widthPx,
+    highlight: st.color === IMAGE_HIGHLIGHT_COLOR,
+    points: [pt]
+  };
+  const canvas = document.getElementById("imgEditorCanvas");
+  if (canvas.setPointerCapture && ev.pointerId !== undefined) {
+    try { canvas.setPointerCapture(ev.pointerId); } catch (e) { /* ok */ }
+  }
+  redrawImageEditor();
+}
+
+function onImageEditorPointerMove(ev) {
+  const st = imgEditorState;
+  if (!st || !st.current) { return; }
+  st.current.points.push(imageEditorPoint(ev));
+  redrawImageEditor();
+}
+
+function onImageEditorPointerUp() {
+  const st = imgEditorState;
+  if (!st || !st.current) { return; }
+  st.marks.push(st.current);
+  st.current = null;
+  redrawImageEditor();
+}
+
+/* --- crop --- */
+/* The crop box's geometry, in fractions of the displayed canvas.
+   Displayed size falls back to the canvas's own pixel size when
+   the browser has not laid the stage out. */
+function imageEditorDisplaySize() {
+  const canvas = document.getElementById("imgEditorCanvas");
+  const w = (canvas.clientWidth || canvas.width || 1);
+  const h = (canvas.clientHeight || canvas.height || 1);
+  return { w: w, h: h };
+}
+
+function positionImageCropBox() {
+  const st = imgEditorState;
+  const box = document.getElementById("imgCropBox");
+  if (!st || !box) { return; }
+  const size = imageEditorDisplaySize();
+  box.style.left = (st.crop.fx * size.w) + "px";
+  box.style.top = (st.crop.fy * size.h) + "px";
+  box.style.width = (st.crop.fw * size.w) + "px";
+  box.style.height = (st.crop.fh * size.h) + "px";
+}
+
+let imgCropDrag = null;
+
+function onImageCropPointerDown(ev) {
+  const st = imgEditorState;
+  if (!st || st.mode !== "crop" || st.saving) { return; }
+  ev.preventDefault();
+  ev.stopPropagation();
+  const handle = ev.target && ev.target.closest ?
+    ev.target.closest(".img-crop-handle") : null;
+  imgCropDrag = {
+    kind: handle ? handle.getAttribute("data-corner") : "move",
+    startX: ev.clientX, startY: ev.clientY,
+    crop0: { fx: st.crop.fx, fy: st.crop.fy, fw: st.crop.fw, fh: st.crop.fh }
+  };
+  const box = document.getElementById("imgCropBox");
+  if (box.setPointerCapture && ev.pointerId !== undefined) {
+    try { box.setPointerCapture(ev.pointerId); } catch (e) { /* ok */ }
+  }
+}
+
+function onImageCropPointerMove(ev) {
+  const st = imgEditorState;
+  if (!st || !imgCropDrag) { return; }
+  const size = imageEditorDisplaySize();
+  const dx = (ev.clientX - imgCropDrag.startX) / size.w;
+  const dy = (ev.clientY - imgCropDrag.startY) / size.h;
+  const c0 = imgCropDrag.crop0;
+  const c = { fx: c0.fx, fy: c0.fy, fw: c0.fw, fh: c0.fh };
+  const MIN = 0.05;
+  const kind = imgCropDrag.kind;
+  if (kind === "move") {
+    c.fx = Math.max(0, Math.min(1 - c.fw, c0.fx + dx));
+    c.fy = Math.max(0, Math.min(1 - c.fh, c0.fy + dy));
+  } else {
+    if (kind.indexOf("e") >= 0) {
+      c.fw = Math.max(MIN, Math.min(1 - c.fx, c0.fw + dx));
+    }
+    if (kind.indexOf("s") >= 0) {
+      c.fh = Math.max(MIN, Math.min(1 - c.fy, c0.fh + dy));
+    }
+    if (kind.indexOf("w") >= 0) {
+      const right = c0.fx + c0.fw;
+      c.fx = Math.max(0, Math.min(right - MIN, c0.fx + dx));
+      c.fw = right - c.fx;
+    }
+    if (kind.indexOf("n") >= 0) {
+      const bottom = c0.fy + c0.fh;
+      c.fy = Math.max(0, Math.min(bottom - MIN, c0.fy + dy));
+      c.fh = bottom - c.fy;
+    }
+  }
+  st.crop = c;
+  positionImageCropBox();
+}
+
+function onImageCropPointerUp() { imgCropDrag = null; }
+
+/* The source rectangle, in image pixels, that the crop fractions
+   select. Kept separate and pure so it can be checked directly. */
+function imageCropSourceRect(crop, imgWidth, imgHeight) {
+  const sx = Math.max(0, Math.round(crop.fx * imgWidth));
+  const sy = Math.max(0, Math.round(crop.fy * imgHeight));
+  const sw = Math.max(1, Math.min(imgWidth - sx,
+    Math.round(crop.fw * imgWidth)));
+  const sh = Math.max(1, Math.min(imgHeight - sy,
+    Math.round(crop.fh * imgHeight)));
+  return { sx: sx, sy: sy, sw: sw, sh: sh };
+}
+
+/* --- save --- */
+/* The swap itself, run only after the new file exists in Drive.
+   See the section comment for the never delete the original rule. */
+async function replaceAttachmentImage(st, blob) {
+  const note = st.note;
+  const att = st.att;
+  const driver = providers[att.provider];
+  if (!driver) {
+    throw new Error("Unknown storage provider for this attachment.");
+  }
+  const status = await driver.getStatus();
+  if (!status.connected) {
+    throw new Error("Sign in with " + providerLabel(att.provider) +
+      " to save the edited image.");
+  }
+  const storageName = att.id + "__" + sanitizeFileName(att.name);
+  const file = typeof File === "function"
+    ? new File([blob], att.name, { type: blob.type || att.mime })
+    : blob;
+  const result = await driver.upload(file, storageName, null);
+  att.fileId = String(result.fileId);
+  att.storageName = storageName;
+  att.size = blob.size;
+  att.mime = blob.type || att.mime;
+  if (currentNote() === note) { markDirty(); }
+  if (st.el && st.el.isConnected) {
+    await hydrateOneAttachment(note, st.el);
+    /* Hydration rebuilt the block's contents, which takes the
+       selection furniture (the grips and the menu button) with
+       it. If this block was the selected one, clear that now
+       stale selection, so the next click selects the image afresh
+       instead of landing on a selection with no controls. */
+    if (selectedAttachmentEl === st.el) { deselectAttachment(); }
+  }
+}
+
+async function saveImageEditor() {
+  const st = imgEditorState;
+  if (!st || st.saving) { return; }
+  const isJpeg = st.att.mime === "image/jpeg";
+  const outType = isJpeg ? "image/jpeg" : "image/png";
+  const stage = document.getElementById("imgEditorCanvas");
+  let outCanvas = stage;
+  if (st.mode === "crop") {
+    const rect = imageCropSourceRect(st.crop, stage.width, stage.height);
+    outCanvas = document.createElement("canvas");
+    outCanvas.width = rect.sw;
+    outCanvas.height = rect.sh;
+    const ctx = imageEditorContext(outCanvas);
+    if (!ctx) {
+      toast("The edited image could not be prepared.", true);
+      return;
+    }
+    ctx.drawImage(st.img, rect.sx, rect.sy, rect.sw, rect.sh,
+      0, 0, rect.sw, rect.sh);
+  } else {
+    redrawImageEditor();
+  }
+  st.saving = true;
+  const saveBtn = document.getElementById("imgEditorSaveBtn");
+  const saveLabel = saveBtn.textContent;
+  saveBtn.disabled = true;
+  saveBtn.textContent = "Saving...";
+  try {
+    const blob = await imageEditorToBlob(outCanvas, outType,
+      isJpeg ? 0.92 : undefined);
+    await replaceAttachmentImage(st, blob);
+    closeImageEditor();
+    toast("Image updated.");
+  } catch (err) {
+    /* The editor stays open with its marks intact; nothing about
+       the note, the block, or the record has changed. */
+    toast("The edited image could not be saved: " + err.message, true);
+  } finally {
+    st.saving = false;
+    if (imgEditorState === st) {
+      saveBtn.disabled = false;
+      saveBtn.textContent = saveLabel;
+    }
   }
 }
 
@@ -16952,6 +18403,9 @@ async function firePendingAttachmentDelete(key) {
   note.attachments = (note.attachments || []).filter(function (a) {
     return a.id !== att.id;
   });
+  /* v2.11: a thumbnail pointing at a file that no longer exists
+     is cleared in the same save, so the choice never dangles. */
+  if (note.thumbnail === att.id) { note.thumbnail = null; }
   if (currentNote() === note) {
     /* Autosave persists the record drop alongside the body, which
        already lost the block when the window opened. */
@@ -18028,15 +19482,143 @@ function wireEvents() {
   /* v1.7: clicking anywhere else closes the image menu, mirroring
      the link popup's rule. Clicks inside the menu itself, and on a
      menu button (which toggles the menu for its own image), are
-     excluded. */
+     excluded. v2.11: the alignment submenu is part of the menu for
+     this rule; its clicks are excluded the same way. */
   document.addEventListener("click", function (ev) {
     const menu = document.getElementById("attMenu");
     if (!menu || menu.classList.contains("hidden")) { return; }
     const target = ev.target;
     if (!target || !target.closest) { return; }
     if (target.closest("#attMenu")) { return; }
+    if (target.closest("#attAlignMenu")) { return; }
     if (target.closest(".ss-att-menu-btn")) { return; }
     closeAttMenu();
+  });
+
+  /* v2.11: the alignment submenu's items run through one delegated
+     listener, like the menu's own. */
+  document.getElementById("attAlignMenu").addEventListener("click", function (ev) {
+    const target = ev.target;
+    const btn = target && target.closest ?
+      target.closest("button[data-align]") : null;
+    if (!btn) { return; }
+    runAttAlignChoice(btn.getAttribute("data-align"));
+  });
+
+  /* v2.11: Escape discipline for the image surfaces, innermost
+     first: the editor and the lightbox are modal and close (the
+     editor discards, exactly like its Cancel), and the alignment
+     submenu closes before the menu it hangs off. stopImmediate-
+     Propagation keeps the later generic handlers (menu close,
+     deselect) from ALSO acting on the same keypress; the Maximize
+     capture handler already counted these as open overlays
+     through anyOverlayOpen, so Maximize stays put either way. */
+  document.addEventListener("keydown", function (ev) {
+    if (ev.key !== "Escape") { return; }
+    if (imageEditorOpen()) {
+      closeImageEditor();
+      ev.stopImmediatePropagation();
+      return;
+    }
+    if (imageLightboxOpen()) {
+      closeImageLightbox();
+      ev.stopImmediatePropagation();
+      return;
+    }
+    if (attAlignMenuOpen()) {
+      closeAttAlignMenu();
+      ev.stopImmediatePropagation();
+    }
+  });
+
+  /* v2.11: the lightbox closes on its button or a backdrop click. */
+  document.getElementById("imgLightboxClose").addEventListener("click", function () {
+    closeImageLightbox();
+  });
+  document.getElementById("imgLightbox").addEventListener("click", function (ev) {
+    if (ev.target === ev.currentTarget) { closeImageLightbox(); }
+  });
+
+  /* v2.11: the image editor's controls. The canvas takes the pen
+     (pointer events cover mouse, touch, and pen through one path);
+     the crop box and its handles take the crop drags. */
+  const imgEditorCanvas = document.getElementById("imgEditorCanvas");
+  imgEditorCanvas.addEventListener("pointerdown", onImageEditorPointerDown);
+  imgEditorCanvas.addEventListener("pointermove", onImageEditorPointerMove);
+  imgEditorCanvas.addEventListener("pointerup", onImageEditorPointerUp);
+  imgEditorCanvas.addEventListener("pointercancel", onImageEditorPointerUp);
+  const imgCropBox = document.getElementById("imgCropBox");
+  imgCropBox.addEventListener("pointerdown", onImageCropPointerDown);
+  imgCropBox.addEventListener("pointermove", onImageCropPointerMove);
+  imgCropBox.addEventListener("pointerup", onImageCropPointerUp);
+  imgCropBox.addEventListener("pointercancel", onImageCropPointerUp);
+  document.getElementById("imgEditorTools").addEventListener("click", function (ev) {
+    const st = imgEditorState;
+    if (!st) { return; }
+    const target = ev.target;
+    const colorBtn = target && target.closest ?
+      target.closest("button[data-color]") : null;
+    if (colorBtn) {
+      st.color = colorBtn.getAttribute("data-color");
+      st.tool = "pen";
+      document.querySelectorAll("#imgEditorTools .img-color")
+        .forEach(function (b) {
+          b.classList.toggle("current", b === colorBtn);
+        });
+      document.getElementById("imgEditorTextBtn")
+        .classList.remove("current");
+      return;
+    }
+    const widthBtn = target && target.closest ?
+      target.closest("button[data-width]") : null;
+    if (widthBtn) {
+      st.widthPx = Number(widthBtn.getAttribute("data-width")) || 3;
+      document.querySelectorAll("#imgEditorTools .img-width-btn")
+        .forEach(function (b) {
+          b.classList.toggle("current", b === widthBtn);
+        });
+    }
+  });
+  document.getElementById("imgEditorTextBtn").addEventListener("click", function () {
+    const st = imgEditorState;
+    if (!st) { return; }
+    st.tool = st.tool === "text" ? "pen" : "text";
+    document.getElementById("imgEditorTextBtn")
+      .classList.toggle("current", st.tool === "text");
+  });
+  document.getElementById("imgEditorUndoBtn").addEventListener("click", function () {
+    const st = imgEditorState;
+    if (!st) { return; }
+    st.marks.pop();
+    redrawImageEditor();
+  });
+  document.getElementById("imgEditorClearBtn").addEventListener("click", function () {
+    const st = imgEditorState;
+    if (!st) { return; }
+    st.marks = [];
+    st.current = null;
+    redrawImageEditor();
+  });
+  document.getElementById("imgEditorCancelBtn").addEventListener("click", function () {
+    closeImageEditor();
+  });
+  document.getElementById("imgEditorSaveBtn").addEventListener("click", function () {
+    saveImageEditor().catch(function (err) { toast(err.message, true); });
+  });
+  document.getElementById("imgEditorModal").addEventListener("click", function (ev) {
+    if (ev.target === ev.currentTarget) { closeImageEditor(); }
+  });
+
+  /* v2.11: clicking an image's caption opens its editor (a
+     prompt; the figure is contenteditable false, so in place
+     typing is not attempted). Locked notes never reach it: their
+     bodies are not editable and the caption carries no listener
+     effect there, editImageCaption checks the lock itself. */
+  document.getElementById("noteBody").addEventListener("click", function (ev) {
+    const target = ev.target;
+    const fig = target && target.closest ?
+      target.closest("figcaption.ss-caption") : null;
+    if (fig) { editImageCaption(fig); }
   });
 
   /* v1.3.1: Escape closes the popup, and scrolling the editor closes it

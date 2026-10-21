@@ -2,8 +2,8 @@
   ==========================================================================
   SnakeScale Notes service worker
   ==========================================================================
-  BUILD STAMP: 2026-10-20-SSN-V2100
-  Version: 2.10.0
+  BUILD STAMP: 2026-10-20-SSN-V2110
+  Version: 2.11.0
 
   This worker exists for exactly one job: making SnakeScale Notes
   installable as an app, and keeping the app shell available when the
@@ -48,7 +48,7 @@
 
 "use strict";
 
-const CACHE_NAME = "snakescale-shell-2026-10-20-SSN-V2100";
+const CACHE_NAME = "snakescale-shell-2026-10-20-SSN-V2110";
 
 /* The shell, as paths relative to this worker's scope (the site
    root). "./" and "./index.html" are both listed: the first is the
