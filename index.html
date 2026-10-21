@@ -40,10 +40,31 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-21-SSN-V2120
-  Version: 2.12.0
+  BUILD STAMP: 2026-10-21-SSN-V2130
+  Version: 2.13.0
 
   Revision history:
+    v2.13.0 2026-10-21 The first run experience. A store seeded
+                      during the boot (a brand new user) opens a
+                      five step walkthrough modal over the app:
+                      where notes live, notebooks, writing and
+                      formatting, linking notes, and data and
+                      history, with Back, Next, Skip, position
+                      dots, and a final button that opens the
+                      starter note. The trigger is the seeding
+                      itself, never a settings flag, so existing
+                      and upgraded stores never see it; finishing,
+                      skipping, or dismissing it records
+                      settings.onboardingSeen. Seeding now creates
+                      a richer starter note (pinned, tagged
+                      welcome and examples) whose body demonstrates
+                      headings, formatted and highlighted text, a
+                      working checklist, a table, and a web link.
+                      Settings gains a Getting started section
+                      with two test paths that work on any store:
+                      Replay the walkthrough, and Add the starter
+                      note (which opens the existing one instead
+                      of duplicating it).
     v2.12.0 2026-10-21 Three changes. Typing "@" in a note opens
                       a Results popup under the caret: a Create
                       new note row carrying the typed text, then
@@ -2632,6 +2653,26 @@ body.dark .settings-section h3{color:var(--accent);}
 .settings-help,.settings-feedback{
   font-size:13px;color:var(--muted);margin-top:6px;line-height:1.4;
 }
+/* v2.13: the Settings Getting started row: two plain buttons that
+   wrap under each other on narrow screens. */
+.settings-start-row{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 8px;}
+/* v2.13: the first run walkthrough card. It reuses .modal and
+   .modal-card; only the tour furniture is new: the logo, the step
+   body, and the position dots. The current dot is filled with the
+   primary color while the rest stay hollow, so where you are in
+   the tour is obvious at a glance (the same visibly marked choice
+   rule as the Settings segmented control). */
+.onboarding-card{max-width:520px;}
+.onboarding-logo{margin-bottom:10px;}
+.onboarding-logo svg{display:block;width:54px;height:auto;}
+.onboarding-body p{margin:0 0 10px;font-size:15px;line-height:1.55;}
+.onboarding-dots{display:flex;gap:7px;justify-content:center;margin:16px 0 2px;}
+.onboarding-dots span{
+  width:9px;height:9px;border-radius:50%;box-sizing:border-box;
+  border:1.5px solid var(--muted);background:transparent;
+}
+.onboarding-dots span.current{background:var(--primary);border-color:var(--primary);}
+.onboarding-foot #onboardingSkipBtn{margin-right:auto;}
 .settings-feedback{min-height:18px;font-weight:600;}
 .theme-segmented{
   display:inline-flex;gap:3px;padding:3px;border:1px solid var(--border);
@@ -2828,7 +2869,7 @@ body.dark .version-date{color:var(--accent);}
       Sign in with Google is the only sign in. There is no SnakeScale app
       password. Continue to the Google sign in step and approve access;
       SnakeScale then connects Drive and creates your first notebook and
-      welcome note. Local copies on this device are encrypted with a
+      starter note. Local copies on this device are encrypted with a
       random device key kept only on this device, which is not a login.
     </p>
     <form id="setupForm" autocomplete="off">
@@ -2846,7 +2887,7 @@ body.dark .version-date{color:var(--accent);}
      renewal is available, and after sign out. Sign in with Google is
      the only step here; on success the connect flow loads the
      SnakeScale Notes folder from Drive, seeding the first notebook
-     and welcome note when the store is brand new.
+     and starter note when the store is brand new.
      ========================================================================== -->
 <div id="repoScreen" class="gate hidden">
   <div class="gate-card">
@@ -3689,6 +3730,19 @@ body.dark .version-date{color:var(--accent);}
       </div>
     </section>
 
+    <!-- v2.13: the two first run test paths. Both work on any
+         store, however old: the walkthrough replays on demand, and
+         the starter note is added (or opened, when it is already
+         there) in place. -->
+    <section class="settings-section" aria-labelledby="settingsStartTitle">
+      <h3 id="settingsStartTitle">Getting started</h3>
+      <p>New here, or want the tour again? Replay the first run walkthrough, or add the starter note that shows what SnakeScale can do.</p>
+      <div class="settings-start-row">
+        <button class="btn" id="settingsWalkthroughBtn" type="button">Replay the walkthrough</button>
+        <button class="btn" id="settingsStarterNoteBtn" type="button">Add the starter note</button>
+      </div>
+    </section>
+
     <div class="modal-foot">
       <button class="btn" id="settingsCloseBtn" type="button">Close</button>
     </div>
@@ -3715,6 +3769,32 @@ body.dark .version-date{color:var(--accent);}
     <div class="version-preview hidden" id="versionHistoryPreview"></div>
     <div class="modal-foot">
       <button class="btn" id="versionHistoryCloseBtn" type="button">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==========================================================================
+     v2.13: the first run walkthrough
+     A five step tour in one modal card. It opens on its own only
+     when the store was seeded during this boot (a brand new user);
+     the Settings Getting started section can replay it on any
+     store. The script fills the title, the step lines, and the
+     position dots per step, and swaps the foot buttons: Skip
+     shows until the last step, Back hides on the first, and the
+     primary button is Next until the last step, where it opens
+     the starter note (first run) or simply finishes (replay).
+     Pure app furniture: nothing here can be saved into a note.
+     ========================================================================== -->
+<div id="onboardingModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="onboardingTitle">
+  <div class="modal-card onboarding-card">
+    <div class="onboarding-logo logo-slot" aria-hidden="true"></div>
+    <h2 id="onboardingTitle"></h2>
+    <div class="onboarding-body" id="onboardingBody"></div>
+    <div class="onboarding-dots" id="onboardingDots" aria-hidden="true"></div>
+    <div class="modal-foot onboarding-foot">
+      <button class="btn" id="onboardingSkipBtn" type="button">Skip</button>
+      <button class="btn" id="onboardingBackBtn" type="button">Back</button>
+      <button class="btn primary" id="onboardingNextBtn" type="button">Next</button>
     </div>
   </div>
 </div>
@@ -3781,8 +3861,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-21-SSN-V2120";
-const APP_VERSION = "2.12.0";
+const APP_BUILD = "2026-10-21-SSN-V2130";
+const APP_VERSION = "2.13.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -3887,6 +3967,14 @@ const state = {
                             // per note (0 turns version history
                             // off), remembered in settings and
                             // edited in the Settings modal.
+  onboardingSeen: false,    // v2.13: true once the first run
+                            // walkthrough has been finished, skipped,
+                            // or dismissed on this device. Recorded
+                            // for explicitness only: the walkthrough
+                            // itself is triggered by a store being
+                            // seeded during the boot, never by this
+                            // flag being absent, so an existing or
+                            // upgraded store can never spring it.
   trashSelection: [],       // v1.8.1: ids of the notes checked in the
                             // Trash view, for Delete Selected
   archiveSelection: [],     // v1.8.1: ids of the notes checked in the
@@ -4350,6 +4438,11 @@ function loadSettings() {
     state.versionsLimit = Math.max(0, Math.min(100,
       Math.trunc(Number(s.versionsLimit))));
   }
+  /* v2.13: whether the first run walkthrough has been finished on
+     this device. Only a stored true is honored; the flag never
+     triggers the walkthrough (seeding during the boot does), it
+     only records that the tour already happened here. */
+  if (s.onboardingSeen === true) { state.onboardingSeen = true; }
 }
 
 
@@ -4359,7 +4452,8 @@ function saveSettings() {
     attach: state.attach,
     listSort: state.listSort,   // v1.8: the remembered notes list sort
     sidebarRail: state.sidebarRail,   // v2.5: the icon rail choice
-    versionsLimit: state.versionsLimit   // v2.8: versions kept per note
+    versionsLimit: state.versionsLimit,   // v2.8: versions kept per note
+    onboardingSeen: state.onboardingSeen   // v2.13: the walkthrough record
   }));
 }
 
@@ -6308,12 +6402,86 @@ function unarchiveNote(note) {
   });
 }
 
+/* --------------------------------------------------------------------------
+   v2.13: the starter note, defined once and used in two places:
+   seedInitialStore creates it in a brand new store, and the
+   Settings Getting started section's Add the starter note button
+   creates (or opens) it on any store. The body demonstrates the
+   app instead of describing it: headings, bold, italic, and
+   highlighted text (the highlight color is the highlight palette's
+   own custom default, #FFF3A3, carried as an inline background
+   color so it saves and renders like a highlight a user makes), a
+   working checklist whose first item is already done in the v2.7
+   shape (the done class plus the checked attribute, so it opens
+   ticked), a small table, and an ordinary Text mode web link. The
+   note is pinned and carries the welcome and examples tags.
+   -------------------------------------------------------------------------- */
+const STARTER_NOTE_TITLE = "Start here: see what SnakeScale can do";
+const STARTER_NOTE_TAGS = ["welcome", "examples"];
+const STARTER_NOTE_BODY =
+  "<p>Welcome to <b>SnakeScale Notes</b>. This note lives in your own " +
+  "Google Drive, in the SnakeScale Notes folder, and so does everything " +
+  "else you write here. It is also a tour: each part below is a real, " +
+  "working example you can edit, tick, or delete.</p>" +
+  "<h2>Headings and formatted text</h2>" +
+  "<p>Notes can hold <b>bold</b>, <i>italic</i>, and " +
+  "<span style=\"background-color:#FFF3A3\">highlighted</span> text, in " +
+  "the sizes and colors the toolbar offers. Headings like the one above " +
+  "keep longer notes easy to scan.</p>" +
+  "<h2>A working checklist</h2>" +
+  "<p>Tick these off. A ticked box stays ticked when the note saves and " +
+  "reopens:</p>" +
+  "<ul class=\"ss-checklist\">" +
+  "<li class=\"done\"><input type=\"checkbox\" checked>Make your first " +
+  "note with New Note</li>" +
+  "<li><input type=\"checkbox\">Try the Checklist button in the " +
+  "toolbar</li>" +
+  "<li><input type=\"checkbox\">Pin a note so it stays at the top of " +
+  "the list</li></ul>" +
+  "<h2>Tables</h2>" +
+  "<table class=\"ss-table\"><thead><tr><th>Thing</th><th>Where it " +
+  "lives</th></tr></thead><tbody>" +
+  "<tr><td>Your notes</td><td>Your Google Drive</td></tr>" +
+  "<tr><td>This tour</td><td>The starter note, in Personal</td></tr>" +
+  "</tbody></table>" +
+  "<h2>Links that show more</h2>" +
+  "<p>The SnakeScale home page: <a href=\"https://nine34.com/snakescale\">" +
+  "SnakeScale Notes, in one page</a>. Rest the mouse on any link in a " +
+  "note (or tap it) and a small bar appears: from its menu you can " +
+  "switch the link between Text, Mention, and Preview views, and " +
+  "Preview shows the page's real title and picture.</p>" +
+  "<h2>Connect your notes</h2>" +
+  "<p>Type @ while you write and pick another note to link to it, or " +
+  "use Insert, then Link to Note. Notes that point at each other are " +
+  "much easier to find again than notes that sit alone.</p>" +
+  "<p>Pictures get their own three dot menu inside a note: full screen " +
+  "preview, Edit &amp; Annotate, Crop, and Transcribe, which reads the " +
+  "words in a picture and types them into the note.</p>" +
+  "<h2>Your history is kept</h2>" +
+  "<p>Every note keeps past versions of itself. The History button at " +
+  "the bottom of a note previews and restores them, and Settings " +
+  "chooses how many to keep. Settings is also where this tour lives: " +
+  "under Getting started you can replay the walkthrough any time, and " +
+  "add this starter note again if you deleted it.</p>" +
+  "<p>Delete this note whenever you are ready. It goes to Trash first, " +
+  "and only disappears for good when you choose Delete Forever.</p>";
+
+/* Build a starter note object from the shared constants above. The
+   one place both creators go through, so the seeded note and the
+   Settings added note can never drift apart. */
+function makeStarterNote(notebookSlug) {
+  const note = makeNote(notebookSlug, STARTER_NOTE_TITLE, STARTER_NOTE_BODY);
+  note.pinned = true;
+  note.tags = STARTER_NOTE_TAGS.slice();
+  return note;
+}
+
 /* Build the first store through the neutral store layer: the Personal
    notebook, the trash and archive folders, index.json, and exactly one
-   welcome note. Seeding runs only when the store itself is empty
+   starter note. Seeding runs only when the store itself is empty
    (v1.4.3: no index.json and a missing or empty notebooks listing),
    so a store holding any data is never seeded, returning users never
-   get a second welcome note, and an interrupted first attempt is
+   get a second starter note, and an interrupted first attempt is
    repaired on the next connect instead of staying empty forever. */
 
 async function seedInitialStore() {
@@ -6339,28 +6507,16 @@ async function seedInitialStore() {
   await storePutFile("archive/.gitkeep", "", null, "Create archive folder",
     { fresh: true });
 
-  const welcomeBody =
-    "<p>Welcome to <b>SnakeScale Notes</b>. This note lives in your own " +
-    "Google Drive, in the SnakeScale Notes folder, as a plain Markdown " +
-    "file, and so do all of your other notes.</p>" +
-    "<p>A few things to try:</p>" +
-    "<ul><li>Make a notebook with the + button next to Notebooks.</li>" +
-    "<li>Add tags to a note, then use the Tags list to filter.</li>" +
-    "<li>Pin this note and it stays at the top of the list.</li>" +
-    "<li>Use the Checklist button in the toolbar for to do lists.</li></ul>" +
-    "<p>Delete this note whenever you are ready. It goes to Trash first, " +
-    "and only disappears for good when you choose Delete Forever.</p>";
-
-  const welcome = makeNote("personal", "Welcome to SnakeScale Notes", welcomeBody);
+  const starter = makeStarterNote("personal");
   /* v1.4.4: fresh, for the same reason as the folder markers above:
-     the welcome note's id was just generated into an empty store. */
-  welcome.sha = await storePutFile(notePath(welcome), serializeNote(welcome),
-    null, "Create welcome note", { fresh: true });
-  state.notes = [welcome];
+     the starter note's id was just generated into an empty store. */
+  starter.sha = await storePutFile(notePath(starter), serializeNote(starter),
+    null, "Create starter note", { fresh: true });
+  state.notes = [starter];
   /* v2.8: the seeded note was written directly, not through
      saveNoteToRepo, so record its baseline here: its first later
      edit can then snapshot this original state. */
-  rememberLastSavedContent(welcome);
+  rememberLastSavedContent(starter);
   await saveIndex();
   /* v1.4.4: saveIndex() only schedules the coalesced index write now.
      Seeding must not return until the seeded index is physically on
@@ -6368,7 +6524,7 @@ async function seedInitialStore() {
      load reads index.json. Flush the pending write first. */
   await flushIndexWrites();
   saveCache();
-  return welcome;
+  return starter;
 }
 
 /* The Google sign in gate: the app's only sign in screen.
@@ -6445,10 +6601,10 @@ async function connectAndLoad() {
     const notebookEntries = await storeListDir("notebooks");
     const storeIsEmpty = !existingIndex &&
       (!notebookEntries || notebookEntries.length === 0);
-    let welcome = null;
+    let starter = null;
     if (storeIsEmpty) {
-      welcome = await seedInitialStore();
-      state.selectedId = welcome.id;
+      starter = await seedInitialStore();
+      state.selectedId = starter.id;
     }
     /* v1.6 background population: when this device holds a cache for
        the Google store, paint the app from it now, still under the
@@ -6463,9 +6619,16 @@ async function connectAndLoad() {
     showScreen("app");
     await syncNow(false);
     hideLoading();
-    if (welcome) {
-      openNote(welcome.id);
+    if (starter) {
+      openNote(starter.id);
       toast("Google Drive connected. Welcome to SnakeScale Notes.");
+      /* v2.13: the first run walkthrough opens over the freshly
+         seeded app. The trigger is this seeding itself, in this
+         boot: no settings flag is consulted, so an existing or
+         upgraded store (where starter is null here) can never
+         spring it, and a store seeded in an earlier boot does not
+         repeat it. */
+      openOnboarding(false, starter.id);
     }
   } catch (err) {
     if (err.needsGoogleReconnect) {
@@ -6885,6 +7048,9 @@ function anyOverlayOpen() {
     "attAlignMenu", "imgLightbox", "imgEditorModal",
     /* v2.12: the "@" note popup joins the set for the same reason. */
     "mentionPopup",
+    /* v2.13: the first run walkthrough joins the set for the same
+       reason: an Escape that dismisses it never exits Maximize. */
+    "onboardingModal",
     "exportMenu", "sidebarMenu"];
   for (let i = 0; i < ids.length; i++) {
     const el = document.getElementById(ids[i]);
@@ -8029,6 +8195,210 @@ function applyVersionsLimitFromInput() {
     });
   }
   setVersionsFeedback("Saved. " + versionsLimitFeedback(nextLimit));
+}
+
+/* --------------------------------------------------------------------------
+   v2.13: the first run walkthrough, and the Settings Getting
+   started actions
+
+   The walkthrough is a five step tour in the onboarding modal.
+   It opens on its own in exactly one situation: connectAndLoad
+   calls openOnboarding when the store was seeded during that
+   boot, which is to say for a brand new user. Nothing else opens
+   it uninvited: not a missing or false onboardingSeen flag (an
+   upgraded store has exactly that, and must never be surprised),
+   and not a returning boot over a seeded store. Finishing,
+   skipping, or dismissing the tour records the flag through
+   saveSettings, so the state is explicit.
+
+   The Settings Getting started section replays the tour on any
+   store (in replay the last step's button reads Done and simply
+   closes), and adds the starter note on any store: when a live
+   note already carries the starter title it is opened instead of
+   duplicated ("live" means in the notes list; a copy resting in
+   Trash or the Archive does not count, which is what makes the
+   button useful after the note was thrown away).
+   -------------------------------------------------------------------------- */
+const ONBOARDING_STEPS = [
+  {
+    title: "Welcome to SnakeScale Notes",
+    lines: [
+      "Your notes live in your own Google Drive, in a folder the app " +
+        "creates for you. They are never stored on a SnakeScale server.",
+      "The developer cannot see your notes, and your Google sign in is " +
+        "the only account you need."
+    ]
+  },
+  {
+    title: "Notebooks and notes",
+    lines: [
+      "Organize with notebooks in the sidebar, and create a note with " +
+        "the New Note button.",
+      "Drag notes between notebooks to reorganize, and pin the " +
+        "important ones so they stay at the top."
+    ]
+  },
+  {
+    title: "Write and format",
+    lines: [
+      "The toolbar gives you headings, lists and checklists, tables, " +
+        "and attachments.",
+      "Images get their own three dot menu inside a note: edit and " +
+        "annotate them, add captions, or transcribe the words in a " +
+        "picture."
+    ]
+  },
+  {
+    title: "Connect your notes",
+    lines: [
+      "Link notes together with Insert, then Link to Note, or just " +
+        "type @ as you write and pick a note.",
+      "Web links can become rich Mention and Preview cards that show " +
+        "the page's real title and picture."
+    ]
+  },
+  {
+    title: "Your data, your history",
+    lines: [
+      "The app works offline and syncs when you are back. Nothing is " +
+        "lost if your connection drops.",
+      "Settings holds appearance, a connection refresh, and how many " +
+        "past versions of each note to keep. The History button on a " +
+        "note previews and restores those versions."
+    ]
+  }
+];
+let onboardingStepIndex = 0;
+let onboardingReplayMode = false;
+let onboardingStarterId = null;
+
+/* Push the current step into the modal: its title, its lines as
+   plain paragraphs (text only, so tour copy can never become
+   markup), the position dots with the current one filled, and the
+   foot buttons for this step (Back hidden on the first step, Skip
+   hidden on the last, and the primary button's label). */
+function renderOnboardingStep() {
+  const step = ONBOARDING_STEPS[onboardingStepIndex];
+  const title = document.getElementById("onboardingTitle");
+  if (title) { title.textContent = step.title; }
+  const body = document.getElementById("onboardingBody");
+  if (body) {
+    body.innerHTML = "";
+    step.lines.forEach(function (line) {
+      const p = document.createElement("p");
+      p.textContent = line;
+      body.appendChild(p);
+    });
+  }
+  const dots = document.getElementById("onboardingDots");
+  if (dots) {
+    dots.innerHTML = "";
+    ONBOARDING_STEPS.forEach(function (s, i) {
+      const d = document.createElement("span");
+      if (i === onboardingStepIndex) { d.className = "current"; }
+      dots.appendChild(d);
+    });
+  }
+  const last = onboardingStepIndex === ONBOARDING_STEPS.length - 1;
+  const back = document.getElementById("onboardingBackBtn");
+  if (back) { back.classList.toggle("hidden", onboardingStepIndex === 0); }
+  const skip = document.getElementById("onboardingSkipBtn");
+  if (skip) { skip.classList.toggle("hidden", last); }
+  const next = document.getElementById("onboardingNextBtn");
+  if (next) {
+    next.textContent = last
+      ? (onboardingReplayMode ? "Done" : "Open your starter note")
+      : "Next";
+  }
+}
+
+function openOnboarding(replay, starterId) {
+  onboardingReplayMode = !!replay;
+  onboardingStarterId = starterId || null;
+  onboardingStepIndex = 0;
+  /* A modal opening puts the link bar away, like every other
+     overlay in the app. */
+  hideLinkBar();
+  renderOnboardingStep();
+  const modal = document.getElementById("onboardingModal");
+  if (modal) { modal.classList.remove("hidden"); }
+  const next = document.getElementById("onboardingNextBtn");
+  if (next) { next.focus(); }
+}
+
+function closeOnboarding() {
+  const modal = document.getElementById("onboardingModal");
+  if (modal) { modal.classList.add("hidden"); }
+}
+
+/* Every way out of the tour (the final button, Skip, Escape, a
+   backdrop click) lands here: the seen flag is recorded, so the
+   state is explicit, and the modal closes. */
+function finishOnboarding() {
+  state.onboardingSeen = true;
+  saveSettings();
+  closeOnboarding();
+}
+
+function onboardingNext() {
+  if (onboardingStepIndex < ONBOARDING_STEPS.length - 1) {
+    onboardingStepIndex += 1;
+    renderOnboardingStep();
+    return;
+  }
+  const starterId = onboardingStarterId;
+  const replay = onboardingReplayMode;
+  finishOnboarding();
+  /* First run only: the tour ends by opening the starter note it
+     has been describing (it is already the open note underneath;
+     this keeps the promise of the button explicit). A replay
+     simply ends. */
+  if (!replay && starterId) { openNote(starterId); }
+}
+
+function onboardingBack() {
+  if (onboardingStepIndex > 0) {
+    onboardingStepIndex -= 1;
+    renderOnboardingStep();
+  }
+}
+
+/* The Settings Getting started section's second button. Follows
+   createNoteInRepo's instant pattern exactly (state and cache
+   first, render and open at once, the Drive write in the
+   background with the same failure toast), carrying the shared
+   starter content instead of a blank note. */
+async function addStarterNoteFromSettings() {
+  closeSettingsModal();
+  const existing = state.notes.find(function (n) {
+    return n.title === STARTER_NOTE_TITLE;
+  });
+  if (existing) {
+    openNote(existing.id);
+    toast("The starter note is already in your notes.");
+    return existing;
+  }
+  if (!state.notebooks.length) {
+    await createNotebook("Personal");
+  }
+  const slug = state.notebooks.some(function (nb) {
+    return nb.slug === "personal";
+  }) ? "personal" : state.notebooks[0].slug;
+  const note = makeStarterNote(slug);
+  state.notes.unshift(note);
+  saveCache();
+  renderAll();
+  openNote(note.id);
+  saveNoteToRepo(note, { skipConflictCheck: true, fresh: true })
+    .then(function () {
+      /* Persist the storage token the background write assigned,
+         as createNoteInRepo does for its notes. */
+      saveCache();
+    })
+    .catch(function (err) {
+      toast("Starter note created locally; save failed: " + err.message, true);
+    });
+  return note;
 }
 
 /* --------------------------------------------------------------------------
@@ -19192,7 +19562,7 @@ function wireEvents() {
       showGoogleConnectScreen(
         "One step left: sign in with Google. SnakeScale will create " +
         "the SnakeScale Notes folder in your Drive and your first " +
-        "notebook and welcome note.");
+        "notebook and starter note.");
     } catch (err) {
       errEl.textContent = "Setup failed: " + err.message;
     }
@@ -19445,6 +19815,28 @@ function wireEvents() {
   });
   document.getElementById("settingsVersionsInput").addEventListener("change",
     applyVersionsLimitFromInput);
+
+  /* v2.13: the Settings Getting started actions, and the first run
+     walkthrough's controls. The walkthrough follows the Settings
+     modal's close patterns: the primary button and Skip finish
+     it (recording the seen flag), Back steps back, a click on
+     the dimmed backdrop finishes it, and Escape finishes it. */
+  document.getElementById("settingsWalkthroughBtn").addEventListener("click", function () {
+    closeSettingsModal();
+    openOnboarding(true);
+  });
+  document.getElementById("settingsStarterNoteBtn").addEventListener("click", function () {
+    addStarterNoteFromSettings().catch(function (err) { toast(err.message, true); });
+  });
+  document.getElementById("onboardingNextBtn").addEventListener("click", onboardingNext);
+  document.getElementById("onboardingBackBtn").addEventListener("click", onboardingBack);
+  document.getElementById("onboardingSkipBtn").addEventListener("click", finishOnboarding);
+  document.getElementById("onboardingModal").addEventListener("click", function (ev) {
+    if (ev.target === ev.currentTarget) { finishOnboarding(); }
+  });
+  document.getElementById("onboardingModal").addEventListener("keydown", function (ev) {
+    if (ev.key === "Escape") { finishOnboarding(); }
+  });
 
   /* v2.8: the editor footer's History button and its modal, with
      the same close pattern as Settings. The list's Preview and
