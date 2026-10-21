@@ -43,6 +43,17 @@
   creates. It cannot see or open anything else in your Drive. The developer
   has no access to your Drive, your notes, or your attachments.</p>
 
+  <h2>Microphone and voice notes</h2>
+  <p>The app uses your microphone only when you choose to record a voice
+  note, and only after your browser asks for your permission. The finished
+  recording is stored in your own Google Drive as an attachment, exactly
+  like any other file you attach to a note. Turning speech into text is
+  done by your browser's built in speech recognition service, provided by
+  your browser's maker (for example Microsoft in Edge or Google in
+  Chrome). The app itself sends nothing anywhere for transcription, and
+  the typed words it produces are saved only to your note, in your
+  Drive.</p>
+
   <h2>Information stored on your device</h2>
   <p>So the app opens quickly and works offline, it stores a small amount of
   information in your browser's local storage on your device: your app
@@ -73,6 +84,12 @@
     software from the jsDelivr content delivery network. The transcription
     itself runs entirely on your device; the image being transcribed is not
     uploaded anywhere.</li>
+    <li><strong>Your browser's speech recognition service</strong>: when
+    you record a voice note in a browser that offers transcription, the
+    audio is processed by the browser's own built in speech recognition
+    service to turn it into text. SnakeScale does not operate that service
+    and does not receive the audio; the recording itself is saved only to
+    your Google Drive, as an attachment.</li>
     <li><strong>GitHub Pages</strong>: the app's program files are hosted on
     GitHub Pages. As with any web host, GitHub may record standard request
     information when your browser loads the app, as described in the

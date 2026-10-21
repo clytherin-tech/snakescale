@@ -40,10 +40,30 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-21-SSN-V2131
-  Version: 2.13.1
+  BUILD STAMP: 2026-10-21-SSN-V2140
+  Version: 2.14.0
 
   Revision history:
+    v2.14.0 2026-10-21 Voice notes, draggable blocks, and two
+                      fixes. A Voice note button beside Insert
+                      records from the microphone with a live
+                      transcript from the browser's built in
+                      speech recognition; Stop saves the recording
+                      as an attachment (its card gains an inline
+                      player) and writes the transcript under it,
+                      and Cancel discards everything. Blocks in a
+                      note gain a hover grip at their left edge:
+                      dragging it moves the block up or down the
+                      note, and list items reorder within their
+                      own list. Plain links in the note body now
+                      take the theme's accent color instead of
+                      the browser default blue. Clear formatting
+                      no longer adds space under lines that were
+                      marginless (list items, typed div lines):
+                      it converts them to DIV instead of P, and
+                      a normalization pass removes any block the
+                      operation left empty. The editor footer's
+                      link hint line is removed.
     v2.13.1 2026-10-21 Highlight fix. A custom highlight color
                       picked from the native color dialog could
                       silently do nothing: on that path the
@@ -1590,7 +1610,12 @@ body.note-drag-active{touch-action:none;overscroll-behavior:none;}
 .editor-scroll{overflow-y:auto;overflow-x:auto;flex:1;padding:26px 30px 40px;}
 /* A single centered reading column keeps long notes comfortable on wide
    monitors while preserving the editor behavior and field order. */
-.editor-inner{width:100%;max-width:860px;margin:0 auto;}
+/* v2.14: position:relative makes the inner column the positioned
+   ancestor for the block drag grip and drop line, which float over
+   its left margin. Every absolutely positioned descendant already
+   has a closer positioned ancestor (the toolbar menu wraps, the
+   attachment figures), so nothing else moves. */
+.editor-inner{width:100%;max-width:860px;margin:0 auto;position:relative;}
 #noteTitle{
   width:100%;border:none;outline:none;background:transparent;
   font-size:26px;line-height:1.2;font-weight:800;color:var(--text);
@@ -1858,8 +1883,18 @@ body.note-drag-active{touch-action:none;overscroll-behavior:none;}
 #noteBody li.done input[type="checkbox"]{accent-color:var(--secondary);}
 /* v1.3.1: links inside the editable body keep the standard link look and
    get a pointer cursor as the affordance that they can be opened (plain
-   click shows the link popup below, Ctrl or Cmd click opens directly). */
-#noteBody a{cursor:pointer;}
+   click shows the link popup below, Ctrl or Cmd click opens directly).
+   v2.14: the plain link color joins the rule. Anchors carried no color
+   of their own, so they rendered in the browser's default blue, off
+   theme (Chris spotted it in the starter note). They now take the
+   theme's accent variable with an underline, the look note links
+   already had. The display mode faces (Mention, Preview, Title, for
+   web links and note links alike) and the ss-note-link rule all carry
+   higher specificity than this single element rule, so wherever a
+   face sets its own color or decoration it still wins; this rule
+   only dresses the plain Text links that had nothing. The accent
+   variable is defined per theme, so both themes read correctly. */
+#noteBody a{cursor:pointer;color:var(--accent);text-decoration:underline;}
 /* Link bar (v2.9): a dark floating bar shown near a hovered or
    clicked external link, replacing the v1.3 link popup outright.
    It is position:fixed and lives OUTSIDE #noteBody in the DOM (a
@@ -2313,6 +2348,54 @@ body.dark #conflictBanner{background:#3A2F10;color:#FFE1A8;}
   background:var(--soft);padding:8px 12px;margin-bottom:12px;
   font-size:13.5px;font-weight:600;
 }
+/* v2.14: the voice note bar, shown above the body while a recording
+   runs. The record dot pulses so the recording state is obvious at
+   a glance; the transcript grows in place, final words at full
+   strength and the words still being recognized dimmed. */
+.voice-bar{
+  display:flex;align-items:flex-start;gap:10px;
+  border:1px solid var(--border);border-radius:var(--radius-card);
+  background:var(--soft);padding:8px 12px;margin-bottom:12px;
+  font-size:14px;
+}
+.voice-dot{
+  flex:none;width:11px;height:11px;border-radius:50%;
+  background:#C0392B;margin-top:5px;
+  animation:voicePulse 1.2s ease-in-out infinite;
+}
+@keyframes voicePulse{
+  0%,100%{opacity:1;} 50%{opacity:.35;}
+}
+@media (prefers-reduced-motion: reduce){
+  .voice-dot{animation:none;}
+}
+.voice-timer{font-weight:700;font-variant-numeric:tabular-nums;margin-top:1px;}
+.voice-transcript{flex:1;min-width:0;line-height:1.5;word-break:break-word;}
+.voice-interim{opacity:.55;}
+.voice-rec-note{display:block;color:var(--muted);font-size:13px;font-style:italic;}
+/* v2.14: the block drag grip and drop line. The grip is a small
+   six dot handle floating in the editor's left margin, aligned
+   with the hovered block's first line; the browser computes its
+   position from the block's on screen rectangle, so it is pure
+   runtime furniture (it and the line live outside #noteBody and
+   are never saved). The drop line is an accent rule across the
+   column at the insertion point of a dragged block. */
+.block-grip{
+  position:absolute;width:16px;height:24px;z-index:25;
+  cursor:grab;touch-action:none;border-radius:5px;
+}
+.block-grip:active{cursor:grabbing;}
+.block-grip:hover{background:var(--soft);}
+.block-grip-dots{
+  display:block;width:100%;height:100%;
+  background-image:radial-gradient(circle, var(--muted) 1.4px, transparent 1.6px);
+  background-size:7px 7px;background-position:2px 2px;
+}
+.block-drop-line{
+  position:absolute;height:3px;border-radius:2px;z-index:24;
+  background:var(--accent);pointer-events:none;
+}
+#noteBody .ss-block-dragging{opacity:.45;}
 #uploadPanel .bar{
   height:8px;border-radius:var(--radius-pill);background:var(--surface);
   margin-top:6px;overflow:hidden;
@@ -2335,6 +2418,10 @@ body.dark #conflictBanner{background:#3A2F10;color:#FFE1A8;}
   display:block;max-width:100%;height:auto;border-radius:8px;margin-bottom:8px;
 }
 .ss-att-name{font-weight:700;font-size:14px;word-break:break-word;}
+/* v2.14: the inline player on an audio attachment's card (voice
+   notes land as audio attachments), so a recording can be played
+   where it sits in the note instead of only downloaded. */
+.ss-att-audio{display:block;width:100%;margin-top:8px;}
 .ss-att-meta{font-size:12.5px;color:var(--muted);margin:2px 0 8px;}
 .ss-att-msg{font-size:13.5px;color:var(--muted);margin:4px 0 8px;}
 .ss-att-actions{display:flex;gap:6px;flex-wrap:wrap;}
@@ -3225,6 +3312,14 @@ body.dark .version-date{color:var(--accent);}
                   <button type="button" data-insert="inlineCode">Inline code</button>
                 </div>
               </span>
+              <!-- v2.14: Voice note sits beside Insert. It records
+                   from the microphone with a live transcript (the
+                   browser's built in speech recognition) and, on
+                   Stop, saves the recording as an attachment and
+                   writes the transcript into the note. The icon is
+                   an inline SVG in currentColor, like the list
+                   buttons, so it follows the theme. -->
+              <button type="button" id="voiceNoteBtn" title="Voice note" aria-label="Voice note"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false"><rect x="6" y="1.3" width="4" height="7" rx="2" fill="currentColor" stroke="none"/><path d="M3.8 6.2a4.2 4.2 0 0 0 8.4 0" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M8 10.6v2.6M5.4 13.9h5.2" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></button>
             </div>
             <!-- Group 2: text style, font family, font size -->
             <div class="tb-group">
@@ -3336,12 +3431,40 @@ body.dark .version-date{color:var(--accent);}
             <span id="uploadText">Uploading...</span>
             <div class="bar"><div id="uploadBarFill"></div></div>
           </div>
+          <!-- v2.14: the voice note bar. It lives while a recording
+               runs: a pulsing record dot, the elapsed timer, the
+               live transcript as it is recognized (final words in
+               full strength, the words still being recognized
+               dimmed, and a note line for when transcription is
+               unavailable or stops), and Stop and Cancel. It is a
+               sibling of #noteBody in .editor-inner, like the
+               upload panel, so nothing in it can ever be saved
+               into a note. -->
+          <div id="voiceBar" class="voice-bar hidden" role="status">
+            <span class="voice-dot" aria-hidden="true"></span>
+            <span id="voiceTimer" class="voice-timer">00:00</span>
+            <div class="voice-transcript"><span id="voiceFinalText"></span><span id="voiceInterimText" class="voice-interim"></span><span id="voiceRecNote" class="voice-rec-note hidden"></span></div>
+            <button type="button" id="voiceStopBtn" class="btn small">Stop</button>
+            <button type="button" id="voiceCancelBtn" class="btn small">Cancel</button>
+          </div>
           <input type="file" id="attachFileInput" multiple class="hidden" aria-hidden="true">
 
           <!-- Rich text body. The note body is stored as HTML inside the
                .md file (documented in the script header), which keeps
                checklists and formatting intact in v1.0. -->
           <div id="noteBody" contenteditable="true" aria-label="Note body"></div>
+
+          <!-- v2.14: the block drag grip and its drop line. Both
+               are runtime only furniture: siblings of #noteBody in
+               .editor-inner (which is their positioned ancestor),
+               never children of it, so collectEditor can never see
+               them and they can never be saved into a note. The
+               grip floats in the left margin beside the block
+               under the pointer; the drop line marks where a
+               dragged block will land. See the block grip code in
+               the script. -->
+          <div id="blockGrip" class="block-grip hidden" aria-hidden="true" title="Drag to move this block"><span class="block-grip-dots" aria-hidden="true"></span></div>
+          <div id="blockDropLine" class="block-drop-line hidden" aria-hidden="true"></div>
 
           <!-- Link bar (v2.9, replacing the v1.3.1/v1.3.2 link popup).
                IMPORTANT: this element is a SIBLING of #noteBody, never a
@@ -3646,7 +3769,6 @@ body.dark .version-date{color:var(--accent);}
           <label for="noteTags">Tags</label>
           <input id="noteTags" type="text" placeholder="ideas, work, personal">
         </div>
-        <span class="editor-hint">Links: hover or click a link for its options, or Ctrl+click (Cmd+click on Mac) to open it.</span>
         <div class="editor-actions">
           <span class="tb-menu-wrap export-wrap">
             <button class="btn small" id="exportBtn" type="button" aria-haspopup="true">Export &#9662;</button>
@@ -3877,8 +3999,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-21-SSN-V2131";
-const APP_VERSION = "2.13.1";
+const APP_BUILD = "2026-10-21-SSN-V2140";
+const APP_VERSION = "2.14.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -7054,6 +7176,9 @@ function setMaximized(on) {
    Escape always deals with the innermost thing first. */
 function anyOverlayOpen() {
   if (noteDrag) { return true; }
+  /* v2.14: a block drag in flight counts like a note drag, so an
+     Escape that cancels it never also exits Maximize. */
+  if (blockDrag) { return true; }
   const ids = ["noteLinkModal", "settingsModal", "versionHistoryModal",
     "nbDropOverlay", "notebookMenu",
     "railFlyout", "linkBar", "linkViewMenu", "noteLinkCard",
@@ -7067,6 +7192,9 @@ function anyOverlayOpen() {
     /* v2.13: the first run walkthrough joins the set for the same
        reason: an Escape that dismisses it never exits Maximize. */
     "onboardingModal",
+    /* v2.14: the voice note bar joins the set for the same reason:
+       an Escape that cancels a recording never exits Maximize. */
+    "voiceBar",
     "exportMenu", "sidebarMenu"];
   for (let i = 0; i < ids.length; i++) {
     const el = document.getElementById(ids[i]);
@@ -15975,14 +16103,30 @@ function clearHighlightSelection() {
 }
 
 /* ----- remove formatting (extended) ---------------------------------------
-   Starts with the classic behavior (removeFormat plus formatBlock P),
+   Starts with the classic behavior (removeFormat plus formatBlock),
    then unwraps the spans our own font, size, color, and highlight
    helpers created inside the selection: removeFormat alone leaves
    those spans in place in most engines, which would make the toolbar's
-   own formatting impossible to fully clear. */
+   own formatting impossible to fully clear.
+
+   v2.14: the formatBlock target is no longer always P. The stylesheet
+   gives paragraphs no rule of their own, so a converted paragraph
+   carries the browser's default block margin (1em) and a line that
+   used to be marginless (a list item, a typed div line) gains about
+   15px of space under it: the extra gap Chris saw after clearing.
+   The fix has two parts. clearFormatBlockTarget classifies the
+   touched blocks' flow BEFORE the commands run and picks DIV for
+   marginless flow, so the converted lines keep the spacing they
+   had; paragraph flow keeps P, today's proven behavior there. And
+   clearFormattingNormalize removes any block the operation left
+   empty, so no hollow shell is left holding space either. */
 function clearFormattingExtended() {
   const bodyEl = document.getElementById("noteBody");
   restoreFormatSelection();
+  const sel0 = window.getSelection();
+  const range0 = (sel0 && sel0.rangeCount) ? sel0.getRangeAt(0) : null;
+  const touchedBefore = clearTouchedTopBlocks(bodyEl, range0);
+  const target = clearFormatBlockTarget(bodyEl, range0);
   document.execCommand("removeFormat", false, null);
   const sel = window.getSelection();
   if (sel && sel.rangeCount) {
@@ -16002,7 +16146,172 @@ function clearFormattingExtended() {
       });
     }
   }
-  document.execCommand("formatBlock", false, "P");
+  document.execCommand("formatBlock", false, target);
+  clearFormattingNormalize(bodyEl, touchedBefore);
+}
+
+/* The top level blocks of the body that a range touches, in document
+   order. Shared by the clear formatting classifier and its
+   normalization pass. A collapsed range touches the block its caret
+   sits in. */
+function clearTouchedTopBlocks(bodyEl, range) {
+  const out = [];
+  if (!range) { return out; }
+  Array.prototype.forEach.call(bodyEl.children, function (child) {
+    let hit = false;
+    try { hit = range.intersectsNode(child); } catch (e) { hit = false; }
+    if (!hit && range.collapsed) {
+      hit = child.contains(range.startContainer);
+    }
+    if (hit) { out.push(child); }
+  });
+  return out;
+}
+
+/* v2.14: which block tag clear formatting converts the touched
+   blocks to. DIV when the touched blocks are marginless flow:
+   any touched block is a list item, or the touched top level
+   blocks are div lines or list containers with no heading and no
+   paragraph flow involved. P otherwise: headings and paragraphs
+   in paragraph flow keep the classic conversion, and anything
+   uncertain (a quote, a code block, a table, a lone heading)
+   defaults to P as well. A heading on its own is decided by the
+   flow around it: paragraph neighbours mean paragraph flow (P),
+   div and list neighbours mean typed line flow (DIV). */
+function clearFormatBlockTarget(bodyEl, range) {
+  if (!range) { return "P"; }
+  const blocks = clearTouchedTopBlocks(bodyEl, range);
+  if (!blocks.length) { return "P"; }
+  /* Any touched list item settles it: list items are marginless,
+     so converting one to a paragraph is exactly the spacing bug. */
+  for (let i = 0; i < blocks.length; i++) {
+    const b = blocks[i];
+    if (b.tagName === "UL" || b.tagName === "OL") {
+      const items = b.querySelectorAll("li");
+      for (let j = 0; j < items.length; j++) {
+        let hit = false;
+        try { hit = range.intersectsNode(items[j]); } catch (e) { hit = false; }
+        if (hit || (range.collapsed && items[j].contains(range.startContainer))) {
+          return "DIV";
+        }
+      }
+    }
+  }
+  let hasP = false;
+  let hasHeading = false;
+  let hasDivFlow = false;
+  blocks.forEach(function (b) {
+    if (b.tagName === "P") { hasP = true; }
+    else if (/^H[1-6]$/.test(b.tagName)) { hasHeading = true; }
+    else if (b.tagName === "DIV" || b.tagName === "UL" ||
+             b.tagName === "OL") { hasDivFlow = true; }
+  });
+  if (hasP) { return "P"; }
+  if (!hasHeading) {
+    return hasDivFlow ? "DIV" : "P";
+  }
+  const neighbours = [];
+  const first = blocks[0];
+  const last = blocks[blocks.length - 1];
+  if (first.previousElementSibling) {
+    neighbours.push(first.previousElementSibling);
+  }
+  if (last.nextElementSibling) {
+    neighbours.push(last.nextElementSibling);
+  }
+  let neighbourP = false;
+  let neighbourDivFlow = neighbours.length > 0;
+  neighbours.forEach(function (n) {
+    if (n.tagName === "P") { neighbourP = true; }
+    if (n.tagName !== "DIV" && n.tagName !== "UL" &&
+        n.tagName !== "OL") { neighbourDivFlow = false; }
+  });
+  if (neighbourP) { return "P"; }
+  if (neighbourDivFlow) { return "DIV"; }
+  return "P";
+}
+
+/* v2.14: the strict emptiness test for the normalization pass.
+   A block counts as empty only when it holds nothing at all: no
+   non-whitespace text, no attachment or media or control anywhere
+   inside it, and no element children other than a lone br (the
+   classic empty block remnant). By construction this can never
+   remove a block containing text, an attachment, a table, or an
+   image. */
+function clearBlockIsEmpty(el) {
+  if (!el || el.nodeType !== 1) { return false; }
+  /* The block itself may BE the attachment or embedded element
+     (an attachment placeholder is a top level div in the body);
+     querySelector only looks at descendants, so guard the
+     element itself first. */
+  if (el.matches &&
+      el.matches(".ss-attachment, img, table, iframe, audio, " +
+        "video, input, textarea, select")) { return false; }
+  if (el.querySelector &&
+      el.querySelector(".ss-attachment, img, table, iframe, audio, " +
+        "video, input, textarea, select")) { return false; }
+  if (el.textContent && el.textContent.replace(/\s+/g, "") !== "") {
+    return false;
+  }
+  const kids = el.children;
+  if (kids.length > 1) { return false; }
+  if (kids.length === 1 && kids[0].tagName !== "BR") { return false; }
+  return true;
+}
+
+/* v2.14: after formatBlock, re-walk the blocks the operation
+   touched and remove the ones it left empty. The candidate set is
+   the blocks captured before the commands ran, plus the blocks
+   around the selection the commands left behind, widened by two
+   bounded rounds of element siblings. The widening exists
+   because engines differ in where the selection lands after
+   formatBlock: a split can leave its shells (an emptied list
+   where the last item was extracted, a br-only remnant) up to
+   two blocks away from every anchor, arranged touched block,
+   converted block, remnant. The rounds stop at two, so the pass
+   never wanders the whole note; the strict emptiness test is the
+   real guard on every candidate. Emptied list items inside a
+   touched list are removed first; a list then left with no
+   items at all is removed too. */
+function clearFormattingNormalize(bodyEl, touchedBefore) {
+  const candidates = [];
+  function add(el) {
+    if (el && candidates.indexOf(el) === -1) { candidates.push(el); }
+  }
+  (touchedBefore || []).forEach(add);
+  const sel = window.getSelection();
+  if (sel && sel.rangeCount) {
+    const range = sel.getRangeAt(0);
+    if (bodyEl.contains(range.commonAncestorContainer)) {
+      clearTouchedTopBlocks(bodyEl, range).forEach(function (b) {
+        add(b);
+        add(b.previousElementSibling);
+        add(b.nextElementSibling);
+      });
+    }
+  }
+  for (let round = 0; round < 2; round++) {
+    candidates.slice().forEach(function (el) {
+      if (!el.isConnected) { return; }
+      add(el.previousElementSibling);
+      add(el.nextElementSibling);
+    });
+  }
+  candidates.forEach(function (list) {
+    if (!list.isConnected) { return; }
+    if (list.tagName !== "UL" && list.tagName !== "OL") { return; }
+    Array.prototype.slice.call(list.children).forEach(function (li) {
+      if (li.tagName === "LI" && clearBlockIsEmpty(li)) { li.remove(); }
+    });
+  });
+  candidates.forEach(function (el) {
+    if (!el.isConnected || el.parentNode !== bodyEl) { return; }
+    const orphanedList =
+      (el.tagName === "UL" || el.tagName === "OL") &&
+      el.querySelectorAll("li").length === 0 &&
+      !el.querySelector(".ss-attachment");
+    if (orphanedList || clearBlockIsEmpty(el)) { el.remove(); }
+  });
 }
 
 /* ----- dropdown menus ---------------------------------------------------- */
@@ -17625,6 +17934,48 @@ async function hydrateOneAttachment(note, el) {
   el.appendChild(head);
   el.appendChild(meta);
   el.appendChild(actions);
+  /* v2.14: an audio card (a voice note, or any audio file) gains
+     an inline player under its actions, so a recording can be
+     played where it sits. The bytes come down the same provider
+     download path as an image's, and the object URL joins
+     state.objectUrls, so it is revoked on note switch and sign
+     out exactly like the image URLs. */
+  if (isAudioAttachment(att) && driver && status.connected) {
+    appendAudioPlayer(el, att, driver);
+  }
+}
+
+/* v2.14: audio attachments, by mime type with the file name
+   extension as a fallback, the same shape as isPdfAttachment. */
+function isAudioAttachment(att) {
+  if (!att) { return false; }
+  if ((att.mime || "").toLowerCase().indexOf("audio/") === 0) { return true; }
+  return /\.(webm|ogg|opus|mp3|m4a|wav|aac)$/i.test(att.name || "");
+}
+
+/* v2.14: fetch an audio attachment's bytes and put a player on
+   its card. Fire and forget from hydration, with the same guards
+   as the image path: a card the editor has moved on from is left
+   alone, and a failed fetch says so on the card itself. */
+async function appendAudioPlayer(el, att, driver) {
+  try {
+    const blob = await driver.download(att.fileId);
+    if (!el.isConnected) { return; }
+    const url = URL.createObjectURL(blob);
+    state.objectUrls.push(url);
+    const audio = document.createElement("audio");
+    audio.className = "ss-att-audio";
+    audio.controls = true;
+    audio.preload = "metadata";
+    audio.src = url;
+    el.appendChild(audio);
+  } catch (err) {
+    if (!el.isConnected) { return; }
+    const fail = document.createElement("div");
+    fail.className = "ss-att-msg";
+    fail.textContent = "This recording could not be loaded: " + err.message;
+    el.appendChild(fail);
+  }
 }
 
 /* ----- v1.6: inline PDF preview ---------------------------------------
@@ -19672,6 +20023,654 @@ async function uploadOneAttachment(note, providerName, driver, file) {
 }
 
 /* --------------------------------------------------------------------------
+   v2.14: block drag grips.
+
+   Resting the pointer over a block in the note body floats a six dot
+   grip in the left margin beside the block's first line (the grip is
+   positioned from the block's on screen rectangle and lives, with
+   its drop line, as a sibling of #noteBody in .editor-inner, so it
+   scrolls with the column and can never be saved into a note:
+   collectEditor reads only #noteBody's innerHTML).
+
+   Draggable blocks are the body's top level blocks (paragraphs,
+   headings, lists, quotes, code blocks, tables, dividers, div
+   lines, and attachment blocks) plus list items, which reorder
+   within their own list only, checklist items included: the node
+   itself moves, so a checklist item's checkbox and done state
+   travel with it.
+
+   The drag follows the note drag's shape: a press on the grip arms
+   it, a few pixels of travel engage it, the dragged block dims, and
+   the drop line tracks the insertion point among the allowed
+   siblings. Nothing moves during the drag itself; pointerup commits
+   the move as one DOM operation and runs markDirty, so a move saves
+   and versions like any other edit. Escape or a pointer cancel ends
+   the drag with the original order untouched, because the node never
+   moved, and a press with no travel changes nothing.
+   -------------------------------------------------------------------------- */
+let blockDrag = null;
+let blockGripBlock = null;
+
+const BLOCK_DRAG_TAGS = { P: 1, H1: 1, H2: 1, H3: 1, H4: 1, H5: 1,
+  H6: 1, UL: 1, OL: 1, BLOCKQUOTE: 1, PRE: 1, TABLE: 1, HR: 1, DIV: 1 };
+
+/* The block a pointer position belongs to: the list item when the
+   pointer is inside one, otherwise the top level block holding it.
+   Null for anything that is not a draggable block (the body's own
+   padding, a non-attachment figure, content outside the body). */
+function blockGripTargetBlock(node) {
+  const bodyEl = document.getElementById("noteBody");
+  if (!node || !bodyEl.contains(node)) { return null; }
+  const el = node.nodeType === 1 ? node : node.parentNode;
+  if (!el || el === bodyEl) { return null; }
+  const li = el.closest ? el.closest("li") : null;
+  if (li && bodyEl.contains(li)) { return li; }
+  let top = el;
+  while (top.parentNode && top.parentNode !== bodyEl) {
+    top = top.parentNode;
+  }
+  if (top.parentNode !== bodyEl) { return null; }
+  if (top.tagName === "FIGURE") {
+    return top.classList.contains("ss-attachment") ? top : null;
+  }
+  return BLOCK_DRAG_TAGS[top.tagName] ? top : null;
+}
+
+function hideBlockGrip() {
+  const grip = document.getElementById("blockGrip");
+  if (grip) { grip.classList.add("hidden"); }
+  if (!blockDrag) {
+    const line = document.getElementById("blockDropLine");
+    if (line) { line.classList.add("hidden"); }
+  }
+}
+
+/* Position the grip in the margin beside the block's first line.
+   Coordinates are relative to .editor-inner, the grip's positioned
+   ancestor, computed from the on screen rectangles, the same seam
+   every floating editor surface uses. */
+function positionBlockGrip(block) {
+  const grip = document.getElementById("blockGrip");
+  const inner = document.querySelector(".editor-inner");
+  if (!grip || !inner || !block) { return; }
+  const ir = inner.getBoundingClientRect();
+  const br = block.getBoundingClientRect();
+  const gw = grip.offsetWidth || 16;
+  grip.style.left = (br.left - ir.left - gw - 6) + "px";
+  grip.style.top = (br.top - ir.top + 2) + "px";
+  grip.classList.remove("hidden");
+}
+
+function onGripHoverPointerMove(ev) {
+  const grip = document.getElementById("blockGrip");
+  if (grip && ev.target && grip.contains(ev.target)) { return; }
+  if (blockDrag || noteDrag || cellDragState) { hideBlockGrip(); return; }
+  /* A press in progress (a text selection drag, an image resize)
+     is not a hover: the grip stays out of its way. */
+  if (ev.buttons) { hideBlockGrip(); return; }
+  const bodyEl = document.getElementById("noteBody");
+  if (!bodyEl || bodyEl.contentEditable === "false" ||
+      !bodyEl.contains(ev.target)) {
+    hideBlockGrip();
+    return;
+  }
+  const block = blockGripTargetBlock(ev.target);
+  if (!block) {
+    blockGripBlock = null;
+    hideBlockGrip();
+    return;
+  }
+  blockGripBlock = block;
+  positionBlockGrip(block);
+}
+
+function onGripPointerDown(ev) {
+  if (blockDrag) { return; }
+  if (ev.pointerType === "mouse" && ev.button !== 0) { return; }
+  const bodyEl = document.getElementById("noteBody");
+  if (!bodyEl || bodyEl.contentEditable === "false") { return; }
+  const block = blockGripBlock;
+  if (!block || !bodyEl.contains(block)) { return; }
+  ev.preventDefault();
+  blockDrag = {
+    node: block,
+    container: block.parentNode,
+    pointerId: ev.pointerId,
+    startY: ev.clientY,
+    engaged: false,
+    insertBefore: null
+  };
+  const grip = document.getElementById("blockGrip");
+  if (grip && grip.setPointerCapture && ev.pointerId !== undefined) {
+    try { grip.setPointerCapture(ev.pointerId); } catch (e) { /* ok */ }
+  }
+  window.addEventListener("pointermove", onBlockDragMove);
+  window.addEventListener("pointerup", onBlockDragUp);
+  window.addEventListener("pointercancel", onBlockDragCancel);
+  document.addEventListener("keydown", onBlockDragKeydown, true);
+}
+
+/* The siblings a dragged block may land among: the draggable top
+   level blocks for a body drag, the items of the same list for an
+   item drag. The dragged node itself is never its own landmark. */
+function blockDragSiblings() {
+  const drag = blockDrag;
+  if (!drag || !drag.container) { return []; }
+  const inBody = drag.container.id === "noteBody";
+  return Array.prototype.filter.call(drag.container.children,
+    function (el) {
+      if (el === drag.node) { return false; }
+      if (inBody) {
+        if (el.tagName === "FIGURE") {
+          return el.classList.contains("ss-attachment");
+        }
+        return !!BLOCK_DRAG_TAGS[el.tagName];
+      }
+      return el.tagName === "LI";
+    });
+}
+
+function updateBlockDropLine(clientY) {
+  const drag = blockDrag;
+  const line = document.getElementById("blockDropLine");
+  const inner = document.querySelector(".editor-inner");
+  if (!drag || !line || !inner) { return; }
+  const ir = inner.getBoundingClientRect();
+  const sibs = blockDragSiblings();
+  let before = null;
+  for (let i = 0; i < sibs.length; i++) {
+    const r = sibs[i].getBoundingClientRect();
+    if (clientY < r.top + r.height / 2) { before = sibs[i]; break; }
+  }
+  drag.insertBefore = before;
+  /* The line sits at the insertion edge: the top of the block the
+     dragged block will land before, or the bottom of the last
+     sibling when it will land at the end. */
+  let y;
+  if (before) {
+    y = before.getBoundingClientRect().top - ir.top - 2;
+  } else if (sibs.length) {
+    y = sibs[sibs.length - 1].getBoundingClientRect().bottom - ir.top - 1;
+  } else {
+    y = drag.node.getBoundingClientRect().bottom - ir.top - 1;
+  }
+  const cr = drag.container.getBoundingClientRect();
+  line.style.left = (cr.left - ir.left) + "px";
+  line.style.width = cr.width + "px";
+  line.style.top = y + "px";
+  line.classList.remove("hidden");
+}
+
+function onBlockDragMove(ev) {
+  if (!blockDrag || ev.pointerId !== blockDrag.pointerId) { return; }
+  if (!blockDrag.engaged) {
+    if (Math.abs(ev.clientY - blockDrag.startY) < 4) { return; }
+    blockDrag.engaged = true;
+    blockDrag.node.classList.add("ss-block-dragging");
+  }
+  ev.preventDefault();
+  updateBlockDropLine(ev.clientY);
+}
+
+function cleanupBlockDrag() {
+  if (!blockDrag) { return; }
+  const drag = blockDrag;
+  blockDrag = null;
+  if (drag.node) { drag.node.classList.remove("ss-block-dragging"); }
+  const line = document.getElementById("blockDropLine");
+  if (line) { line.classList.add("hidden"); }
+  window.removeEventListener("pointermove", onBlockDragMove);
+  window.removeEventListener("pointerup", onBlockDragUp);
+  window.removeEventListener("pointercancel", onBlockDragCancel);
+  document.removeEventListener("keydown", onBlockDragKeydown, true);
+}
+
+function onBlockDragUp(ev) {
+  if (!blockDrag || ev.pointerId !== blockDrag.pointerId) { return; }
+  const drag = blockDrag;
+  const wasEngaged = drag.engaged;
+  const before = drag.insertBefore;
+  cleanupBlockDrag();
+  if (!wasEngaged) { return; }
+  const parent = drag.node.parentNode;
+  if (!parent) { return; }
+  /* Committing is one DOM move. Landing exactly where the block
+     already sits leaves its next sibling unchanged, and only a
+     real change of order runs the edit pipeline. */
+  const oldNext = drag.node.nextSibling;
+  if (before) { parent.insertBefore(drag.node, before); }
+  else { parent.appendChild(drag.node); }
+  if (drag.node.nextSibling !== oldNext) { markDirty(); }
+}
+
+function onBlockDragCancel() {
+  cleanupBlockDrag();
+}
+
+function onBlockDragKeydown(ev) {
+  if (ev.key === "Escape") { cleanupBlockDrag(); }
+}
+
+/* --------------------------------------------------------------------------
+   v2.14: voice notes.
+
+   The Voice note button beside Insert records from the microphone
+   while the browser's built in speech recognition transcribes
+   alongside it (Edge and Chrome offer it; the recognition service
+   is the browser maker's own, and the app only reads the words
+   back). The voice bar above the body shows the elapsed time and
+   the words as they land, final ones at full strength and the ones
+   still being recognized dimmed.
+
+   Stop ends the recording and saves it through the exact path any
+   attached file takes (uploadOneAttachment: a placeholder at the
+   caret saved when recording started, a resumable upload into the
+   attachments subfolder, a normal attachment record), then writes
+   the transcript as plain paragraphs right after the audio card.
+   Cancel throws the recording and the words away. Escape while
+   recording means Cancel, and the bar counts as an overlay, so
+   that Escape never also exits Maximize.
+   -------------------------------------------------------------------------- */
+let voiceCapture = null;
+
+function voiceSleep(ms) {
+  return new Promise(function (resolve) { setTimeout(resolve, ms); });
+}
+
+/* "Voice note 2026-10-21 9-52 AM": the recording's file name, so a
+   note's attachments read in the order they were dictated. */
+function voiceNoteFileName(date) {
+  const pad = function (n) { return (n < 10 ? "0" : "") + n; };
+  let hours = date.getHours();
+  const ampm = hours >= 12 ? "PM" : "AM";
+  hours = hours % 12;
+  if (hours === 0) { hours = 12; }
+  return "Voice note " + date.getFullYear() + "-" +
+    pad(date.getMonth() + 1) + "-" + pad(date.getDate()) + " " +
+    hours + "-" + pad(date.getMinutes()) + " " + ampm;
+}
+
+function voiceAudioExtension(mime) {
+  const base = (mime || "").split(";")[0].trim().toLowerCase();
+  if (base === "audio/webm") { return ".webm"; }
+  if (base === "audio/ogg") { return ".ogg"; }
+  if (base === "audio/mp4") { return ".m4a"; }
+  if (base === "audio/mpeg") { return ".mp3"; }
+  if (base === "audio/wav" || base === "audio/x-wav") { return ".wav"; }
+  return ".webm";
+}
+
+/* Prefer audio/webm, the brief's first choice, then the other
+   types a recorder might offer; an empty answer lets the browser
+   pick its own default. */
+function pickVoiceRecorderMime() {
+  if (typeof MediaRecorder === "undefined") { return ""; }
+  if (typeof MediaRecorder.isTypeSupported !== "function") { return ""; }
+  const candidates = ["audio/webm;codecs=opus", "audio/webm",
+    "audio/ogg;codecs=opus", "audio/mp4"];
+  for (let i = 0; i < candidates.length; i++) {
+    if (MediaRecorder.isTypeSupported(candidates[i])) {
+      return candidates[i];
+    }
+  }
+  return "";
+}
+
+function formatVoiceTimer(ms) {
+  const total = Math.floor(ms / 1000);
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return (m < 10 ? "0" : "") + m + ":" + (s < 10 ? "0" : "") + s;
+}
+
+function renderVoiceTranscript() {
+  if (!voiceCapture) { return; }
+  const finalEl = document.getElementById("voiceFinalText");
+  const interimEl = document.getElementById("voiceInterimText");
+  if (!finalEl || !interimEl) { return; }
+  const finalText = voiceCapture.segments.join(" ");
+  const interimText = voiceCapture.interimText;
+  finalEl.textContent = finalText;
+  interimEl.textContent =
+    (finalText && interimText) ? " " + interimText : interimText;
+}
+
+function showVoiceRecNote(text) {
+  const el = document.getElementById("voiceRecNote");
+  if (!el) { return; }
+  if (text) {
+    el.textContent = text;
+    el.classList.remove("hidden");
+  } else {
+    el.textContent = "";
+    el.classList.add("hidden");
+  }
+}
+
+function onVoiceResult(capture, ev) {
+  if (voiceCapture !== capture) { return; }
+  let interim = "";
+  for (let i = ev.resultIndex; i < ev.results.length; i++) {
+    const res = ev.results[i];
+    const text = (res[0] && res[0].transcript) || "";
+    if (res.isFinal) {
+      const piece = text.trim();
+      if (piece) { capture.segments.push(piece); }
+    } else {
+      interim += text;
+    }
+  }
+  capture.interimText = interim.trim();
+  renderVoiceTranscript();
+}
+
+/* A recognition error ends transcription, never the recording:
+   the bar says so, and Stop will attach the audio on its own. */
+function onVoiceRecognitionError(capture, ev) {
+  if (voiceCapture !== capture || capture.stopping) { return; }
+  capture.recognitionFailed = true;
+  showVoiceRecNote("Transcription stopped (" +
+    (ev && ev.error ? ev.error : "error") +
+    "). The recording continues; only the audio will be attached.");
+}
+
+async function startVoiceNote() {
+  if (voiceCapture) { return; }
+  /* The same guards as the attach flow, run before anything is
+     recorded, so a voice note is never made that cannot be saved:
+     a note must be open and live, the app must be online, and the
+     storage provider must be signed in. */
+  const note = currentNote();
+  if (!note) {
+    toast("Open a note first, then record a voice note in it.", true);
+    return;
+  }
+  if (note.trashed) {
+    toast("Voice notes cannot be added while a note is in Trash. Restore it first.", true);
+    return;
+  }
+  if (note.archived) {
+    toast("Voice notes cannot be added while a note is archived. Unarchive it first.", true);
+    return;
+  }
+  if (!state.online) {
+    toast("Voice notes need an internet connection: the recording is uploaded to your storage provider. You appear to be offline.", true);
+    return;
+  }
+  const providerName = state.attach.defaultProvider;
+  if (!providerName || !providers[providerName]) {
+    toast("Sign in with Google before recording voice notes.", true);
+    return;
+  }
+  const driver = providers[providerName];
+  const status = await driver.getStatus();
+  if (!status.connected) {
+    toast("Sign in with " + providerLabel(providerName) +
+      " before recording voice notes.", true);
+    return;
+  }
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia ||
+      typeof MediaRecorder === "undefined") {
+    toast("Microphone access is needed for voice notes, and this browser does not offer it.", true);
+    return;
+  }
+  /* The caret the recording and the transcript will land at, saved
+     through the same machinery the toolbar uses before the
+     microphone prompt can steal focus. */
+  saveFormatSelection();
+  let stream = null;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch (err) {
+    toast("Microphone access is needed for voice notes. Allow the microphone for this site, then try again.", true);
+    return;
+  }
+  const capture = {
+    noteId: note.id,
+    note: note,
+    providerName: providerName,
+    driver: driver,
+    stream: stream,
+    recorder: null,
+    chunks: [],
+    mime: "",
+    recognition: null,
+    hadRecognition: false,
+    recognitionRunning: false,
+    recognitionFailed: false,
+    endResolve: null,
+    segments: [],
+    interimText: "",
+    startedAt: Date.now(),
+    timer: null,
+    stopping: false
+  };
+  voiceCapture = capture;
+  try {
+    const mime = pickVoiceRecorderMime();
+    capture.recorder = mime
+      ? new MediaRecorder(stream, { mimeType: mime })
+      : new MediaRecorder(stream);
+    capture.mime = capture.recorder.mimeType || mime || "audio/webm";
+  } catch (err) {
+    voiceCapture = null;
+    stream.getTracks().forEach(function (t) { t.stop(); });
+    toast("This browser could not start recording: " + err.message, true);
+    return;
+  }
+  capture.recorder.ondataavailable = function (ev) {
+    if (ev.data && ev.data.size) { capture.chunks.push(ev.data); }
+  };
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (SR) {
+    try {
+      const rec = new SR();
+      rec.continuous = true;
+      rec.interimResults = true;
+      rec.lang = navigator.language || "en-US";
+      capture.recognition = rec;
+      capture.hadRecognition = true;
+      rec.onresult = function (ev) { onVoiceResult(capture, ev); };
+      rec.onerror = function (ev) { onVoiceRecognitionError(capture, ev); };
+      rec.onstart = function () { capture.recognitionRunning = true; };
+      rec.onend = function () {
+        capture.recognitionRunning = false;
+        /* Recognition ends itself on long silences in some
+           browsers; while the recording is wanted and healthy, it
+           is simply started again. */
+        if (voiceCapture === capture && !capture.stopping &&
+            !capture.recognitionFailed) {
+          try { rec.start(); } catch (e) { /* already running */ }
+        }
+        if (capture.endResolve) {
+          const resolve = capture.endResolve;
+          capture.endResolve = null;
+          resolve();
+        }
+      };
+      rec.start();
+    } catch (err) {
+      capture.recognition = null;
+      capture.hadRecognition = false;
+    }
+  }
+  showVoiceRecNote(capture.hadRecognition ? "" :
+    "Transcription is not available in this browser; the recording will be attached on its own.");
+  document.getElementById("voiceFinalText").textContent = "";
+  document.getElementById("voiceInterimText").textContent = "";
+  document.getElementById("voiceTimer").textContent = "00:00";
+  document.getElementById("voiceBar").classList.remove("hidden");
+  document.getElementById("voiceNoteBtn").disabled = true;
+  capture.timer = setInterval(function () {
+    const el = document.getElementById("voiceTimer");
+    if (el) {
+      el.textContent = formatVoiceTimer(Date.now() - capture.startedAt);
+    }
+  }, 1000);
+  capture.recorder.start(250);
+}
+
+/* Stop everything about a capture without saving any of it: the
+   chunks and the words die with the capture object. */
+function endVoiceCapture(capture) {
+  if (capture.timer) { clearInterval(capture.timer); capture.timer = null; }
+  capture.recognitionFailed = true;
+  if (capture.recognition) {
+    try { capture.recognition.abort(); } catch (e) { /* ok */ }
+    capture.recognition = null;
+  }
+  if (capture.recorder && capture.recorder.state !== "inactive") {
+    try { capture.recorder.stop(); } catch (e) { /* ok */ }
+  }
+  if (capture.stream) {
+    capture.stream.getTracks().forEach(function (t) { t.stop(); });
+  }
+  document.getElementById("voiceBar").classList.add("hidden");
+  document.getElementById("voiceNoteBtn").disabled = false;
+  if (voiceCapture === capture) { voiceCapture = null; }
+}
+
+function cancelVoiceNote() {
+  const capture = voiceCapture;
+  if (!capture) { return; }
+  capture.stopping = true;
+  endVoiceCapture(capture);
+}
+
+async function stopVoiceNote() {
+  const capture = voiceCapture;
+  if (!capture || capture.stopping) { return; }
+  capture.stopping = true;
+  if (capture.timer) { clearInterval(capture.timer); capture.timer = null; }
+  /* Recognition gets the chance to deliver its last words before
+     the transcript is read: stop it and wait for its end, with a
+     timeout so a speech service that never answers cannot hang
+     the save. */
+  if (capture.recognition && capture.recognitionRunning) {
+    const ended = new Promise(function (resolve) {
+      capture.endResolve = resolve;
+    });
+    try { capture.recognition.stop(); } catch (e) { capture.endResolve = null; }
+    if (capture.endResolve) {
+      await Promise.race([ended, voiceSleep(1200)]);
+      capture.endResolve = null;
+    }
+  }
+  capture.recognition = null;
+  const blob = await new Promise(function (resolve) {
+    if (!capture.recorder) { resolve(null); return; }
+    if (capture.recorder.state === "inactive") {
+      resolve(new Blob(capture.chunks, { type: capture.mime }));
+      return;
+    }
+    capture.recorder.onstop = function () {
+      resolve(new Blob(capture.chunks, { type: capture.mime }));
+    };
+    try { capture.recorder.stop(); }
+    catch (e) {
+      resolve(new Blob(capture.chunks, { type: capture.mime }));
+    }
+  });
+  if (capture.stream) {
+    capture.stream.getTracks().forEach(function (t) { t.stop(); });
+  }
+  document.getElementById("voiceBar").classList.add("hidden");
+  document.getElementById("voiceNoteBtn").disabled = false;
+  voiceCapture = null;
+  const note = currentNote();
+  if (!note || note.id !== capture.noteId) {
+    toast("The note changed while recording, so the voice note was discarded.", true);
+    return;
+  }
+  if (!blob || !blob.size) {
+    toast("The recording came out empty, so nothing was attached.", true);
+    return;
+  }
+  const segments = capture.segments.filter(function (s) {
+    return s && s.replace(/\s+/g, "") !== "";
+  });
+  const name = voiceNoteFileName(new Date()) +
+    voiceAudioExtension(capture.mime);
+  const file = new File([blob], name, {
+    type: (capture.mime || "audio/webm").split(";")[0]
+  });
+  await saveVoiceNoteToNote(capture, note, file, segments);
+}
+
+/* The Stop landing: the recording goes through the one upload path
+   every attachment takes, then the transcript paragraphs go in
+   right after the audio card. A failed upload keeps the words: the
+   failure toast uploadOneAttachment already gave stands, and the
+   transcript is added as text at the saved caret instead, so a
+   dictated note is never lost with its recording. */
+async function saveVoiceNoteToNote(capture, note, file, segments) {
+  restoreFormatSelection();
+  const beforeIds = {};
+  (note.attachments || []).forEach(function (a) { beforeIds[a.id] = true; });
+  await uploadOneAttachment(note, capture.providerName, capture.driver, file);
+  hideUploadProgress();
+  let record = null;
+  (note.attachments || []).forEach(function (a) {
+    if (!beforeIds[a.id]) { record = a; }
+  });
+  const bodyEl = document.getElementById("noteBody");
+  if (!record) {
+    if (segments.length) {
+      insertVoiceTranscript(null, segments);
+      markDirty();
+      toast("The recording could not be saved, but your words were added as text.", true);
+    }
+    return;
+  }
+  if (!segments.length) {
+    toast(capture.hadRecognition
+      ? "No speech was recognized, so the recording was attached on its own."
+      : "Transcription is not available in this browser, so the recording was attached on its own.", true);
+    return;
+  }
+  const el = bodyEl.querySelector(
+    ".ss-attachment[data-attachment-id=\"" + record.id + "\"]");
+  insertVoiceTranscript(el, segments);
+  markDirty();
+  toast("Voice note added.");
+}
+
+/* Transcript paragraphs are built with textContent assignment
+   only: dictated words are data, never markup, so speech that
+   happens to sound like HTML lands as plain text. With an anchor
+   (the audio card) they go directly after it; without one they go
+   at the saved caret when it sits on a block boundary, and at the
+   end of the note otherwise, rather than splitting a paragraph
+   open around them. */
+function insertVoiceTranscript(anchorEl, segments) {
+  const bodyEl = document.getElementById("noteBody");
+  const nodes = segments.map(function (text) {
+    const p = document.createElement("p");
+    p.textContent = text;
+    return p;
+  });
+  if (!nodes.length) { return; }
+  if (anchorEl && anchorEl.isConnected) {
+    let ref = anchorEl;
+    nodes.forEach(function (p) {
+      ref.after(p);
+      ref = p;
+    });
+    return;
+  }
+  if (savedCaretRange && savedCaretRange.startContainer === bodyEl &&
+      bodyEl.contains(savedCaretRange.startContainer)) {
+    const frag = document.createDocumentFragment();
+    nodes.forEach(function (p) { frag.appendChild(p); });
+    const range = savedCaretRange.cloneRange();
+    range.deleteContents();
+    range.insertNode(frag);
+    return;
+  }
+  nodes.forEach(function (p) { bodyEl.appendChild(p); });
+}
+
+/* --------------------------------------------------------------------------
    12. Screen flow and event wiring
    -------------------------------------------------------------------------- */
 function wireEvents() {
@@ -20104,6 +21103,43 @@ function wireEvents() {
   document.getElementById("noteBody").addEventListener("input", function () {
     queueAttachmentBodyCheck();
   });
+
+  /* v2.14: voice note wiring. The toolbar button starts a
+     recording (the toolbar's mousedown backstop has already saved
+     the selection by the time the click lands, and startVoiceNote
+     saves it again before the microphone prompt), Stop and Cancel
+     live on the bar, and Escape while recording means Cancel. The
+     bar is in anyOverlayOpen's set, so that Escape is spent on the
+     recording and never also exits Maximize. */
+  document.getElementById("voiceNoteBtn").addEventListener("click", function () {
+    startVoiceNote().catch(function (err) { toast(err.message, true); });
+  });
+  document.getElementById("voiceStopBtn").addEventListener("click", function () {
+    stopVoiceNote().catch(function (err) { toast(err.message, true); });
+  });
+  document.getElementById("voiceCancelBtn").addEventListener("click", function () {
+    cancelVoiceNote();
+  });
+  document.addEventListener("keydown", function (ev) {
+    if (ev.key === "Escape" && voiceCapture) { cancelVoiceNote(); }
+  });
+
+  /* v2.14: block grip wiring. Pointer movement over the editor
+     column tracks the block under the pointer; movement anywhere
+     outside the column, or a scroll of the editor, hides the grip;
+     a press on the grip itself starts the drag. */
+  document.querySelector(".editor-inner").addEventListener("pointermove",
+    onGripHoverPointerMove);
+  document.addEventListener("pointermove", function (ev) {
+    const inner = document.querySelector(".editor-inner");
+    if (inner && ev.target && !inner.contains(ev.target)) {
+      hideBlockGrip();
+    }
+  });
+  document.querySelector(".editor-scroll").addEventListener("scroll",
+    function () { hideBlockGrip(); });
+  document.getElementById("blockGrip").addEventListener("pointerdown",
+    onGripPointerDown);
 
   /* v2.12: the "@" note popup wiring. Typing in the body and every
      selection change re-run the token tracker; the keys are taken
