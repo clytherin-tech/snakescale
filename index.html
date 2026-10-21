@@ -40,10 +40,34 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-21-SSN-V2160
-  Version: 2.16.0
+  BUILD STAMP: 2026-10-21-SSN-V2161
+  Version: 2.16.1
 
   Revision history:
+    v2.16.1 2026-10-21 The open note refreshes on sync when it
+                      is clean. The editor's standing rule never
+                      refills the fields of the note already
+                      open, which protects typing but also left
+                      a sync that changed that very note (an
+                      auto-sync landing an outside edit, say)
+                      invisible until the user clicked away and
+                      back. A sync now snapshots the open note's
+                      pre-sync saved baseline before its flush
+                      and load, and when the load brings back a
+                      changed title, body, or tags for the open
+                      note and the editor's current fields, read
+                      through the save path's own canonical
+                      form, still equal that baseline (nothing
+                      typed, toggled, or retitled is waiting),
+                      the fields refill in place with hydration,
+                      the scroll position kept and the caret
+                      restored by its text offset. An editor
+                      holding anything unsaved is never touched:
+                      the skip is total, and the old behavior
+                      stands. Unchanged notes, other notes'
+                      changes, the conflict rule, and the
+                      flush before load order are all as they
+                      were.
     v2.16.0 2026-10-21 Idle auto-sync on Drive changes. While
                       the app is open it asks the Drive change
                       feed, about every 30 seconds, whether
@@ -4220,8 +4244,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-21-SSN-V2160";
-const APP_VERSION = "2.16.0";
+const APP_BUILD = "2026-10-21-SSN-V2161";
+const APP_VERSION = "2.16.1";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -6014,6 +6038,16 @@ async function syncNow(showToast) {
   if (state.syncing) { return; }
   state.syncing = true;
   refreshSyncPill();
+  /* v2.16.1: snapshot the open note's pre-sync state (its last
+     saved content baseline and its content as the sync found
+     it), so the render below can refresh the open editor in
+     place when the load brings a changed version of that note
+     back and the editor holds nothing unsaved (see
+     syncShouldRefillOpenNote). Captured here, before the
+     flush: the flush itself can save, move, or fork the note
+     and rewrite the baselines, and the snapshot must predate
+     all of it to mean "what the user last saw saved". */
+  const openNoteCtx = captureOpenNoteSyncContext();
   try {
     await flushQueue();
     /* v1.4.4: a coalesced index write may still be pending (its
@@ -6022,7 +6056,12 @@ async function syncNow(showToast) {
        app itself is about to replace. */
     await flushIndexWrites();
     await loadAllFromRepo();
-    renderAll();
+    syncOpenNoteRefresh = openNoteCtx;
+    try {
+      renderAll();
+    } finally {
+      syncOpenNoteRefresh = null;
+    }
     refreshSyncPill();
     if (showToast) { toast("Synced with " + storageDisplayName() + "."); }
   } catch (err) {
@@ -8204,6 +8243,179 @@ function renderNoteList() {
   });
 }
 
+/* --------------------------------------------------------------------------
+   v2.16.1: refreshing the open note when a sync changes it.
+
+   The standing editor rule (in renderEditor below) never
+   refills the fields of the note already open, so a re-render
+   during typing can neither move the cursor nor clobber input.
+   Live testing v2.16.0 showed the rule's blunt edge: when an
+   auto-sync landed an outside edit to the very note on screen,
+   the list updated around an editor that kept showing the old
+   text until the user clicked away and back. This block is
+   the refinement, and it is deliberately narrow. syncNow
+   snapshots the open note's state before its flush and load,
+   arms the snapshot for its renderAll, and renderEditor asks
+   syncShouldRefillOpenNote whether this render may refill the
+   open note's fields in place. Three facts must all hold:
+
+   - The render belongs to that sync (the snapshot is armed)
+     and names the same note that is already open.
+   - The load actually changed the note: the freshly loaded
+     title, body, or tags differ from the pre-sync content.
+     An unchanged note needs no refill (and an auto-sync's
+     v2.16 guard has usually already kept its hands off).
+   - The editor is clean: what it shows right now, read back
+     through the exact canonicalization the save path applies
+     (collectEditor's three reads, taken without applying
+     them), equals the note's pre-sync last saved content (the
+     v2.8 baseline in lastSavedContentByNoteId). Any difference
+     at all (typed text, a title edit in flight, a checklist
+     toggle the autosave has not landed yet, a tags edit)
+     means hands off: the user's in-flight work is never
+     overwritten by a sync, and the editor stays exactly as it
+     behaves without this block.
+
+   The baseline is the right cleanliness reference because it
+   is by construction what the editor was last filled from or
+   saved to; a body the runtime decorated on open (link
+   faces, hydrated attachment shells, healed checklist boxes)
+   canonicalizes back to it through the same funnel every
+   save passes through. A note whose saved body would not
+   survive that round trip simply never looks clean, the
+   refill is skipped, and the old behavior stands: the safe
+   direction to fail.
+
+   A refill is the ordinary field fill (the same block a note
+   switch runs, hydration included), bracketed by a view
+   state capture and restore: the scroll container's
+   scrollTop, and the caret as a character offset into the
+   body's text, restored clamped to the new body. Trashed and
+   archived notes are read only, so nothing in them can be
+   unsaved; they refill under the same clean rule, and a sync
+   that moves the open note between lists or notebooks (or
+   away entirely) reaches the same end states the render
+   already produced for those cases, because this decision
+   only ever adds a field fill for a note that is still the
+   open one, still carrying its id.
+   -------------------------------------------------------------------------- */
+let syncOpenNoteRefresh = null;
+
+/* The pre-sync snapshot of the open note, taken by syncNow
+   before its flush: the note's id, a clone of its last saved
+   content baseline (null when the note somehow has none, in
+   which case no refill can ever be proven safe), and a
+   content snapshot of the note object as the sync found it. */
+function captureOpenNoteSyncContext() {
+  const open = currentNote();
+  if (!open) { return null; }
+  const saved = lastSavedContentByNoteId[open.id];
+  return {
+    id: open.id,
+    baseline: saved ? cloneVersionValue(saved) : null,
+    before: noteContentSnapshot(open)
+  };
+}
+
+/* May this render refill the open note's fields with the
+   copy the sync just loaded? See the block comment above for
+   the three facts that must all hold. */
+function syncShouldRefillOpenNote(note) {
+  const ctx = syncOpenNoteRefresh;
+  if (!ctx || ctx.id !== note.id) { return false; }
+  if (renderEditor._forId !== note.id) { return false; }
+  if (!ctx.baseline) { return false; }
+  if (versionTextContentEqual(ctx.before, noteContentSnapshot(note))) {
+    return false;
+  }
+  const editorNow = {
+    title: document.getElementById("noteTitle").value.trim() ||
+      "Untitled note",
+    body: canonicalizeAttachmentPlaceholders(
+      document.getElementById("noteBody").innerHTML),
+    tags: document.getElementById("noteTags").value
+      .split(",")
+      .map(function (t) { return t.trim(); })
+      .filter(function (t) { return t.length > 0; })
+  };
+  return versionTextContentEqual(editorNow, ctx.baseline);
+}
+
+/* The caret as a character offset into a body's text: the
+   lengths of every text node before the anchor, in document
+   order, plus the offset inside the anchor node itself.
+   Returns -1 when the selection does not sit on a text node
+   inside the body, in which case no caret is restored. */
+function editorCaretTextOffset(bodyEl) {
+  const sel = window.getSelection();
+  if (!sel || sel.rangeCount === 0) { return -1; }
+  const anchor = sel.anchorNode;
+  if (!anchor || anchor.nodeType !== 3 || !bodyEl.contains(anchor)) {
+    return -1;
+  }
+  let total = 0;
+  const walker = document.createTreeWalker(
+    bodyEl, NodeFilter.SHOW_TEXT, null);
+  let node = walker.nextNode();
+  while (node) {
+    if (node === anchor) { return total + sel.anchorOffset; }
+    total += node.nodeValue.length;
+    node = walker.nextNode();
+  }
+  return -1;
+}
+
+function captureEditorViewState() {
+  const scroller = document.querySelector(".editor-scroll");
+  const bodyEl = document.getElementById("noteBody");
+  return {
+    scrollTop: scroller ? scroller.scrollTop : 0,
+    caret: bodyEl ? editorCaretTextOffset(bodyEl) : -1
+  };
+}
+
+/* Put the view state back after a refill: the scroll offset
+   as it was, and the caret at the saved text offset, clamped
+   to whatever text the new body actually has (to its very
+   end when the new body is shorter, and nowhere at all when
+   it has no text). */
+function restoreEditorViewState(view) {
+  const scroller = document.querySelector(".editor-scroll");
+  if (scroller) { scroller.scrollTop = view.scrollTop; }
+  if (view.caret < 0) { return; }
+  const bodyEl = document.getElementById("noteBody");
+  if (!bodyEl) { return; }
+  let remaining = view.caret;
+  let target = null;
+  let targetOffset = 0;
+  let lastText = null;
+  const walker = document.createTreeWalker(
+    bodyEl, NodeFilter.SHOW_TEXT, null);
+  let node = walker.nextNode();
+  while (node) {
+    lastText = node;
+    if (remaining <= node.nodeValue.length) {
+      target = node;
+      targetOffset = remaining;
+      break;
+    }
+    remaining -= node.nodeValue.length;
+    node = walker.nextNode();
+  }
+  if (!target && lastText) {
+    target = lastText;
+    targetOffset = lastText.nodeValue.length;
+  }
+  if (!target) { return; }
+  const range = document.createRange();
+  range.setStart(target, targetOffset);
+  range.collapse(true);
+  const sel = window.getSelection();
+  if (!sel) { return; }
+  sel.removeAllRanges();
+  sel.addRange(range);
+}
+
 /* Open one note in the editor. On mobile this also switches the visible
    pane to the editor. */
 function openNote(id) {
@@ -8248,17 +8460,25 @@ function renderEditor() {
      and the DOM and the user's selection stay exactly as they
      stood. A note that did change elsewhere carries a new
      revision, the guard misses, and the normal render below
-     runs (which, by the rule right under this one, still never
-     refills the body of the note already open). Manual syncs
-     never arm the guard. */
+     runs. Manual syncs never arm the guard. */
   if (autoSyncEditorGuard && autoSyncEditorGuard.id === note.id &&
       note.sha && autoSyncEditorGuard.sha === note.sha) {
     return;
   }
 
   /* Only refill the fields when a different note is being opened, so a
-     re-render during typing never moves the cursor or clobbers input. */
-  if (renderEditor._forId !== note.id) {
+     re-render during typing never moves the cursor or clobbers input.
+     v2.16.1: one narrow exception. When this render is a sync's
+     and the sync changed the note already open, a clean editor
+     (nothing unsaved; see syncShouldRefillOpenNote) is refilled
+     in place, so an outside edit shows up without clicking away
+     and back. The view state is captured before the fill and
+     restored after it, so the reader keeps their place. */
+  const syncRefill = renderEditor._forId === note.id &&
+    syncShouldRefillOpenNote(note);
+  let refillView = null;
+  if (renderEditor._forId !== note.id || syncRefill) {
+    if (syncRefill) { refillView = captureEditorViewState(); }
     renderEditor._forId = note.id;
     /* v1.3.1: switching notes closes any open link popup, since it
        refers to a link in the previous note. v2.9: same for the
@@ -8345,6 +8565,10 @@ function renderEditor() {
       console.warn("Attachment hydration failed:", err);
     });
   }
+  /* v2.16.1: a sync refill hands the reader their place back
+     (scroll, and the caret by its text offset) once the new
+     fields and decorations are in. */
+  if (refillView) { restoreEditorViewState(refillView); }
 
   /* v2.5: the notebook link follows the note. A trashed or
      archived note shows the notebook it came from, since that is
