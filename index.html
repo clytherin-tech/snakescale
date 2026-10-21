@@ -40,10 +40,38 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-21-SSN-V2170
-  Version: 2.17.0
+  BUILD STAMP: 2026-10-21-SSN-V2171
+  Version: 2.17.1
 
   Revision history:
+    v2.17.1 2026-10-21 One conflict copy per divergence. When
+                      a note changed somewhere else before your
+                      edit saved, the app kept your version as a
+                      conflict copy, as it always has; but the
+                      editor went on holding the revision it had
+                      loaded, so every later autosave conflicted
+                      again and made another copy, a fountain of
+                      copies while you typed (seven copies of one
+                      note in four minutes of two device editing,
+                      in the report that prompted this fix). A
+                      save that forks a copy now marks the note
+                      diverged for the session: further saves of
+                      it pause instead of writing or copying, the
+                      conflict banner stays up (no twelve second
+                      fade) with the explanation and a Reload
+                      note button, and reloading pulls the
+                      current stored version into the editor
+                      with a fresh revision and baseline, clears
+                      the mark and any held queued write, and
+                      lets editing continue. A later, genuinely
+                      new divergence starts a new episode and
+                      earns its one copy. Queued offline writes
+                      that conflict at flush time mark the note
+                      the same way and are held while it is
+                      diverged; Trash, Archive, restore, delete,
+                      and notebook moves clear the mark, as does
+                      sign out. The conflict rule itself, the
+                      copy's title, and the toast are unchanged.
     v2.17.0 2026-10-21 Six refinements. Refresh connection moves
                       from the labeled button beside the Synced
                       pill into the sidebar three dot menu, as an
@@ -2534,6 +2562,13 @@ body.note-drag-active{touch-action:none;overscroll-behavior:none;}
   padding:10px 16px;font-size:14px;font-weight:600;
 }
 body.dark #conflictBanner{background:#3A2F10;color:#FFE1A8;}
+/* v2.17.1: the banner's Reload note button (diverged notes). */
+#conflictReloadBtn{
+  margin-left:10px;font:inherit;font-weight:700;padding:2px 10px;
+  border-radius:6px;border:1px solid #B98A1D;background:#FFF8E6;
+  color:#5C4300;cursor:pointer;
+}
+body.dark #conflictReloadBtn{background:#574512;color:#FFE1A8;border-color:#A8873A;}
 
 /* ---------- v1.3 note body: styles for the new block formats ----------
    Quote, code block, heading 3, and dividers can now be created from
@@ -3509,7 +3544,7 @@ body.dark .version-date{color:var(--accent);}
 
   <!-- RIGHT PANE: editor -->
   <main id="editorpane">
-    <div id="conflictBanner" class="hidden"></div>
+    <div id="conflictBanner" class="hidden"><span class="conflict-text"></span> <button id="conflictReloadBtn" type="button" class="hidden">Reload note</button></div>
 
     <!-- Shown when no note is selected. -->
     <div id="noNote" class="no-note">
@@ -4306,8 +4341,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-21-SSN-V2170";
-const APP_VERSION = "2.17.0";
+const APP_BUILD = "2026-10-21-SSN-V2171";
+const APP_VERSION = "2.17.1";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -4801,6 +4836,9 @@ async function signOut() {
   clearGoogleRenewalTimer();
   /* v2.16: and the auto-sync watcher stops with the session. */
   stopAutoSync();
+  /* v2.17.1: divergence is session state too; none of it may
+     leak into the next sign in on this device. */
+  clearAllDivergenceState();
   state.attach.googleExpiresAt = 0;
   state.attach.googleFolderId = null;
   revokeAttachmentUrls();
@@ -6182,6 +6220,155 @@ function saveNoteToRepo(note, options) {
   });
 }
 
+/* --------------------------------------------------------------------------
+   v2.17.1: divergence, one conflict copy per episode
+
+   The conflict rule above forks a copy when a save finds the file
+   changed since the editor loaded it. Before this fix nothing
+   healed the editor afterward: the note kept its stale storage
+   revision, so the next autosave forked again, one copy per save,
+   for as long as the user kept typing in that note on that device
+   (seven copies of one note in four minutes of two device editing
+   prompted this fix). The rule itself is unchanged; only the
+   repetition is treated.
+
+   A save that forks a copy (the pre-write revision check, the
+   409/422 catch, or a queued offline write conflicting at flush
+   time) marks the note diverged in the map below, after its one
+   copy is written. While a note is marked:
+   - saveNoteToRepoNow returns a paused result up front: no Drive
+     write, no queue entry, no version capture, and the editor's
+     in-memory content is left exactly as it stands;
+   - flushQueue holds the note's queued content puts (its trash
+     and archive move puts are exempt, as moves, exactly as in
+     the flush conflict branch) instead of flushing them;
+   - the conflict banner stays up with no auto hide, explains
+     the pause, and offers Reload note.
+   Reload (reloadDivergedNote) fetches the note's current file,
+   swaps the parsed note into state with its fresh revision and
+   a fresh last saved baseline, clears the mark and any held
+   queued put for the note, and re-renders (opening the note
+   when it is not the one on screen). Editing then saves against
+   the current revision again. A genuinely new external change
+   after that starts a new episode and earns its one new copy.
+   Trash, archive, restore, unarchive, delete forever, and
+   notebook moves clear the mark (they re-path the note with
+   their own unconditional writes or remove it, so divergence
+   is moot); sign out and Google disconnect clear all of it.
+   The map and the banner pointer are plain session state: they
+   live in memory only and never reach the cache or the store.
+   -------------------------------------------------------------------------- */
+const divergedNotes = new Map();   /* noteId -> { text } */
+let conflictBannerNoteId = null;
+
+function isNoteDiverged(noteId) {
+  return divergedNotes.has(noteId);
+}
+
+/* Record a fresh divergence and put its banner up. Called only
+   after the episode's one conflict copy is safely written. */
+function markNoteDiverged(noteId, bannerText) {
+  divergedNotes.set(noteId, { text: bannerText });
+  showConflictBanner(bannerText, noteId);
+}
+
+/* Clear one note's mark. dropQueuedPuts is Reload's alone: the
+   held queued writes for the note belong to the divergence and
+   go with it. The move operations clear the mark WITHOUT
+   dropping anything, because the entries they just queued are
+   the move itself. When the banner pointed at this note, the
+   banner follows whatever divergence remains (or hides). */
+function clearNoteDivergence(noteId, dropQueuedPuts) {
+  const wasMarked = divergedNotes.delete(noteId);
+  if (dropQueuedPuts) {
+    const kept = loadQueue().filter(function (op) {
+      return !(op.kind === "put" && op.noteId === noteId);
+    });
+    saveQueue(kept);
+  }
+  if (conflictBannerNoteId === noteId) {
+    conflictBannerNoteId = null;
+    refreshConflictBanner();
+  }
+  return wasMarked;
+}
+
+/* Keep the banner pointed at a live divergence: if the note it
+   named has resolved, repoint it at the most recently marked
+   note still diverged, or hide it when none remain. */
+function refreshConflictBanner() {
+  if (conflictBannerNoteId && divergedNotes.has(conflictBannerNoteId)) {
+    return;
+  }
+  if (!divergedNotes.size) { hideConflictBanner(); return; }
+  let lastId = null;
+  divergedNotes.forEach(function (entry, id) { lastId = id; });
+  showConflictBanner(divergedNotes.get(lastId).text, lastId);
+}
+
+/* Session teardown (sign out, Google disconnect): every mark
+   and the banner go together. */
+function clearAllDivergenceState() {
+  divergedNotes.clear();
+  conflictBannerNoteId = null;
+  hideConflictBanner();
+}
+
+/* Reload a diverged note from the store: the divergence's exit.
+   The current file is fetched fresh and parsed into a new note
+   object, which replaces the stale one in whichever list holds
+   it; the fresh parse carries the current storage revision, and
+   rememberLastSavedContent gives it a matching last saved
+   baseline, so the next save compares like against like. The
+   mark and any held queued put for the note clear with it.
+   The user's divergent version is not lost by this: it is the
+   conflict copy the episode already wrote. When the note is
+   the one on screen, clearing renderEditor's marker makes the
+   render refill the fields from the reloaded note; when it is
+   not, the note opens. */
+async function reloadDivergedNote(noteId) {
+  const note = findNoteById(noteId);
+  if (!note) { clearNoteDivergence(noteId, true); return; }
+  let file = null;
+  try {
+    file = await storeGetFile(notePath(note));
+  } catch (err) {
+    toast("Reload failed: " + err.message, true);
+    return;
+  }
+  if (!file) {
+    /* The file itself is gone from the store (deleted on
+       another device, say). Divergence over a missing file is
+       moot: clear the pause and let a sync reconcile the list. */
+    clearNoteDivergence(noteId, true);
+    toast("That note is no longer in " + storageDisplayName() +
+      ", so its pause is cleared.", true);
+    if (storeSyncReady()) { syncNow(false); }
+    return;
+  }
+  const parsed = parseNoteFile(file.text, file.token, note.id,
+    note.trashed, note.archived);
+  if (!parsed.notebook) { parsed.notebook = note.notebook; }
+  const lists = [state.notes, state.trash, state.archive];
+  for (const list of lists) {
+    const at = list.findIndex(function (n) { return n.id === noteId; });
+    if (at >= 0) { list[at] = parsed; break; }
+  }
+  rememberLastSavedContent(parsed);
+  clearNoteDivergence(noteId, true);
+  saveCache();
+  if (state.selectedId === noteId) {
+    renderEditor._forId = null;
+    renderAll();
+  } else {
+    openNote(noteId);
+  }
+  /* renderAll recomputed the pill; if other notes are still
+     diverged, the conflict state is still the honest one. */
+  if (divergedNotes.size) { setSyncPill("bad", "Conflict saved"); }
+  toast("Note reloaded from " + storageDisplayName() + ".");
+}
+
 /* Save one note to the repo, with the critical conflict rule:
    BEFORE writing, fetch the file fresh and compare its sha with the sha
    the editor loaded. If they differ, someone (or another device) changed
@@ -6189,6 +6376,9 @@ function saveNoteToRepo(note, options) {
    "<title> (conflict copy)" in the same notebook, the original is left
    untouched, and a banner tells the user what happened. A 409 or 422 from
    the PUT is handled the same way. Nothing is ever silently overwritten.
+   v2.17.1: a save that forks a copy also marks the note diverged
+   (see the divergence block above), so its later saves pause
+   instead of forking a copy per save.
    When offline, the write is queued instead and the note keeps a dirty
    marker in the cache.
    This is the worker behind saveNoteToRepo above, which serializes
@@ -6196,6 +6386,17 @@ function saveNoteToRepo(note, options) {
    saveNoteToRepo. */
 async function saveNoteToRepoNow(note, options) {
   options = options || {};
+  /* v2.17.1: a diverged note's saves pause (see the divergence
+     block above). The check sits ahead of every branch, online
+     and offline alike, so a paused save neither writes, nor
+     queues, nor captures a version, and the editor's in-memory
+     content is left exactly as it stands. The deliberate
+     conflict check bypasses (fresh creates, which mint a new id
+     that can never be marked) keep their exemption. */
+  if (!options.skipConflictCheck && isNoteDiverged(note.id)) {
+    setSyncPill("bad", "Conflict saved");
+    return { paused: true, diverged: true };
+  }
   /* v2.8: capture the version history facts BEFORE anything in
      this save can move them. previousSavedContent is the note's
      last saved state, held in the baseline map precisely because
@@ -6360,23 +6561,64 @@ async function saveConflictCopy(note, originalPath) {
   state.notes.push(copy);
   saveCache();
   renderAll();
-  showConflictBanner(
+  /* v2.17.1: the copy is written, so the episode is complete;
+     mark the original diverged so its later saves pause instead
+     of forking a copy per save, and put the persistent banner
+     up (the mark owns the banner now, not the twelve second
+     timer). The toast and the pill are exactly as before. */
+  markNoteDiverged(note.id,
     "This note changed somewhere else before your edit saved, so your version " +
-    "was kept as a separate note: \"" + copy.title + "\". Nothing was overwritten."
-  );
+    "was kept as a separate note: \"" + copy.title + "\". Nothing was overwritten. " +
+    "Saving of this note is now paused, so no more copies pile up; use Reload " +
+    "note to load the current version and keep editing it.");
   setSyncPill("bad", "Conflict saved");
   toast("Conflict: your version was saved as \"" + copy.title + "\".", true);
   return { conflict: true, copy: copy };
 }
 
-function showConflictBanner(text) {
+/* Show the conflict banner. v2.17.1: with a noteId the banner
+   is that note's divergence banner: it carries the Reload note
+   button and NEVER auto hides while the divergence stands (the
+   timer is cleared and none is armed; showConflictBanner._timer
+   stays null, which the harness asserts). Without a noteId the
+   banner keeps its original behavior, a twelve second showing. */
+function showConflictBanner(text, noteId) {
   const banner = document.getElementById("conflictBanner");
-  banner.textContent = text;
-  banner.classList.remove("hidden");
+  const textEl = banner.querySelector(".conflict-text");
+  if (textEl) { textEl.textContent = text; }
+  else { banner.textContent = text; }
+  const reloadBtn = document.getElementById("conflictReloadBtn");
+  if (reloadBtn && !reloadBtn._wired) {
+    reloadBtn._wired = true;
+    reloadBtn.addEventListener("click", function () {
+      if (conflictBannerNoteId) {
+        reloadDivergedNote(conflictBannerNoteId);
+      }
+    });
+  }
   clearTimeout(showConflictBanner._timer);
-  showConflictBanner._timer = setTimeout(function () {
-    banner.classList.add("hidden");
-  }, 12000);
+  showConflictBanner._timer = null;
+  banner.classList.remove("hidden");
+  if (noteId) {
+    conflictBannerNoteId = noteId;
+    if (reloadBtn) { reloadBtn.classList.remove("hidden"); }
+  } else {
+    conflictBannerNoteId = null;
+    if (reloadBtn) { reloadBtn.classList.add("hidden"); }
+    showConflictBanner._timer = setTimeout(function () {
+      banner.classList.add("hidden");
+    }, 12000);
+  }
+}
+
+function hideConflictBanner() {
+  const banner = document.getElementById("conflictBanner");
+  clearTimeout(showConflictBanner._timer);
+  showConflictBanner._timer = null;
+  banner.classList.add("hidden");
+  conflictBannerNoteId = null;
+  const reloadBtn = document.getElementById("conflictReloadBtn");
+  if (reloadBtn) { reloadBtn.classList.add("hidden"); }
 }
 
 /* Flush the offline queue, oldest first. A queued put re-checks the file
@@ -6393,6 +6635,19 @@ async function flushQueue() {
     if (failed) { remaining.push(op); continue; }
     try {
       if (op.kind === "put") {
+        /* v2.17.1: a content put for a note already marked
+           diverged is held, not flushed: flushing it would
+           either fork another copy or overwrite, and Reload
+           clears held entries when the divergence resolves.
+           The note's trash and archive puts are moves, exempt
+           exactly as in the conflict branch below; their
+           operations clear the mark before they ever queue. */
+        if (op.noteId && isNoteDiverged(op.noteId) &&
+            !op.path.startsWith("trash/") &&
+            !op.path.startsWith("archive/")) {
+          remaining.push(op);
+          continue;
+        }
         const existing = await storeGetFile(op.path);
         const localNote = findNoteById(op.noteId);
         const loadedSha = localNote ? localNote.sha : null;
@@ -6416,9 +6671,15 @@ async function flushQueue() {
              skip itself. */
           rememberLastSavedContent(parsed);
           state.notes.push(parsed);
-          showConflictBanner("A note edited offline changed on " +
+          /* v2.17.1: the queued conflict marks the note diverged
+             through the same path as an online one, so a later
+             flush (or save) can never fork a second copy for
+             this episode; the banner is the persistent one. */
+          markNoteDiverged(op.noteId, "A note edited offline changed on " +
             storageDisplayName() + " too. Your offline version was kept as \"" +
-            parsed.title + "\".");
+            parsed.title + "\". Saving of this note is now paused, so no " +
+            "more copies pile up; use Reload note to load the current " +
+            "version and keep editing it.");
           setSyncPill("bad", "Conflict saved");
         } else {
           const newSha = await storePutFile(op.path, op.content,
@@ -6685,6 +6946,9 @@ function moveNoteToTrash(note, quiet) {
   state.notes = state.notes.filter(function (n) { return n.id !== note.id; });
   state.archive = state.archive.filter(function (n) { return n.id !== note.id; });
   state.trash.unshift(note);
+  /* v2.17.1: the trash move re-paths the note with its own
+     unconditional write, so any divergence mark is moot. */
+  clearNoteDivergence(note.id);
   if (state.selectedId === note.id) { state.selectedId = null; }
   if (!online) {
     /* Offline (or the store is not connected): queue both halves, in
@@ -6736,6 +7000,9 @@ function restoreNote(note) {
   const text = serializeNote(note);
   state.trash = state.trash.filter(function (n) { return n.id !== note.id; });
   state.notes.unshift(note);
+  /* v2.17.1: the restore re-paths the note with its own
+     unconditional write, so any divergence mark is moot. */
+  clearNoteDivergence(note.id);
   if (!online) {
     queueOp({ kind: "put", path: newPath, content: text, noteId: note.id });
     queueOp({ kind: "delete", path: oldPath, noteId: note.id });
@@ -6767,6 +7034,9 @@ function deleteNoteForever(note) {
   const online = state.online && state.repoExists;
   state.trash = state.trash.filter(function (n) { return n.id !== note.id; });
   if (state.selectedId === note.id) { state.selectedId = null; }
+  /* v2.17.1: the note is gone for good; its divergence mark,
+     and the banner if it pointed here, go with it. */
+  clearNoteDivergence(note.id);
   if (!online) {
     queueOp({ kind: "delete", path: path, noteId: note.id });
     /* v2.8: the note's version history is deleted with it. Offline
@@ -6822,6 +7092,9 @@ function archiveNote(note) {
   const text = serializeNote(note);
   state.notes = state.notes.filter(function (n) { return n.id !== note.id; });
   state.archive.unshift(note);
+  /* v2.17.1: the archive move re-paths the note with its own
+     unconditional write, so any divergence mark is moot. */
+  clearNoteDivergence(note.id);
   if (state.selectedId === note.id) { state.selectedId = null; }
   if (!online) {
     queueOp({ kind: "put", path: newPath, content: text, noteId: note.id });
@@ -6862,6 +7135,9 @@ function unarchiveNote(note) {
   const text = serializeNote(note);
   state.archive = state.archive.filter(function (n) { return n.id !== note.id; });
   state.notes.unshift(note);
+  /* v2.17.1: the unarchive re-paths the note with its own
+     unconditional write, so any divergence mark is moot. */
+  clearNoteDivergence(note.id);
   if (!online) {
     queueOp({ kind: "put", path: newPath, content: text, noteId: note.id });
     queueOp({ kind: "delete", path: oldPath, noteId: note.id });
@@ -9432,6 +9708,14 @@ async function restoreVersionNow(note, versionId) {
           "the restore was stopped and nothing was replaced.", true);
         return;
       }
+      if (preSaveResult && preSaveResult.paused) {
+        /* v2.17.1: the note is diverged and its saves are
+           paused, so "current" cannot be established; stop the
+           same way a conflict stops it. */
+        toast("This note changed elsewhere and its saving is paused, " +
+          "so the restore was stopped. Reload the note, then restore.", true);
+        return;
+      }
     }
   }
   /* Step 2: load the history safely, and find the version. */
@@ -9499,6 +9783,15 @@ async function restoreVersionNow(note, versionId) {
   if (result && result.conflict) {
     toast("The restore ran into a storage conflict, so it was saved " +
       "as a conflict copy instead of replacing the note.", true);
+    renderAll();
+    return;
+  }
+  if (result && result.paused) {
+    /* v2.17.1: a diverged note's save pauses, so the version was
+       not applied to the store; say so rather than claiming a
+       restore that never landed. */
+    toast("This note changed elsewhere and its saving is paused, " +
+      "so nothing was restored. Reload the note, then restore.", true);
     renderAll();
     return;
   }
@@ -14973,6 +15266,12 @@ async function importFiles(fileList) {
    picker and drag and drop run literally the same code. */
 async function saveNoteAndSettleMove(note, previousPath) {
   const result = await saveNoteToRepo(note);
+  /* v2.17.1: a paused save wrote nothing, so there is nothing
+     to settle: deleting the previous path's file here would
+     strand the note (its only stored copy lives there). The
+     note's placement in state stands until the divergence is
+     resolved and a later load or save settles it honestly. */
+  if (result && result.paused) { return result; }
   if (notePath(note) !== previousPath) {
     if (state.online && state.repoExists) {
       const oldFile = await storeGetFile(previousPath);
@@ -15008,6 +15307,13 @@ function moveNoteToNotebook(note, targetSlug) {
     return Promise.resolve(false);
   }
   if (note.notebook === targetSlug) { return Promise.resolve(false); }
+  /* v2.17.1: a notebook move takes charge of the note's
+     placement, like the trash and archive moves: it clears any
+     divergence mark and runs its save against the target
+     path, whose file does not exist yet, so the move completes
+     instead of pausing. The episode's conflict copy remains as
+     the record of the version that diverged. */
+  clearNoteDivergence(note.id);
   const previousPath = notePath(note);
   const isOpen = state.selectedId === note.id;
   if (isOpen) {
@@ -15893,6 +16199,10 @@ const autosave = debounce(async function () {
       setSaveState("Conflict saved as a copy");
       state.selectedId = result.copy.id;
       renderEditor._forId = null;
+    } else if (result && result.paused) {
+      /* v2.17.1: the note is diverged; its saves pause until
+         Reload. Say so where "Saved" would otherwise lie. */
+      setSaveState("Saving paused: this note changed elsewhere");
     } else {
       setSaveState("Saved " + new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }));
     }
@@ -18309,6 +18619,8 @@ async function googleDisconnect() {
   clearGoogleRenewalTimer();
   /* v2.16: the auto-sync watcher serves the same session. */
   stopAutoSync();
+  /* v2.17.1: and so does the divergence state. */
+  clearAllDivergenceState();
   state.attach.googleExpiresAt = 0;
   state.attach.googleFolderId = null;
   resetDriveNotesCache();
