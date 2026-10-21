@@ -40,10 +40,26 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-21-SSN-V2130
-  Version: 2.13.0
+  BUILD STAMP: 2026-10-21-SSN-V2131
+  Version: 2.13.1
 
   Revision history:
+    v2.13.1 2026-10-21 Highlight fix. A custom highlight color
+                      picked from the native color dialog could
+                      silently do nothing: on that path the
+                      selection is restored programmatically after
+                      the dialog closes, and Edge's hiliteColor
+                      command can report success while painting
+                      nothing on such a range, so the span fallback
+                      (which only ran when the commands reported
+                      failure) never ran. applyHighlight now
+                      verifies its own effect after the command
+                      chain: if no visible background landed on the
+                      range, the span helper applies the color
+                      itself. A range that really was painted
+                      verifies clean and gains no second span
+                      layer, and the transparent clearing path is
+                      unchanged. Nothing else changes.
     v2.13.0 2026-10-21 The first run experience. A store seeded
                       during the boot (a brand new user) opens a
                       five step walkthrough modal over the app:
@@ -3861,8 +3877,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-21-SSN-V2130";
-const APP_VERSION = "2.13.0";
+const APP_BUILD = "2026-10-21-SSN-V2131";
+const APP_VERSION = "2.13.1";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -15689,7 +15705,22 @@ function applyTextColor(value) {
 /* Highlight: hiliteColor is the modern command name; backColor is the
    older alias some engines still use, and the span helper is the final
    fallback. "No highlight" passes transparent, which clears the visual
-   highlight while keeping the text itself untouched. */
+   highlight while keeping the text itself untouched.
+
+   v2.13.1: the command chain's return values are no longer the last
+   word. On the Custom color path the range being painted is one this
+   file restored programmatically after the native color dialog
+   closed, and on exactly that path Edge's hiliteColor can report
+   success while painting nothing, so the span fallback (which ran
+   only when both commands reported failure) never got its turn and
+   the picked color silently did nothing; the preset swatches were
+   unaffected because they apply onto a live selection the editor
+   never lost. After the chain runs, every non-transparent apply now
+   verifies its own effect (ensureHighlightLanded below): if no
+   visible background actually landed on the range, the span helper
+   runs after all, so a highlight the user asked for is guaranteed by
+   the proven path. A range that really was painted verifies clean
+   and gains no second span layer. */
 function applyHighlight(value) {
   restoreFormatSelection();
   let ok = false;
@@ -15700,10 +15731,109 @@ function applyHighlight(value) {
     catch (err) { ok = false; }
   }
   if (!ok) { applySpanStyle({ backgroundColor: value }); }
+  if (value !== "transparent") { ensureHighlightLanded(value); }
   document.getElementById("highlightBar").style.background =
     value === "transparent" ? "" : value;
   closeToolbarMenus();
   markDirty();
+}
+
+/* v2.13.1: is this background value an actual visible color? "No
+   background" is spelled several ways across engines (empty,
+   transparent, and the fully transparent rgba form computed styles
+   report), and all of them count as no background here. */
+function backgroundValueIsVisible(value) {
+  if (!value) { return false; }
+  const v = String(value).toLowerCase().replace(/\s+/g, "");
+  return v !== "" && v !== "transparent" &&
+    v !== "rgba(0,0,0,0)" && v !== "rgb(0,0,0,0)";
+}
+
+/* v2.13.1: does this element itself carry a visible background? The
+   inline style is read first (the form spanHasBackground reads),
+   then the computed style, which is what catches a background an
+   engine applied through a generated class or a presentational
+   element rather than an inline style. */
+function elementHasVisibleBackground(el) {
+  if (el.style &&
+      (backgroundValueIsVisible(el.style.backgroundColor) ||
+       backgroundValueIsVisible(el.style.background))) {
+    return true;
+  }
+  let computed = "";
+  try { computed = window.getComputedStyle(el).backgroundColor; }
+  catch (err) { computed = ""; }
+  return backgroundValueIsVisible(computed);
+}
+
+/* v2.13.1: does any text the range covers sit inside an element
+   carrying a visible background? The walk mirrors
+   wrapRangeTextWithSpan: text nodes the range touches (boundary
+   nodes counted only for the part inside the range), attachment
+   placeholders skipped, and each covered node's ancestors are read
+   up to but not including the note body itself, whose own
+   background is the editor surface, not a highlight. */
+function rangeHasVisibleBackground(range) {
+  const bodyEl = document.getElementById("noteBody");
+  if (!range || range.collapsed) { return false; }
+  if (!bodyEl.contains(range.commonAncestorContainer)) { return false; }
+  const walker = document.createTreeWalker(
+    bodyEl, NodeFilter.SHOW_TEXT, null);
+  let node = walker.nextNode();
+  while (node) {
+    const parent = node.parentElement;
+    const inAttachment = parent && parent.closest(".ss-attachment");
+    if (!inAttachment && node.nodeValue.length &&
+        range.intersectsNode(node)) {
+      let start = 0;
+      let end = node.nodeValue.length;
+      if (node === range.startContainer) { start = range.startOffset; }
+      if (node === range.endContainer) { end = range.endOffset; }
+      if (start < end) {
+        let el = parent;
+        while (el && el !== bodyEl) {
+          if (elementHasVisibleBackground(el)) { return true; }
+          el = el.parentElement;
+        }
+      }
+    }
+    node = walker.nextNode();
+  }
+  return false;
+}
+
+/* v2.13.1: the range a just finished highlight apply is judged on:
+   the live selection when it is still a real range inside the body,
+   else the saved format range the apply restored from. A collapsed
+   or missing range yields null: there is nothing to judge, and
+   nothing to repaint. */
+function highlightJudgeRange() {
+  const bodyEl = document.getElementById("noteBody");
+  const sel = window.getSelection();
+  if (sel && sel.rangeCount) {
+    const live = sel.getRangeAt(0);
+    if (!live.collapsed &&
+        bodyEl.contains(live.commonAncestorContainer)) {
+      return live;
+    }
+  }
+  if (savedFormatRange && !savedFormatRange.collapsed &&
+      bodyEl.contains(savedFormatRange.startContainer) &&
+      bodyEl.contains(savedFormatRange.endContainer)) {
+    return savedFormatRange;
+  }
+  return null;
+}
+
+/* v2.13.1: applyHighlight's guarantee, described at its definition:
+   when the command chain left no visible background on the range it
+   acted on, the span helper applies the color itself. */
+function ensureHighlightLanded(value) {
+  const range = highlightJudgeRange();
+  if (!range) { return; }
+  if (!rangeHasVisibleBackground(range)) {
+    applySpanStyle({ backgroundColor: value });
+  }
 }
 
 /* v2.6.0: split el around one of its child nodes: el keeps the child,
