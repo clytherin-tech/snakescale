@@ -40,10 +40,35 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-21-SSN-V2141
-  Version: 2.14.1
+  BUILD STAMP: 2026-10-21-SSN-V2142
+  Version: 2.14.2
 
   Revision history:
+    v2.14.2 2026-10-21 The block grip hover rewiring fix. The
+                      v2.14.1 position resolution never ran in a
+                      real browser: the grip renders at
+                      left:-20px relative to .editor-inner, so
+                      it floats over .editor-scroll, and the
+                      hover tracker, bound to .editor-inner,
+                      was never in the event path for the
+                      strip the reach crosses; that strip was
+                      instead judged by the document outside
+                      guard, which hid the grip, and the
+                      body's own padding target resolved to
+                      no block and hid it too. Compounding
+                      both, the position helper rejected every
+                      point left of the column edge, the
+                      grip's whole zone. The tracker and the
+                      outside guard are both scoped to
+                      .editor-scroll now, any target that is
+                      not a block descendant of the body (the
+                      body element itself included) resolves
+                      by pointer position, and the position
+                      helper admits the grip strip from 28px
+                      left of the body's edge to its right
+                      edge. The drag mechanics, the press
+                      handler, the pressed pointer hide, and
+                      the scroll hide are unchanged.
     v2.14.1 2026-10-21 Three refinements from Chris's first
                       hands on pass over v2.14.0. The voice
                       recording bar is a floating card now: it
@@ -4074,8 +4099,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-21-SSN-V2141";
-const APP_VERSION = "2.14.1";
+const APP_BUILD = "2026-10-21-SSN-V2142";
+const APP_VERSION = "2.14.2";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -20492,33 +20517,36 @@ function blockGripTargetBlock(node) {
   return BLOCK_DRAG_TAGS[top.tagName] ? top : null;
 }
 
-/* v2.14.1: the block a pointer POSITION belongs to, for pointers
-   over the editor column but not over the note body itself. The
-   grip floats in the left margin, which is .editor-inner space
-   outside #noteBody, and the hover tracker below used to judge
-   purely by event target: crossing that margin on the way to
-   grab the grip read as "not over the body", the grip hid mid
-   crossing, and being display:none it could never be hovered
-   back. So when the target is outside the body, the block is
-   resolved geometrically instead: list items first (an item's
-   span wins over the list that contains it), then the top level
-   blocks, each in document order, the winner being the block
-   whose on screen vertical span holds the pointer's Y. The
-   pointer must be inside .editor-inner and no further right
-   than the note body's right edge (the column's own right side
-   is body, and anything there resolves by target as before).
-   Above the first block or below the last one there is no
-   block, and the grip hides, exactly as a target over the
-   body's own empty space has always hidden it. */
+/* The block a pointer POSITION belongs to, for pointers that are
+   not over a block descendant of the note body: over the body
+   element itself, over the scroll strip beside the column, or
+   over other editor furniture. v2.14.1 introduced this geometric
+   resolution because the hover tracker used to judge purely by
+   event target and hid the grip mid crossing on the way to grab
+   it; v2.14.2 corrects where the grip's territory actually is.
+   The grip renders at left:-20px relative to .editor-inner, so it
+   floats over .editor-scroll, left of the column's own left
+   edge, and the body's left edge is the column's left edge. A
+   guard that admitted only points at or right of the column edge
+   therefore rejected the grip's entire zone. The X range now
+   runs from 28px left of the body's left edge (the 16px grip,
+   its 6px gap, and 6px of slack) to the body's right edge; the
+   Y range stays the editor column's vertical span. The block is
+   resolved geometrically: list items first (an item's span wins
+   over the list that contains it), then the top level blocks,
+   each in document order, the winner being the block whose on
+   screen vertical span holds the pointer's Y. Above the first
+   block or below the last one there is no block, and the grip
+   hides, exactly as a target over the body's own empty space
+   has always hidden it. */
 function blockGripBlockAtPoint(clientX, clientY) {
   const bodyEl = document.getElementById("noteBody");
   const inner = document.querySelector(".editor-inner");
   if (!bodyEl || !inner) { return null; }
   const ir = inner.getBoundingClientRect();
-  if (clientX < ir.left || clientX > ir.right ||
-      clientY < ir.top || clientY > ir.bottom) { return null; }
   const br = bodyEl.getBoundingClientRect();
-  if (clientX > br.right) { return null; }
+  if (clientY < ir.top || clientY > ir.bottom) { return null; }
+  if (clientX < br.left - 28 || clientX > br.right) { return null; }
   const items = bodyEl.querySelectorAll("li");
   for (let i = 0; i < items.length; i++) {
     const r = items[i].getBoundingClientRect();
@@ -20578,15 +20606,17 @@ function onGripHoverPointerMove(ev) {
     return;
   }
   let block;
-  if (bodyEl.contains(ev.target)) {
+  if (ev.target !== bodyEl && bodyEl.contains(ev.target)) {
     block = blockGripTargetBlock(ev.target);
   } else {
-    /* v2.14.1: the pointer is over the editor column but not over
-       the body itself: the margin strip the grip floats in, on
-       the way to grab it (or the column's other furniture).
-       Resolve the block by position, so the crossing keeps the
-       grip for the block whose line the pointer is level with,
-       and blockGripBlock names that block when the press lands. */
+    /* v2.14.2: the pointer is not over a block descendant of the
+       body: it is over the body element itself (its thin padding
+       strip used to resolve to no block and kill the grip mid
+       reach), over the scroll strip the grip floats in, or over
+       the column's other furniture. Resolve the block by
+       position, so the crossing keeps the grip for the block
+       whose line the pointer is level with, and blockGripBlock
+       names that block when the press lands. */
     block = blockGripBlockAtPoint(ev.clientX, ev.clientY);
   }
   if (!block) {
@@ -21655,14 +21685,22 @@ function wireEvents() {
   });
 
   /* v2.14: block grip wiring. Pointer movement over the editor
-     column tracks the block under the pointer; movement anywhere
-     outside the column, or a scroll of the editor, hides the grip;
-     a press on the grip itself starts the drag. */
-  document.querySelector(".editor-inner").addEventListener("pointermove",
+     tracks the block under the pointer; movement anywhere outside
+     the editor, or a scroll of the editor, hides the grip; a press
+     on the grip itself starts the drag. v2.14.2: the tracker is
+     bound to .editor-scroll, not .editor-inner. The grip renders
+     left of the column, over .editor-scroll, so movements on the
+     reach to grab it target .editor-scroll and their event path
+     never passes through .editor-inner at all: bound there, the
+     tracker never saw the crossing, and the outside guard below
+     (then scoped to .editor-inner) hid the grip instead. Both the
+     tracker and the guard are scoped to .editor-scroll now, the
+     container every target in the reach actually lives in. */
+  document.querySelector(".editor-scroll").addEventListener("pointermove",
     onGripHoverPointerMove);
   document.addEventListener("pointermove", function (ev) {
-    const inner = document.querySelector(".editor-inner");
-    if (inner && ev.target && !inner.contains(ev.target)) {
+    const scroll = document.querySelector(".editor-scroll");
+    if (scroll && ev.target && !scroll.contains(ev.target)) {
       hideBlockGrip();
     }
   });
