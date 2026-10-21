@@ -40,10 +40,44 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-21-SSN-V2171
-  Version: 2.17.1
+  BUILD STAMP: 2026-10-21-SSN-V2180
+  Version: 2.18.0
 
   Revision history:
+    v2.18.0 2026-10-21 Four changes. Collapse sidebar is a
+                      button now, not a menu item: the expanded
+                      sidebar's footer carries a small dark
+                      chevron button ("<", tooltip "Click to
+                      collapse") at its bottom right, and the
+                      rail's expand control is the same button
+                      showing ">" ("Click to expand") at the
+                      rail's foot; both run the one setSidebarRail
+                      path, and the three dot menu loses its
+                      Collapse item. Pasted backgrounds are
+                      stripped at both ends: the paste handler
+                      now intercepts HTML pastes and removes
+                      background styling (the background and
+                      background-* inline declarations and the
+                      bgcolor attribute) from every pasted
+                      element before insertion, so an email
+                      paste's white box never lands, and Clear
+                      formatting removes the same styling from
+                      every block it touches and everything
+                      inside them, so notes already holding a
+                      pasted background can be cleaned. The
+                      scrollbars join the theme: the app's
+                      scroll areas get thin brand green thumbs
+                      that stay transparent at rest and fade in
+                      while their area is hovered (WebKit and
+                      Firefox rules, with dark variants). And
+                      the note cards are rebuilt to Chris's
+                      mockup: a meta line (notebook name, a dot,
+                      relative updated time), a bold single
+                      line title, a single line preview, tag
+                      pills in one truncating row, and a rounded
+                      thumbnail box at the right holding the
+                      note's chosen thumbnail image, or the
+                      first attachment's type icon, or nothing.
     v2.17.1 2026-10-21 One conflict copy per divergence. When
                       a note changed somewhere else before your
                       edit saved, the app kept your version as a
@@ -1476,6 +1510,22 @@ body.dark .gate-brand .wordmark{color:#EAF3EC;}
   padding:1px 7px;font-size:16px;line-height:1;cursor:pointer;
 }
 .sidebar-menu-btn:hover{border-color:var(--accent);}
+/* v2.18: the sidebar's collapse control is a real button at the
+   foot of the expanded sidebar, right aligned under the version
+   line: a small dark rounded chip in the footer's own palette
+   (the sync pill's), carrying the "<" chevron and the tooltip
+   "Click to collapse". The rail's expand control is the same
+   chip in rail form (see the rail rules in the v2.5 block). */
+.sidebar-collapse-row{
+  display:flex;justify-content:flex-end;margin-top:10px;
+}
+.sidebar-collapse-btn{
+  background:#0A2E21;border:1px solid #2A5240;color:#EAF3EC;
+  border-radius:var(--radius-button);min-width:46px;min-height:28px;
+  padding:2px 14px;font-size:15px;font-weight:700;line-height:1;
+  cursor:pointer;
+}
+.sidebar-collapse-btn:hover{border-color:var(--accent);}
 /* v2.15 placed a labeled Refresh connection button beside the
    Synced pill here; v2.17 removed it again at Chris's word: the
    action lives in the three dot menu now, as the item under Sync
@@ -1606,10 +1656,17 @@ body.dark .filter-group-title{color:var(--accent);}
 }
 #filterClearBtn{align-self:flex-end;}
 #noteList{overflow-y:auto;flex:1;padding:10px;}
+/* v2.18: the card is a row in Chris's mockup layout: the text
+   column at the left (meta line, title, preview, tag pills)
+   and the optional thumbnail box at the right. The card was a
+   plain block through v2.17 (with a row only when a thumbnail
+   image rode along); it is a flex row always now, the column
+   taking the space the box does not. */
 .note-card{
   background:var(--surface);border:1px solid var(--border);
   border-left:3px solid transparent;border-radius:var(--radius-card);
   padding:12px 13px;margin-bottom:10px;cursor:pointer;box-shadow:none;
+  display:flex;gap:12px;align-items:flex-start;
   transition:background-color var(--motion),border-color var(--motion),
     box-shadow var(--motion);
 }
@@ -1618,18 +1675,33 @@ body.dark .filter-group-title{color:var(--accent);}
   background:var(--selected);border-color:var(--secondary);
   border-left-color:var(--accent);box-shadow:var(--shadow);
 }
-.note-card .card-title{font-weight:700;font-size:15px;line-height:1.3;
-  margin-bottom:3px;display:flex;gap:6px;align-items:flex-start;}
-.note-card .pin-mark{color:var(--secondary);font-size:12px;}
-.note-card .card-date{font-size:12px;line-height:1.35;color:var(--muted);}
-.note-card .card-snippet{
-  font-size:13px;line-height:1.45;color:var(--muted);margin-top:5px;
-  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
+/* The meta line: notebook name, a dot, the relative updated
+   time, small and muted on one truncating line. */
+.note-card .card-meta{
+  font-size:12px;line-height:1.35;color:var(--muted);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  margin-bottom:3px;
 }
-.chip-row{display:flex;flex-wrap:wrap;gap:4px;margin-top:7px;}
+.note-card .card-title{font-weight:700;font-size:15px;line-height:1.3;
+  margin-bottom:3px;display:flex;gap:6px;align-items:center;min-width:0;}
+.note-card .card-title-text{
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.note-card .pin-mark{color:var(--secondary);font-size:12px;flex:none;}
+.note-card .card-snippet{
+  font-size:13px;line-height:1.45;color:var(--muted);margin-top:4px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+/* The tag row stays one row tall: pills that do not fit are
+   cut by the row's edge rather than wrapping the card taller. */
+.chip-row{
+  display:flex;flex-wrap:nowrap;gap:4px;margin-top:7px;
+  overflow:hidden;max-height:21px;
+}
 .tag-chip{
   font-size:11px;background:var(--soft);color:var(--primary);
   border-radius:var(--radius-pill);padding:2px 7px;font-weight:600;line-height:1.35;
+  white-space:nowrap;flex:none;
 }
 body.dark .tag-chip{color:var(--accent);}
 /* v1.8.1: Trash and Archive multi select. Rows in those two views
@@ -1779,6 +1851,16 @@ body.note-drag-active{touch-action:none;overscroll-behavior:none;}
       box-shadow var(--motion);
   }
   #sidebarRail .rail-btn:hover{background:rgba(87,167,115,.16);}
+  /* v2.18: the rail's expand control is the chevron chip, the
+     same dark rounded button the expanded sidebar's footer
+     carries for collapse, showing ">" at the rail's foot. */
+  #sidebarRail .rail-expand-btn{
+    background:#0A2E21;border:1px solid #2A5240;
+    font-size:17px;font-weight:700;
+  }
+  #sidebarRail .rail-expand-btn:hover{
+    background:#0A2E21;border-color:var(--accent);
+  }
   #sidebarRail .rail-btn.active{
     background:rgba(87,167,115,.28);color:#fff;
     box-shadow:inset 3px 0 0 var(--accent);
@@ -1820,6 +1902,130 @@ body.note-drag-active{touch-action:none;overscroll-behavior:none;}
    instead of breaking the layout or sliding under the sidebar;
    vertical behavior is exactly as before. */
 .editor-scroll{overflow-y:auto;overflow-x:auto;flex:1;padding:26px 30px 40px;}
+
+/* v2.18 themed scrollbars: begin
+   The app's scroll areas wear the theme: a thin thumb in the
+   brand greens on a transparent track. At rest the thumb is
+   transparent (the bar is effectively invisible); while the
+   pointer is over the scroll area the thumb fades in, over
+   about 250ms, and resting on the thumb itself darkens it.
+   The containers are enumerated here: the notes list, the
+   editor, the sidebar and its rail, the rail flyout, and the
+   small scrolling popups and panels (tag picker, mention
+   list, note link list, filter tag list, version history,
+   toolbar menus). The page level body scrollbar is not
+   touched. Firefox takes scrollbar-width and scrollbar-color
+   (its thumb color flips on hover the same way, with the
+   color transition where the engine supports one); WebKit
+   and Chromium (Edge included) take the pseudo elements.
+   Dark mode and the always dark sidebar surfaces get a
+   slightly stronger accent so the thumb stays visible there
+   without ever shouting. */
+#noteList, .editor-scroll, #sidebar, #sidebarRail, #railFlyout,
+#tagPicker, .mention-list, .note-link-list, .filter-tag-list,
+.version-history-list, .version-preview, .tb-menu{
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+  transition: scrollbar-color 250ms ease;
+}
+#noteList:hover, .editor-scroll:hover, #tagPicker:hover,
+.mention-list:hover, .note-link-list:hover,
+.filter-tag-list:hover, .version-history-list:hover,
+.version-preview:hover, .tb-menu:hover{
+  scrollbar-color: rgba(87,167,115,.55) transparent;
+}
+#sidebar:hover, #sidebarRail:hover, #railFlyout:hover{
+  scrollbar-color: rgba(87,167,115,.65) transparent;
+}
+body.dark #noteList:hover, body.dark .editor-scroll:hover,
+body.dark #tagPicker:hover, body.dark .mention-list:hover,
+body.dark .note-link-list:hover, body.dark .filter-tag-list:hover,
+body.dark .version-history-list:hover,
+body.dark .version-preview:hover, body.dark .tb-menu:hover{
+  scrollbar-color: rgba(87,167,115,.65) transparent;
+}
+#noteList::-webkit-scrollbar, .editor-scroll::-webkit-scrollbar,
+#sidebar::-webkit-scrollbar, #sidebarRail::-webkit-scrollbar,
+#railFlyout::-webkit-scrollbar, #tagPicker::-webkit-scrollbar,
+.mention-list::-webkit-scrollbar,
+.note-link-list::-webkit-scrollbar,
+.filter-tag-list::-webkit-scrollbar,
+.version-history-list::-webkit-scrollbar,
+.version-preview::-webkit-scrollbar, .tb-menu::-webkit-scrollbar{
+  width:10px;height:10px;
+}
+#noteList::-webkit-scrollbar-track,
+.editor-scroll::-webkit-scrollbar-track,
+#sidebar::-webkit-scrollbar-track,
+#sidebarRail::-webkit-scrollbar-track,
+#railFlyout::-webkit-scrollbar-track,
+#tagPicker::-webkit-scrollbar-track,
+.mention-list::-webkit-scrollbar-track,
+.note-link-list::-webkit-scrollbar-track,
+.filter-tag-list::-webkit-scrollbar-track,
+.version-history-list::-webkit-scrollbar-track,
+.version-preview::-webkit-scrollbar-track,
+.tb-menu::-webkit-scrollbar-track{
+  background:transparent;
+}
+#noteList::-webkit-scrollbar-thumb,
+.editor-scroll::-webkit-scrollbar-thumb,
+#sidebar::-webkit-scrollbar-thumb,
+#sidebarRail::-webkit-scrollbar-thumb,
+#railFlyout::-webkit-scrollbar-thumb,
+#tagPicker::-webkit-scrollbar-thumb,
+.mention-list::-webkit-scrollbar-thumb,
+.note-link-list::-webkit-scrollbar-thumb,
+.filter-tag-list::-webkit-scrollbar-thumb,
+.version-history-list::-webkit-scrollbar-thumb,
+.version-preview::-webkit-scrollbar-thumb,
+.tb-menu::-webkit-scrollbar-thumb{
+  background-color:transparent;border-radius:8px;
+  border:2px solid transparent;background-clip:padding-box;
+  transition:background-color 250ms ease;
+}
+#noteList:hover::-webkit-scrollbar-thumb,
+.editor-scroll:hover::-webkit-scrollbar-thumb,
+#tagPicker:hover::-webkit-scrollbar-thumb,
+.mention-list:hover::-webkit-scrollbar-thumb,
+.note-link-list:hover::-webkit-scrollbar-thumb,
+.filter-tag-list:hover::-webkit-scrollbar-thumb,
+.version-history-list:hover::-webkit-scrollbar-thumb,
+.version-preview:hover::-webkit-scrollbar-thumb,
+.tb-menu:hover::-webkit-scrollbar-thumb{
+  background-color:rgba(87,167,115,.45);
+}
+#sidebar:hover::-webkit-scrollbar-thumb,
+#sidebarRail:hover::-webkit-scrollbar-thumb,
+#railFlyout:hover::-webkit-scrollbar-thumb{
+  background-color:rgba(87,167,115,.6);
+}
+body.dark #noteList:hover::-webkit-scrollbar-thumb,
+body.dark .editor-scroll:hover::-webkit-scrollbar-thumb,
+body.dark #tagPicker:hover::-webkit-scrollbar-thumb,
+body.dark .mention-list:hover::-webkit-scrollbar-thumb,
+body.dark .note-link-list:hover::-webkit-scrollbar-thumb,
+body.dark .filter-tag-list:hover::-webkit-scrollbar-thumb,
+body.dark .version-history-list:hover::-webkit-scrollbar-thumb,
+body.dark .version-preview:hover::-webkit-scrollbar-thumb,
+body.dark .tb-menu:hover::-webkit-scrollbar-thumb{
+  background-color:rgba(87,167,115,.6);
+}
+#noteList::-webkit-scrollbar-thumb:hover,
+.editor-scroll::-webkit-scrollbar-thumb:hover,
+#sidebar::-webkit-scrollbar-thumb:hover,
+#sidebarRail::-webkit-scrollbar-thumb:hover,
+#railFlyout::-webkit-scrollbar-thumb:hover,
+#tagPicker::-webkit-scrollbar-thumb:hover,
+.mention-list::-webkit-scrollbar-thumb:hover,
+.note-link-list::-webkit-scrollbar-thumb:hover,
+.filter-tag-list::-webkit-scrollbar-thumb:hover,
+.version-history-list::-webkit-scrollbar-thumb:hover,
+.version-preview::-webkit-scrollbar-thumb:hover,
+.tb-menu::-webkit-scrollbar-thumb:hover{
+  background-color:rgba(46,125,79,.85);
+}
+/* v2.18 themed scrollbars: end */
 /* A single centered reading column keeps long notes comfortable on wide
    monitors while preserving the editor behavior and field order. */
 /* v2.14: position:relative makes the inner column the positioned
@@ -2867,13 +3073,25 @@ body.dark .ss-att-provider{color:#EAF3EC;}
   display:none;
 }
 
-/* The notes list card thumbnail (Set as note thumbnail). */
-.note-card.has-thumb{display:flex;gap:11px;align-items:flex-start;}
-.note-card .card-thumb{
-  width:56px;height:56px;object-fit:cover;border-radius:8px;
-  flex:none;background:var(--soft);
-}
+/* The notes list card's text column and thumbnail box.
+   v2.11: the column existed only beside a chosen image
+   thumbnail. v2.18: the column is every card's text half, and
+   the box is a 64px rounded square at the card's right: the
+   chosen thumbnail image (or the first attachment's image)
+   fills it edge to edge; a non image attachment shows its
+   type icon centered on the soft surface; a note with no
+   attachments renders no box at all. */
 .note-card .card-main{flex:1;min-width:0;}
+.note-card .card-thumb-box{
+  width:64px;height:64px;flex:none;border-radius:10px;
+  background:var(--soft);display:flex;align-items:center;
+  justify-content:center;overflow:hidden;color:var(--secondary);
+}
+.note-card .card-thumb{
+  width:100%;height:100%;object-fit:cover;display:block;
+}
+.note-card .card-thumb-icon{display:flex;align-items:center;justify-content:center;}
+.note-card .card-thumb-icon svg{display:block;}
 
 /* The full screen image preview: a dark lightbox over everything,
    the image contained in the viewport. */
@@ -3390,7 +3608,19 @@ body.dark .version-date{color:var(--accent);}
            Refresh connection is a menu item under Sync now,
            running the same shared refresh flow; its working
            feedback is the Synced pill and the closing toast,
-           the way Sync now's has always been. -->
+           the way Sync now's has always been.
+           v2.18: Collapse sidebar leaves this menu. The menu
+           is now Sync now, Refresh connection, Install app,
+           Settings, and Sign out, and collapsing is a real
+           button at the foot of the sidebar (below, under the
+           version line): a small dark chevron chip showing
+           "<" with the tooltip "Click to collapse", right
+           aligned after the footer's divider. The rail's
+           expand control is the same chip showing ">" at the
+           rail's foot. On mobile widths the rail never shows
+           and the sidebar is the off canvas pane as always;
+           the footer button rides along in it, harmless, and
+           the pane's own close paths are untouched. -->
       <div class="sync-row">
         <div class="sync-pill" id="syncPill" data-state="idle"><span class="sync-dot" aria-hidden="true"></span><span class="sync-label">Not synced yet</span></div>
         <button class="sidebar-menu-btn" id="sidebarMenuBtn" type="button" aria-haspopup="true" aria-expanded="false" title="More actions" aria-label="More actions">&#8943;</button>
@@ -3399,7 +3629,6 @@ body.dark .version-date{color:var(--accent);}
           <button class="att-menu-item" id="sidebarRefreshItem" type="button" role="menuitem">Refresh connection</button>
           <button class="att-menu-item hidden" id="sidebarInstallItem" type="button" role="menuitem">Install app</button>
           <button class="att-menu-item" id="sidebarSettingsItem" type="button" role="menuitem">Settings</button>
-          <button class="att-menu-item" id="sidebarCollapseItem" type="button" role="menuitem">Collapse sidebar</button>
           <div class="att-menu-sep"></div>
           <button class="att-menu-item" id="sidebarSignOutItem" type="button" role="menuitem">Sign out</button>
         </div>
@@ -3408,6 +3637,13 @@ body.dark .version-date{color:var(--accent);}
       <!-- v1.6: the running app's version, written from APP_VERSION
            by the script at boot. Never hard code a version here. -->
       <div class="app-version" id="appVersion"></div>
+      <!-- v2.18: the collapse button, at the very bottom of the
+           sidebar under the footer's divider, right aligned. It
+           runs setSidebarRail, the same toggle the menu item
+           ran through v2.17. -->
+      <div class="sidebar-collapse-row">
+        <button class="sidebar-collapse-btn" id="sidebarCollapseBtn" type="button" title="Click to collapse" aria-label="Click to collapse">&lt;</button>
+      </div>
     </div>
   </aside>
 
@@ -3439,7 +3675,12 @@ body.dark .version-date{color:var(--accent);}
     <button class="rail-btn" id="railRefreshBtn" type="button" title="Refresh connection" aria-label="Refresh connection"><svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true" focusable="false"><path d="M16.5 10a6.5 6.5 0 1 1-1.9-4.6M16.7 2.8v3.4h-3.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg></button>
     <button class="rail-btn" id="railThemeBtn" type="button" title="Dark mode" aria-label="Toggle dark mode"><svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true" focusable="false"><path d="M16.8 12.6A7.5 7.5 0 1 1 7.4 3.2a6 6 0 0 0 9.4 9.4z" fill="currentColor" stroke="none"/></svg></button>
     <button class="rail-btn" id="railLockBtn" type="button" title="Sign out" aria-label="Sign out"><svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true" focusable="false"><path d="M8 3H5.5A1.5 1.5 0 0 0 4 4.5v11A1.5 1.5 0 0 0 5.5 17H8M13 6l4 4-4 4M17 10H7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg></button>
-    <button class="rail-btn" id="railExpandBtn" type="button" title="Expand sidebar" aria-label="Expand sidebar"><svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true" focusable="false"><rect x="2.5" y="3.5" width="15" height="13" rx="2" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M8 3.5v13" stroke="currentColor" stroke-width="1.7" fill="none"/></svg></button>
+    <!-- v2.18: the expand control is the chevron chip now, the
+         same dark rounded button as the expanded sidebar's
+         collapse button, showing ">" with the tooltip "Click
+         to expand", in the same bottom of the rail spot this
+         button has always held. -->
+    <button class="rail-btn rail-expand-btn" id="railExpandBtn" type="button" title="Click to expand" aria-label="Click to expand">&gt;</button>
   </aside>
 
   <!-- v2.5: the rail's Notebooks flyout. One instance, app
@@ -4341,8 +4582,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-21-SSN-V2171";
-const APP_VERSION = "2.17.1";
+const APP_BUILD = "2026-10-21-SSN-V2180";
+const APP_VERSION = "2.18.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -4592,6 +4833,31 @@ function formatDate(iso) {
     return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
   }
   return d.toLocaleDateString([], { year: "numeric", month: "short", day: "numeric" });
+}
+
+/* v2.18: the notes list card's relative updated label, in the
+   mockup's words ("18 minutes ago"): "just now" inside the
+   first minute, then minutes, hours, and days, each floored,
+   and for anything a week old or older the plain date from
+   formatDate. A time in the future reads "just now" too. */
+function relativeTimeLabel(iso) {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) { return ""; }
+  const diffMs = Date.now() - d.getTime();
+  if (diffMs < 60000) { return "just now"; }
+  const mins = Math.floor(diffMs / 60000);
+  if (mins < 60) {
+    return mins + (mins === 1 ? " minute ago" : " minutes ago");
+  }
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) {
+    return hours + (hours === 1 ? " hour ago" : " hours ago");
+  }
+  const days = Math.floor(hours / 24);
+  if (days < 7) {
+    return days + (days === 1 ? " day ago" : " days ago");
+  }
+  return formatDate(iso);
 }
 
 /* Toast messages. Every API error ends up here as readable text. */
@@ -7635,7 +7901,11 @@ function renderSidebar() {
    v2.8: the refresh and theme buttons are the exceptions by
    necessity (their counterparts moved into the Settings modal),
    and they call the shared refreshGoogleConnection and
-   toggleTheme functions directly instead. The Notebooks button is the one
+   toggleTheme functions directly instead. v2.18: the expand
+   button is a third exception, running setSidebarRail
+   directly now that its old counterpart (the footer menu's
+   Collapse item) is gone; the expanded sidebar's way in is
+   its own footer chevron button. The Notebooks button is the one
    container: it opens the flyout, whose rows are built here in
    the same pass as the sidebar's notebook rows and navigate the
    same way they do. The flyout closes on a grace timer once the
@@ -7644,11 +7914,11 @@ function renderSidebar() {
 let railFlyoutCloseTimer = null;
 
 function renderRailChrome() {
-  /* v2.7: the full sidebar's rail toggle button is gone (the
-     footer menu's Collapse sidebar item runs setSidebarRail
-     now), so there is no toggle label left to maintain here;
-     the rail's own expand icon is the way back, and it clicks
-     that same menu item. */
+  /* v2.7: the full sidebar's rail toggle button is gone, so
+     there is no toggle label left to maintain here. v2.18:
+     the way in is the expanded sidebar's footer collapse
+     button and the way back is the rail's own chevron expand
+     button at its foot; both run setSidebarRail directly. */
   const marks = [
     ["railAllBtn", state.view.kind === "all"],
     ["railPinnedBtn", state.view.kind === "pinned"],
@@ -8441,6 +8711,66 @@ async function loadListThumb(imgEl, att) {
   } catch (err) { /* no thumbnail, no error: see the comment above */ }
 }
 
+/* v2.18: the attachment a note's card shows in its thumbnail
+   box: the note's chosen thumbnail (the v2.11 front matter
+   field, an attachment id) when that record is still among
+   the note's attachments, and otherwise the note's first
+   attachment; null when the note has no attachments at all,
+   in which case the card renders no box. */
+function cardThumbnailAttachment(note) {
+  const atts = note.attachments || [];
+  if (note.thumbnail) {
+    const chosen = atts.find(function (a) {
+      return a.id === note.thumbnail;
+    });
+    if (chosen) { return chosen; }
+  }
+  return atts.length ? atts[0] : null;
+}
+
+/* v2.18: the type icon a card's thumbnail box shows for a non
+   image attachment, drawn in the current color so it takes
+   the box's brand tint: a waveform for audio (the mockup's
+   example), a play mark for video, a labeled page for PDF,
+   and a plain page for everything else. Inline SVG strings,
+   the house style for icons; these are card furniture, never
+   saved anywhere. */
+function attachmentTypeIconSvg(att) {
+  const mime = ((att && att.mime) || "").toLowerCase();
+  const open = "<svg viewBox=\"0 0 24 24\" width=\"30\" height=\"30\" " +
+    "aria-hidden=\"true\" focusable=\"false\">";
+  if (mime.indexOf("audio/") === 0) {
+    return open +
+      "<path d=\"M4 10v4M8 7v10M12 4v16M16 8v8M20 10v4\" " +
+      "stroke=\"currentColor\" stroke-width=\"2\" " +
+      "stroke-linecap=\"round\" fill=\"none\"/></svg>";
+  }
+  if (mime.indexOf("video/") === 0) {
+    return open +
+      "<rect x=\"3\" y=\"5.5\" width=\"18\" height=\"13\" rx=\"2.5\" " +
+      "fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\"/>" +
+      "<path d=\"M10.5 9.5l5 2.5-5 2.5z\" fill=\"currentColor\"/>" +
+      "</svg>";
+  }
+  if (mime === "application/pdf") {
+    return open +
+      "<path d=\"M7 3h7l4 4v14H7z\" fill=\"none\" " +
+      "stroke=\"currentColor\" stroke-width=\"1.8\" " +
+      "stroke-linejoin=\"round\"/>" +
+      "<path d=\"M14 3v4h4\" fill=\"none\" stroke=\"currentColor\" " +
+      "stroke-width=\"1.8\" stroke-linejoin=\"round\"/>" +
+      "<text x=\"12\" y=\"17.5\" text-anchor=\"middle\" " +
+      "font-size=\"5\" font-weight=\"700\" " +
+      "fill=\"currentColor\">PDF</text></svg>";
+  }
+  return open +
+    "<path d=\"M7 3h7l4 4v14H7z\" fill=\"none\" " +
+    "stroke=\"currentColor\" stroke-width=\"1.8\" " +
+    "stroke-linejoin=\"round\"/>" +
+    "<path d=\"M14 3v4h4\" fill=\"none\" stroke=\"currentColor\" " +
+    "stroke-width=\"1.8\" stroke-linejoin=\"round\"/></svg>";
+}
+
 function renderNoteList() {
   const viewKey = state.view.kind + ":" + (state.view.value || "");
   if (lastRenderedListViewKey !== null &&
@@ -8526,23 +8856,24 @@ function renderNoteList() {
       picker.appendChild(box);
       card.appendChild(picker);
     }
-    /* v2.11: the card's main column. With a thumbnail the card
-       becomes a row (thumb at the side, this column beside it);
-       without one the column IS the card, exactly as before. */
-    let main = card;
-    const thumbAtt = note.thumbnail ? (note.attachments || [])
-      .find(function (a) { return a.id === note.thumbnail; }) : null;
-    if (thumbAtt && isImageAttachment(thumbAtt)) {
-      card.classList.add("has-thumb");
-      const thumb = document.createElement("img");
-      thumb.className = "card-thumb";
-      thumb.alt = "";
-      card.appendChild(thumb);
-      loadListThumb(thumb, thumbAtt);
-      main = document.createElement("div");
-      main.className = "card-main";
-      card.appendChild(main);
-    }
+    /* v2.18: the card's text column, in the mockup's order: the
+       meta line (notebook name, a dot, relative updated time),
+       the bold title, the one line preview, and the tag pills.
+       The column is every card's left half now (through v2.17
+       it existed only beside a chosen image thumbnail); the
+       thumbnail box, when the note has one, is appended to
+       the card after the column, which puts it at the right. */
+    const main = document.createElement("div");
+    main.className = "card-main";
+    card.appendChild(main);
+
+    const meta = document.createElement("div");
+    meta.className = "card-meta";
+    const metaNb = notebookNameForNote(note);
+    const metaWhen = relativeTimeLabel(note.updated);
+    meta.textContent = metaNb ? metaNb + " · " + metaWhen : metaWhen;
+    main.appendChild(meta);
+
     const titleRow = document.createElement("div");
     titleRow.className = "card-title";
     if (note.pinned && !note.trashed && !note.archived) {
@@ -8552,14 +8883,10 @@ function renderNoteList() {
       titleRow.appendChild(pin);
     }
     const titleText = document.createElement("span");
+    titleText.className = "card-title-text";
     titleText.textContent = note.title || "Untitled note";
     titleRow.appendChild(titleText);
     main.appendChild(titleRow);
-
-    const date = document.createElement("div");
-    date.className = "card-date";
-    date.textContent = formatDate(note.updated);
-    main.appendChild(date);
 
     const snippetText = htmlToText(note.body).slice(0, 140);
     if (snippetText) {
@@ -8578,6 +8905,34 @@ function renderNoteList() {
         row.appendChild(chip);
       });
       main.appendChild(row);
+    }
+
+    /* v2.18: the thumbnail box. The attachment it shows is the
+       note's chosen thumbnail (the v2.11 front matter field)
+       when that record is still on the note, and otherwise
+       the note's first attachment; a note with neither renders
+       no box at all. An image fills the box through the same
+       loadListThumb path the chosen thumbnail always used;
+       anything else shows its attachment type icon centered
+       (the audio waveform in Chris's mockup). */
+    const cardAtt = cardThumbnailAttachment(note);
+    if (cardAtt) {
+      const box = document.createElement("div");
+      box.className = "card-thumb-box";
+      if (isImageAttachment(cardAtt)) {
+        const thumb = document.createElement("img");
+        thumb.className = "card-thumb";
+        thumb.alt = "";
+        box.appendChild(thumb);
+        loadListThumb(thumb, cardAtt);
+      } else {
+        const icon = document.createElement("span");
+        icon.className = "card-thumb-icon";
+        icon.setAttribute("aria-hidden", "true");
+        icon.innerHTML = attachmentTypeIconSvg(cardAtt);
+        box.appendChild(icon);
+      }
+      card.appendChild(box);
     }
     card.addEventListener("click", function () { openNote(note.id); });
     listEl.appendChild(card);
@@ -9038,9 +9393,11 @@ function toggleNotebookMenu() {
    v2.8: Refresh connection and Dark mode left this menu for the
    Settings modal (see the v2.8 block below). v2.17: Refresh
    connection is back in this menu, under Sync now (Dark mode
-   stays in Settings); the menu now holds Sync now, Refresh
+   stays in Settings); the menu then held Sync now, Refresh
    connection, Install app, Settings, Collapse sidebar, and
-   Sign out.
+   Sign out. v2.18: Collapse sidebar leaves the menu for the
+   footer's chevron button, so the menu now holds Sync now,
+   Refresh connection, Install app, Settings, and Sign out.
    -------------------------------------------------------------------------- */
 function openSidebarMenu() {
   const menu = document.getElementById("sidebarMenu");
@@ -17143,6 +17500,82 @@ function spanHasBackground(span) {
     .toLowerCase().indexOf("background") !== -1;
 }
 
+/* v2.18: remove the background styling from ONE element: the
+   background shorthand and every background-* declaration in
+   its inline style, plus the bgcolor attribute. Every other
+   declaration (font, size, color, margins) is preserved word
+   for word, and a style attribute the cleaning empties is
+   removed outright. The declaration filter works on the
+   attribute text rather than the CSSOM, so exactly the same
+   cleaning happens in every engine: this is the fix for
+   Chris's email pastes, whose white background rides on the
+   pasted paragraphs themselves, where neither removeFormat
+   nor the highlight clearer ever reaches. */
+function cleanBackgroundFromElement(el) {
+  if (!el || el.nodeType !== 1) { return; }
+  if (el.hasAttribute && el.hasAttribute("bgcolor")) {
+    el.removeAttribute("bgcolor");
+  }
+  const style = el.getAttribute ? el.getAttribute("style") : null;
+  if (!style || style.toLowerCase().indexOf("background") === -1) {
+    return;
+  }
+  const kept = [];
+  style.split(";").forEach(function (decl) {
+    const text = decl.trim();
+    if (!text) { return; }
+    const colon = text.indexOf(":");
+    const prop = (colon === -1 ? text : text.slice(0, colon))
+      .trim().toLowerCase();
+    if (prop === "background" || prop.indexOf("background-") === 0) {
+      return;
+    }
+    kept.push(text);
+  });
+  if (kept.length) {
+    el.setAttribute("style", kept.join("; ") + ";");
+  } else {
+    el.removeAttribute("style");
+  }
+}
+
+/* v2.18: clean every element in a list of roots, each root and
+   all its descendants. Elements inside an attachment block
+   are skipped: an attachment's faces are runtime furniture
+   rebuilt on every render, never saved styling, and a paste
+   or a clear that carried one along must not reach inside
+   it. Shared by the paste sanitizer and the clear formatting
+   cure below. */
+function cleanBackgroundsInRoots(roots) {
+  (roots || []).forEach(function (root) {
+    if (!root || root.nodeType !== 1) { return; }
+    if (root.closest && root.closest(".ss-attachment")) { return; }
+    cleanBackgroundFromElement(root);
+    root.querySelectorAll("*").forEach(function (el) {
+      if (el.closest && el.closest(".ss-attachment")) { return; }
+      cleanBackgroundFromElement(el);
+    });
+  });
+}
+
+/* v2.18: the paste time half of the background fix. An HTML
+   fragment from the clipboard (an email client's paragraphs
+   above all) is parsed into a detached holder, every element
+   in it is cleaned of background styling, and the cleaned
+   fragment is what the paste handler inserts. Everything
+   else about the paste (fonts, sizes, bold, links, tables)
+   passes through exactly as it arrived. */
+function stripPastedBackgrounds(htmlText) {
+  const holder = document.createElement("div");
+  holder.innerHTML = htmlText;
+  /* The holder's children are the fragment's top level
+     elements; as roots they carry every nested element with
+     them, so this one walk covers the whole fragment. */
+  cleanBackgroundsInRoots(
+    Array.prototype.slice.call(holder.children));
+  return holder.innerHTML;
+}
+
 /* v2.6.0: remove background styling from exactly the part of the
    body the range covers. For every text node the range touches,
    each background carrying span above it is split around the node
@@ -17259,6 +17692,18 @@ function clearFormattingExtended() {
   const range0 = (sel0 && sel0.rangeCount) ? sel0.getRangeAt(0) : null;
   const touchedBefore = clearTouchedTopBlocks(bodyEl, range0);
   const plan = clearConversionPlan(bodyEl, range0, touchedBefore);
+  /* v2.18: the operation also strips background styling (the
+     cleanBackgroundsInRoots pass) from every touched top
+     level block and all its descendants: the cure half of
+     the paste background fix. A background that arrived on a
+     pasted paragraph lives on the block itself, where
+     removeFormat does not reach (Chris's report: the white
+     box behind email text could not be reset even with
+     Remove Formatting). The pass runs here, on the blocks as
+     captured, and again after the conversions, because an
+     engine's formatBlock may rebuild a block and carry its
+     attributes onto the replacement. */
+  cleanBackgroundsInRoots(touchedBefore);
   document.execCommand("removeFormat", false, null);
   const sel = window.getSelection();
   if (sel && sel.rangeCount) {
@@ -17279,6 +17724,15 @@ function clearFormattingExtended() {
     }
   }
   plan.forEach(function (entry) { clearApplyConversion(entry); });
+  /* v2.18: the second background pass, over the touched blocks
+     that survived and whatever blocks the conversions left
+     the selection in (a rebuilt block can carry the old
+     block's background with it; see the header note). */
+  const selAfter = window.getSelection();
+  const rangeAfter = (selAfter && selAfter.rangeCount)
+    ? selAfter.getRangeAt(0) : null;
+  cleanBackgroundsInRoots(touchedBefore.concat(
+    clearTouchedTopBlocks(bodyEl, rangeAfter)));
   clearFormattingNormalize(bodyEl, touchedBefore);
 }
 
@@ -23158,9 +23612,12 @@ function wireEvents() {
     closeSidebarMenu();
     signOut().catch(function (err) { toast(err.message, true); });
   });
-  document.getElementById("sidebarCollapseItem").addEventListener("click", function () {
-    closeSidebarMenu();
-    setSidebarRail(!state.sidebarRail);
+  /* v2.18: collapse is the footer's chevron button, not a menu
+     item. It runs the same setSidebarRail toggle the item ran
+     (the rail's expand button below runs it back), with the
+     same settings persistence inside setSidebarRail. */
+  document.getElementById("sidebarCollapseBtn").addEventListener("click", function () {
+    setSidebarRail(true);
   });
 
   /* v2.8: the Settings modal's own controls, following the note
@@ -23365,14 +23822,21 @@ function wireEvents() {
      the flyout on hover or click; leaving the button or the
      flyout starts the grace close (scheduleRailFlyoutClose), and
      the flyout's New Notebook entry clicks the sidebar's add
-     button, then closes. */
+     button, then closes. v2.18: the expand button leaves the
+     click through list: its old counterpart, the footer's
+     Collapse sidebar menu item, is gone, and the button now
+     runs setSidebarRail directly, the same single toggle the
+     new footer collapse button runs. */
   [["railNewNoteBtn", "newNoteBtn"], ["railAllBtn", "navAll"],
    ["railPinnedBtn", "navPinned"], ["railTrashBtn", "navTrash"],
-   ["railArchiveBtn", "navArchive"], ["railLockBtn", "sidebarSignOutItem"],
-   ["railExpandBtn", "sidebarCollapseItem"]].forEach(function (pair) {
+   ["railArchiveBtn", "navArchive"], ["railLockBtn", "sidebarSignOutItem"]
+   ].forEach(function (pair) {
     document.getElementById(pair[0]).addEventListener("click", function () {
       document.getElementById(pair[1]).click();
     });
+  });
+  document.getElementById("railExpandBtn").addEventListener("click", function () {
+    setSidebarRail(false);
   });
   document.getElementById("railRefreshBtn").addEventListener("click", function () {
     refreshGoogleConnection().catch(function (err) { toast(err.message, true); });
@@ -24092,8 +24556,17 @@ function wireEvents() {
     }
   });
 
-  /* v1.2 paste: image files on the clipboard become attachments. Plain
-     text and HTML pastes fall through to the normal editor behavior. */
+  /* v1.2 paste: image files on the clipboard become attachments.
+     v2.18: HTML pastes are intercepted too, so their background
+     styling can be stripped before the content lands (see
+     stripPastedBackgrounds): a paste from an email client
+     otherwise brings the message's white background with it,
+     painted on the pasted paragraphs, where no formatting
+     command could reach it. The cleaned fragment goes in
+     through the same insertHTML the browser's own paste would
+     use, and everything else about the paste is preserved.
+     Plain text pastes (no HTML on the clipboard) still fall
+     through to the normal editor behavior. */
   noteBodyEl.addEventListener("paste", function (ev) {
     const files = ev.clipboardData ? ev.clipboardData.files : null;
     if (files && files.length) {
@@ -24102,6 +24575,20 @@ function wireEvents() {
       handleIncomingFiles(files).catch(function (err) {
         toast("Attach failed: " + err.message, true);
       });
+      return;
+    }
+    let htmlText = "";
+    try {
+      htmlText = (ev.clipboardData &&
+        typeof ev.clipboardData.getData === "function")
+        ? ev.clipboardData.getData("text/html") : "";
+    } catch (e) { htmlText = ""; }
+    if (htmlText) {
+      ev.preventDefault();
+      captureCaret();
+      document.execCommand("insertHTML", false,
+        stripPastedBackgrounds(htmlText));
+      markDirty();
     }
   });
 
