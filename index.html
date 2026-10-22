@@ -40,10 +40,49 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-21-SSN-V2180
-  Version: 2.18.0
+  BUILD STAMP: 2026-10-22-SSN-V2190
+  Version: 2.19.0
 
   Revision history:
+    v2.19.0 2026-10-22 Conflict hardening. The v2.17.1 rule
+                      capped conflict copies at one per
+                      divergence, but a copy could still be
+                      forked by a session that never edited
+                      the note: the autosave had no content
+                      gate, so a save fired for an untouched
+                      open note ran the full write path with
+                      whatever revision that session held,
+                      and no point in the save path compared
+                      content, so any revision mismatch forked
+                      a copy even when the words being saved
+                      were identical to the words already
+                      stored. Two fixes. First, untouched
+                      notes are never written: the editor
+                      autosave compares the collected content
+                      against the note's last saved baseline
+                      in full (title, body, tags, attachment
+                      records, pin, and thumbnail, the last
+                      two now carried in the content snapshot)
+                      and a match ends the save before any
+                      write or queue entry; a queued offline
+                      put whose content the store already
+                      holds is likewise consumed quietly at
+                      flush time. Second, content is compared
+                      before any conflict copy: at the
+                      pre-write revision check, in the
+                      409/422 catch, and in the flush conflict
+                      branch, the freshly fetched stored
+                      content is compared against the content
+                      being saved (bookkeeping fields excluded,
+                      since every save re-stamps the updated
+                      field and byte equality could never
+                      match), and identical content adopts the
+                      fresh revision silently, no write, no
+                      copy, no pause, no banner. A genuine
+                      divergence, different words on both
+                      sides, is untouched: exactly one copy,
+                      the pause, and Reload note, as v2.17.1
+                      left them.
     v2.18.0 2026-10-21 Four changes. Collapse sidebar is a
                       button now, not a menu item: the expanded
                       sidebar's footer carries a small dark
@@ -4582,8 +4621,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-21-SSN-V2180";
-const APP_VERSION = "2.18.0";
+const APP_BUILD = "2026-10-22-SSN-V2190";
+const APP_VERSION = "2.19.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -5487,9 +5526,21 @@ function cloneVersionValue(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
-/* The content snapshot of one note: exactly the fields a version
-   preserves. Attachments are sanitized and cloned, so a snapshot
-   can never be mutated by later work on the note object. */
+/* The content snapshot of one note: the fields a version
+   preserves, plus (v2.19) the pin and the thumbnail. Those
+   two are stored note content too, and they change through
+   their own paths (the pin through its list menu save, the
+   thumbnail through the autosave itself), so the save
+   machinery's full content questions, the v2.19 autosave
+   gate and the conflict content comparison, need them in
+   the snapshot beside title, body, tags, and attachments.
+   Version entries keep carrying only their four named
+   fields: maintainVersionHistory picks them out of the
+   snapshot by name, so the extra fields ride along in
+   snapshots and queued history entries without ever
+   reaching a stored version. Attachments are sanitized
+   and cloned, so a snapshot can never be mutated by later
+   work on the note object. */
 function noteContentSnapshot(note) {
   if (!note) { return null; }
   return {
@@ -5497,7 +5548,9 @@ function noteContentSnapshot(note) {
     body: String(note.body || ""),
     tags: (Array.isArray(note.tags) ? note.tags : [])
       .map(function (t) { return String(t); }),
-    attachments: sanitizeAttachments(cloneVersionValue(note.attachments || []))
+    attachments: sanitizeAttachments(cloneVersionValue(note.attachments || [])),
+    pinned: !!note.pinned,
+    thumbnail: note.thumbnail || null
   };
 }
 
@@ -5558,6 +5611,48 @@ function versionTextContentEqual(a, b) {
   if (!a || !b) { return false; }
   return a.title === b.title && a.body === b.body &&
     JSON.stringify(a.tags || []) === JSON.stringify(b.tags || []);
+}
+
+/* v2.19: content equivalence between two note shaped objects
+   (a live note and a freshly parsed stored file, or two parsed
+   files): the conflict rule's content question. Everything
+   that makes the note the note is compared: title, body,
+   tags, the pin, the thumbnail, the attachment records, and
+   the notebook. The bookkeeping fields are excluded on
+   purpose: the id (the same file either way), created and
+   updated (every save re-stamps updated before serializing,
+   so two saves of the same words never carry the same value;
+   it was exactly that re-stamp that made byte comparison
+   useless here), the storage revision, and list placement
+   (trash and archive files live at their own paths and never
+   reach this comparison). */
+function noteContentEquivalent(a, b) {
+  if (!a || !b) { return false; }
+  return String(a.title || "") === String(b.title || "") &&
+    String(a.body || "") === String(b.body || "") &&
+    JSON.stringify(a.tags || []) === JSON.stringify(b.tags || []) &&
+    !!a.pinned === !!b.pinned &&
+    (a.thumbnail || null) === (b.thumbnail || null) &&
+    String(a.notebook || "") === String(b.notebook || "") &&
+    JSON.stringify(sanitizeAttachments(a.attachments || [])) ===
+      JSON.stringify(sanitizeAttachments(b.attachments || []));
+}
+
+/* v2.19: does this note, exactly as it stands now, match its
+   last saved baseline in full? The baseline is the v2.8
+   snapshot map, extended in this build with the pin and the
+   thumbnail, the two stored fields that travel outside
+   title, body, and tags. A note with no baseline was never
+   loaded or saved in this session (a first save, above all)
+   and is never called unchanged. */
+function noteMatchesLastSaved(note) {
+  if (!note) { return false; }
+  const baseline = lastSavedContentByNoteId[note.id];
+  if (!baseline) { return false; }
+  const snap = noteContentSnapshot(note);
+  return versionContentEqual(snap, baseline) &&
+    snap.pinned === baseline.pinned &&
+    snap.thumbnail === baseline.thumbnail;
 }
 
 function versionHistoryLoadError(message) {
@@ -6635,6 +6730,95 @@ async function reloadDivergedNote(noteId) {
   toast("Note reloaded from " + storageDisplayName() + ".");
 }
 
+/* v2.19: the tail of a save whose content is current in the
+   store, shared by the ordinary landed write in
+   saveNoteToRepoNow and by the silent adoption below:
+   version history maintenance for the content that just
+   became current (it runs when this save changed content,
+   when a lowered limit is waiting to prune this note, or
+   when the note's history is already loaded in this
+   session), then the baseline and cache updates every
+   landed save performs. Maintenance is fail soft by
+   design: a history that cannot be loaded safely is left
+   untouched, and the note save still stands. Returns the
+   version status the save result carries. saveFacts is
+   the bundle saveNoteToRepoNow computed before its write:
+   {previousSavedContent, candidateContent,
+   versionContentChanged, suppressVersionCapture}. */
+async function finishLandedNoteSave(note, path, saveFacts) {
+  let versionStatus = null;
+  if (!saveFacts.suppressVersionCapture && saveFacts.previousSavedContent &&
+      (saveFacts.versionContentChanged ||
+       versionHistoryPruneNeeded.has(note.id) ||
+       versionHistoryCache[note.id])) {
+    const versionResult = await maintainVersionHistory(note.id,
+      saveFacts.previousSavedContent, {
+        contentChanged: saveFacts.versionContentChanged,
+        notePath: path
+      });
+    versionStatus = versionResult.status;
+    if (versionStatus !== "skipped-load" &&
+        versionStatus !== "write-failed" &&
+        versionStatus !== "delete-failed") {
+      versionHistoryPruneNeeded.delete(note.id);
+    }
+    if (versionStatus === "skipped-load" ||
+        versionStatus === "write-failed" ||
+        versionStatus === "delete-failed" ||
+        versionStatus === "skipped-conflict") {
+      console.warn("Version history was not updated for note " +
+        note.id + " (" + versionStatus + ").");
+    }
+  }
+  rememberLastSavedSnapshot(note.id, saveFacts.candidateContent);
+  saveCache();
+  return versionStatus;
+}
+
+/* v2.19: when a save finds the file's revision advanced,
+   the question that decides between a conflict copy and a
+   quiet finish is whether the CONTENT actually differs.
+   Through v2.18 the revision alone decided, so a session
+   saving exactly the words already stored (an idle device
+   holding the note open while another device saved the
+   same text, an unconditional save of an untouched note, a
+   write that raced an identical save in the gap) forked a
+   conflict copy for a divergence that never happened.
+   This helper asks the content question: it compares the
+   freshly fetched stored file against the note being
+   saved with noteContentEquivalent (bookkeeping fields
+   excluded; raw bytes could never answer, since every
+   save re-stamps the updated field before serializing).
+   When the contents are equivalent, the fresh revision
+   token is adopted into note.sha and the save completes
+   as a silent success through the same landed tail an
+   ordinary write runs: NO write of its own, NO copy, NO
+   diverged mark, NO banner. When they genuinely differ,
+   or the current file cannot be read, it returns null
+   and the caller runs the unchanged keep both copies
+   rule. prefetched is a storeGetFile result the caller
+   may already hold (the pre-write check fetches it
+   anyway); the write conflict catch passes null and the
+   current file is fetched here. */
+async function adoptStoredRevisionIfContentEqual(note, path, saveFacts,
+    prefetched) {
+  let fresh = prefetched || null;
+  if (!fresh) {
+    try {
+      fresh = await storeGetFile(path);
+    } catch (err) {
+      return null;
+    }
+  }
+  if (!fresh) { return null; }
+  const stored = parseNoteFile(fresh.text, fresh.token, note.id,
+    note.trashed, note.archived);
+  if (!noteContentEquivalent(stored, note)) { return null; }
+  note.sha = fresh.token;
+  const versionStatus = await finishLandedNoteSave(note, path, saveFacts);
+  return { saved: true, adopted: true, versionStatus: versionStatus };
+}
+
 /* Save one note to the repo, with the critical conflict rule:
    BEFORE writing, fetch the file fresh and compare its sha with the sha
    the editor loaded. If they differ, someone (or another device) changed
@@ -6645,6 +6829,12 @@ async function reloadDivergedNote(noteId) {
    v2.17.1: a save that forks a copy also marks the note diverged
    (see the divergence block above), so its later saves pause
    instead of forking a copy per save.
+   v2.19: a differing sha is a question, not a verdict: at both
+   decision points (the pre-write comparison and the 409/422
+   catch) the freshly fetched stored content is compared
+   against the content being saved first, and identical
+   content adopts the fresh revision silently instead of
+   forking a copy (see adoptStoredRevisionIfContentEqual).
    When offline, the write is queued instead and the note keeps a dirty
    marker in the cache.
    This is the worker behind saveNoteToRepo above, which serializes
@@ -6680,6 +6870,15 @@ async function saveNoteToRepoNow(note, options) {
   const versionContentChanged = !!previousSavedContent &&
     !versionTextContentEqual(previousSavedContent, candidateContent);
   const suppressVersionCapture = !!options.suppressVersionCapture;
+  /* v2.19: the facts the landed tail and the silent
+     adoption share, bundled once (see finishLandedNoteSave
+     and adoptStoredRevisionIfContentEqual above). */
+  const saveFacts = {
+    previousSavedContent: previousSavedContent,
+    candidateContent: candidateContent,
+    versionContentChanged: versionContentChanged,
+    suppressVersionCapture: suppressVersionCapture
+  };
   note.updated = new Date().toISOString();
   const path = notePath(note);
   const text = serializeNote(note);
@@ -6705,6 +6904,14 @@ async function saveNoteToRepoNow(note, options) {
     if (shaToUse && !options.skipConflictCheck) {
       const fresh = await storeGetFile(path);
       if (fresh && fresh.token !== shaToUse) {
+        /* v2.19: the revision advanced; ask the content
+           question before forking anything. Identical
+           content is an echo, not a divergence: adopt the
+           fresh token and finish silently. Genuinely
+           different content keeps the rule below. */
+        const adopted = await adoptStoredRevisionIfContentEqual(
+          note, path, saveFacts, fresh);
+        if (adopted) { return adopted; }
         return await saveConflictCopy(note, path);
       }
       if (!fresh) { shaToUse = null; }
@@ -6719,42 +6926,25 @@ async function saveNoteToRepoNow(note, options) {
       (shaToUse ? "Update note " : "Create note ") + note.id,
       { fresh: !!options.fresh });
     note.sha = newSha;
-    /* v2.8: the note write landed, so its history maintenance may
-       run. It runs when this save changed content, when a lowered
-       limit is waiting to prune this note, or when the note's
-       history is already loaded in this session (which keeps a
-       lowered limit's pruning timely without reading Drive on
-       every unchanged save). Maintenance is fail soft by design:
-       a history that cannot be loaded safely is left untouched,
-       and the note save still stands. */
-    let versionStatus = null;
-    if (!suppressVersionCapture && previousSavedContent &&
-        (versionContentChanged || versionHistoryPruneNeeded.has(note.id) ||
-         versionHistoryCache[note.id])) {
-      const versionResult = await maintainVersionHistory(note.id,
-        previousSavedContent, {
-          contentChanged: versionContentChanged,
-          notePath: path
-        });
-      versionStatus = versionResult.status;
-      if (versionStatus !== "skipped-load" &&
-          versionStatus !== "write-failed" &&
-          versionStatus !== "delete-failed") {
-        versionHistoryPruneNeeded.delete(note.id);
-      }
-      if (versionStatus === "skipped-load" ||
-          versionStatus === "write-failed" ||
-          versionStatus === "delete-failed" ||
-          versionStatus === "skipped-conflict") {
-        console.warn("Version history was not updated for note " +
-          note.id + " (" + versionStatus + ").");
-      }
-    }
-    rememberLastSavedSnapshot(note.id, candidateContent);
-    saveCache();
+    /* v2.8: the note write landed, so its history maintenance
+       may run (inside finishLandedNoteSave, the landed tail
+       this write and the v2.19 silent adoption share). */
+    const versionStatus = await finishLandedNoteSave(note, path,
+      saveFacts);
     return { saved: true, versionStatus: versionStatus };
   } catch (err) {
     if (isStoreConflict(err) || err.status === 409 || err.status === 422) {
+      /* v2.19: the write raced a change in the gap since the
+         pre-write check; ask the content question here too
+         before forking. The file may have advanced to
+         exactly the content this save carries (another
+         session saving the same words), which adopts
+         silently like the pre-write echo. A failed fetch or
+         genuinely different content falls through to the
+         keep both copies rule, unchanged. */
+      const adopted = await adoptStoredRevisionIfContentEqual(
+        note, path, saveFacts, null);
+      if (adopted) { return adopted; }
       return await saveConflictCopy(note, path);
     }
     if (err.needsGoogleReconnect) {
@@ -6917,7 +7107,40 @@ async function flushQueue() {
         const existing = await storeGetFile(op.path);
         const localNote = findNoteById(op.noteId);
         const loadedSha = localNote ? localNote.sha : null;
-        if (existing && loadedSha && existing.token !== loadedSha &&
+        /* v2.19: a queued put whose content the store already
+           holds is neither a conflict nor a write: the change
+           it carries has landed by another path, or was never
+           a change at all (an untouched note saved while
+           offline, say). It is consumed quietly and the
+           stored revision adopted, where through v2.18 the
+           same entry either overwrote the file with identical
+           bytes or, when this session's revision had drifted,
+           forked a conflict copy for a divergence that never
+           happened. The comparison is the save path's content
+           equivalence, the queued text against the stored
+           text: never against this session's baseline, which
+           the queueing save itself already advanced past the
+           queued content. Trash and archive puts are moves
+           and stay exempt, exactly as in the conflict branch
+           below. */
+        let putAlreadyLanded = false;
+        if (existing && op.noteId &&
+            !op.path.startsWith("trash/") &&
+            !op.path.startsWith("archive/")) {
+          const storedParsed = parseNoteFile(existing.text,
+            existing.token, op.noteId, false);
+          const queuedParsed = parseNoteFile(op.content, null,
+            op.noteId, false);
+          if (noteContentEquivalent(storedParsed, queuedParsed)) {
+            putAlreadyLanded = true;
+            if (localNote && notePath(localNote) === op.path) {
+              localNote.sha = existing.token;
+            }
+          }
+        }
+        if (putAlreadyLanded) {
+          /* Consumed: nothing written, nothing forked. */
+        } else if (existing && loadedSha && existing.token !== loadedSha &&
             !op.path.startsWith("trash/") &&
             !op.path.startsWith("archive/")) {
           /* The repo version changed while offline. Keep both copies.
@@ -16547,6 +16770,37 @@ const autosave = debounce(async function () {
   const previousPath = notePath(note);
   const previousNotebook = note.notebook;
   collectEditor(note);
+  /* v2.19: the untouched note gate. When the collected
+     content matches the note's last saved baseline in full
+     (title, body, tags, attachment records, pin, and
+     thumbnail: noteMatchesLastSaved), this save has nothing
+     to write, so it writes nothing: no Drive write, no
+     queued put when offline, no version churn, and above
+     all no conflict copy from a session that merely holds
+     the note open with a stale revision while another
+     device edits it, which is how a copy could be forked
+     by a device its owner never typed on. The gate is
+     deliberately here and in flushQueue, not in the save
+     worker: the worker cannot tell an untouched editor
+     save from a deliberate metadata save (a pin toggle's
+     own save carries text identical to its baseline), and
+     those must never be gated. Metadata that travels
+     through THIS autosave is safe by construction: a tag
+     or title edit changes the compared fields, and the
+     thumbnail rides the snapshot, so real changes pass
+     the gate and only true no-ops stop here. The path
+     check keeps a pending notebook settle out of the
+     gate's reach (moves run their own save through
+     saveNoteAndSettleMove directly and never depend on
+     this one), and a note with no baseline is never
+     gated, so a first save always runs. */
+  if (notePath(note) === previousPath && noteMatchesLastSaved(note)) {
+    setSaveState("Saved " + new Date().toLocaleTimeString([], {
+      hour: "numeric", minute: "2-digit" }));
+    renderSidebar();
+    renderNoteList();
+    return;
+  }
   setSaveState("Saving...");
   try {
     const result = await saveNoteAndSettleMove(note, previousPath);
