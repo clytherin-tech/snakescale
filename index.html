@@ -40,10 +40,46 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-22-SSN-V2190
-  Version: 2.19.0
+  BUILD STAMP: 2026-10-22-SSN-V2200
+  Version: 2.20.0
 
   Revision history:
+    v2.20.0 2026-10-22 A catalog for the list, and a drop box
+                      for outside notes. The notes list used to
+                      download every note file on every load just
+                      to draw its cards. Now the app keeps a
+                      small catalog.json at the store root (the
+                      same kind of rebuildable cache index.json
+                      has always been for the notebook list):
+                      each load reads the catalog, lists the
+                      folders' metadata, and trusts every entry
+                      whose revision still matches its file, so
+                      unchanged notes cost no body download at
+                      all and the list renders from the catalog.
+                      A note's body is fetched the first time it
+                      is opened, saved, or moved (a "shell" until
+                      then), and any surprise (a missing or
+                      damaged catalog, a changed file, a vanished
+                      one) falls back to downloading what it
+                      must, or the whole store, exactly as
+                      before. The note files themselves remain
+                      the only source of truth. Beside it,
+                      incoming.json is a drop box that works
+                      around the drive.file visibility rule:
+                      the app can only see files it created, so
+                      a note file uploaded by another tool never
+                      appears, but the content of an app created
+                      file is readable whoever wrote it. Other
+                      tools (Sarah, through the Drive connector)
+                      now write complete note files into the
+                      box; each sync imports them as ordinary
+                      app created notes, skipping duplicates,
+                      reporting what it did, and leaving
+                      malformed entries in the box's rejected
+                      list with a reason instead of retrying
+                      them forever. Attachments cannot travel
+                      through the box yet; the README documents
+                      the format.
     v2.19.0 2026-10-22 Conflict hardening. The v2.17.1 rule
                       capped conflict copies at one per
                       divergence, but a copy could still be
@@ -4621,8 +4657,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-22-SSN-V2190";
-const APP_VERSION = "2.19.0";
+const APP_BUILD = "2026-10-22-SSN-V2200";
+const APP_VERSION = "2.20.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -4767,6 +4803,11 @@ const state = {
                     with the provider, never in the notes store
      sha:       string|null,  storage sync token of the file as last loaded
                     (a Google Drive revision token)
+     bodyLoaded: boolean,     (v2.20) false only for a catalog shell:
+                    body is null and the body is fetched on first use
+     previewText: string|null, (v2.20) a shell's card preview, from the
+                    catalog; loaded notes leave it null
+     fileId:    string|null,  (v2.20) the Drive file id, when resolved
      trashed:   boolean,
      trashedFrom: string|null  notebook slug the note was trashed from
      archived:  boolean,       (v1.5)
@@ -5136,6 +5177,8 @@ async function signOut() {
   /* v2.8: histories and baselines belong to the signed in account;
      none of them may leak into the next sign in on this device. */
   clearVersionRuntimeState();
+  /* v2.20: the catalog and drop box session state goes with them. */
+  resetCatalogRuntimeState();
   /* v2.15: signing out cancels the pending automatic renewal,
      so no silent ask can resurrect the session just left. */
   clearGoogleRenewalTimer();
@@ -5361,7 +5404,21 @@ async function storeEncryptedCache(snapshot, key, generation) {
   }));
 }
 
+/* v2.20: saveCache is the one call every mutation path already
+   makes when state changes, so it doubles as the catalog
+   maintenance hook: the local cache write runs exactly as
+   before, and the catalog writer is scheduled behind it
+   (debounced, change tested, and inert until this session's
+   first store load has armed it; see the v2.20 section). The
+   catalog snapshot is built when the write actually runs, so a
+   burst of saves costs at most one catalog write, and a failed
+   one is swallowed there, never here. */
 function saveCache() {
+  writeLocalCache();
+  saveCatalog();
+}
+
+function writeLocalCache() {
   const snapshot = cacheSnapshot();
   if (state.sessionKey) {
     const key = state.sessionKey;
@@ -5568,13 +5625,20 @@ function forgetLastSavedContent(noteId) {
 }
 /* Rebuild the baseline map from the three note lists. Called
    after every load (cache or store), because the loaded objects
-   ARE the last saved state at that moment. */
+   ARE the last saved state at that moment.
+   v2.20: catalog shells are skipped. A shell has no body, so a
+   baseline built from it would snapshot an empty body the note
+   does not have; ensureNoteBodyLoaded seeds the real baseline
+   when the shell's file is fetched. */
 function rememberLastSavedContentForAllNotes() {
   Object.keys(lastSavedContentByNoteId).forEach(function (id) {
     delete lastSavedContentByNoteId[id];
   });
   [state.notes, state.trash, state.archive].forEach(function (list) {
-    (list || []).forEach(function (note) { rememberLastSavedContent(note); });
+    (list || []).forEach(function (note) {
+      if (note.bodyLoaded === false) { return; }
+      rememberLastSavedContent(note);
+    });
   });
 }
 function clearVersionHistoryCache() {
@@ -5964,7 +6028,13 @@ async function flushVersionHistoryOp(op) {
    surface, never to a driver directly:
 
      storeGetFile(path)                         -> {text, token} | null
-     storeListDir(path)                         -> [{name, path, isDir}]
+     storeListDir(path)                         -> [{name, path, isDir,
+                                                    fileId, token}]
+                                                  (v2.20: the file id and
+                                                  revision token ride along,
+                                                  from the same listing
+                                                  metadata; older callers
+                                                  simply ignore them)
      storePutFile(path, text, expectedToken, message, options)
                                                 -> token string
      storeDeleteFile(path, token, message)
@@ -6140,9 +6210,12 @@ function parseNoteFile(text, sha, fallbackId, trashed, archived) {
     updated: new Date().toISOString(),
     pinned: false,
     body: "",
+    bodyLoaded: true,  /* v2.20: false only for catalog shells */
+    previewText: null, /* v2.20: shells carry the catalog preview here */
     attachments: [],   /* v1.2: attachment metadata, see serializeNote */
     thumbnail: null,   /* v2.11: thumbnail attachment id, or null */
     sha: sha || null,
+    fileId: null,      /* v2.20: the Drive file id, when a load resolved it */
     trashed: !!trashed,
     trashedFrom: null,
     archived: !!archived,   /* v1.5, mirrors trashed */
@@ -6364,10 +6437,696 @@ function buildIndexFromFolders(folderSlugs) {
   return { version: 1, notebooks: rebuilt, updated: new Date().toISOString() };
 }
 
-/* Load everything from the repo: index (or rebuild it), every notebook
-   folder, every note file, the trash folder, and the archive folder.
-   Results replace state and refresh the cache. Throws on hard failures
-   so the caller can fall back to the cache and say so. */
+/* --------------------------------------------------------------------------
+   v2.20: catalog.json, the list cache, and incoming.json, the drop box
+
+   Two small files join index.json at the store root. Both are
+   created by the app itself, which is what makes the second one
+   work at all: the app's Google permission (drive.file) only ever
+   shows it files it created, so a note file an outside tool uploads
+   into a notebook folder is invisible to the app, while the
+   CONTENT of a file the app created is readable no matter who last
+   wrote it. Outside tools therefore never create note files; they
+   write note text into the drop box, and the app adopts it.
+
+   catalog.json is a rebuildable cache of everything the notes
+   list shows: per note, its title, notebook, collection (notebook,
+   trash, or archive), tags, created and updated stamps, pin, the
+   card preview text exactly as the card derives it, the card
+   thumbnail facts, the Drive file id, and the freshness token (the
+   same revision token the save path keeps as note.sha). The note
+   .md files remain the only source of truth. A load reads the
+   catalog, lists the folders' metadata (names, ids, tokens; no
+   body downloads), and reconciles: an entry whose token and file
+   id match its listing is trusted, so the list renders with zero
+   note body downloads; a mismatch, an unlisted entry, or a listed
+   file with no entry is corrected by downloading only that body
+   (or dropping the entry). A note loaded from a trusted entry is
+   a SHELL (bodyLoaded false, body null, previewText and the card
+   attachment riding along) until something needs its body:
+   opening it, saving it, or moving it fetches that one file
+   through ensureNoteBodyLoaded first. A body this session already
+   holds at the listing's token is kept, so in-session syncs lose
+   nothing. Fallbacks: a missing, unparseable, or wrong shape
+   catalog, a malformed entry, or a duplicate note id in the
+   listings all run the classic full load below instead, and the
+   catalog is rebuilt from whatever the load produced. The writer
+   is saveIndex's twin: debounced, serialized, best effort,
+   last writer wins (another device's catalog is just a stale
+   cache, and reconciliation corrects it; catalog writes are never
+   routed through the conflict rule), and a write never blocks,
+   delays, or fails a note operation.
+
+   incoming.json is the drop box: {notes: [one full note file text
+   per entry, front matter plus HTML body, exactly as the app
+   serializes a .md], rejected: [{entry, error, at}]}. It is
+   created at store seeding and lazily by any load that finds it
+   missing. After each load, syncNow runs processIncomingBox when
+   the file's token moved since the last processed token: valid
+   entries become real app created notes through the normal save
+   machinery, duplicates (same note id anywhere in the store) are
+   skipped, entries naming a missing notebook land in the first
+   notebook and are flagged in the report, attachment records are
+   stripped (their files live outside the app's visibility) and
+   counted, and malformed entries move to rejected with a reason
+   and are never retried. Cleanup re-reads the file fresh and
+   subtracts exactly the processed entry strings, so an entry an
+   outside writer appends mid cleanup survives to the next sync;
+   a write back that loses the token race leaves the file alone
+   and lets the next sync retry, with the duplicate skip as the
+   guard against importing twice. Attachments cannot be delivered
+   through the box yet; the README documents the format for other
+   tools.
+
+   Auto-sync corpus: both files' Drive ids join the known ids on
+   every load (the load resolves them, which is what the corpus
+   builder reads). A change to catalog.json alone never triggers
+   a sync (it is a cache, and reacting to it would loop on the
+   app's own writes); a change to incoming.json does, except the
+   echo of this device's own cleanup write, whose token is the
+   last processed token.
+   -------------------------------------------------------------------------- */
+const CATALOG_FILE = "catalog.json";
+const INCOMING_FILE = "incoming.json";
+const CATALOG_SHAPE_VERSION = 1;
+const CATALOG_WRITE_DEBOUNCE_MS = 800;
+
+let catalogWriteTimer = null;      /* pending debounce timer, or null */
+let catalogWritePromise = null;    /* the running write loop, or null */
+let catalogWriteDirty = false;     /* state changed since the last write began */
+let catalogFlushWaiters = [];      /* flushCatalogWrites() resolvers */
+let lastCatalogToken = null;       /* token of the catalog last read or written */
+let lastCatalogEntriesText = null; /* its entries, serialized; the change test */
+let catalogArmed = false;          /* true once a load completed this session */
+let pendingIncoming = null;        /* {token, notes, rejected} from the load */
+let incomingProcessedToken = null; /* token of the box last fully processed */
+const noteBodyLoads = Object.create(null); /* note id -> in flight body load */
+
+/* The catalog entry for one note, in the collection named. Every
+   field comes from the note object; a shell contributes its
+   catalog born fields (previewText, shellCardAtt, attachmentCount)
+   instead of body derived ones, so a catalog built over shells
+   round trips its own facts unchanged. */
+function buildCatalogEntry(note, collection) {
+  const loaded = note.bodyLoaded !== false;
+  const cardAtt = loaded ? cardThumbnailAttachment(note)
+    : (note.shellCardAtt || null);
+  return {
+    id: note.id,
+    collection: collection,
+    title: note.title || "Untitled note",
+    notebook: note.notebook || "",
+    trashedFrom: note.trashedFrom || null,
+    archivedFrom: note.archivedFrom || null,
+    tags: (note.tags || []).slice(),
+    created: note.created || "",
+    updated: note.updated || "",
+    pinned: !!note.pinned,
+    preview: loaded ? htmlToText(note.body).slice(0, 140)
+      : (note.previewText || ""),
+    thumbnail: note.thumbnail || null,
+    cardAttachment: cardAtt
+      ? (sanitizeAttachments([cloneVersionValue(cardAtt)])[0] || null)
+      : null,
+    attachmentCount: loaded ? (note.attachments || []).length
+      : (note.attachmentCount || 0),
+    fileId: note.fileId || driveCache.fileIds[notePath(note)] || null,
+    token: note.sha || null
+  };
+}
+
+function buildCatalogObject() {
+  const entries = [];
+  state.notes.forEach(function (note) {
+    entries.push(buildCatalogEntry(note, "notebook"));
+  });
+  state.trash.forEach(function (note) {
+    entries.push(buildCatalogEntry(note, "trash"));
+  });
+  state.archive.forEach(function (note) {
+    entries.push(buildCatalogEntry(note, "archive"));
+  });
+  return {
+    version: CATALOG_SHAPE_VERSION,
+    updated: new Date().toISOString(),
+    entries: entries
+  };
+}
+
+/* Schedule a catalog write from current state. Mirrors saveIndex:
+   inert until this session has completed a store load (so a write
+   can never be built from pre load cache state and clobber a good
+   catalog ahead of the load that would have read it), debounced,
+   and serialized behind any write already running. */
+function saveCatalog() {
+  if (!state.repoExists || !catalogArmed) { return; }
+  catalogWriteDirty = true;
+  if (catalogWritePromise) { return; }
+  if (catalogWriteTimer !== null) { return; }
+  catalogWriteTimer = setTimeout(function () {
+    catalogWriteTimer = null;
+    runCatalogWriteLoop();
+  }, CATALOG_WRITE_DEBOUNCE_MS);
+}
+
+/* One physical catalog write, from a snapshot of current state.
+   Unchanged entries write nothing at all. A lost token race is
+   retried once over the winner's token (last writer wins; the
+   file is a cache, never a conflict copy candidate), and every
+   failure is swallowed: the next load reconciles or rebuilds. */
+async function writeCatalogOnce() {
+  const snapshot = buildCatalogObject();
+  const entriesText = JSON.stringify(snapshot.entries);
+  if (entriesText === lastCatalogEntriesText) { return; }
+  const text = JSON.stringify(snapshot, null, 2);
+  try {
+    lastCatalogToken = await storePutFile(CATALOG_FILE, text,
+      lastCatalogToken, "Update catalog");
+    lastCatalogEntriesText = entriesText;
+  } catch (err) {
+    if (!isStoreConflict(err)) { return; }
+    try {
+      const fresh = await storeGetFile(CATALOG_FILE);
+      lastCatalogToken = await storePutFile(CATALOG_FILE, text,
+        fresh ? fresh.token : null, "Update catalog");
+      lastCatalogEntriesText = entriesText;
+    } catch (err2) { /* swallowed: rebuilt on the next load */ }
+  }
+}
+
+function runCatalogWriteLoop() {
+  if (catalogWritePromise) { return catalogWritePromise; }
+  catalogWritePromise = (async function () {
+    while (catalogWriteDirty) {
+      catalogWriteDirty = false;
+      await writeCatalogOnce();
+    }
+  })();
+  catalogWritePromise.then(function () {
+    catalogWritePromise = null;
+    settleCatalogFlushWaiters();
+  });
+  return catalogWritePromise;
+}
+
+function settleCatalogFlushWaiters() {
+  if (catalogWriteTimer !== null || catalogWritePromise ||
+      catalogWriteDirty) {
+    return;
+  }
+  const waiters = catalogFlushWaiters;
+  catalogFlushWaiters = [];
+  waiters.forEach(function (resolve) { resolve(); });
+}
+
+/* Resolve once every catalog write scheduled so far has landed
+   (or failed safely). syncNow flushes before its load, the same
+   discipline flushIndexWrites gives index.json. */
+function flushCatalogWrites() {
+  if (catalogWriteTimer !== null) {
+    clearTimeout(catalogWriteTimer);
+    catalogWriteTimer = null;
+    runCatalogWriteLoop();
+  } else if (!catalogWritePromise && catalogWriteDirty) {
+    runCatalogWriteLoop();
+  }
+  if (!catalogWritePromise && !catalogWriteDirty &&
+      catalogWriteTimer === null) {
+    return Promise.resolve();
+  }
+  return new Promise(function (resolve) {
+    catalogFlushWaiters.push(resolve);
+  });
+}
+
+/* A note object built from one catalog entry: everything the list
+   needs, and no body. bodyLoaded false is the shell mark every
+   body consumer checks; previewText, shellCardAtt, and
+   attachmentCount carry the card's facts until the real file is
+   fetched and the full parse replaces them. */
+function noteFromCatalogEntry(entry, collection) {
+  return {
+    id: entry.id,
+    title: entry.title || "Untitled note",
+    notebook: entry.notebook || "",
+    tags: Array.isArray(entry.tags) ? entry.tags.slice() : [],
+    created: entry.created || "",
+    updated: entry.updated || "",
+    pinned: !!entry.pinned,
+    body: null,
+    bodyLoaded: false,
+    previewText: entry.preview || "",
+    attachments: [],
+    thumbnail: entry.thumbnail || null,
+    shellCardAtt: entry.cardAttachment || null,
+    attachmentCount: entry.attachmentCount || 0,
+    sha: entry.token || null,
+    fileId: entry.fileId || null,
+    trashed: collection === "trash",
+    trashedFrom: entry.trashedFrom || null,
+    archived: collection === "archive",
+    archivedFrom: entry.archivedFrom || null
+  };
+}
+
+/* Fetch a shell note's one file and complete the note in place:
+   the full parse replaces every field, the loaded content seeds
+   the note's last saved baseline (it IS the last saved state),
+   and the cache picks the completed note up. Concurrent callers
+   share one in flight fetch. A failed fetch leaves the shell a
+   shell (bodyLoaded still false) and resolves anyway, so UI
+   callers can simply re-check the flag; the promise never
+   rejects. */
+function ensureNoteBodyLoaded(note) {
+  if (!note || note.bodyLoaded !== false) {
+    return Promise.resolve(note);
+  }
+  if (noteBodyLoads[note.id]) { return noteBodyLoads[note.id]; }
+  const load = (async function () {
+    try {
+      const file = await storeGetFile(notePath(note));
+      if (file) {
+        const parsed = parseNoteFile(file.text, file.token, note.id,
+          note.trashed, note.archived);
+        note.title = parsed.title;
+        note.notebook = parsed.notebook;
+        note.tags = parsed.tags;
+        note.created = parsed.created;
+        note.updated = parsed.updated;
+        note.pinned = parsed.pinned;
+        note.body = parsed.body;
+        note.attachments = parsed.attachments;
+        note.thumbnail = parsed.thumbnail;
+        note.trashedFrom = parsed.trashedFrom;
+        note.archivedFrom = parsed.archivedFrom;
+        note.sha = file.token;
+        note.previewText = htmlToText(parsed.body).slice(0, 140);
+      } else {
+        /* Listed a moment ago and already gone: the next load
+           drops the note; until then it opens empty rather than
+           not at all. */
+        note.body = "";
+      }
+    } catch (err) {
+      return note;   /* still a shell; a later attempt can retry */
+    }
+    note.bodyLoaded = true;
+    rememberLastSavedContent(note);
+    saveCache();
+    return note;
+  })();
+  noteBodyLoads[note.id] = load;
+  load.then(function () {
+    if (noteBodyLoads[note.id] === load) { delete noteBodyLoads[note.id]; }
+  });
+  return load;
+}
+
+/* The plain text the list shows and searches for one note: the
+   body derived text for a loaded note, the catalog preview for a
+   shell (which is the same derivation, capped the same way, made
+   when the entry was built). */
+function noteListText(note) {
+  if (!note) { return ""; }
+  if (note.bodyLoaded === false) { return note.previewText || ""; }
+  return htmlToText(note.body);
+}
+
+/* The drop box in its empty form, as the app creates it. */
+function emptyIncomingText() {
+  return JSON.stringify({ notes: [], rejected: [] }, null, 2);
+}
+
+/* Read the drop box during a load: create it (best effort) when
+   missing, and stash its contents for syncNow's processing step
+   when its token moved past the last processed token. A malformed
+   box is left exactly as found (the outside writer owns fixing
+   it) and treated as processed at its current token, so a load
+   never spins on it. Nothing here may fail the load around it. */
+async function loadIncomingStash() {
+  pendingIncoming = null;
+  try {
+    const file = await storeGetFile(INCOMING_FILE);
+    if (!file) {
+      try {
+        incomingProcessedToken = await storePutFile(INCOMING_FILE,
+          emptyIncomingText(), null, "Create drop box", { fresh: true });
+      } catch (err) { /* best effort; retried by the next load */ }
+      return;
+    }
+    let parsed = null;
+    try { parsed = JSON.parse(file.text); } catch (err) { parsed = null; }
+    if (!parsed || !Array.isArray(parsed.notes) ||
+        !Array.isArray(parsed.rejected)) {
+      incomingProcessedToken = file.token;
+      return;
+    }
+    if (file.token !== incomingProcessedToken) {
+      pendingIncoming = {
+        token: file.token,
+        notes: parsed.notes.slice(),
+        rejected: parsed.rejected.slice()
+      };
+    }
+  } catch (err) { /* a failed read idles the box for this load */ }
+}
+
+/* Remove from list exactly the strings in removals, one
+   occurrence apiece (multiset subtraction): processed entries go,
+   anything appended concurrently that was never processed stays. */
+function subtractEntryStrings(list, removals) {
+  const pending = removals.slice();
+  return (list || []).filter(function (item) {
+    const idx = pending.indexOf(item);
+    if (idx >= 0) {
+      pending.splice(idx, 1);
+      return false;
+    }
+    return true;
+  });
+}
+
+/* Process the drop box stashed by the load. Runs inside syncNow,
+   after the load and before its render, so an auto-sync cycle
+   imports too. See the section comment for the rules; the one
+   toast at the end is the report, and rejected entries stay in
+   the file for the outside writer to see and fix. */
+async function processIncomingBox() {
+  const pending = pendingIncoming;
+  pendingIncoming = null;
+  if (!pending) { return; }
+  if (!state.notebooks.length) { await createNotebook("Personal"); }
+  let imported = 0;
+  let duplicates = 0;
+  let strippedNotes = 0;
+  let fallbackName = null;
+  const failed = [];
+  const removalStrings = [];
+  const batch = [];
+  for (const entryText of pending.notes) {
+    if (typeof entryText !== "string" || !entryText.trim()) {
+      failed.push({
+        entry: typeof entryText === "string" ? entryText : String(entryText),
+        error: "The entry is not note file text."
+      });
+      removalStrings.push(entryText);
+      continue;
+    }
+    const parsed = parseNoteFile(entryText, null, newNoteId(), false, false);
+    if (findNoteById(parsed.id)) {
+      duplicates++;
+      removalStrings.push(entryText);
+      continue;
+    }
+    let target = parsed.notebook;
+    if (!target || !state.notebooks.some(function (nb) {
+      return nb.slug === target;
+    })) {
+      target = state.notebooks[0].slug;
+      fallbackName = state.notebooks[0].name;
+      parsed.notebook = target;
+    }
+    /* Attachment records name files this app has never seen and
+       cannot see (the drive.file visibility rule the box exists
+       to work around), so they are stripped and counted rather
+       than left dangling into a broken note. */
+    if ((parsed.attachments || []).length) {
+      strippedNotes++;
+      parsed.attachments = [];
+      parsed.thumbnail = null;
+    }
+    parsed.trashed = false;
+    parsed.trashedFrom = null;
+    parsed.archived = false;
+    parsed.archivedFrom = null;
+    parsed.sha = null;
+    parsed.fileId = null;
+    parsed.bodyLoaded = true;
+    state.notes.unshift(parsed);
+    try {
+      await saveNoteToRepo(parsed, { skipConflictCheck: true, fresh: true });
+      imported++;
+      batch.push(parsed);
+      removalStrings.push(entryText);
+    } catch (err) {
+      state.notes = state.notes.filter(function (n) {
+        return n.id !== parsed.id;
+      });
+      failed.push({ entry: entryText, error: err.message });
+      removalStrings.push(entryText);
+    }
+  }
+  /* A batch lands at the head of the list in box order (the loop
+     unshifted each note as its save ran, so the block is put back
+     in entry order here). */
+  if (batch.length > 1) {
+    const batchIds = {};
+    batch.forEach(function (n) { batchIds[n.id] = true; });
+    state.notes = batch.concat(state.notes.filter(function (n) {
+      return !batchIds[n.id];
+    }));
+  }
+  /* Cleanup, with the race care from the section comment:
+     re-read fresh, subtract exactly what was processed, move the
+     failures to rejected, preserve everything else, and write
+     back against the fresh token. A lost race or a failed write
+     leaves the file (and the processed token) alone; the next
+     sync retries, and the duplicate skip keeps a retry from
+     importing anything twice. */
+  try {
+    const fresh = await storeGetFile(INCOMING_FILE);
+    if (!fresh) {
+      incomingProcessedToken = pending.token;
+    } else {
+      let freshParsed = null;
+      try { freshParsed = JSON.parse(fresh.text); } catch (err) {
+        freshParsed = null;
+      }
+      if (!freshParsed || !Array.isArray(freshParsed.notes) ||
+          !Array.isArray(freshParsed.rejected)) {
+        incomingProcessedToken = fresh.token;
+      } else {
+        const remaining = subtractEntryStrings(freshParsed.notes,
+          removalStrings);
+        const newRejected = freshParsed.rejected.concat(failed.map(
+          function (f) {
+            return {
+              entry: f.entry, error: f.error,
+              at: new Date().toISOString()
+            };
+          }));
+        if (remaining.length !== freshParsed.notes.length ||
+            failed.length > 0) {
+          incomingProcessedToken = await storePutFile(INCOMING_FILE,
+            JSON.stringify({ notes: remaining, rejected: newRejected },
+              null, 2),
+            fresh.token, "Update drop box");
+        } else {
+          incomingProcessedToken = fresh.token;
+        }
+      }
+    }
+  } catch (err) { /* left for the next sync, by design */ }
+  if (imported > 0) { saveCache(); }
+  const total = imported + duplicates + failed.length;
+  if (total > 0) {
+    let message = "Imported " + imported +
+      (imported === 1 ? " note" : " notes") + " from the drop box";
+    if (duplicates > 0) {
+      message += "; skipped " + duplicates +
+        (duplicates === 1 ? " duplicate" : " duplicates");
+    }
+    if (failed.length > 0) {
+      message += "; rejected " + failed.length;
+    }
+    if (fallbackName) {
+      message += "; notes naming a missing notebook were placed in " +
+        fallbackName;
+    }
+    if (strippedNotes > 0) {
+      message += "; attachments were left off " + strippedNotes +
+        (strippedNotes === 1 ? " note" : " notes");
+    }
+    toast(message, failed.length > 0);
+  }
+}
+
+/* Sign out drops the catalog and drop box session state, like the
+   version runtime state beside it: tokens and stashes belong to
+   the signed in account, and the write timer must not fire into
+   the next session. */
+function resetCatalogRuntimeState() {
+  if (catalogWriteTimer !== null) {
+    clearTimeout(catalogWriteTimer);
+    catalogWriteTimer = null;
+  }
+  catalogWriteDirty = false;
+  catalogArmed = false;
+  lastCatalogToken = null;
+  lastCatalogEntriesText = null;
+  pendingIncoming = null;
+  incomingProcessedToken = null;
+  Object.keys(noteBodyLoads).forEach(function (id) {
+    delete noteBodyLoads[id];
+  });
+}
+
+/* A catalog problem the classic load should answer instead: the
+   reconcile throws this (and only this) to ask for the fallback,
+   and loadAllFromRepo honors exactly it. */
+function catalogFallbackSignal(message) {
+  const err = new Error(message);
+  err.catalogFallback = true;
+  return err;
+}
+
+/* The fast path: reconcile the catalog against the gathered
+   listings (one snapshot of the store's shape, taken by
+   loadAllFromRepo). Trusted entries become shells, or full notes
+   when this session already holds that note's body at the
+   listing's token; everything else downloads only its own body,
+   exactly as the classic load does. Falls back (via
+   catalogFallbackSignal) on a malformed entry or a duplicate
+   note id in the listings. */
+async function reconcileCatalogListings(catalog, listings) {
+  const entriesByKey = Object.create(null);
+  (catalog.entries || []).forEach(function (entry) {
+    if (!entry || typeof entry !== "object" ||
+        typeof entry.id !== "string" || !entry.id ||
+        typeof entry.collection !== "string") {
+      throw catalogFallbackSignal("A catalog entry is malformed.");
+    }
+    /* An entry whose token or file id is unusable simply never
+       matches a listing (below), which downloads that body and
+       rebuilds the entry; it is not a reason to abandon the
+       whole catalog. */
+    if (typeof entry.token === "string" &&
+        typeof entry.fileId === "string") {
+      entriesByKey[entry.collection + "|" + entry.id] = entry;
+    }
+  });
+  const prevById = Object.create(null);
+  [state.notes, state.trash, state.archive].forEach(function (list) {
+    (list || []).forEach(function (note) { prevById[note.id] = note; });
+  });
+  const seenIds = Object.create(null);
+  const out = { notes: [], trash: [], archive: [] };
+
+  async function take(collection, slug, entries) {
+    const listName = collection === "notebook" ? "notes" : collection;
+    for (const entry of (entries || [])) {
+      if (entry.isDir || !/\.md$/i.test(entry.name)) { continue; }
+      const fallbackId = entry.name.replace(/\.md$/i, "");
+      if (seenIds[fallbackId]) {
+        throw catalogFallbackSignal(
+          "A note id appears twice in the store: " + fallbackId);
+      }
+      seenIds[fallbackId] = true;
+      const path = collection === "notebook"
+        ? "notebooks/" + slug + "/" + entry.name
+        : collection + "/" + entry.name;
+      const cat = entriesByKey[collection + "|" + fallbackId];
+      if (cat && cat.token === entry.token &&
+          cat.fileId === entry.fileId) {
+        const note = noteFromCatalogEntry(cat, collection);
+        const prev = prevById[fallbackId];
+        if (prev && prev.sha === entry.token &&
+            typeof prev.body === "string") {
+          /* This session already holds the body at this exact
+             revision (the boot cache, or the previous load a
+             moment ago): keep it, so a sync costs the note
+             nothing and everything downstream sees a full note. */
+          note.body = prev.body;
+          note.attachments = prev.attachments;
+          note.bodyLoaded = true;
+          note.previewText = htmlToText(prev.body).slice(0, 140);
+        }
+        note.sha = entry.token;
+        note.fileId = entry.fileId;
+        out[listName].push(note);
+      } else {
+        const file = await storeGetFile(path);
+        if (!file) { continue; }   /* vanished mid load, as before */
+        const note = parseNoteFile(file.text, file.token, fallbackId,
+          collection === "trash", collection === "archive");
+        if (!note.notebook && collection === "notebook") {
+          note.notebook = slug;
+        }
+        note.fileId = entry.fileId;
+        out[listName].push(note);
+      }
+    }
+  }
+
+  for (const nb of state.notebooks) {
+    await take("notebook", nb.slug, listings.notebooks[nb.slug]);
+  }
+  await take("trash", null, listings.trash);
+  await take("archive", null, listings.archive);
+  return out;
+}
+
+/* The classic load: every note body downloaded and parsed, as
+   every load worked before v2.20. It runs when there is no
+   usable catalog and whenever reconciliation declines, driven by
+   the same gathered listings so the two paths can never disagree
+   about which files exist. */
+async function loadListingsClassic(listings) {
+  const out = { notes: [], trash: [], archive: [] };
+  for (const nb of state.notebooks) {
+    const entries = listings.notebooks[nb.slug];
+    for (const entry of (entries || [])) {
+      if (entry.isDir || !/\.md$/i.test(entry.name)) { continue; }
+      const file = await storeGetFile(
+        "notebooks/" + nb.slug + "/" + entry.name);
+      if (!file) { continue; }
+      const fallbackId = entry.name.replace(/\.md$/i, "");
+      const note = parseNoteFile(file.text, file.token, fallbackId, false);
+      if (!note.notebook) { note.notebook = nb.slug; }
+      note.fileId = entry.fileId;
+      out.notes.push(note);
+    }
+  }
+  const trashEntries = listings.trash;
+  for (const entry of (trashEntries || [])) {
+    if (entry.isDir || !/\.md$/i.test(entry.name)) { continue; }
+    const file = await storeGetFile("trash/" + entry.name);
+    if (!file) { continue; }
+    const fallbackId = entry.name.replace(/\.md$/i, "");
+    const note = parseNoteFile(file.text, file.token, fallbackId, true);
+    note.fileId = entry.fileId;
+    out.trash.push(note);
+  }
+  /* v1.5: the archive folder loads exactly like the trash folder.
+     Stores created before archiving have no archive folder at all;
+     the listing then comes back null and the archive is simply
+     empty. The folder materializes on the first archive (the
+     Drive driver creates folders on the way to a file). */
+  const archiveEntries = listings.archive;
+  for (const entry of (archiveEntries || [])) {
+    if (entry.isDir || !/\.md$/i.test(entry.name)) { continue; }
+    const file = await storeGetFile("archive/" + entry.name);
+    if (!file) { continue; }
+    const fallbackId = entry.name.replace(/\.md$/i, "");
+    const note = parseNoteFile(file.text, file.token, fallbackId,
+      false, true);
+    note.fileId = entry.fileId;
+    out.archive.push(note);
+  }
+  return out;
+}
+
+/* Load everything from the repo: index (or rebuild it), every
+   notebook folder, every note file, the trash folder, and the
+   archive folder. Results replace state and refresh the cache.
+   Throws on hard failures so the caller can fall back to the
+   cache and say so.
+   v2.20: the folder listings are gathered once, with file ids
+   and revision tokens, and the note files themselves load
+   through the catalog fast path when a usable catalog exists
+   (see the v2.20 section comment above), falling back to the
+   classic full download otherwise. The drop box is read along
+   the way; its import step runs in syncNow, after this load. */
 async function loadAllFromRepo() {
   attachmentParseWarnings = 0;   /* v1.2: reset the malformed metadata count */
   const indexFile = await storeGetFile("index.json");
@@ -6401,57 +7160,77 @@ async function loadAllFromRepo() {
     });
   }
 
-  const notes = [];
+  /* v2.20: the listings, gathered once for both load paths. */
+  const listings = { notebooks: {}, trash: null, archive: null };
   for (const nb of state.notebooks) {
-    const entries = await storeListDir("notebooks/" + nb.slug);
-    for (const entry of (entries || [])) {
-      if (entry.isDir || !/\.md$/i.test(entry.name)) { continue; }
-      const file = await storeGetFile("notebooks/" + nb.slug + "/" + entry.name);
-      if (!file) { continue; }
-      const fallbackId = entry.name.replace(/\.md$/i, "");
-      const note = parseNoteFile(file.text, file.token, fallbackId, false);
-      if (!note.notebook) { note.notebook = nb.slug; }
-      notes.push(note);
+    listings.notebooks[nb.slug] = await storeListDir(
+      "notebooks/" + nb.slug);
+  }
+  listings.trash = await storeListDir("trash");
+  listings.archive = await storeListDir("archive");
+
+  /* v2.20: read the catalog. Any failure here (a missing file, a
+     transport error, unparseable JSON, a shape this build does
+     not speak) simply means the classic load runs and the
+     catalog is rebuilt from its result. */
+  let catalog = null;
+  try {
+    const catalogFile = await storeGetFile(CATALOG_FILE);
+    if (catalogFile) {
+      lastCatalogToken = catalogFile.token;
+      /* The entries text resets BEFORE the parse: a catalog that
+         cannot be used must not leave the writer believing its
+         entries are current, or the rebuild after the classic
+         load would be skipped as "unchanged" and the damaged
+         file would never heal. */
+      lastCatalogEntriesText = null;
+      try {
+        const parsedCatalog = JSON.parse(catalogFile.text);
+        if (parsedCatalog &&
+            parsedCatalog.version === CATALOG_SHAPE_VERSION &&
+            Array.isArray(parsedCatalog.entries)) {
+          catalog = parsedCatalog;
+          lastCatalogEntriesText = JSON.stringify(parsedCatalog.entries);
+        }
+      } catch (e) { catalog = null; }
+    } else {
+      lastCatalogToken = null;
+      lastCatalogEntriesText = null;
+    }
+  } catch (e) { catalog = null; lastCatalogEntriesText = null; }
+
+  /* v2.20: the drop box rides along (creates itself if missing,
+     stashes unprocessed contents for syncNow's import step). */
+  await loadIncomingStash();
+
+  let loaded = null;
+  if (catalog) {
+    try {
+      loaded = await reconcileCatalogListings(catalog, listings);
+    } catch (err) {
+      if (!err || !err.catalogFallback) { throw err; }
+      loaded = null;   /* the catalog declined; the classic load runs */
     }
   }
+  if (!loaded) { loaded = await loadListingsClassic(listings); }
 
-  const trash = [];
-  const trashEntries = await storeListDir("trash");
-  for (const entry of (trashEntries || [])) {
-    if (entry.isDir || !/\.md$/i.test(entry.name)) { continue; }
-    const file = await storeGetFile("trash/" + entry.name);
-    if (!file) { continue; }
-    const fallbackId = entry.name.replace(/\.md$/i, "");
-    trash.push(parseNoteFile(file.text, file.token, fallbackId, true));
-  }
-
-  /* v1.5: the archive folder loads exactly like the trash folder.
-     Stores created before archiving have no archive folder at all;
-     the listing then comes back null and the archive is simply empty.
-     The folder materializes on the first archive (the Drive driver
-     creates folders on the way to a file). */
-  const archive = [];
-  const archiveEntries = await storeListDir("archive");
-  for (const entry of (archiveEntries || [])) {
-    if (entry.isDir || !/\.md$/i.test(entry.name)) { continue; }
-    const file = await storeGetFile("archive/" + entry.name);
-    if (!file) { continue; }
-    const fallbackId = entry.name.replace(/\.md$/i, "");
-    archive.push(parseNoteFile(file.text, file.token, fallbackId, false, true));
-  }
-
-  state.notes = notes;
-  state.trash = trash;
-  state.archive = archive;
+  state.notes = loaded.notes;
+  state.trash = loaded.trash;
+  state.archive = loaded.archive;
   /* v2.16: the auto-sync corpus is whatever this load just
      resolved; see rebuildAutoSyncKnownIds. */
   rebuildAutoSyncKnownIds();
   /* v2.8: a fresh load is the last saved state, so it reseeds the
      version baselines; cached histories are dropped too, because
      another device may have written or pruned them since this
-     device last read them. */
+     device last read them. v2.20: shells carry no body, so they
+     seed no baseline; ensureNoteBodyLoaded seeds theirs when
+     their file is fetched (see rememberLastSavedContentForAllNotes). */
   rememberLastSavedContentForAllNotes();
   clearVersionHistoryCache();
+  /* v2.20: from here on this session may maintain the catalog;
+     the saveCache below schedules its first (re)build check. */
+  catalogArmed = true;
   saveCache();
   /* v1.2: one readable warning if any note file carried attachment
      metadata that could not be parsed. Those notes still loaded; they
@@ -6516,7 +7295,39 @@ async function syncNow(showToast) {
        so the load can never race or be confused by a stale index the
        app itself is about to replace. */
     await flushIndexWrites();
+    /* v2.20: the same flush discipline for the catalog, so the
+       load below reads this device's newest catalog, never one
+       its own pending write is about to replace. */
+    await flushCatalogWrites();
     await loadAllFromRepo();
+    /* v2.20: the drop box imports inside the sync, after the
+       load and before the render, so what it brought in shows
+       up in this same pass (and an auto-sync cycle imports
+       too). Its failures are contained inside it; a broken box
+       must never fail the sync around it. */
+    try {
+      await processIncomingBox();
+    } catch (err) {
+      console.warn("Drop box processing failed: " +
+        (err && err.message));
+    }
+    /* v2.20: if the load left the OPEN note as a catalog shell
+       (its stored revision moved past the body this session
+       held, so reconciliation trusted the listing and kept no
+       body), complete its body before the render and before
+       the open note restore reads it. The editor still shows
+       the previous content at this point; leaving the note a
+       shell here would let a dirty check read that stale
+       editor content as the note's body and save it over the
+       newer stored revision, the exact overwrite the conflict
+       machinery exists to prevent. Every other note stays a
+       shell; only the open one pays for its download, exactly
+       as a full load always downloaded it. */
+    const openAfterLoad = state.selectedId ?
+      findNoteById(state.selectedId) : null;
+    if (openAfterLoad && openAfterLoad.bodyLoaded === false) {
+      await ensureNoteBodyLoaded(openAfterLoad);
+    }
     syncOpenNoteRefresh = openNoteCtx;
     try {
       renderAll();
@@ -6852,6 +7663,20 @@ async function saveNoteToRepoNow(note, options) {
   if (!options.skipConflictCheck && isNoteDiverged(note.id)) {
     setSyncPill("bad", "Conflict saved");
     return { paused: true, diverged: true };
+  }
+  /* v2.20: a save serializes the note's body, so a catalog shell
+     (body not on this device yet) is completed first, through
+     the same single fetch opening it would have made. If the
+     fetch cannot complete the note (offline, signed out), the
+     save fails honestly here rather than writing an empty body
+     over the stored note. Fresh creates mint their note in
+     memory and are never shells, so they pass straight through. */
+  if (note.bodyLoaded === false) {
+    await ensureNoteBodyLoaded(note);
+    if (note.bodyLoaded === false) {
+      throw new Error("The note's content is not loaded on this " +
+        "device yet, so it cannot be saved.");
+    }
   }
   /* v2.8: capture the version history facts BEFORE anything in
      this save can move them. previousSavedContent is the note's
@@ -7265,6 +8090,17 @@ async function renameNotebook(slug, newName) {
   const moving = state.notes.filter(function (n) { return n.notebook === slug; });
   for (const note of moving) {
     const oldPath = notePath(note);
+    /* v2.20: the move rewrites the note's file text, so a catalog
+       shell is completed at its CURRENT path first (before the
+       notebook flip below changes where its file is looked for). */
+    if (note.bodyLoaded === false) {
+      await ensureNoteBodyLoaded(note);
+      if (note.bodyLoaded === false) {
+        toast("Rename partly failed for one note: its content is " +
+          "not loaded on this device yet.", true);
+        continue;
+      }
+    }
     note.notebook = newSlug;
     if (state.online && state.repoExists) {
       try {
@@ -7364,9 +8200,12 @@ function makeNote(notebookSlug, title, body) {
     updated: now,
     pinned: false,
     body: body || "",
+    bodyLoaded: true,  /* v2.20: a made note's body is right here */
+    previewText: null, /* v2.20: only catalog shells use this field */
     attachments: [],   /* v1.2: new notes start with no attachments */
     thumbnail: null,   /* v2.11: no thumbnail until one is chosen */
     sha: null,
+    fileId: null,      /* v2.20: assigned by the first store write or load */
     trashed: false,
     trashedFrom: null,
     archived: false,        /* v1.5 */
@@ -7409,6 +8248,72 @@ async function createNoteInRepo(notebookSlug) {
   return note;
 }
 
+/* v2.20: the four placement operations whose implementations
+   follow (trash, restore, archive, unarchive) capture the note's
+   file text synchronously at action time, so a catalog shell,
+   whose body is not on this device, is completed before the
+   operation runs. The deferred operation then proceeds exactly
+   as it always has and its promise is the one returned, so
+   awaiting callers (notebook deletion above all) keep their
+   timing. A shell whose file cannot be fetched keeps its place
+   and says so, rather than moving an empty body over the stored
+   note. */
+function moveNoteToTrash(note, quiet) {
+  if (note && note.bodyLoaded === false) {
+    return ensureNoteBodyLoaded(note).then(function () {
+      if (note.bodyLoaded === false) {
+        toast("That note is not loaded on this device yet, so it " +
+          "could not be moved to Trash.", true);
+        return null;
+      }
+      return moveNoteToTrashNow(note, quiet);
+    });
+  }
+  return moveNoteToTrashNow(note, quiet);
+}
+
+function restoreNote(note) {
+  if (note && note.bodyLoaded === false) {
+    return ensureNoteBodyLoaded(note).then(function () {
+      if (note.bodyLoaded === false) {
+        toast("That note is not loaded on this device yet, so it " +
+          "could not be restored.", true);
+        return null;
+      }
+      return restoreNoteNow(note);
+    });
+  }
+  return restoreNoteNow(note);
+}
+
+function archiveNote(note) {
+  if (note && note.bodyLoaded === false) {
+    return ensureNoteBodyLoaded(note).then(function () {
+      if (note.bodyLoaded === false) {
+        toast("That note is not loaded on this device yet, so it " +
+          "could not be archived.", true);
+        return null;
+      }
+      return archiveNoteNow(note);
+    });
+  }
+  return archiveNoteNow(note);
+}
+
+function unarchiveNote(note) {
+  if (note && note.bodyLoaded === false) {
+    return ensureNoteBodyLoaded(note).then(function () {
+      if (note.bodyLoaded === false) {
+        toast("That note is not loaded on this device yet, so it " +
+          "could not be unarchived.", true);
+        return null;
+      }
+      return unarchiveNoteNow(note);
+    });
+  }
+  return unarchiveNoteNow(note);
+}
+
 /* Move a note to Trash. quiet=true is used by deleteNotebook, which moves
    many notes at once and renders once at the end.
    v1.5: the state change, the cache write, and the render all happen
@@ -7418,7 +8323,7 @@ async function createNoteInRepo(notebookSlug) {
    view: it leaves the archive list, its archivedFrom notebook becomes
    its trashedFrom (so Restore still returns it to the notebook it
    originally came from), and its file moves out of archive/. */
-function moveNoteToTrash(note, quiet) {
+function moveNoteToTrashNow(note, quiet) {
   const oldPath = notePath(note);
   const wasArchived = !!note.archived;
   const online = state.online && state.repoExists;
@@ -7471,7 +8376,7 @@ function moveNoteToTrash(note, quiet) {
    v1.5: same instant pattern as moveNoteToTrash. The target notebook
    is settled synchronously: createNotebook updates state before it
    returns its promise, so the fallback below never has to wait. */
-function restoreNote(note) {
+function restoreNoteNow(note) {
   const oldPath = notePath(note);
   const online = state.online && state.repoExists;
   let target = note.trashedFrom || note.notebook || "personal";
@@ -7570,7 +8475,7 @@ function deleteNoteForever(note) {
    file move finishes in the background through the operation chain.
    archivedFrom remembers the notebook, so Unarchive is a plain
    restore under another name. Pinned is cleared, as with Trash. */
-function archiveNote(note) {
+function archiveNoteNow(note) {
   const oldPath = notePath(note);
   const online = state.online && state.repoExists;
   note.archived = true;
@@ -7608,7 +8513,7 @@ function archiveNote(note) {
 /* Unarchive a note (v1.5): return it to the notebook it was archived
    from, with restoreNote's fallback when that notebook is gone (the
    first notebook that exists, creating Personal if there are none). */
-function unarchiveNote(note) {
+function unarchiveNoteNow(note) {
   const oldPath = notePath(note);
   const online = state.online && state.repoExists;
   let target = note.archivedFrom || note.notebook || "personal";
@@ -7757,6 +8662,16 @@ async function seedInitialStore() {
      the starter note's id was just generated into an empty store. */
   starter.sha = await storePutFile(notePath(starter), serializeNote(starter),
     null, "Create starter note", { fresh: true });
+  /* v2.20: the drop box is born with the store, empty. It must be
+     a file the app created (the drive.file visibility rule is
+     the whole reason it exists), and creating it here means a
+     brand new store has one before any outside writer looks.
+     Best effort: loadIncomingStash creates it lazily on any load
+     that finds it missing, so a failure here cannot fail seeding. */
+  try {
+    await storePutFile(INCOMING_FILE, emptyIncomingText(), null,
+      "Create drop box", { fresh: true });
+  } catch (err) { /* retried lazily by the first load */ }
   state.notes = [starter];
   /* v2.8: the seeded note was written directly, not through
      saveNoteToRepo, so record its baseline here: its first later
@@ -8866,7 +9781,10 @@ function visibleNotes() {
     const q = state.search;
     list = list.filter(function (n) {
       return n.title.toLowerCase().indexOf(q) >= 0 ||
-        htmlToText(n.body).toLowerCase().indexOf(q) >= 0 ||
+        /* v2.20: a shell searches its catalog preview (its full
+           body is not on this device); a loaded note searches
+           its body, as always. */
+        noteListText(n).toLowerCase().indexOf(q) >= 0 ||
         /* v1.2: attachment file names are searchable. Placeholder markup
            itself contributes no text, so snippets stay clean. */
         (n.attachments || []).some(function (a) {
@@ -8941,6 +9859,10 @@ async function loadListThumb(imgEl, att) {
    attachment; null when the note has no attachments at all,
    in which case the card renders no box. */
 function cardThumbnailAttachment(note) {
+  /* v2.20: a catalog shell carries the record its card shows
+     (the chosen thumbnail when set, else the first attachment),
+     resolved when the catalog entry was built. */
+  if (note.bodyLoaded === false) { return note.shellCardAtt || null; }
   const atts = note.attachments || [];
   if (note.thumbnail) {
     const chosen = atts.find(function (a) {
@@ -9111,7 +10033,10 @@ function renderNoteList() {
     titleRow.appendChild(titleText);
     main.appendChild(titleRow);
 
-    const snippetText = htmlToText(note.body).slice(0, 140);
+    /* v2.20: noteListText is the body derived text for a loaded
+       note and the catalog preview for a shell; the same 140
+       character cap either way. */
+    const snippetText = noteListText(note).slice(0, 140);
     if (snippetText) {
       const snip = document.createElement("div");
       snip.className = "card-snippet";
@@ -9365,6 +10290,27 @@ function renderEditor() {
     hideCellMenu();
     clearCellSelection();
     /* v2.5: and no notebook menu. */
+    closeNotebookMenu();
+    return;
+  }
+  /* v2.20: a catalog shell has no body on this device yet, so
+     there is nothing honest to fill the editor with. Fetch the
+     one file now and render again when it lands (if the note is
+     still the selected one); until then the editor shows the
+     same empty pane as no selection, and no field is ever filled
+     from a shell, so nothing can autosave an empty body over
+     the real one. */
+  if (note.bodyLoaded === false) {
+    ensureNoteBodyLoaded(note).then(function () {
+      if (note.bodyLoaded !== false && state.selectedId === note.id) {
+        renderEditor();
+      }
+    });
+    noNote.classList.remove("hidden");
+    wrap.classList.add("hidden");
+    hideLinkBar();
+    hideTableMenu();
+    clearCellSelection();
     closeNotebookMenu();
     return;
   }
@@ -11033,7 +11979,11 @@ function noteLinkTimeLabel(iso) {
    when cut. An empty body yields an empty string, and the
    card simply shows a blank excerpt line. */
 function noteLinkExcerpt(note) {
-  const text = htmlToText((note && note.body) || "");
+  /* v2.20: a shell target excerpts its catalog preview; its body
+     is not on this device. */
+  const text = note && note.bodyLoaded === false
+    ? (note.previewText || "")
+    : htmlToText((note && note.body) || "");
   if (!text) { return ""; }
   return text.length > 160 ? text.slice(0, 157) + "..." : text;
 }
@@ -15886,6 +16836,22 @@ function moveNoteToNotebook(note, targetSlug) {
   if (!note || !target || note.trashed || note.archived) {
     return Promise.resolve(false);
   }
+  /* v2.20: a catalog shell is completed at its current path
+     before anything flips the note's notebook: the shared save
+     below writes at the NEW path, and its own body guard would
+     look for the file there, where it does not exist yet. The
+     move then proceeds exactly as before. (The open note is
+     never a shell; the editor loads its body before rendering.) */
+  if (note.bodyLoaded === false) {
+    return ensureNoteBodyLoaded(note).then(function () {
+      if (note.bodyLoaded === false) {
+        toast("That note is not loaded on this device yet, so it " +
+          "could not be moved.", true);
+        return false;
+      }
+      return moveNoteToNotebook(note, targetSlug);
+    });
+  }
   if (note.notebook === targetSlug) { return Promise.resolve(false); }
   /* v2.17.1: a notebook move takes charge of the note's
      placement, like the trash and archive moves: it clears any
@@ -19030,6 +19996,30 @@ function rebuildAutoSyncKnownIds() {
 /* The corpus test for one change record, as described above. */
 function autoSyncChangeTouchesStore(change) {
   if (!change || !change.fileId) { return false; }
+  /* v2.20: the two store root bookkeeping files get their own
+     answers, ahead of the corpus test. A catalog change never
+     triggers a sync: the catalog is a cache this device rebuilds
+     and reconciles on its own schedule, and reacting to it would
+     loop on the app's own catalog writes. A drop box change does
+     trigger one (an outside writer may have added notes to
+     import), except the echo of this device's own cleanup
+     write, recognized by its token being the last processed
+     one. Both ids are read live from the driver's resolution
+     cache, where every load leaves them. */
+  const catalogFileId = driveCache.fileIds[CATALOG_FILE];
+  if (catalogFileId && change.fileId === catalogFileId) {
+    return false;
+  }
+  const incomingFileId = driveCache.fileIds[INCOMING_FILE];
+  if (incomingFileId && change.fileId === incomingFileId) {
+    if (change.removed) { return true; }
+    if (incomingProcessedToken && change.file &&
+        driveTokenFromMetadata(change.file) ===
+          incomingProcessedToken) {
+      return false;
+    }
+    return true;
+  }
   let inCorpus = autoSyncKnownIds.has(change.fileId);
   if (!inCorpus && !change.removed && change.file &&
       Array.isArray(change.file.parents)) {
@@ -19821,7 +20811,14 @@ async function driveStoreListDir(path) {
     return {
       name: child.name,
       path: path ? path + "/" + child.name : child.name,
-      isDir: child.mimeType === DRIVE_FOLDER_MIME
+      isDir: child.mimeType === DRIVE_FOLDER_MIME,
+      /* v2.20: the listing already fetched this metadata (it is
+         what driveTokenFromMetadata reads); carrying it lets the
+         loader reconcile the catalog against the store's shape
+         without a single extra call. Folders carry neither. */
+      fileId: child.mimeType === DRIVE_FOLDER_MIME ? null : child.id,
+      token: child.mimeType === DRIVE_FOLDER_MIME
+        ? null : driveTokenFromMetadata(child)
     };
   });
 }
@@ -22367,7 +23364,12 @@ async function firePendingAttachmentDelete(key) {
   } else {
     /* The note is not open: make sure its stored body no longer
        carries the block either, then save it through the per note
-       operation chain like every other background write. */
+       operation chain like every other background write.
+       v2.20: a catalog shell's body is fetched first, so the
+       strip below has the real text to work on. */
+    if (note.bodyLoaded === false) {
+      await ensureNoteBodyLoaded(note);
+    }
     stripAttachmentFromBodyText(note, att.id);
     try {
       await saveNoteToRepo(note);
