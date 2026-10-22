@@ -40,10 +40,47 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-22-SSN-V2210
-  Version: 2.21.0
+  BUILD STAMP: 2026-10-22-SSN-V2220
+  Version: 2.22.0
 
   Revision history:
+    v2.22.0 2026-10-22 Conflict hardening, round three: a
+                      session that made no edits can no longer
+                      fork a conflict copy. The incident: a PC
+                      edited a note while an iPad held last
+                      night's version of it; tapping Refresh
+                      connection on the iPad forked a copy of
+                      the old text, because Refresh ran its own
+                      save of the open note outside the v2.19
+                      untouched gate, and the mismatch logic
+                      only compared against the current stored
+                      content, where an older ancestor reads
+                      as "different". Refresh's save now
+                      carries the ambient intent, and the save
+                      worker itself refuses an ambient save
+                      whose content still equals the note's
+                      last saved baseline: no write, no queue
+                      entry, nothing. On a revision mismatch,
+                      the decision order is now: (1) the
+                      baseline test: content equal to what
+                      this session loaded means it contributed
+                      nothing, so the current stored revision
+                      is adopted silently; (2) the ancestor
+                      test: content matching any captured
+                      version history entry likewise holds no
+                      unique work and adopts silently; (3)
+                      the v2.19 content equality adoption;
+                      (4) only then the genuine rule: one
+                      conflict copy, the pause, and Reload.
+                      The same no unique work tests guard the
+                      offline queue's flush conflict branch:
+                      a put queued by a save whose content
+                      equaled its baseline carries that fact
+                      with it, and a queued ancestor is
+                      consumed quietly instead of forking.
+                      Deliberate mutations (pin, tags, title,
+                      checklist, attachments, moves, restore)
+                      are untouched and always write.
     v2.21.0 2026-10-22 Boot speed: paint from the device first,
                       and measure every boot. A reload used to
                       hold the loading overlay until the whole
@@ -4702,8 +4739,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-22-SSN-V2210";
-const APP_VERSION = "2.21.0";
+const APP_BUILD = "2026-10-22-SSN-V2220";
+const APP_VERSION = "2.22.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -7713,6 +7750,165 @@ async function adoptStoredRevisionIfContentEqual(note, path, saveFacts,
   return { saved: true, adopted: true, versionStatus: versionStatus };
 }
 
+/* v2.22: the baseline test's predicate, in the saveFacts
+   shape: does the content this save is making current equal
+   the baseline snapshot this session loaded (or last saved)
+   the note at, in full (title, body, tags, attachment
+   records, pin, thumbnail: the same fields
+   noteMatchesLastSaved compares)? Bookkeeping fields are
+   not content: updated is re-stamped by every save, the id
+   and revision are the file's, and the notebook placement
+   travels its own settle path. */
+function saveFactsContentEqualsBaseline(saveFacts) {
+  const baseline = saveFacts.previousSavedContent;
+  const candidate = saveFacts.candidateContent;
+  if (!baseline || !candidate) { return false; }
+  return versionContentEqual(candidate, baseline) &&
+    candidate.pinned === baseline.pinned &&
+    candidate.thumbnail === baseline.thumbnail;
+}
+
+/* v2.22: the ancestor test's reader: does a content snapshot
+   canonically match ANY entry in the note's captured version
+   history? Version entries carry title, body, tags, and
+   attachment records (their four fields), and
+   versionContentEqual compares exactly those, so a staged
+   snapshot and a stored entry compare field for field with
+   nothing left over. The history is read through the one
+   existing loader (the History view's own), cache included;
+   any failure to read it (a damaged history, a store error)
+   answers false, and the caller falls through to the older
+   rules: a history that cannot be read must never become a
+   reason to fork OR to adopt on a guess. The check runs
+   only on the mismatch path below, never on an ordinary
+   save, so its cost stays bounded to saves that already
+   know the file moved. */
+async function noteContentMatchesVersionHistory(noteId, candidate) {
+  if (!candidate) { return false; }
+  let loaded;
+  try {
+    loaded = await loadVersionHistory(noteId);
+  } catch (err) {
+    return false;
+  }
+  if (!loaded || !loaded.ok || !loaded.data) { return false; }
+  return (loaded.data.versions || []).some(function (entry) {
+    return versionContentEqual(candidate, entry);
+  });
+}
+
+/* v2.22: the mismatch decision chain, run at both of
+   saveNoteToRepoNow's decision points (the pre-write
+   revision comparison and the 409/422/StoreConflict catch)
+   before anything may fork a conflict copy. v2.19 asked
+   only whether the content being saved equals the CURRENT
+   stored content; that cannot see the stale holder whose
+   text is an older state of the same note (everything it
+   holds is in the stored note's past, so it reads as
+   "different" and forked, which is the 2026-10-22 Refresh
+   incident). The question that actually decides a conflict
+   is whether THIS session contributed anything the store
+   does not already have, so the order is:
+   (1) the baseline test: the content being saved equals
+       the baseline this session loaded the note at, so the
+       session made no edits at all since loading (typing
+       that was never collected into the note is not a save
+       and never reaches here; anything collected differs
+       from baseline by construction). Nothing here is
+       unique: adopt the current stored revision silently.
+   (2) the ancestor test: the content matches a captured
+       version history entry, so it is a state this note
+       genuinely held before; whatever the store holds now
+       grew from it or past it, and this session's copy of
+       it carries no unique work either. Adopt silently.
+   (3) the v2.19 content equality adoption, unchanged.
+   Only when all three say no does the caller run the
+   genuine rule (one copy, the mark, the pause).
+   Adoption here means: the freshly fetched stored file's
+   revision becomes note.sha, the note object itself takes
+   the stored content (the model must describe the note as
+   it now stands, or the note list would keep previewing
+   the stale text and the model baseline pair would
+   disagree), the baseline becomes the STORED content's
+   snapshot (that is the note's last saved state now, and
+   the landed tail's candidate baseline would misdescribe
+   it), the cache is saved, and the result is the adoption
+   shape the v2.19 path returns. No write, no copy, no
+   mark, no banner, no pause, and no version maintenance:
+   this session changed nothing, and the session that did
+   change the note ran its own maintenance when its save
+   landed. When the adopted note is the open one and the
+   editor still shows exactly the content this save just
+   adjudicated (the common case: an idle autosave debounce,
+   a Refresh tap), the editor is refilled from the adopted
+   content on the spot, the same clear the marker refill
+   Reload uses; the sync load's own refill guard would
+   otherwise read that editor as holding unsaved edits
+   (it no longer matches the baseline the adoption just
+   moved) and strand the stale text on screen. Typing that
+   raced this save is left alone in the editor and simply
+   becomes the next edit of the adopted note: that edit's
+   own save captures the adopted content into the version
+   history first, because the baseline is the stored
+   snapshot, so nothing the store held is lost either
+   way. */
+async function adoptStoredRevisionOnMismatch(note, path, saveFacts,
+    prefetched) {
+  const contributedNothing = saveFactsContentEqualsBaseline(saveFacts);
+  let matchesAncestor = false;
+  if (!contributedNothing) {
+    matchesAncestor = await noteContentMatchesVersionHistory(
+      note.id, saveFacts.candidateContent);
+  }
+  if (!contributedNothing && !matchesAncestor) {
+    return adoptStoredRevisionIfContentEqual(note, path, saveFacts,
+      prefetched);
+  }
+  let fresh = prefetched || null;
+  if (!fresh) {
+    try {
+      fresh = await storeGetFile(path);
+    } catch (err) {
+      fresh = null;
+    }
+  }
+  if (!fresh) { return null; }
+  const stored = parseNoteFile(fresh.text, fresh.token, note.id,
+    note.trashed, note.archived);
+  note.sha = fresh.token;
+  /* Whether the open editor still shows exactly the
+     adjudicated content decides the refill below, so it is
+     read BEFORE the model swap (the swap does not touch the
+     editor fields, but the comparison reads cleanest
+     against the pre-adoption state). */
+  let editorHoldsAdjudicated = false;
+  if (state.selectedId === note.id && renderEditor._forId === note.id) {
+    try {
+      editorHoldsAdjudicated = versionContentEqual(
+        editorContentSnapshot(note), saveFacts.candidateContent);
+    } catch (err) {
+      editorHoldsAdjudicated = false;
+    }
+  }
+  note.title = stored.title;
+  note.body = stored.body;
+  note.tags = stored.tags.slice();
+  note.attachments = sanitizeAttachments(
+    cloneVersionValue(stored.attachments || []));
+  note.pinned = stored.pinned;
+  note.thumbnail = stored.thumbnail;
+  note.updated = stored.updated;
+  note.fileId = stored.fileId || note.fileId;
+  note.bodyLoaded = true;
+  rememberLastSavedSnapshot(note.id, noteContentSnapshot(stored));
+  saveCache();
+  if (editorHoldsAdjudicated) {
+    renderEditor._forId = null;
+    renderAll();
+  }
+  return { saved: true, adopted: true, versionStatus: null };
+}
+
 /* Save one note to the repo, with the critical conflict rule:
    BEFORE writing, fetch the file fresh and compare its sha with the sha
    the editor loaded. If they differ, someone (or another device) changed
@@ -7729,6 +7925,13 @@ async function adoptStoredRevisionIfContentEqual(note, path, saveFacts,
    against the content being saved first, and identical
    content adopts the fresh revision silently instead of
    forking a copy (see adoptStoredRevisionIfContentEqual).
+   v2.22: the verdict now comes from the decision chain in
+   adoptStoredRevisionOnMismatch (baseline test, ancestor
+   test, then the v2.19 content equality), because equality
+   with the current content cannot acquit a stale holder
+   whose text is an older state of the same note; and saves
+   marked ambient return before any of this when the note
+   still equals its baseline (see the ambient gate below).
    When offline, the write is queued instead and the note keeps a dirty
    marker in the cache.
    This is the worker behind saveNoteToRepo above, which serializes
@@ -7761,6 +7964,35 @@ async function saveNoteToRepoNow(note, options) {
         "device yet, so it cannot be saved.");
     }
   }
+  /* v2.22: the ambient save gate. A save marked ambient
+     (options.ambient) exists only to persist whatever the
+     session currently holds; no discrete user mutation stands
+     behind it. Refresh connection's pre refresh save of the
+     open note is the caller: through v2.21 it ran ungated, so
+     a device merely holding a note open with a stale revision
+     (an iPad asleep since last night, say) ran the full write
+     path on Refresh and forked a conflict copy of text it had
+     never edited. The v2.19 gate covered the editor autosave
+     at its caller; this is the same predicate
+     (noteMatchesLastSaved: the full snapshot against the last
+     saved baseline) enforced in the worker for every ambient
+     caller, present and future: when the note still equals
+     its baseline, an ambient save writes nothing, queues
+     nothing, captures no version, and reports itself saved
+     and unchanged. Deliberate saves never pass the flag: a
+     pin toggle, a tag or title edit, a checklist toggle, an
+     attachment change, a move, a restore all mutate the note
+     before saving, so their content differs from baseline
+     and they write exactly as before (a baseline equal
+     deliberate save has nothing to persist either, but no
+     deliberate caller is ever gated, so none can be
+     swallowed by construction). A note with no baseline (a
+     first save) is never gated. The gate sits ahead of the
+     updated re-stamp below so an unchanged note keeps its
+     stored timestamps untouched. */
+  if (options.ambient && noteMatchesLastSaved(note)) {
+    return { saved: true, unchanged: true };
+  }
   /* v2.8: capture the version history facts BEFORE anything in
      this save can move them. previousSavedContent is the note's
      last saved state, held in the baseline map precisely because
@@ -7791,8 +8023,28 @@ async function saveNoteToRepoNow(note, options) {
   const path = notePath(note);
   const text = serializeNote(note);
 
+  /* v2.22: every queued form of this save (the offline branch
+     below and the two queueing catches further down) goes
+     through this one builder, which stamps the op with the
+     baseline verdict while the baseline still exists:
+     contentEqualsBaseline says the content being queued
+     equals the baseline this session loaded the note at, so
+     the save contributed nothing since loading and its flush
+     must never fork a copy for it (see the flush conflict
+     branch in flushQueue, where the baseline itself is long
+     advanced and only this recorded verdict survives).
+     Genuine edits never carry the flag: their content
+     differs from baseline by construction. */
+  const queueNotePut = function () {
+    const op = { kind: "put", path: path, content: text, noteId: note.id };
+    if (saveFactsContentEqualsBaseline(saveFacts)) {
+      op.contentEqualsBaseline = true;
+    }
+    queueOp(op);
+  };
+
   if (!state.online) {
-    queueOp({ kind: "put", path: path, content: text, noteId: note.id });
+    queueNotePut();
     /* v2.8: the matching history entry queues immediately behind
        the note write it belongs to (see flushVersionHistoryOp). A
        first save has no previous state and queues nothing. */
@@ -7816,8 +8068,15 @@ async function saveNoteToRepoNow(note, options) {
            question before forking anything. Identical
            content is an echo, not a divergence: adopt the
            fresh token and finish silently. Genuinely
-           different content keeps the rule below. */
-        const adopted = await adoptStoredRevisionIfContentEqual(
+           different content keeps the rule below.
+           v2.22: the question is now the full mismatch
+           decision chain (adoptStoredRevisionOnMismatch):
+           the baseline and ancestor tests run ahead of the
+           v2.19 content equality step, so a session that
+           contributed nothing since loading, or one holding
+           only a state this note already held, adopts the
+           fresh revision silently instead of forking. */
+        const adopted = await adoptStoredRevisionOnMismatch(
           note, path, saveFacts, fresh);
         if (adopted) { return adopted; }
         return await saveConflictCopy(note, path);
@@ -7849,8 +8108,11 @@ async function saveNoteToRepoNow(note, options) {
          session saving the same words), which adopts
          silently like the pre-write echo. A failed fetch or
          genuinely different content falls through to the
-         keep both copies rule, unchanged. */
-      const adopted = await adoptStoredRevisionIfContentEqual(
+         keep both copies rule, unchanged.
+         v2.22: the same full decision chain as the pre-write
+         point runs here (adoptStoredRevisionOnMismatch):
+         baseline test, ancestor test, then content equality. */
+      const adopted = await adoptStoredRevisionOnMismatch(
         note, path, saveFacts, null);
       if (adopted) { return adopted; }
       return await saveConflictCopy(note, path);
@@ -7859,7 +8121,7 @@ async function saveNoteToRepoNow(note, options) {
       /* v1.4: an expired Google sign in must never lose an edit. The
          complete note text joins the same offline queue used for network
          outages, and flushQueue retries it after the next sign in. */
-      queueOp({ kind: "put", path: path, content: text, noteId: note.id });
+      queueNotePut();
       /* v2.8: the history entry for this queued save queues behind
          it, exactly as in the offline branch below. */
       if (!suppressVersionCapture && previousSavedContent &&
@@ -7876,7 +8138,7 @@ async function saveNoteToRepoNow(note, options) {
       return { queued: true, googleReconnect: true };
     }
     if (err.offline || !state.online) {
-      queueOp({ kind: "put", path: path, content: text, noteId: note.id });
+      queueNotePut();
       if (!suppressVersionCapture && previousSavedContent &&
           (versionContentChanged || versionHistoryPruneNeeded.has(note.id))) {
         queueVersionHistoryMaintenance(note.id, path, previousSavedContent,
@@ -8046,7 +8308,47 @@ async function flushQueue() {
             }
           }
         }
-        if (putAlreadyLanded) {
+        /* v2.22: the no unique work tests, applied at exactly
+           the fork branch's own precondition (the store holds
+           the file, this session's loaded revision differs
+           from the stored one, and the put is a content put,
+           not a move). The baseline test reaches flush in its
+           queue time form: the save that queued this put
+           recorded contentEqualsBaseline on the op when its
+           content still equaled the baseline it loaded at,
+           because by flush time this session's baseline map
+           has long advanced past the queued content and the
+           recorded verdict is the only honest witness left.
+           Failing that, the ancestor test: queued content
+           matching a captured version history entry is a
+           state this note genuinely held, so it carries no
+           unique work either. A put passing either test is
+           consumed exactly like the landed one above (the
+           stored revision adopted, nothing written, nothing
+           forked, no mark); a put passing neither forks
+           below, unchanged, which is what a genuine offline
+           edit that collided still earns. Ops queued by
+           older builds carry no flag and simply face the
+           ancestor test and the old rules. */
+        let putMadeNoEdits = false;
+        if (!putAlreadyLanded && existing && loadedSha &&
+            existing.token !== loadedSha &&
+            !op.path.startsWith("trash/") &&
+            !op.path.startsWith("archive/")) {
+          if (op.contentEqualsBaseline) {
+            putMadeNoEdits = true;
+          } else {
+            const queuedParsed = parseNoteFile(op.content, null,
+              op.noteId, false);
+            putMadeNoEdits = await noteContentMatchesVersionHistory(
+              op.noteId, noteContentSnapshot(queuedParsed));
+          }
+          if (putMadeNoEdits && localNote &&
+              notePath(localNote) === op.path) {
+            localNote.sha = existing.token;
+          }
+        }
+        if (putAlreadyLanded || putMadeNoEdits) {
           /* Consumed: nothing written, nothing forked. */
         } else if (existing && loadedSha && existing.token !== loadedSha &&
             !op.path.startsWith("trash/") &&
@@ -20485,7 +20787,19 @@ async function refreshGoogleConnection() {
         renderEditor._forId === open.id) {
       collectEditor(open);
       saveCache();
-      await saveNoteToRepo(open).catch(function () { return null; });
+      /* v2.22: this save is ambient (see the worker's ambient
+         gate): it exists to protect a genuinely dirty editor's
+         text (queued in full when the token is already dead),
+         not to persist a note nobody edited. Through v2.21 it
+         ran ungated, so Refresh on a device merely holding a
+         note open with a stale revision saved that stale text
+         through the full write path and forked a conflict
+         copy of it (the 2026-10-22 iPad incident). Marked
+         ambient, an untouched open note now costs this save
+         nothing at all, and a dirty one still saves (or
+         queues) exactly as before. */
+      await saveNoteToRepo(open, { ambient: true })
+        .catch(function () { return null; });
     }
     /* (b) A fresh token through the existing GIS machinery: the
        silent request first (empty prompt, via googleTrySilentSignIn,
