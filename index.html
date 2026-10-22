@@ -40,10 +40,47 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-22-SSN-V2200
-  Version: 2.20.0
+  BUILD STAMP: 2026-10-22-SSN-V2210
+  Version: 2.21.0
 
   Revision history:
+    v2.21.0 2026-10-22 Boot speed: paint from the device first,
+                      and measure every boot. A reload used to
+                      hold the loading overlay until the whole
+                      Drive sync settled, even though the app
+                      already painted from its encrypted on
+                      device cache before the sync (behind the
+                      overlay, since v1.6). That paint is now
+                      the boot's first paint: the overlay comes
+                      down on it and the sync finishes behind
+                      the sync pill, reconciling in place under
+                      the usual protections (an open note with
+                      unsaved typing is never refilled). With
+                      no readable cache, boot behaves exactly
+                      as before. The loader's folder listings
+                      now run concurrently instead of one after
+                      another, with the catalog and drop box
+                      reads riding along, and nothing after a
+                      load waits on the debounced index or
+                      catalog bookkeeping writes (the flushes
+                      before a load stay: the load reads both
+                      files and must never meet this device's
+                      own stale write). Settings gains a Last
+                      load readout: sign in, cache paint,
+                      catalog, listings, note bodies downloaded,
+                      first paint, fully synced, and the page's
+                      own download time, so a slow boot is a
+                      breakdown instead of a mystery. And the
+                      service worker serves the page cache
+                      first, like the manifest and the icons:
+                      the network first rule re-downloaded the
+                      whole file on every reload. Updates stay
+                      reliable through the per version cache
+                      name: a new release precaches its page
+                      under its new cache name at install and
+                      deletes the old caches at activate, so
+                      the first navigation a new worker serves
+                      already carries the new build.
     v2.20.0 2026-10-22 A catalog for the list, and a drop box
                       for outside notes. The notes list used to
                       download every note file on every load just
@@ -4514,6 +4551,14 @@ body.dark .version-date{color:var(--accent);}
         </label>
         <div class="settings-help">Check Google Drive about every 30 seconds and sync automatically when your notes change elsewhere, only when you are idle.</div>
       </div>
+      <!-- v2.21: the Last load readout. A plain diagnostic list,
+           filled by renderLastLoadReadout from the boot report
+           every time Settings opens; it describes the most
+           recent boot in this session only. -->
+      <div class="settings-autosync">
+        <div class="settings-help">Last load</div>
+        <div class="settings-help" id="settingsLastLoad">No load has finished yet in this session.</div>
+      </div>
     </section>
 
     <section class="settings-section" aria-labelledby="settingsHistoryTitle">
@@ -4657,8 +4702,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-22-SSN-V2200";
-const APP_VERSION = "2.20.0";
+const APP_BUILD = "2026-10-22-SSN-V2210";
+const APP_VERSION = "2.21.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -6706,6 +6751,7 @@ function ensureNoteBodyLoaded(note) {
     try {
       const file = await storeGetFile(notePath(note));
       if (file) {
+        bootCountNoteDownload();   /* v2.21: the boot report's count */
         const parsed = parseNoteFile(file.text, file.token, note.id,
           note.trashed, note.archived);
         note.title = parsed.title;
@@ -7047,6 +7093,7 @@ async function reconcileCatalogListings(catalog, listings) {
       } else {
         const file = await storeGetFile(path);
         if (!file) { continue; }   /* vanished mid load, as before */
+        bootCountNoteDownload();   /* v2.21: the boot report's count */
         const note = parseNoteFile(file.text, file.token, fallbackId,
           collection === "trash", collection === "archive");
         if (!note.notebook && collection === "notebook") {
@@ -7080,6 +7127,7 @@ async function loadListingsClassic(listings) {
       const file = await storeGetFile(
         "notebooks/" + nb.slug + "/" + entry.name);
       if (!file) { continue; }
+      bootCountNoteDownload();   /* v2.21: the boot report's count */
       const fallbackId = entry.name.replace(/\.md$/i, "");
       const note = parseNoteFile(file.text, file.token, fallbackId, false);
       if (!note.notebook) { note.notebook = nb.slug; }
@@ -7092,6 +7140,7 @@ async function loadListingsClassic(listings) {
     if (entry.isDir || !/\.md$/i.test(entry.name)) { continue; }
     const file = await storeGetFile("trash/" + entry.name);
     if (!file) { continue; }
+    bootCountNoteDownload();   /* v2.21: the boot report's count */
     const fallbackId = entry.name.replace(/\.md$/i, "");
     const note = parseNoteFile(file.text, file.token, fallbackId, true);
     note.fileId = entry.fileId;
@@ -7107,6 +7156,7 @@ async function loadListingsClassic(listings) {
     if (entry.isDir || !/\.md$/i.test(entry.name)) { continue; }
     const file = await storeGetFile("archive/" + entry.name);
     if (!file) { continue; }
+    bootCountNoteDownload();   /* v2.21: the boot report's count */
     const fallbackId = entry.name.replace(/\.md$/i, "");
     const note = parseNoteFile(file.text, file.token, fallbackId,
       false, true);
@@ -7127,52 +7177,14 @@ async function loadListingsClassic(listings) {
    (see the v2.20 section comment above), falling back to the
    classic full download otherwise. The drop box is read along
    the way; its import step runs in syncNow, after this load. */
-async function loadAllFromRepo() {
-  attachmentParseWarnings = 0;   /* v1.2: reset the malformed metadata count */
-  const indexFile = await storeGetFile("index.json");
-  let index = null;
-  if (indexFile) {
-    try { index = JSON.parse(indexFile.text); } catch (e) { index = null; }
-  }
-  const folders = await storeListDir("notebooks");
-  const folderSlugs = (folders || [])
-    .filter(function (e) { return e.isDir; })
-    .map(function (e) { return e.name; });
-
-  if (!index || !Array.isArray(index.notebooks)) {
-    index = buildIndexFromFolders(folderSlugs);
-    state.notebooks = index.notebooks;
-    state.index = index;
-    /* Persist the rebuilt index so the next load is a single GET. */
-    try {
-      await storePutFile("index.json", JSON.stringify(index, null, 2),
-        indexFile ? indexFile.token : null, "Rebuild index");
-    } catch (err) { /* best effort, see saveIndex */ }
-  } else {
-    state.notebooks = index.notebooks;
-    state.index = index;
-    /* A notebook folder with no index entry still gets listed, so notes
-       are never hidden by a stale index. */
-    folderSlugs.forEach(function (slug) {
-      if (!state.notebooks.some(function (nb) { return nb.slug === slug; })) {
-        state.notebooks.push(buildIndexFromFolders([slug]).notebooks[0]);
-      }
-    });
-  }
-
-  /* v2.20: the listings, gathered once for both load paths. */
-  const listings = { notebooks: {}, trash: null, archive: null };
-  for (const nb of state.notebooks) {
-    listings.notebooks[nb.slug] = await storeListDir(
-      "notebooks/" + nb.slug);
-  }
-  listings.trash = await storeListDir("trash");
-  listings.archive = await storeListDir("archive");
-
-  /* v2.20: read the catalog. Any failure here (a missing file, a
-     transport error, unparseable JSON, a shape this build does
-     not speak) simply means the classic load runs and the
-     catalog is rebuilt from its result. */
+/* v2.21: the catalog read, lifted out of loadAllFromRepo so
+   the load can start it alongside the folder listings and
+   await it where the old serial code read it. The body is
+   the v2.20 read unchanged, failures and all: any failure
+   here (a missing file, a transport error, unparseable JSON,
+   a shape this build does not speak) simply means the classic
+   load runs and the catalog is rebuilt from its result. */
+async function readCatalogForLoad() {
   let catalog = null;
   try {
     const catalogFile = await storeGetFile(CATALOG_FILE);
@@ -7198,10 +7210,81 @@ async function loadAllFromRepo() {
       lastCatalogEntriesText = null;
     }
   } catch (e) { catalog = null; lastCatalogEntriesText = null; }
+  return catalog;
+}
 
+async function loadAllFromRepo() {
+  attachmentParseWarnings = 0;   /* v1.2: reset the malformed metadata count */
+  /* v2.21: the index read and the notebooks listing are
+     independent; they run together now. Promise.all keeps the
+     old failure surface: a rejection from either fails the
+     load, as the serial order did. */
+  const indexAndFolders = await Promise.all([
+    storeGetFile("index.json"), storeListDir("notebooks")]);
+  const indexFile = indexAndFolders[0];
+  let index = null;
+  if (indexFile) {
+    try { index = JSON.parse(indexFile.text); } catch (e) { index = null; }
+  }
+  const folders = indexAndFolders[1];
+  const folderSlugs = (folders || [])
+    .filter(function (e) { return e.isDir; })
+    .map(function (e) { return e.name; });
+
+  if (!index || !Array.isArray(index.notebooks)) {
+    index = buildIndexFromFolders(folderSlugs);
+    state.notebooks = index.notebooks;
+    state.index = index;
+    /* Persist the rebuilt index so the next load is a single GET. */
+    try {
+      await storePutFile("index.json", JSON.stringify(index, null, 2),
+        indexFile ? indexFile.token : null, "Rebuild index");
+    } catch (err) { /* best effort, see saveIndex */ }
+  } else {
+    state.notebooks = index.notebooks;
+    state.index = index;
+    /* A notebook folder with no index entry still gets listed, so notes
+       are never hidden by a stale index. */
+    folderSlugs.forEach(function (slug) {
+      if (!state.notebooks.some(function (nb) { return nb.slug === slug; })) {
+        state.notebooks.push(buildIndexFromFolders([slug]).notebooks[0]);
+      }
+    });
+  }
+
+  /* v2.20: the listings, gathered once for both load paths.
+     v2.21: gathered CONCURRENTLY. Each notebook folder, the
+     trash, and the archive are independent listings, and the
+     catalog read and the drop box read depend on none of
+     them, so all of it starts together and the load awaits
+     the batch. Promise.all preserves the error semantics the
+     serial code had (any listing's failure fails the load;
+     the serial code simply stopped at the first). One known
+     cost: racing folder resolutions can repeat a find child
+     lookup for a shared parent before the folder id cache
+     fills; the results are identical, only the call is
+     duplicated. */
+  const listings = { notebooks: {}, trash: null, archive: null };
+  const listingJobs = state.notebooks.map(function (nb) {
+    return storeListDir("notebooks/" + nb.slug).then(function (entries) {
+      listings.notebooks[nb.slug] = entries;
+    });
+  });
+  listingJobs.push(storeListDir("trash").then(function (entries) {
+    listings.trash = entries;
+  }));
+  listingJobs.push(storeListDir("archive").then(function (entries) {
+    listings.archive = entries;
+  }));
+  const catalogPromise = readCatalogForLoad();
   /* v2.20: the drop box rides along (creates itself if missing,
      stashes unprocessed contents for syncNow's import step). */
-  await loadIncomingStash();
+  const incomingPromise = loadIncomingStash();
+  await Promise.all(listingJobs);
+  bootMark("listingsDone");
+  const catalog = await catalogPromise;
+  bootMark("catalogRead");
+  await incomingPromise;
 
   let loaded = null;
   if (catalog) {
@@ -8729,6 +8812,14 @@ async function connectAndLoad() {
         "your Google Drive. The same sign in also covers attachments.");
     return;
   }
+  /* v2.21: the boot report's first stage. The sign in is live
+     in memory from here on, which is also the standard the
+     cache paint below is gated on: this function is only ever
+     reached with a live sign in (the gate's silent renewal or
+     a still live token), the store root is ensured next, and
+     the seeding decision reads the store itself before any
+     cached state is painted. */
+  bootMark("signInReady");
 
   /* v2.0: Google is the only attachment provider. Settings written
      by an older build may still carry another value in this field;
@@ -8767,23 +8858,46 @@ async function connectAndLoad() {
       state.selectedId = starter.id;
     }
     /* v1.6 background population: when this device holds a cache for
-       the Google store, paint the app from it now, still under the
-       loading overlay. The sync below then replaces the state with
-       the fresh library and re renders, and only then does the
-       overlay fade. A device with no cache simply waits for the sync,
-       exactly as before. The cache is a display shortcut only: the
-       seeding decision above already read the store itself, and the
-       sync still owns the final state, so conflict, queue, and
-       seeding behavior are unchanged. */
-    if (await loadCacheWithKey()) { renderAll(); }
+       the Google store, paint the app from it now. The sync below
+       then replaces the state with the fresh library and re renders.
+       The cache is a display shortcut only: the seeding decision
+       above already read the store itself, and the sync still owns
+       the final state, so conflict, queue, and seeding behavior are
+       unchanged.
+       v2.21: that paint is now the boot's first paint. The overlay
+       comes down on it, and the sync finishes behind the sync pill
+       (state.syncing drives the pill for exactly this span) instead
+       of behind the overlay. The reconciliation lands through the
+       ordinary sync machinery, with its ordinary protections: the
+       open note snapshot in syncNow predates the load, and an
+       editor holding unsaved typing is never refilled (v2.16.1),
+       so acting on the painted app is the same exposure as
+       pressing Sync now while working, which the app has always
+       supported. A device with no readable cache paints nothing
+       and waits for the sync with the overlay up, exactly as
+       before v2.21. */
+    const paintedFromCache = await loadCacheWithKey();
+    if (paintedFromCache) {
+      renderAll();
+      bootMark("cachePainted");
+    } else {
+      bootCacheSkipped();
+    }
     showScreen("app");
+    if (paintedFromCache) {
+      bootMark("firstPaint");
+      hideLoading();
+    }
     await syncNow(false);
+    bootMark("synced");
     /* v2.16: the boot sync just refreshed the store in memory,
        so the auto-sync watcher baselines its change token from
        this moment and starts polling (when the setting is on).
        Changes from before this boot are already in hand. */
     startAutoSync();
+    if (!paintedFromCache) { bootMark("firstPaint"); }
     hideLoading();
+    finalizeBootReport();
     if (starter) {
       openNote(starter.id);
       toast("Google Drive connected. Welcome to SnakeScale Notes.");
@@ -8807,11 +8921,18 @@ async function connectAndLoad() {
       state.repoExists = true;
       showScreen("app");
       renderAll();
+      /* v2.21: this offline paint is a first paint too, and
+         the boot report freezes here: the synced stage stays
+         skipped, which is the readout's honest word for a
+         boot that never reached Drive. */
+      bootMark("cachePainted");
+      bootMark("firstPaint");
       /* v2.16: the cached app is still a connected app once the
          store is reachable again; the watcher's ticks simply
          no-op until storeSyncReady passes. */
       startAutoSync();
       hideLoading();
+      finalizeBootReport();
       toast("Could not reach Google Drive (" + err.message +
         "). Showing your cached notes.", true);
       refreshSyncPill();
@@ -8830,6 +8951,115 @@ async function connectAndLoad() {
    intentional exception is the note BODY in the editor: it is the user's
    own rich text HTML, loaded into the contenteditable element by design.
    -------------------------------------------------------------------------- */
+
+/* --------------------------------------------------------------------------
+   v2.21: the boot report (Settings' Last load readout)
+
+   One object, filled in as the boot walks its stages and read
+   by the readout in the Settings Connection section
+   (renderLastLoadReadout below; syncSettingsControls refreshes
+   it on every open). Marks are performance.now readings,
+   milliseconds since this navigation began, and each is taken
+   once: the first writer wins, and finalizeBootReport freezes
+   the report when the boot's sync settles, so later syncs in
+   the same session can never move the boot's numbers. The
+   note body counter rides the same freeze: it counts every
+   note file body this boot's load downloaded (the loader's
+   own fetches, plus the open note's shell completion in
+   syncNow), and stops counting at the freeze.
+
+   The stages, in the order a boot meets them:
+     signInReady   the Google sign in checked out live
+     cachePainted  the list was painted from the device cache
+     catalogRead   this boot's load read catalog.json
+     listingsDone  this boot's load gathered the folder listings
+     firstPaint    the list was on screen, the overlay down
+     synced        the boot sync settled
+   A stage that did not run (no readable cache to paint, an
+   offline boot that never synced) stays null and the readout
+   says skipped, never a made up number.
+   -------------------------------------------------------------------------- */
+const bootReport = {
+  marks: {
+    signInReady: null, cachePainted: null, catalogRead: null,
+    listingsDone: null, firstPaint: null, synced: null
+  },
+  /* The boot looked for a cache and found none usable, which
+     the readout words differently from a stage that simply
+     has not happened yet. */
+  cacheSkipped: false,
+  noteDownloads: 0,
+  finalized: false
+};
+
+function bootMark(name) {
+  if (bootReport.finalized) { return; }
+  if (bootReport.marks[name] == null) {
+    bootReport.marks[name] = performance.now();
+  }
+}
+
+function bootCacheSkipped() {
+  if (!bootReport.finalized) { bootReport.cacheSkipped = true; }
+}
+
+function bootCountNoteDownload() {
+  if (!bootReport.finalized) { bootReport.noteDownloads++; }
+}
+
+function finalizeBootReport() {
+  bootReport.finalized = true;
+}
+
+/* A mark, readably: under a second as whole milliseconds,
+   above it as seconds with one decimal. A stage that never
+   ran reads as skipped. */
+function formatBootTime(ms) {
+  if (ms == null || !isFinite(ms)) { return "skipped"; }
+  if (ms < 1000) { return Math.round(ms) + " ms"; }
+  return (ms / 1000).toFixed(1) + " s";
+}
+
+/* The browser's own timing for the document itself: when the
+   page's response finished arriving, on the same clock as the
+   marks. Absent on engines without navigation timing, where
+   the readout simply leaves the line out. */
+function bootNavigationTiming() {
+  try {
+    const entries = performance.getEntriesByType("navigation");
+    if (entries && entries.length && entries[0].responseEnd) {
+      return entries[0].responseEnd;
+    }
+  } catch (e) { /* no navigation timing: no line */ }
+  return null;
+}
+
+function renderLastLoadReadout() {
+  const el = document.getElementById("settingsLastLoad");
+  if (!el) { return; }
+  el.textContent = "";
+  const m = bootReport.marks;
+  const lines = [];
+  const navMs = bootNavigationTiming();
+  if (navMs != null) {
+    lines.push("Page download: " + formatBootTime(navMs));
+  }
+  lines.push("Sign in ready: " + formatBootTime(m.signInReady));
+  lines.push(bootReport.cacheSkipped && m.cachePainted == null
+    ? "Painted from this device's cache: skipped (no readable cache)"
+    : "Painted from this device's cache: " +
+      formatBootTime(m.cachePainted));
+  lines.push("Catalog read: " + formatBootTime(m.catalogRead));
+  lines.push("Folder listings: " + formatBootTime(m.listingsDone));
+  lines.push("Note bodies downloaded: " + bootReport.noteDownloads);
+  lines.push("Notes on screen: " + formatBootTime(m.firstPaint));
+  lines.push("Fully synced: " + formatBootTime(m.synced));
+  lines.forEach(function (text) {
+    const row = document.createElement("div");
+    row.textContent = text;
+    el.appendChild(row);
+  });
+}
 
 /* --------------------------------------------------------------------------
    v1.6 loading overlay and sidebar version label
@@ -10657,6 +10887,8 @@ function syncSettingsControls() {
   /* v2.16: the auto-sync checkbox shows the saved choice. */
   const autoSyncToggle = document.getElementById("settingsAutoSyncToggle");
   if (autoSyncToggle) { autoSyncToggle.checked = state.autoSync !== false; }
+  /* v2.21: the Last load readout shows this session's boot. */
+  renderLastLoadReadout();
 }
 
 function openSettingsModal() {
@@ -26255,7 +26487,18 @@ function registerServiceWorker() {
       (proto === "http:" &&
         (host === "localhost" || host === "127.0.0.1"));
     if (!secureEnough) { return; }
-    navigator.serviceWorker.register("sw.js").catch(function () {
+    navigator.serviceWorker.register("sw.js").then(function (reg) {
+      /* v2.21: ask for an update check on every boot. The page
+         is served cache first now, so discovering a new worker
+         promptly is what keeps releases arriving: the check
+         itself is one small request for sw.js, and the new
+         worker precaches the new build's page under its new
+         cache name before it activates. A failed check is as
+         silent as a failed registration. */
+      if (reg && typeof reg.update === "function") {
+        reg.update().catch(function () { /* silent, as below */ });
+      }
+    }).catch(function () {
       /* Silent by design: the app works the same without the
          worker; it only loses offline shell caching and the
          browser's install offer. */
