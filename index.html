@@ -40,10 +40,54 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-22-SSN-V2220
-  Version: 2.22.0
+  BUILD STAMP: 2026-10-22-SSN-V2230
+  Version: 2.23.0
 
   Revision history:
+    v2.23.0 2026-10-22 Paste options, and attachments ride
+                      the drop box. A rich paste (one carrying
+                      HTML) now keeps its clipboard payloads and
+                      raises a small Paste options popup at the
+                      end of the pasted content, modeled on the
+                      Word popup Chris pointed at: Keep source
+                      formatting (the v2.18 paste, backgrounds
+                      stripped, exactly as before), Merge
+                      formatting (the same structure with inline
+                      font family, font size, color, and
+                      background styling removed, so the text
+                      takes the note's own formatting), and
+                      Paste text only (the clipboard's plain
+                      text, paragraphs as paragraphs and single
+                      line breaks as line breaks). Picking a row
+                      re-applies the same paste in that mode:
+                      the switch undoes the paste's own insert
+                      and inserts the new rendering, so one undo
+                      after a switch still returns to the
+                      pre-paste state (where undo is unavailable
+                      the retained pasted range is replaced
+                      instead, and then one undo returns to the
+                      paste as it first landed). A Settings
+                      control, Default paste, picks which mode
+                      a paste lands in; the popup still offers
+                      the other two, and its Set default paste
+                      row opens Settings at that control. The
+                      popup shows only for rich pastes, never
+                      for plain text, files, or drag and drop,
+                      and it dismisses on Escape, on a pointer
+                      press outside it, on the next editing
+                      keystroke or input, on scroll, and when
+                      the note changes. And the drop box grows
+                      an object entry form, {note, attachments},
+                      whose attachments (base64 payloads in
+                      the entry itself, capped at 10 MB apiece
+                      and 25 MB per entry) upload through the
+                      app's own attachment pipeline on import
+                      and land in the note as ordinary
+                      attachments, images inline and files as
+                      cards at the end of the body; string
+                      entries import exactly as before, and the
+                      import report counts what landed, what
+                      was too large, and what failed, by name.
     v2.22.0 2026-10-22 Conflict hardening, round three: a
                       session that made no edits can no longer
                       fork a conflict copy. The incident: a PC
@@ -2436,6 +2480,39 @@ body.dark .tb-menu:hover::-webkit-scrollbar-thumb{
 .mention-create-sub{font-size:12px;color:var(--accent);margin-top:1px;}
 .mention-hint{flex:none;display:inline-flex;align-items:center;gap:5px;
   font-size:12px;color:var(--muted);white-space:nowrap;}
+/* v2.23: the Paste options popup. A fixed card in the mention
+   popup's look, parked at the end of the pasted content by the
+   script (flipping above it near the window's bottom). The
+   mode rows are full width buttons in the Word popup's shape
+   (Chris's screenshot); the row for the mode the paste is
+   currently wearing carries the soft fill and a check, so the
+   applied choice is visible, never silently remembered; the
+   Set default paste row sits apart at the foot, over a rule,
+   with its gear. */
+#pastePopup{
+  position:fixed;z-index:63;width:min(300px,94vw);padding:6px;
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius-card);box-shadow:0 10px 28px rgba(6,32,22,.28);
+}
+#pastePopup.hidden{display:none;}
+.paste-head{
+  font-size:11px;font-weight:700;letter-spacing:.08em;
+  color:var(--muted);padding:5px 10px 3px;
+}
+.paste-row{
+  display:flex;align-items:center;gap:9px;width:100%;text-align:left;
+  border:none;background:none;color:var(--text);font-size:14px;
+  padding:7px 10px;border-radius:8px;cursor:pointer;
+}
+.paste-row:hover{background:var(--soft);}
+.paste-row svg{flex:none;opacity:.85;}
+.paste-row .paste-row-label{flex:1;min-width:0;}
+.paste-row .paste-check{flex:none;visibility:hidden;color:var(--accent);}
+.paste-row.current{background:var(--soft);}
+.paste-row.current .paste-check{visibility:visible;}
+.paste-foot{
+  border-top:1px solid var(--border);margin-top:4px;padding-top:4px;
+}
 /* v1.6 checklists: a checklist is a list of checkboxes, not a bulleted
    list, so its items never show a bullet or marker in front of the
    checkbox. Toolbars have tagged new checklists with the ss-checklist
@@ -4263,6 +4340,25 @@ body.dark .version-date{color:var(--accent);}
                of #noteBody like the link bar, so it can never be
                saved into a note. Hidden by default. -->
           <div id="mentionPopup" class="hidden" role="listbox" aria-label="Link a note"></div>
+          <!-- v2.23: the Paste options popup, modeled on the
+               Word popup in Chris's screenshot. After a paste
+               carrying HTML lands, this card floats at the end
+               of the pasted content: three mode rows that swap
+               the paste's rendering in place, and a Set default
+               paste row that opens Settings at the Default paste
+               select. A sibling of #noteBody like the mention
+               popup, so it can never be saved into a note. The
+               row for the mode the paste is wearing carries the
+               current marker and the check. Hidden by default. -->
+          <div id="pastePopup" class="hidden" role="menu" aria-label="Paste options">
+            <div class="paste-head">PASTE OPTIONS</div>
+            <button class="paste-row" type="button" data-paste-mode="source"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4l11-11a2.83 2.83 0 1 0-4-4L4 16v4z"/><path d="M13.5 6.5l4 4"/></svg><span class="paste-row-label">Keep source formatting</span><svg class="paste-check" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"/></svg></button>
+            <button class="paste-row" type="button" data-paste-mode="merge"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 7h13"/><path d="M8 12h13"/><path d="M8 17h13"/><path d="M3.5 7h.01"/><path d="M3.5 12h.01"/><path d="M3.5 17h.01"/></svg><span class="paste-row-label">Merge formatting</span><svg class="paste-check" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"/></svg></button>
+            <button class="paste-row" type="button" data-paste-mode="text"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 6V4h14v2"/><path d="M12 4v16"/><path d="M9 20h6"/></svg><span class="paste-row-label">Paste text only</span><svg class="paste-check" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5L20 6.5"/></svg></button>
+            <div class="paste-foot">
+              <button class="paste-row" type="button" data-paste-action="set-default"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.09A1.7 1.7 0 0 0 9 19.4a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.09A1.7 1.7 0 0 0 4.6 9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.51 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.7 1.7 0 0 0 19.4 9c.23.6.86 1 1.51 1H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.51 1z"/></svg><span class="paste-row-label">Set default paste</span></button>
+            </div>
+          </div>
           <!-- v1.7: the selected image's action menu, a SIBLING of
                #noteBody like the link popup, so it can never be saved
                into a note. Buttons carry data-action values; one
@@ -4598,6 +4694,24 @@ body.dark .version-date{color:var(--accent);}
       </div>
     </section>
 
+    <!-- v2.23: the default paste mode. The select is the whole
+         control: its shown value is the saved choice, and
+         changing it persists at once, like every Settings
+         control. The paste popup's Set default paste row opens
+         Settings focused here. -->
+    <section class="settings-section" aria-labelledby="settingsEditorTitle">
+      <h3 id="settingsEditorTitle">Editor</h3>
+      <div class="field">
+        <label for="settingsDefaultPasteSelect">Default paste</label>
+        <select id="settingsDefaultPasteSelect">
+          <option value="source">Keep source formatting</option>
+          <option value="merge">Merge formatting</option>
+          <option value="text">Paste text only</option>
+        </select>
+        <div class="settings-help">What a paste carrying formatting does first. After any rich paste, the Paste options popup beside the pasted text still offers the other two modes for that paste.</div>
+      </div>
+    </section>
+
     <section class="settings-section" aria-labelledby="settingsHistoryTitle">
       <h3 id="settingsHistoryTitle">Note history</h3>
       <div class="field">
@@ -4739,8 +4853,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-22-SSN-V2220";
-const APP_VERSION = "2.22.0";
+const APP_BUILD = "2026-10-22-SSN-V2230";
+const APP_VERSION = "2.23.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -4859,6 +4973,12 @@ const state = {
                             // toggle. On unless a stored settings
                             // record explicitly says false; see
                             // the auto-sync block for the engine.
+  defaultPasteMode: "source", // v2.23: which rendering a rich
+                            // paste lands in ("source", "merge",
+                            // or "text"), remembered in settings
+                            // and edited by the Settings Editor
+                            // section's Default paste select; see
+                            // the paste options block.
   trashSelection: [],       // v1.8.1: ids of the notes checked in the
                             // Trash view, for Delete Selected
   archiveSelection: [],     // v1.8.1: ids of the notes checked in the
@@ -5372,6 +5492,13 @@ function loadSettings() {
      before this setting existed (no autoSync field at all)
      keeps the on default, exactly like a fresh device. */
   if (s.autoSync === false) { state.autoSync = false; }
+  /* v2.23: the default paste mode. Only the three values the
+     Settings select offers are honored; anything else (an
+     absent field from an older build, a damaged value) leaves
+     the Keep source formatting default in place. */
+  if (["source", "merge", "text"].indexOf(s.defaultPasteMode) >= 0) {
+    state.defaultPasteMode = s.defaultPasteMode;
+  }
 }
 
 
@@ -5383,7 +5510,8 @@ function saveSettings() {
     sidebarRail: state.sidebarRail,   // v2.5: the icon rail choice
     versionsLimit: state.versionsLimit,   // v2.8: versions kept per note
     onboardingSeen: state.onboardingSeen,   // v2.13: the walkthrough record
-    autoSync: state.autoSync   // v2.16: the idle auto-sync choice
+    autoSync: state.autoSync,   // v2.16: the idle auto-sync choice
+    defaultPasteMode: state.defaultPasteMode   // v2.23: the paste default
   }));
 }
 
@@ -6576,9 +6704,27 @@ function buildIndexFromFolders(folderSlugs) {
    outside writer appends mid cleanup survives to the next sync;
    a write back that loses the token race leaves the file alone
    and lets the next sync retry, with the duplicate skip as the
-   guard against importing twice. Attachments cannot be delivered
-   through the box yet; the README documents the format for other
-   tools.
+   guard against importing twice. The README documents the format
+   for other tools.
+
+   v2.23: an entry may also be an object, {note: "<the same note
+   file text>", attachments: [{name, mimeType, dataBase64}]},
+   carrying its files with it. The note text runs the identical
+   pipeline (its own front matter attachment records are still
+   stripped: those files remain outside the app's visibility),
+   and each carried attachment is base64 decoded and uploaded
+   through the app's own attachment machinery into the store
+   attachments folder, becoming an ordinary attachment record on
+   the note: images are appended inline at the end of the body,
+   other files as attachment blocks there. Caps: 10 MB decoded
+   per attachment and 25 MB decoded per entry; an item over a
+   cap is skipped and named in the report, an item whose upload
+   fails is counted and named, and the note imports either way
+   with whatever landed. The duplicate skip runs before any
+   upload, so reprocessing an entry never orphans files, and
+   cleanup tells entries apart by a type tagged key, so a
+   string entry and an object entry holding the same note text
+   remain two entries.
 
    Auto-sync corpus: both files' Drive ids join the known ids on
    every load (the load resolves them, which is what the corpus
@@ -6874,19 +7020,149 @@ async function loadIncomingStash() {
   } catch (err) { /* a failed read idles the box for this load */ }
 }
 
-/* Remove from list exactly the strings in removals, one
-   occurrence apiece (multiset subtraction): processed entries go,
-   anything appended concurrently that was never processed stays. */
-function subtractEntryStrings(list, removals) {
-  const pending = removals.slice();
+/* v2.23: the drop box caps for carried attachments, decoded
+   sizes: one attachment may be at most 10 MB, and one entry's
+   attachments together at most 25 MB. Single named constants:
+   the import below and the README both answer to these. */
+const DROPBOX_ATT_MAX_BYTES = 10 * 1024 * 1024;
+const DROPBOX_ATT_TOTAL_BYTES = 25 * 1024 * 1024;
+
+/* The identity of one drop box entry for cleanup subtraction:
+   a type tagged key, so entries are told apart by what they
+   are, not only by their text. A string entry keys on its
+   text; an object entry on its note text (two object entries
+   carrying the same note text are the same drop twice over,
+   and the duplicate skip has already kept the second from
+   importing or uploading anything); anything else keys on its
+   string form, as the pre-v2.23 rejection path recorded it. */
+function dropboxEntryKey(entry) {
+  if (typeof entry === "string") { return "s:" + entry; }
+  if (entry && typeof entry === "object" &&
+      typeof entry.note === "string") {
+    return "o:" + entry.note;
+  }
+  return "x:" + String(entry);
+}
+
+/* Remove from list exactly the entries whose keys are in
+   removalKeys, one occurrence apiece (multiset subtraction):
+   processed entries go, anything appended concurrently that
+   was never processed stays. */
+function subtractDropboxEntries(list, removalKeys) {
+  const pending = removalKeys.slice();
   return (list || []).filter(function (item) {
-    const idx = pending.indexOf(item);
+    const idx = pending.indexOf(dropboxEntryKey(item));
     if (idx >= 0) {
       pending.splice(idx, 1);
       return false;
     }
     return true;
   });
+}
+
+/* Base64 to bytes for a carried attachment. Whitespace in the
+   payload (line wraps from a mail or JSON writer) is ignored.
+   Returns null on undecodable input; the caller counts the
+   item as failed under its name. */
+function decodeDropboxBase64(dataBase64) {
+  try {
+    const bin = atob(String(dataBase64).replace(/\s+/g, ""));
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) {
+      bytes[i] = bin.charCodeAt(i);
+    }
+    return bytes;
+  } catch (err) { return null; }
+}
+
+/* v2.23: land one object entry's carried attachments on its
+   note. Runs after the note text's own front matter records
+   were stripped (see processIncomingBox) and before the note
+   is saved, so the records and the body blocks are part of
+   the note's first save and canonicalize exactly like any
+   editor placed attachment. Items run in array order through
+   the app's ordinary attachment upload (the current provider
+   driver, the store attachments folder via the storage name
+   convention), under the caps above: an item over a cap is
+   skipped and named, an undecodable or failed item is counted
+   and named, and neither stops the note or the items after
+   it. Placement: each landed item appends its block at the
+   end of the body, images as the inline image figure the
+   editor itself inserts, other files as the attachment block;
+   both are the bare shells the save funnel rebuilds, so the
+   imported note is native from its first save. */
+async function importDropboxAttachments(note, items) {
+  const result = { imported: 0, skippedNames: [], failedNames: [] };
+  const attachCfg = state.attach || {};
+  const svc = attachCfg.defaultProvider || "google";
+  const driver = (typeof providers !== "undefined" && providers)
+    ? providers[svc] : null;
+  let ready = false;
+  if (driver && state.online) {
+    try {
+      const st = await driver.getStatus();
+      ready = !!(st && st.connected);
+    } catch (err) { ready = false; }
+  }
+  let totalBytes = 0;
+  const shells = [];
+  for (const item of items) {
+    const name = (item && typeof item.name === "string" && item.name)
+      ? item.name : "attachment";
+    const mime = (item && typeof item.mimeType === "string" && item.mimeType)
+      ? item.mimeType : "application/octet-stream";
+    let bytes = null;
+    if (item && typeof item.dataBase64 === "string") {
+      bytes = decodeDropboxBase64(item.dataBase64);
+    }
+    if (!bytes) { result.failedNames.push(name); continue; }
+    if (bytes.length > DROPBOX_ATT_MAX_BYTES ||
+        totalBytes + bytes.length > DROPBOX_ATT_TOTAL_BYTES) {
+      result.skippedNames.push(name);
+      continue;
+    }
+    totalBytes += bytes.length;
+    if (!ready || !driver) { result.failedNames.push(name); continue; }
+    const attId = newNoteId() + "a";
+    const storageName = attId + "__" + sanitizeFileName(name);
+    const file = new File([bytes], name, { type: mime });
+    /* The provider driver's upload is promise based, with a
+       progress callback as its third argument, exactly as the
+       docx image import beside this section calls it. */
+    let uploaded = null;
+    try {
+      uploaded = await driver.upload(file, storageName,
+        function () { });
+    } catch (err) { uploaded = null; }
+    if (!uploaded || !uploaded.fileId) {
+      result.failedNames.push(name);
+      continue;
+    }
+    note.attachments.push({
+      id: attId,
+      provider: svc,
+      fileId: String(uploaded.fileId),
+      name: name,
+      storageName: storageName,
+      mime: mime,
+      size: bytes.length,
+      created: new Date().toISOString()
+    });
+    shells.push({ id: attId, image: mime.indexOf("image/") === 0 });
+    result.imported++;
+  }
+  if (shells.length) {
+    let tail = "";
+    shells.forEach(function (s) {
+      tail += s.image
+        ? '<figure class="ss-attachment" data-attachment-id="' + s.id +
+          '" contenteditable="false"></figure>'
+        : '<div class="ss-attachment" data-attachment-id="' + s.id +
+          '" contenteditable="false"></div>';
+    });
+    note.body = (note.body || "") + tail;
+  }
+  return result;
 }
 
 /* Process the drop box stashed by the load. Runs inside syncNow,
@@ -6903,22 +7179,50 @@ async function processIncomingBox() {
   let duplicates = 0;
   let strippedNotes = 0;
   let fallbackName = null;
+  /* v2.23: the attachment tallies for the report. */
+  let attImported = 0;
+  const attSkippedNames = [];
+  const attFailedNames = [];
   const failed = [];
-  const removalStrings = [];
+  const removalKeys = [];
   const batch = [];
-  for (const entryText of pending.notes) {
-    if (typeof entryText !== "string" || !entryText.trim()) {
+  for (const rawEntry of pending.notes) {
+    /* v2.23: two entry forms, told apart by type. A string is
+       note file text, exactly as the box has always taken it.
+       An object with a string note field is the same text
+       plus carried attachments. Anything else (including an
+       object without note text, and blank text either way) is
+       rejected as not note file text, with the entry preserved
+       in the rejected record in its own form: strings as they
+       are, objects as the object, other values stringified,
+       the pre-v2.23 behavior for each kind. */
+    let entryText = null;
+    let attItems = null;
+    let rejectedEntry = rawEntry;
+    if (typeof rawEntry === "string") {
+      entryText = rawEntry;
+    } else if (rawEntry && typeof rawEntry === "object" &&
+        typeof rawEntry.note === "string") {
+      entryText = rawEntry.note;
+      attItems = Array.isArray(rawEntry.attachments)
+        ? rawEntry.attachments : [];
+    } else if (!rawEntry || typeof rawEntry !== "object") {
+      rejectedEntry = String(rawEntry);
+    }
+    if (entryText === null || !entryText.trim()) {
       failed.push({
-        entry: typeof entryText === "string" ? entryText : String(entryText),
+        entry: rejectedEntry,
         error: "The entry is not note file text."
       });
-      removalStrings.push(entryText);
+      removalKeys.push(dropboxEntryKey(rawEntry));
       continue;
     }
     const parsed = parseNoteFile(entryText, null, newNoteId(), false, false);
     if (findNoteById(parsed.id)) {
+      /* The duplicate skip runs before any attachment work, so
+         a reprocessed entry never uploads (and orphans) files. */
       duplicates++;
-      removalStrings.push(entryText);
+      removalKeys.push(dropboxEntryKey(rawEntry));
       continue;
     }
     let target = parsed.notebook;
@@ -6932,7 +7236,9 @@ async function processIncomingBox() {
     /* Attachment records name files this app has never seen and
        cannot see (the drive.file visibility rule the box exists
        to work around), so they are stripped and counted rather
-       than left dangling into a broken note. */
+       than left dangling into a broken note. v2.23: the files an
+       object entry CARRIES are a different matter; they upload
+       below and land as records of the app's own making. */
     if ((parsed.attachments || []).length) {
       strippedNotes++;
       parsed.attachments = [];
@@ -6945,18 +7251,28 @@ async function processIncomingBox() {
     parsed.sha = null;
     parsed.fileId = null;
     parsed.bodyLoaded = true;
+    if (attItems && attItems.length) {
+      const attResult = await importDropboxAttachments(parsed, attItems);
+      attImported += attResult.imported;
+      attResult.skippedNames.forEach(function (n) {
+        attSkippedNames.push(n);
+      });
+      attResult.failedNames.forEach(function (n) {
+        attFailedNames.push(n);
+      });
+    }
     state.notes.unshift(parsed);
     try {
       await saveNoteToRepo(parsed, { skipConflictCheck: true, fresh: true });
       imported++;
       batch.push(parsed);
-      removalStrings.push(entryText);
+      removalKeys.push(dropboxEntryKey(rawEntry));
     } catch (err) {
       state.notes = state.notes.filter(function (n) {
         return n.id !== parsed.id;
       });
-      failed.push({ entry: entryText, error: err.message });
-      removalStrings.push(entryText);
+      failed.push({ entry: rejectedEntry, error: err.message });
+      removalKeys.push(dropboxEntryKey(rawEntry));
     }
   }
   /* A batch lands at the head of the list in box order (the loop
@@ -6989,8 +7305,8 @@ async function processIncomingBox() {
           !Array.isArray(freshParsed.rejected)) {
         incomingProcessedToken = fresh.token;
       } else {
-        const remaining = subtractEntryStrings(freshParsed.notes,
-          removalStrings);
+        const remaining = subtractDropboxEntries(freshParsed.notes,
+          removalKeys);
         const newRejected = freshParsed.rejected.concat(failed.map(
           function (f) {
             return {
@@ -7029,6 +7345,20 @@ async function processIncomingBox() {
     if (strippedNotes > 0) {
       message += "; attachments were left off " + strippedNotes +
         (strippedNotes === 1 ? " note" : " notes");
+    }
+    /* v2.23: the carried attachments' own tallies. Skipped and
+       failed items are named, so the report says which file
+       did not land, not only that one did not. */
+    if (attImported > 0) {
+      message += "; attachments imported " + attImported;
+    }
+    if (attSkippedNames.length > 0) {
+      message += "; attachments skipped " + attSkippedNames.length +
+        " (too large): " + attSkippedNames.join(", ");
+    }
+    if (attFailedNames.length > 0) {
+      message += "; attachments failed " + attFailedNames.length +
+        ": " + attFailedNames.join(", ");
     }
     toast(message, failed.length > 0);
   }
@@ -9756,6 +10086,10 @@ function anyOverlayOpen() {
     "attAlignMenu", "imgLightbox", "imgEditorModal",
     /* v2.12: the "@" note popup joins the set for the same reason. */
     "mentionPopup",
+    /* v2.23: the Paste options popup joins the set for the same
+       reason, and so the auto-sync gate treats an open paste
+       popup like every other open overlay. */
+    "pastePopup",
     /* v2.13: the first run walkthrough joins the set for the same
        reason: an Escape that dismisses it never exits Maximize. */
     "onboardingModal",
@@ -10810,6 +11144,10 @@ function renderEditor() {
   const note = currentNote();
   const noNote = document.getElementById("noNote");
   const wrap = document.getElementById("editorWrap");
+  /* v2.23: the paste popup belongs to the note and body it was
+     raised over; any render replaces both, so it closes here,
+     on every path below. */
+  closePastePopup();
   if (!note) {
     noNote.classList.remove("hidden");
     wrap.classList.add("hidden");
@@ -11189,6 +11527,13 @@ function syncSettingsControls() {
   /* v2.16: the auto-sync checkbox shows the saved choice. */
   const autoSyncToggle = document.getElementById("settingsAutoSyncToggle");
   if (autoSyncToggle) { autoSyncToggle.checked = state.autoSync !== false; }
+  /* v2.23: the Default paste select shows the saved mode. */
+  const pasteSelect = document.getElementById("settingsDefaultPasteSelect");
+  if (pasteSelect) {
+    pasteSelect.value = ["source", "merge", "text"]
+      .indexOf(state.defaultPasteMode) >= 0
+      ? state.defaultPasteMode : "source";
+  }
   /* v2.21: the Last load readout shows this session's boot. */
   renderLastLoadReadout();
 }
@@ -11203,6 +11548,39 @@ function openSettingsModal() {
   if (modal) { modal.classList.remove("hidden"); }
   const closeBtn = document.getElementById("settingsCloseBtn");
   if (closeBtn) { closeBtn.focus(); }
+}
+
+/* v2.23: the paste popup's Set default paste row lands here:
+   the same modal, opened the same way, with the Default paste
+   select scrolled into view and focused so the choice it
+   names is the one on screen. The popup closes first (its own
+   dismissal), so the two never stack. */
+function openSettingsAtDefaultPaste() {
+  closePastePopup();
+  openSettingsModal();
+  const select = document.getElementById("settingsDefaultPasteSelect");
+  if (select) {
+    if (typeof select.scrollIntoView === "function") {
+      select.scrollIntoView({ block: "center" });
+    }
+    select.focus();
+  }
+}
+
+/* v2.23: the Default paste select's change handler. The choice
+   persists at once, like every Settings control, and takes
+   effect on the next paste; a paste already on screen keeps
+   the mode it landed in. */
+function applyDefaultPasteFromSelect() {
+  const select = document.getElementById("settingsDefaultPasteSelect");
+  if (!select) { return; }
+  if (["source", "merge", "text"].indexOf(select.value) >= 0) {
+    state.defaultPasteMode = select.value;
+  } else {
+    state.defaultPasteMode = "source";
+    select.value = "source";
+  }
+  saveSettings();
 }
 
 function closeSettingsModal() {
@@ -19330,6 +19708,306 @@ function stripPastedBackgrounds(htmlText) {
   return holder.innerHTML;
 }
 
+/* ------------------------------------------------------------------
+   v2.23: MERGE FORMATTING, the middle paste mode. Same document
+   structure as the source paste (paragraphs, divs, headings,
+   lists, blockquotes, tables, checklists, links, and the
+   bold/italic/underline elements all stay), with the inline
+   presentation that pins text to its source look removed, so
+   the pasted text adopts the note's own formatting. The strip
+   rule set, grounded in the v2.18 cleaner above and worked by
+   the same declaration-text filter so it behaves identically
+   in every engine:
+     - style declarations whose property is font,
+       font-family, font-size, color, background, or any
+       background-* property, plus the WebKit text fill and
+       stroke colors some mail clients ride on;
+     - the legacy presentational attributes face, size,
+       color, and bgcolor.
+   What is NOT stripped: font-weight, font-style,
+   text-decoration, margins, line height, alignment, table
+   geometry, class names, and every element itself, so the
+   structure and the emphasis semantics survive whole.
+   Attachment blocks are skipped, exactly as in the background
+   cleaner: their faces are runtime furniture, not styling.
+   ------------------------------------------------------------------ */
+const MERGE_STRIPPED_STYLE_PROPS = {
+  "font": true,
+  "font-family": true,
+  "font-size": true,
+  "color": true,
+  "background": true,
+  "-webkit-text-fill-color": true,
+  "-webkit-text-stroke-color": true
+};
+
+function mergeStripStyleAttribute(style) {
+  const kept = [];
+  style.split(";").forEach(function (decl) {
+    const text = decl.trim();
+    if (!text) { return; }
+    const colon = text.indexOf(":");
+    const prop = (colon === -1 ? text : text.slice(0, colon))
+      .trim().toLowerCase();
+    if (MERGE_STRIPPED_STYLE_PROPS[prop]) { return; }
+    if (prop.indexOf("background-") === 0) { return; }
+    kept.push(text);
+  });
+  return kept.length ? kept.join("; ") + ";" : "";
+}
+
+function cleanMergeFromElement(el) {
+  if (!el || el.nodeType !== 1) { return; }
+  ["face", "size", "color", "bgcolor"].forEach(function (attr) {
+    if (el.hasAttribute && el.hasAttribute(attr)) {
+      el.removeAttribute(attr);
+    }
+  });
+  const style = el.getAttribute ? el.getAttribute("style") : null;
+  if (!style) { return; }
+  const next = mergeStripStyleAttribute(style);
+  if (next) {
+    el.setAttribute("style", next);
+  } else {
+    el.removeAttribute("style");
+  }
+}
+
+/* The merge walk over a list of roots, mirroring
+   cleanBackgroundsInRoots exactly, attachment skip included. */
+function cleanMergeInRoots(roots) {
+  (roots || []).forEach(function (root) {
+    if (!root || root.nodeType !== 1) { return; }
+    if (root.closest && root.closest(".ss-attachment")) { return; }
+    cleanMergeFromElement(root);
+    root.querySelectorAll("*").forEach(function (el) {
+      if (el.closest && el.closest(".ss-attachment")) { return; }
+      cleanMergeFromElement(el);
+    });
+  });
+}
+
+/* The merge rendering of a clipboard HTML fragment: parsed
+   into the same detached holder as the source rendering, the
+   v2.18 background cleaning runs first (backgrounds are gone
+   in every mode), then the merge walk strips the rest of the
+   source presentation. */
+function mergePastedFormatting(htmlText) {
+  const holder = document.createElement("div");
+  holder.innerHTML = htmlText;
+  const roots = Array.prototype.slice.call(holder.children);
+  cleanBackgroundsInRoots(roots);
+  cleanMergeInRoots(roots);
+  return holder.innerHTML;
+}
+
+/* ------------------------------------------------------------------
+   v2.23: THE PASTE OPTIONS POPUP. When a paste carrying HTML
+   lands (the only paste the handler intercepts), the raw
+   clipboard payloads and the pasted range are retained in a
+   session, and this card appears at the end of the pasted
+   content with the three modes and a Set default paste row.
+   Picking a mode re-applies the paste in that mode, in place,
+   through the very insertHTML call the paste itself used, so
+   the save funnel sees the final content exactly as if it had
+   been pasted that way.
+
+   The session holds live-node bookmarks, never serialized
+   HTML: start (the caret the paste landed at) and end (the
+   caret the insert left behind). Insertion never replaces the
+   node the caret sat in, so both bookmarks stay valid for the
+   whole session. Anything that could move them (typing, a
+   click elsewhere, a note switch) dismisses the popup first,
+   which is what makes the bookmarks and the undo composition
+   below safe.
+
+   Undo composition: a switch first undoes the insert the
+   editor is currently wearing (one native undo step, the
+   same stack the paste itself made) and then inserts the
+   new rendering as a fresh step. So the session never grows
+   the stack: paste makes step A; a switch undoes A and
+   makes step B; a second switch undoes B and makes step C.
+   One Ctrl+Z after any switch removes the current insert
+   step and lands on the pre-paste content, exactly as one
+   Ctrl+Z after the paste itself would. Where execCommand
+   undo is unavailable or reports failure, the switch falls
+   back to selecting the bookmarked pasted range and
+   inserting over it; then one Ctrl+Z returns to the paste
+   as it last landed, and a second reaches the pre-paste
+   state.
+   ------------------------------------------------------------------ */
+let pastePopupSession = null;   // {html, text, mode, start, end, fresh?}
+let pastePopupApplying = false; // true while a switch re-inserts
+
+/* The editor element, fetched per call: the app's own
+   noteBodyEl binding is local to wireEvents, so this block
+   (like the save funnel and the caret helpers) goes through
+   the document. */
+function pasteBodyEl() { return document.getElementById("noteBody"); }
+
+function pastePopupOpen() {
+  const popup = document.getElementById("pastePopup");
+  return !!popup && !popup.classList.contains("hidden");
+}
+
+/* Close the popup and drop the retained payloads. Every
+   dismissal route funnels here; it never touches the editor,
+   so whatever rendering was last applied simply stays. */
+function closePastePopup() {
+  pastePopupSession = null;
+  const popup = document.getElementById("pastePopup");
+  if (popup) { popup.classList.add("hidden"); }
+}
+
+/* One rendering of the retained payloads, per mode. Source is
+   the v2.18 pipeline untouched; text follows the app's plain
+   text convention (textToNoteBodyHtml: blank lines split
+   paragraphs, single line breaks become line breaks). */
+function renderPasteForMode(mode, htmlText, plainText) {
+  if (mode === "merge") { return mergePastedFormatting(htmlText); }
+  if (mode === "text") { return textToNoteBodyHtml(plainText || ""); }
+  return stripPastedBackgrounds(htmlText);
+}
+
+/* Mark the row for the session's current mode. The applied
+   choice is drawn (soft fill plus the check), never silently
+   remembered, per Chris's settings rule. */
+function syncPastePopupRows() {
+  const popup = document.getElementById("pastePopup");
+  if (!popup || !pastePopupSession) { return; }
+  popup.querySelectorAll("[data-paste-mode]").forEach(function (row) {
+    const on = row.getAttribute("data-paste-mode") === pastePopupSession.mode;
+    row.classList.toggle("current", on);
+    row.setAttribute("aria-checked", on ? "true" : "false");
+  });
+}
+
+/* Park the popup at the end of the pasted content: under the
+   end bookmark's caret rectangle, flipped above it when the
+   card would run off the window's bottom and clamped inside
+   the window horizontally, the mention popup's geometry. The
+   end bookmark node may be an element (offset = child index)
+   or a text node; the rect comes from a zero width range built
+   on it, so both read the same. */
+function positionPastePopup() {
+  const popup = document.getElementById("pastePopup");
+  if (!popup || !pastePopupSession) { return; }
+  const end = pastePopupSession.end;
+  if (!end || !end.node || !pasteBodyEl().contains(end.node)) { return; }
+  const range = document.createRange();
+  try {
+    range.setStart(end.node, Math.min(end.offset,
+      end.node.nodeType === 3
+        ? end.node.nodeValue.length : end.node.childNodes.length));
+    range.collapse(true);
+  } catch (err) { return; }
+  let rect = null;
+  try { rect = range.getBoundingClientRect(); } catch (err) {
+    rect = null;
+  }
+  if (!rect) {
+    /* A host without Range geometry (a headless DOM): park
+       the card at the editor's own top corner instead of
+       leaving it wherever the stylesheet put it. */
+    const bodyRect = pasteBodyEl().getBoundingClientRect();
+    rect = { left: bodyRect.left, top: bodyRect.top,
+      bottom: bodyRect.top };
+  }
+  const popupW = popup.offsetWidth || 300;
+  const popupH = popup.offsetHeight || 190;
+  let left = Math.max(8, Math.min(rect.left,
+    window.innerWidth - popupW - 8));
+  let top = rect.bottom + 6;
+  if (top + popupH > window.innerHeight - 8 && rect.top - popupH - 6 > 8) {
+    top = rect.top - popupH - 6;
+  }
+  popup.style.left = left + "px";
+  popup.style.top = top + "px";
+}
+
+/* Show the popup for a fresh session: rows synced to the mode
+   the paste landed in, then positioned. Focus never moves;
+   the editor keeps the keyboard. */
+function showPastePopup() {
+  const popup = document.getElementById("pastePopup");
+  if (!popup || !pastePopupSession) { return; }
+  popup.classList.remove("hidden");
+  syncPastePopupRows();
+  positionPastePopup();
+}
+
+/* A bookmark for one end of the current selection, as live
+   node plus offset. Returns null when there is no usable
+   selection inside the editor. */
+function pasteSelectionBookmark(fromEnd) {
+  const sel = window.getSelection();
+  if (!sel || !sel.rangeCount) { return null; }
+  const node = fromEnd ? sel.focusNode : sel.anchorNode;
+  const offset = fromEnd ? sel.focusOffset : sel.anchorOffset;
+  if (!node || !pasteBodyEl().contains(node)) { return null; }
+  return { node: node, offset: offset };
+}
+
+/* Rebuild the range the paste occupies from its bookmarks,
+   for the fallback switch path. Null when either bookmark's
+   node has left the document (the popup is dismissed before
+   that can happen in practice; this is the seatbelt). */
+function pasteRangeFromBookmarks(session) {
+  if (!session || !session.start || !session.end) { return null; }
+  if (!pasteBodyEl().contains(session.start.node) ||
+      !pasteBodyEl().contains(session.end.node)) { return null; }
+  const range = document.createRange();
+  try {
+    range.setStart(session.start.node, session.start.offset);
+    range.setEnd(session.end.node, session.end.offset);
+  } catch (err) { return null; }
+  return range;
+}
+
+/* Swap the paste's rendering for another mode's, in place.
+   See the block comment above for the undo composition. The
+   applying flag keeps the input listener from reading the
+   programmatic insert as the user's next edit (which would
+   dismiss the popup mid-switch). */
+function applyPasteMode(mode) {
+  const session = pastePopupSession;
+  if (!session) { return; }
+  if (mode === session.mode) { syncPastePopupRows(); return; }
+  const rendered = renderPasteForMode(mode, session.html, session.text);
+  pastePopupApplying = true;
+  try {
+    pasteBodyEl().focus();
+    let undone = false;
+    try {
+      undone = document.execCommand("undo", false, null);
+    } catch (err) { undone = false; }
+    if (undone) {
+      /* The paste's insert is off the document; the caret is
+         back where the paste landed. Insert the new rendering
+         there, through the paste's own call. */
+      document.execCommand("insertHTML", false, rendered);
+    } else {
+      const range = pasteRangeFromBookmarks(session);
+      if (!range) { closePastePopup(); return; }
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+      captureCaret();
+      document.execCommand("insertHTML", false, rendered);
+    }
+    /* The insert leaves the caret at the end of the new
+       rendering: that is the session's new end bookmark. */
+    const endBm = pasteSelectionBookmark(true);
+    if (endBm) { session.end = endBm; }
+    session.mode = mode;
+    markDirty();
+    syncPastePopupRows();
+    positionPastePopup();
+  } finally {
+    pastePopupApplying = false;
+  }
+}
+
 /* v2.6.0: remove background styling from exactly the part of the
    body the range covers. For every text node the range touches,
    each background carrying span above it is split around the node
@@ -25456,6 +26134,9 @@ function wireEvents() {
   /* v2.16: the auto-sync toggle in Settings Connection. */
   document.getElementById("settingsAutoSyncToggle").addEventListener("change",
     applyAutoSyncFromToggle);
+  /* v2.23: the Default paste select in Settings Editor. */
+  document.getElementById("settingsDefaultPasteSelect")
+    .addEventListener("change", applyDefaultPasteFromSelect);
 
   /* v2.13: the Settings Getting started actions, and the first run
      walkthrough's controls. The walkthrough follows the Settings
@@ -25760,6 +26441,80 @@ function wireEvents() {
     if (rowEl) {
       setMentionHighlight(Number(rowEl.getAttribute("data-mi")));
     }
+  });
+
+  /* v2.23: the Paste options popup wiring, mirroring the
+     mention popup's. The popup's mousedown is swallowed whole
+     (it holds no input), so clicking a row never moves the
+     editor selection before the click lands; the click then
+     swaps the paste's mode, or opens Settings at the Default
+     paste select from the footer row. Dismissal: Escape
+     (taken on the capture phase, so it works while the editor
+     holds focus and never falls through to the maximize
+     handler), any keystroke aimed at the editor (the caret is
+     moving to a new edit; the keystroke itself proceeds, Word
+     parity), the input event of the first real edit after
+     the paste (the paste's own input event is excused by the
+     session's fresh mark, and a switch's programmatic insert
+     by the applying flag), a mousedown anywhere outside the
+     popup, an editor scroll, and any note switch (renderEditor
+     closes it). */
+  const pastePopupEl = document.getElementById("pastePopup");
+  pastePopupEl.addEventListener("mousedown", function (ev) {
+    ev.preventDefault();
+  });
+  pastePopupEl.addEventListener("click", function (ev) {
+    const target = ev.target;
+    if (!target || !target.closest) { return; }
+    const modeRow = target.closest("[data-paste-mode]");
+    if (modeRow) {
+      applyPasteMode(modeRow.getAttribute("data-paste-mode"));
+      return;
+    }
+    const actionRow = target.closest("[data-paste-action]");
+    if (actionRow &&
+        actionRow.getAttribute("data-paste-action") === "set-default") {
+      openSettingsAtDefaultPaste();
+    }
+  });
+  document.addEventListener("keydown", function (ev) {
+    if (!pastePopupOpen()) { return; }
+    if (ev.key === "Escape") {
+      ev.preventDefault();
+      ev.stopPropagation();
+      closePastePopup();
+      return;
+    }
+    const target = ev.target;
+    if (target && target.closest &&
+        target.closest("#pastePopup")) { return; }
+    if (target && target.closest &&
+        target.closest("#noteBody")) {
+      closePastePopup();
+    }
+  }, true);
+  document.getElementById("noteBody").addEventListener("input",
+    function () {
+      if (!pastePopupOpen() || pastePopupApplying) { return; }
+      if (pastePopupSession && pastePopupSession.fresh) {
+        /* The input event of the paste itself: the session
+           stays. The mark is spent, so the NEXT input event
+           is the user's first edit after the paste and
+           dismisses like any other. */
+        delete pastePopupSession.fresh;
+        return;
+      }
+      closePastePopup();
+    });
+  document.querySelector(".editor-scroll").addEventListener("scroll",
+    function () { closePastePopup(); });
+  document.addEventListener("mousedown", function (ev) {
+    if (!pastePopupOpen()) { return; }
+    const target = ev.target;
+    if (target && target.closest && target.closest("#pastePopup")) {
+      return;
+    }
+    closePastePopup();
   });
 
   /* Checklist toggling: a click on a checkbox inside the body flips the
@@ -26368,7 +27123,14 @@ function wireEvents() {
      through the same insertHTML the browser's own paste would
      use, and everything else about the paste is preserved.
      Plain text pastes (no HTML on the clipboard) still fall
-     through to the normal editor behavior. */
+     through to the normal editor behavior.
+     v2.23: the interception now lands the paste in the
+     configured default mode (Settings, Default paste) and
+     retains both payloads for the Paste options popup (see
+     the paste options block): the session's start bookmark is
+     the caret the paste lands at, read BEFORE the insert, and
+     its end bookmark is the caret the insert leaves behind.
+     File pastes return above and never raise the popup. */
   noteBodyEl.addEventListener("paste", function (ev) {
     const files = ev.clipboardData ? ev.clipboardData.files : null;
     if (files && files.length) {
@@ -26387,10 +27149,32 @@ function wireEvents() {
     } catch (e) { htmlText = ""; }
     if (htmlText) {
       ev.preventDefault();
+      let plainText = "";
+      try {
+        plainText = ev.clipboardData.getData("text/plain") || "";
+      } catch (e) { plainText = ""; }
+      const startBm = pasteSelectionBookmark(false);
       captureCaret();
+      const mode = ["source", "merge", "text"]
+        .indexOf(state.defaultPasteMode) >= 0
+        ? state.defaultPasteMode : "source";
       document.execCommand("insertHTML", false,
-        stripPastedBackgrounds(htmlText));
+        renderPasteForMode(mode, htmlText, plainText));
       markDirty();
+      const endBm = pasteSelectionBookmark(true);
+      if (startBm && endBm) {
+        pastePopupSession = {
+          html: htmlText, text: plainText, mode: mode,
+          start: startBm, end: endBm,
+          /* The paste's own input event follows this handler;
+             the mark excuses exactly that one event from the
+             typing dismissal (see the popup wiring). */
+          fresh: true
+        };
+        showPastePopup();
+      } else {
+        closePastePopup();
+      }
     }
   });
 
