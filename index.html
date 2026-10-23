@@ -40,10 +40,37 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-23-SSN-V2242
-  Version: 2.24.2
+  BUILD STAMP: 2026-10-23-SSN-V2243
+  Version: 2.24.3
 
   Revision history:
+    v2.24.3 2026-10-23 The list pane's per-task groups are
+                      gone, replaced by one Things to do tile
+                      per notebook that has tasks, Evernote's
+                      shape: a note card reading "Things to
+                      do", the notebook name and the latest
+                      task activity in its meta line, and a
+                      completed over total progress pill,
+                      sorting into the list by its activity
+                      time; in All Notes there is one tile per
+                      notebook that has tasks. Clicking a tile
+                      opens that notebook's tasks in the
+                      editor pane as a Things to do page: a
+                      breadcrumb, the progress chip, the big
+                      title, a quick add for that notebook, and
+                      the tasks as a checklist with round
+                      checkboxes and word due labels, the
+                      completed set below its own heading,
+                      struck through and dimmed. The page is a
+                      view over tasks.json only: it writes no
+                      note file, catalog entry, or version, and
+                      it never touches the open note's editor
+                      state. The old list group's + Task
+                      affordance goes with the group; its work
+                      lives in the page's quick add and in the
+                      Tasks view. tasks.json, the task editor,
+                      the notifications, and the Tasks view
+                      are unchanged.
     v2.24.2 2026-10-23 The palettes' Custom color flow does
                       what Chris described: clicking Custom
                       paints the selection at once with the
@@ -3660,8 +3687,9 @@ body.dark .settings-section h3{color:var(--accent);}
    under the light one instead of following the OS alone. */
 body{color-scheme:light;}
 body.dark{color-scheme:dark;}
-/* The tasks group at the top of a notebook or All Notes list,
-   and the group blocks inside the Tasks view. */
+/* The group blocks inside the Tasks view. (Through v2.24.2 a
+   tasks group also headed notebook and All Notes lists; the
+   Things to do tile replaced it, see the v2.24.3 block below.) */
 .task-group{margin:0 0 14px;}
 .task-group-head{
   display:flex;align-items:center;gap:8px;padding:4px 4px 7px;
@@ -3672,7 +3700,6 @@ body.dark{color-scheme:dark;}
 }
 body.dark .task-group-title{color:var(--accent);}
 .task-group-count{font-size:12.5px;color:var(--muted);font-weight:600;}
-.task-add-btn{margin-left:auto;}
 .task-row{
   display:flex;align-items:flex-start;gap:9px;padding:8px 10px;
   background:var(--surface);border:1px solid var(--border);
@@ -3818,6 +3845,65 @@ body.dark .tasks-head h2{color:var(--accent);}
     max-width:100%;overflow:hidden;text-overflow:ellipsis;
   }
 }
+/* v2.24.3: the Things to do tile and page, Evernote's shape.
+   The tile rides the note card system (a .note-card marked
+   .task-tile), so it sits in the list exactly like a note
+   card; it is never a note: it carries no data-note-id, so
+   the drag machinery and multi select pass it by. The
+   progress pill reads completed over total, its small check
+   following the theme through currentColor. The page is a
+   pseudo-note in the editor pane: the editor's own scroll
+   and measure classes carry it, so its scrollbar, padding,
+   and measure theme and behave like the note editor's. The
+   rows are the shared task rows; their checkboxes go round
+   here, to the mockup, and completed rows dim through
+   opacity on top of the row's strike-through. */
+.task-progress-pill{
+  display:inline-flex;align-items:center;gap:4px;
+  font-size:11px;font-weight:700;line-height:1.35;
+  background:var(--soft);color:var(--primary);
+  border-radius:var(--radius-pill);padding:2px 8px;
+  white-space:nowrap;flex:none;
+}
+body.dark .task-progress-pill{color:var(--accent);}
+.task-progress-pill svg{display:block;}
+.things-crumb{
+  font-size:13px;color:var(--muted);margin-bottom:10px;
+  display:flex;gap:6px;align-items:center;flex-wrap:wrap;
+}
+.things-crumb-here{color:var(--text);font-weight:600;}
+.things-head{
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  margin-bottom:14px;
+}
+.things-title{
+  font-size:26px;line-height:1.2;font-weight:800;color:var(--text);
+}
+.things-chip{font-size:12.5px;padding:3px 10px;}
+.things-quickadd{margin-bottom:14px;}
+.things-rows .task-check input{
+  -webkit-appearance:none;appearance:none;width:20px;height:20px;
+  border:2px solid var(--muted);border-radius:50%;
+  background:transparent;position:relative;flex:none;
+}
+.things-rows .task-check input:checked{
+  background:var(--primary);border-color:var(--primary);
+}
+.things-rows .task-check input:checked::after{
+  content:"";position:absolute;left:6px;top:3px;width:5px;height:9px;
+  border:solid #fff;border-width:0 2.5px 2.5px 0;
+  transform:rotate(45deg);
+}
+.things-rows .task-row.completed{opacity:.72;}
+.things-subhead{
+  font-size:12px;font-weight:700;letter-spacing:.05em;
+  text-transform:uppercase;color:var(--muted);
+  margin:18px 2px 8px;
+}
+.things-empty{padding:34px 18px;text-align:center;color:var(--muted);}
+.things-empty .big{
+  font-size:18px;font-weight:800;color:var(--text);margin-bottom:6px;
+}
 /* The task editor dialog: the Settings dialog family's field
    styling, extended to the textarea and the date and time
    inputs so every control in it is themed in both themes, with
@@ -3912,7 +3998,7 @@ body.dark .version-date{color:var(--accent);}
    no rule hides it: it appears in the footer and switches back to
    the list pane exactly as before. */
 @media (min-width:901px){
-  #editorBackBtn{display:none;}
+  #editorBackBtn,#thingsBackBtn{display:none;}
 }
 
 /* toasts. v1.5.1: the stack used to sit at bottom:14px, directly over
@@ -4942,6 +5028,25 @@ body.dark .version-date{color:var(--accent);}
         </div>
       </div>
     </div>
+    <!-- v2.24.3: the Things to do page: one notebook's tasks
+         in the editor pane, Evernote's shape. It is a view
+         over tasks.json only, a pseudo-note: no note file,
+         catalog entry, or version ever comes from it, and it
+         never enters the note editor's save paths. renderEditor
+         shows it in place of the editor and the empty pane
+         while state.thingsNotebook is set, and
+         renderThingsView fills #thingsInner. The footer mirrors
+         the editor's for the phone Back to list affordance. -->
+    <div id="thingsWrap" class="hidden" style="display:flex;flex-direction:column;flex:1;min-height:0;">
+      <div class="editor-scroll">
+        <div class="editor-inner" id="thingsInner"></div>
+      </div>
+      <div class="editor-foot">
+        <div class="editor-actions">
+          <button class="btn small" id="thingsBackBtn" type="button">Back to list</button>
+        </div>
+      </div>
+    </div>
   </main>
 
   <!-- v2.24.1: the Tasks view is its own pane, beside the
@@ -5301,8 +5406,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-23-SSN-V2242";
-const APP_VERSION = "2.24.2";
+const APP_BUILD = "2026-10-23-SSN-V2243";
+const APP_VERSION = "2.24.3";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -5455,6 +5560,12 @@ const state = {
     collapsed: {}           // the Find tasks text and the set of
   },                        // collapsed group keys join them,
                             // still session only, never saved.
+  thingsNotebook: null,     // v2.24.3: the slug of the notebook
+                            // whose Things to do page is open in
+                            // the editor pane, or null. Session
+                            // only, like tasksView above: the page
+                            // is a view over tasks.json, never a
+                            // note, and nothing of it is saved.
   taskLastNotebook: null,   // v2.24: the notebook the last task
                             // was created in, session only; the
                             // quick add and group defaults.
@@ -7842,6 +7953,12 @@ function afterTasksChanged() {
       state.view.kind === "notebook") {
     renderNoteList();
   }
+  /* v2.24.3: an open Things to do page re-renders in place,
+     so a completion from its own rows, an edit saved in the
+     task editor, or a quick add lands on the page at once.
+     It also arrives here on a sync's task reload, which is
+     how a remote change reaches the open page. */
+  if (state.thingsNotebook) { renderEditor(); }
   checkTaskReminders();
 }
 
@@ -11926,15 +12043,14 @@ function renderNoteList() {
     listEl.appendChild(empty);
     return;
   }
-  /* v2.24: the Tasks group heads the All Notes and notebook
-     lists (never Trash, Archive, Pinned, or a tag view, and not
-     while a search or the list filters are narrowing the notes:
-     the group is the scope's open work at a glance, and the
-     Tasks view is one click away for a filtered hunt). A view
-     with tasks but no notes shows the group and a quiet line
-     where the empty state would have been. */
-  const groupTasks = tasksGroupForCurrentView();
-  if (!list.length && !groupTasks.length) {
+  /* v2.24.3: the Things to do tiles for this view (see
+     taskTilesForCurrentView): one card per notebook that has
+     any tasks, never in Trash, Archive, Pinned, or a tag view,
+     and not while a search or the list filters are narrowing
+     the notes. A view with tasks but no notes shows its tile
+     and a quiet line where the empty state would have been. */
+  const tiles = taskTilesForCurrentView();
+  if (!list.length && !tiles.length) {
     const empty = document.createElement("div");
     empty.className = "empty-state";
     if (state.view.kind === "trash") {
@@ -11951,31 +12067,30 @@ function renderNoteList() {
     listEl.appendChild(empty);
     return;
   }
-  if (groupTasks.length) {
-    listEl.appendChild(buildTasksGroupEl(groupTasks, {
-      showNotebook: state.view.kind === "all",
-      addNotebook: state.view.kind === "notebook"
-        ? state.view.value : defaultTaskNotebook()
-    }));
-  }
-  if (!list.length) {
-    const noNotes = document.createElement("div");
-    noNotes.className = "hint";
-    noNotes.style.padding = "4px 10px";
-    noNotes.textContent =
-      "No notes here yet. Press New Note to write your first one.";
-    listEl.appendChild(noNotes);
-    return;
-  }
-
   /* v1.8.1: the multi select set this view's rows draw from, or
      null outside Trash and the Archive. */
   const selectSet = state.view.kind === "trash" ? state.trashSelection
     : state.view.kind === "archive" ? state.archiveSelection : null;
 
-  list.forEach(function (note) {
+  /* v2.24.3: the tiles and the cards render as one merged
+     sequence (see listItemsWithTiles): the tiles interleave
+     with the cards under the list's sort, each standing where
+     its notebook's latest task activity falls. A tile is not
+     a note: it never counts in the "N notes" line above,
+     never multi selects, and carries no note id, so the drag
+     machinery passes it by. While a Things to do page is
+     open, no note card wears the active treatment: the tile
+     of the page's notebook wears it instead. */
+  listItemsWithTiles(list, tiles).forEach(function (item) {
+    if (item.tile) {
+      listEl.appendChild(buildTaskTileEl(item.tile));
+      return;
+    }
+    const note = item.note;
     const card = document.createElement("div");
-    card.className = "note-card" + (note.id === state.selectedId ? " active" : "");
+    card.className = "note-card" +
+      ((note.id === state.selectedId && !state.thingsNotebook)
+        ? " active" : "");
     /* v2.4: the drag and drop pointer handler is delegated on the
        list, so the card itself carries the note id it stands for. */
     card.setAttribute("data-note-id", note.id);
@@ -12088,6 +12203,17 @@ function renderNoteList() {
     card.addEventListener("click", function () { openNote(note.id); });
     listEl.appendChild(card);
   });
+  /* v2.24.3: a view with tiles but no notes (a notebook whose
+     work is all tasks, so far) keeps the quiet line that sat
+     under the old group. */
+  if (!list.length) {
+    const noNotes = document.createElement("div");
+    noNotes.className = "hint";
+    noNotes.style.padding = "4px 10px";
+    noNotes.textContent =
+      "No notes here yet. Press New Note to write your first one.";
+    listEl.appendChild(noNotes);
+  }
 }
 
 /* --------------------------------------------------------------------------
@@ -12264,16 +12390,17 @@ function restoreEditorViewState(view) {
 }
 
 /* --------------------------------------------------------------------------
-   v2.24: task surfaces: the list group, the Tasks view, the
-   task editor, and reminder notifications
+   task surfaces: the Things to do tiles and page (v2.24.3),
+   the Tasks view, the task editor, and reminder notifications
 
    Rendering mirrors the note list's habits: rows are built
    with DOM APIs and textContent, rebuilt wholesale on every
-   render, and their controls are wired as they are built. The
+   and their controls are wired as they are built. The
    checkbox on a row completes (or reopens) without opening;
    the row itself opens the editor. Every mutation re-renders
-   through afterTasksChanged, so the sidebar count, the list
-   group, and the Tasks view can never disagree.
+   through afterTasksChanged, so the sidebar count, the
+   tiles, an open Things to do page, and the Tasks view can
+   never disagree.
    -------------------------------------------------------------------------- */
 const TASK_FLAG_SVG =
   "<svg viewBox=\"0 0 16 16\" width=\"13\" height=\"13\" " +
@@ -12283,25 +12410,150 @@ const TASK_FLAG_SVG =
   "<path d=\"M4 2.8c2.2-1.3 4.2 1 6.8 0l1.2-.5v5.4l-1.2.5c-2.6 1-4.6-1.3-6.8 0z\" " +
   "fill=\"currentColor\"/></svg>";
 
-/* The open tasks a notebook or All Notes list shows in its
-   Tasks group: this scope's open tasks only (completed tasks
-   live in the Tasks view), in list order. Empty outside those
-   two views, and while a search or the list filters narrow
-   the notes (see renderNoteList). */
-function tasksGroupForCurrentView() {
+/* The small check inside a progress pill (the tile's and the
+   Things page's), in currentColor so it follows the theme. */
+const TASK_CHECK_SVG =
+  "<svg viewBox=\"0 0 16 16\" width=\"12\" height=\"12\" " +
+  "aria-hidden=\"true\" focusable=\"false\">" +
+  "<path d=\"M3 8.6l3.1 3L13 4.7\" stroke=\"currentColor\" " +
+  "stroke-width=\"2.1\" stroke-linecap=\"round\" " +
+  "stroke-linejoin=\"round\" fill=\"none\"/></svg>";
+
+/* One notebook's tasks, every status. */
+function tasksForNotebook(slug) {
+  return state.tasks.filter(function (t) {
+    return t.notebook === slug;
+  });
+}
+
+/* The Things to do tile for one notebook, or null when the
+   notebook has no tasks at all: the notebook's name, its
+   activity (the latest updated stamp across its tasks, which
+   the list sort places the tile by), and the completed over
+   total pair the progress pill reads. */
+function taskTileForNotebook(slug) {
+  const tasks = tasksForNotebook(slug);
+  if (!tasks.length) { return null; }
+  let activity = "";
+  let completed = 0;
+  tasks.forEach(function (t) {
+    if (String(t.updated || "") > activity) {
+      activity = String(t.updated || "");
+    }
+    if (t.status === "completed") { completed += 1; }
+  });
+  return {
+    slug: slug,
+    name: notebookNameForSlug(slug),
+    activity: activity,
+    total: tasks.length,
+    completed: completed
+  };
+}
+
+/* The tiles a notebook or All Notes list shows (v2.24.3):
+   a notebook view carries at most one, its own notebook's;
+   All Notes carries one per notebook that has tasks, in the
+   sidebar's notebook order, with a tile for tasks whose
+   notebook no longer exists standing under its slug rather
+   than vanishing. Empty outside those two views, and while
+   a search or the list filters narrow the notes (see
+   renderNoteList), the same gates the old Tasks group kept. */
+function taskTilesForCurrentView() {
   if (state.view.kind !== "all" && state.view.kind !== "notebook") {
     return [];
   }
   if (state.search || listFiltersActive()) { return []; }
-  let tasks = state.tasks.filter(function (t) {
-    return t.status === "open";
-  });
   if (state.view.kind === "notebook") {
-    tasks = tasks.filter(function (t) {
-      return t.notebook === state.view.value;
-    });
+    const only = taskTileForNotebook(state.view.value);
+    return only ? [only] : [];
   }
-  return sortTasksForList(tasks);
+  const tiles = [];
+  const seen = {};
+  state.notebooks.forEach(function (nb) {
+    seen[nb.slug] = true;
+    const tile = taskTileForNotebook(nb.slug);
+    if (tile) { tiles.push(tile); }
+  });
+  state.tasks.forEach(function (t) {
+    if (seen[t.notebook]) { return; }
+    seen[t.notebook] = true;
+    const tile = taskTileForNotebook(t.notebook);
+    if (tile) { tiles.push(tile); }
+  });
+  return tiles;
+}
+
+/* The tile card itself, on the note card system: the meta
+   line (notebook name, a dot, the relative activity time),
+   the bold "Things to do" title, and the progress pill in the
+   card's pill row. A click opens the notebook's Things to do
+   page in the editor pane (openThingsToDo). The tile wears
+   the card's active treatment while its page is open. */
+function buildTaskTileEl(tile) {
+  const card = document.createElement("div");
+  card.className = "note-card task-tile" +
+    (state.thingsNotebook === tile.slug ? " active" : "");
+  card.setAttribute("data-task-tile", tile.slug);
+  card.title = "Things to do in " + tile.name;
+  const main = document.createElement("div");
+  main.className = "card-main";
+  card.appendChild(main);
+  const meta = document.createElement("div");
+  meta.className = "card-meta";
+  const when = relativeTimeLabel(tile.activity);
+  meta.textContent = when ? tile.name + " · " + when : tile.name;
+  main.appendChild(meta);
+  const titleRow = document.createElement("div");
+  titleRow.className = "card-title";
+  const titleText = document.createElement("span");
+  titleText.className = "card-title-text";
+  titleText.textContent = "Things to do";
+  titleRow.appendChild(titleText);
+  main.appendChild(titleRow);
+  const row = document.createElement("div");
+  row.className = "chip-row";
+  const pill = document.createElement("span");
+  pill.className = "task-progress-pill";
+  pill.innerHTML = TASK_CHECK_SVG;
+  const pillText = document.createElement("span");
+  pillText.textContent = tile.completed + "/" + tile.total;
+  pill.appendChild(pillText);
+  row.appendChild(pill);
+  main.appendChild(row);
+  card.addEventListener("click", function () {
+    openThingsToDo(tile.slug);
+  });
+  return card;
+}
+
+/* The merged render sequence for a list: the notes in the
+   order visibleNotes gave them and the tiles placed among
+   them under the list's own sort rules (pinned notes first,
+   then the sort field and direction), a tile comparing by
+   its activity time where a note compares by the same date
+   field, and by its title where the sort is by title. The
+   sort is stable, so the notes keep their given order among
+   themselves and the tiles keep theirs. */
+function listItemsWithTiles(list, tiles) {
+  const items = list.map(function (note) { return { note: note }; });
+  if (!tiles.length) { return items; }
+  tiles.forEach(function (tile) { items.push({ tile: tile }); });
+  function fieldsOf(item) {
+    if (item.tile) {
+      return {
+        pinned: false, title: "Things to do",
+        created: item.tile.activity, updated: item.tile.activity
+      };
+    }
+    return item.note;
+  }
+  items.sort(function (a, b) {
+    const fa = fieldsOf(a), fb = fieldsOf(b);
+    if (!!fb.pinned !== !!fa.pinned) { return fb.pinned ? 1 : -1; }
+    return compareNotesByListSort(fa, fb);
+  });
+  return items;
 }
 
 function buildTaskGroupHeadEl(title, count, opts) {
@@ -12311,8 +12563,8 @@ function buildTaskGroupHeadEl(title, count, opts) {
   /* v2.24.1: in the Tasks view the head is collapsible: a
      chevron button at its left toggles the group's rows
      (the caller owns the collapsed state and the re-render).
-     The list pane's groups pass no opts and keep the plain
-     head they have always had. */
+     A caller with no head to collapse passes no opts and
+     gets the plain head. */
   if (opts.collapsible) {
     const chev = document.createElement("button");
     chev.type = "button";
@@ -12339,7 +12591,8 @@ function buildTaskGroupHeadEl(title, count, opts) {
   return head;
 }
 
-/* One task row, shared by the list group and the Tasks view:
+/* One task row, shared by the Tasks view and the Things to
+   do page:
    the completion checkbox, the title (with the notebook named
    under it where the caller asks), and the chips (due, flag,
    priority). Completed rows render struck through with the
@@ -12376,8 +12629,8 @@ function buildTaskRowEl(task, opts) {
      (flag, priority) ride in the Title column, the due chip
      (or a dash when there is no due date) sits in the Due
      date column, and the notebook name fills the Notebook
-     column. The list pane's groups keep the card form
-     below, unchanged. */
+     column. The Things to do page keeps the card form
+     below. */
   if (opts.columns) {
     row.classList.add("task-row-cols");
     const titleCell = document.createElement("div");
@@ -12453,7 +12706,10 @@ function buildTaskRowEl(task, opts) {
 
   const chips = document.createElement("div");
   chips.className = "task-chips";
-  const chip = taskDueChip(task);
+  /* v2.24.3: the Things to do page passes its own due label
+     (the mockup's word phrases: Overdue, Due today,
+     Tomorrow), so one row builder serves both wordings. */
+  const chip = opts.dueLabel ? opts.dueLabel(task) : taskDueChip(task);
   if (chip) {
     const chipEl = document.createElement("span");
     chipEl.className = "due-chip" + (chip.cls ? " " + chip.cls : "");
@@ -12478,31 +12734,6 @@ function buildTaskRowEl(task, opts) {
     openTaskEditor(task.id);
   });
   return row;
-}
-
-/* The Tasks group at the top of a notebook or All Notes list:
-   the header (with its open count and the + Task affordance,
-   which opens the editor on a fresh task for this scope) and
-   one row per open task. */
-function buildTasksGroupEl(tasks, opts) {
-  opts = opts || {};
-  const group = document.createElement("div");
-  group.className = "task-group";
-  const head = buildTaskGroupHeadEl("Tasks",
-    tasks.length + (tasks.length === 1 ? " open" : " open"));
-  const add = document.createElement("button");
-  add.type = "button";
-  add.className = "btn small task-add-btn";
-  add.textContent = "+ Task";
-  add.addEventListener("click", function () {
-    openTaskEditor(null, opts.addNotebook || defaultTaskNotebook());
-  });
-  head.appendChild(add);
-  group.appendChild(head);
-  tasks.forEach(function (task) {
-    group.appendChild(buildTaskRowEl(task, opts));
-  });
-  return group;
 }
 
 /* The tasks the Tasks view shows after its filter: All keeps
@@ -12829,6 +13060,152 @@ function fillTasksBody() {
     }
     body.appendChild(group);
   });
+}
+
+/* ---------------- v2.24.3: the Things to do page ----------
+   One notebook's tasks as a page in the editor pane,
+   Evernote's shape: a breadcrumb (the notebook, then Things
+   to do), the progress chip, the big title, a quick add for
+   this notebook, and the tasks as a checklist. Open tasks
+   come first in the shared list order (due moment, no date
+   last), then the completed set under its own heading, most
+   recently completed first, struck through and dimmed. The
+   rows are the shared task rows with word due labels, so a
+   checkbox completes (a recurring task rolls forward) through
+   the same toggle as everywhere, and a row click opens the
+   task editor. The page is a pseudo-note: it writes nothing
+   to any note file, catalog, or version store, and it is
+   rebuilt wholesale by renderThingsView whenever tasks
+   change (afterTasksChanged and sync reloads both route
+   through renderEditor while the page is open). */
+
+/* The due label the page's rows wear: the mockup's words at
+   the right of the row. Overdue wins the red, today reads
+   "Due today", tomorrow its word, and anything later the
+   same date label the chips use; a task with no due date
+   wears no label. */
+function thingsDueLabel(task) {
+  if (!task || !task.dueDate) { return null; }
+  const diff = taskDayDiff(task);
+  const time = task.dueTime ? " " + taskTimeLabel(task.dueTime) : "";
+  if (diff !== null && diff < 0) {
+    return { text: "Overdue", cls: "overdue" };
+  }
+  if (diff === 0) { return { text: "Due today" + time, cls: "today" }; }
+  if (diff === 1) { return { text: "Tomorrow" + time, cls: "" }; }
+  return { text: taskDateLabel(task.dueDate) + time, cls: "" };
+}
+
+/* Open one notebook's Things to do page in the editor pane.
+   On mobile this also switches the visible pane to the
+   editor, exactly as openNote does. */
+function openThingsToDo(slug) {
+  state.thingsNotebook = slug;
+  renderNoteList();
+  renderEditor();
+  setMobileView("editor");
+}
+
+function renderThingsView() {
+  const wrap = document.getElementById("thingsWrap");
+  const inner = document.getElementById("thingsInner");
+  if (!wrap || !inner) { return; }
+  const slug = state.thingsNotebook;
+  if (!slug) { wrap.classList.add("hidden"); return; }
+  wrap.classList.remove("hidden");
+  inner.innerHTML = "";
+  const name = notebookNameForSlug(slug);
+  const tasks = tasksForNotebook(slug);
+  const completed = tasks.filter(function (t) {
+    return t.status === "completed";
+  }).length;
+
+  const crumb = document.createElement("div");
+  crumb.className = "things-crumb";
+  const crumbNb = document.createElement("span");
+  crumbNb.textContent = name;
+  crumb.appendChild(crumbNb);
+  const crumbSep = document.createElement("span");
+  crumbSep.setAttribute("aria-hidden", "true");
+  crumbSep.textContent = ">";
+  crumb.appendChild(crumbSep);
+  const crumbHere = document.createElement("span");
+  crumbHere.className = "things-crumb-here";
+  crumbHere.textContent = "Things to do";
+  crumb.appendChild(crumbHere);
+  inner.appendChild(crumb);
+
+  const head = document.createElement("div");
+  head.className = "things-head";
+  const title = document.createElement("div");
+  title.className = "things-title";
+  title.textContent = "Things to do";
+  head.appendChild(title);
+  const chip = document.createElement("span");
+  chip.className = "task-progress-pill things-chip";
+  chip.innerHTML = TASK_CHECK_SVG;
+  const chipText = document.createElement("span");
+  chipText.textContent = completed + "/" + tasks.length;
+  chip.appendChild(chipText);
+  head.appendChild(chip);
+  inner.appendChild(head);
+
+  /* The quick add: Enter creates the task in this notebook
+     through the shared create path, and focus returns to
+     the fresh input, the Tasks view's rapid entry habit. */
+  const quick = document.createElement("div");
+  quick.className = "tasks-quickadd things-quickadd";
+  const input = document.createElement("input");
+  input.type = "text";
+  input.id = "thingsQuickTitle";
+  input.placeholder = "Add a task and press Enter";
+  input.setAttribute("aria-label",
+    "New task title for " + name);
+  quick.appendChild(input);
+  input.addEventListener("keydown", function (ev) {
+    if (ev.key !== "Enter") { return; }
+    ev.preventDefault();
+    const value = input.value.trim();
+    if (!value) { return; }
+    createTask({ title: value, notebook: slug });
+    const fresh = document.getElementById("thingsQuickTitle");
+    if (fresh) { fresh.focus(); }
+  });
+  inner.appendChild(quick);
+
+  if (!tasks.length) {
+    /* The notebook's last task going away (a delete in the
+       editor, a sync) leaves the page standing on its empty
+       state with the quick add, never a bounce out. */
+    const empty = document.createElement("div");
+    empty.className = "things-empty";
+    const big = document.createElement("div");
+    big.className = "big";
+    big.textContent = "No tasks yet";
+    empty.appendChild(big);
+    const line = document.createElement("div");
+    line.textContent = "Tasks you add to " + name +
+      " will live here. Add the first one above.";
+    empty.appendChild(line);
+    inner.appendChild(empty);
+    return;
+  }
+  const rows = document.createElement("div");
+  rows.className = "things-rows";
+  let doneHeadShown = false;
+  sortTasksForList(tasks).forEach(function (task) {
+    if (task.status === "completed" && !doneHeadShown) {
+      doneHeadShown = true;
+      const sub = document.createElement("div");
+      sub.className = "things-subhead";
+      sub.textContent = "Completed";
+      rows.appendChild(sub);
+    }
+    rows.appendChild(buildTaskRowEl(task, {
+      dueLabel: thingsDueLabel
+    }));
+  });
+  inner.appendChild(rows);
 }
 
 /* ---------------- the task editor ----------------
@@ -13266,6 +13643,8 @@ function onTasksLoaded(prevTaskUpdatedById) {
    pane to the editor. */
 function openNote(id) {
   state.selectedId = id;
+  /* v2.24.3: a note opening replaces any Things to do page. */
+  state.thingsNotebook = null;
   renderNoteList();
   renderEditor();
   setMobileView("editor");
@@ -13284,6 +13663,26 @@ function renderEditor() {
      raised over; any render replaces both, so it closes here,
      on every path below. */
   closePastePopup();
+  /* v2.24.3: while a Things to do page is open it owns the
+     editor pane outright: the empty pane and the note editor
+     hide, the page renders, and nothing here touches the
+     note's fields, so the open note's editor state (and any
+     pending autosave, which reads those same untouched
+     fields) is exactly as it was when the user comes back.
+     Note popups close like they do on the no note path. */
+  const thingsWrap = document.getElementById("thingsWrap");
+  if (state.thingsNotebook) {
+    noNote.classList.add("hidden");
+    wrap.classList.add("hidden");
+    hideLinkBar();
+    hideTableMenu();
+    hideCellMenu();
+    clearCellSelection();
+    closeNotebookMenu();
+    renderThingsView();
+    return;
+  }
+  if (thingsWrap) { thingsWrap.classList.add("hidden"); }
   if (!note) {
     noNote.classList.remove("hidden");
     wrap.classList.add("hidden");
@@ -28681,6 +29080,9 @@ function wireEvents() {
     document.getElementById("newNoteBtn").click();
   });
   document.getElementById("editorBackBtn").addEventListener("click", function () { setMobileView("list"); });
+  /* v2.24.3: the Things to do page's footer carries the same
+     phone affordance in its own footer. */
+  document.getElementById("thingsBackBtn").addEventListener("click", function () { setMobileView("list"); });
 
   /* Editor inputs: any change marks the note dirty and autosaves.
      (v2.2: notePinned left this list with the checkbox itself; the
