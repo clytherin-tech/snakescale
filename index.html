@@ -40,10 +40,37 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-23-SSN-V2243
-  Version: 2.24.3
+  BUILD STAMP: 2026-10-23-SSN-V2244
+  Version: 2.24.4
 
   Revision history:
+    v2.24.4 2026-10-23 A mobile pass over the whole app,
+                      driven by phone testing of the Tasks
+                      surfaces. The Tasks view's three column
+                      table restacks at phone widths: the
+                      column header hides, each row puts its
+                      checkbox, title, flag, and priority on a
+                      full width first line, and the due date
+                      and notebook share a second muted line,
+                      so a long title wraps in words instead of
+                      collapsing a character at a time; the
+                      desktop table is unchanged. The Things
+                      to do tile gains the note card's one line
+                      summary on phones (tasks open, and how
+                      many are completed) while keeping its
+                      desktop height, and the Things to do
+                      page's rows wrap their markers onto their
+                      own line under a larger round checkbox.
+                      Around the app: form controls take the
+                      size that stops phone browsers zooming on
+                      focus, primary buttons and menu rows meet
+                      touch sizes, dialogs stack their paired
+                      fields and shrink their padding on narrow
+                      screens, the fixed popups are capped to
+                      the screen width, and the mobile bar and
+                      toasts respect the phone's safe areas.
+                      Layout only: no task, note, storage, or
+                      sync behavior changes.
     v2.24.3 2026-10-23 The list pane's per-task groups are
                       gone, replaced by one Things to do tile
                       per notebook that has tasks, Evernote's
@@ -3845,6 +3872,75 @@ body.dark .tasks-head h2{color:var(--accent);}
     max-width:100%;overflow:hidden;text-overflow:ellipsis;
   }
 }
+/* v2.24.4: phone form for the Tasks pane rows. The three
+   column table cannot carry its own Title cell at phone
+   widths: the fixed Due date and Notebook tracks leave the
+   Title track only about 112px at 360px, and the checkbox,
+   flag, and priority pill inside that cell consume nearly
+   all of it, so the title's flex child is squeezed to a
+   one character measure and wraps a letter per line (the
+   iPhone screenshot Chris sent on 2026-10-23). The desktop
+   table is untouched; at 700px and under the row restacks:
+   the Title cell takes the full row width, and Due date and
+   Notebook share a second line inside the same bordered
+   row. The column header hides, because its three labels
+   no longer describe a three column geometry, and the pane
+   gives up horizontal scrolling so nothing can slide the
+   row partly off screen. */
+@media (max-width:700px){
+  .tasks-scroll{overflow-x:hidden;}
+  .tasks-inner{min-width:0;}
+  .tasks-colhead{display:none;}
+  .task-row-cols{
+    grid-template-columns:minmax(0,1fr) minmax(0,auto);
+    grid-template-areas:"title title" "due notebook";
+    gap:7px 10px;align-items:start;padding:10px;
+  }
+  .task-cell-title{
+    grid-area:title;align-items:center;min-width:0;
+  }
+  .task-row-cols .task-row-main{
+    flex:1 1 150px;min-width:0;
+  }
+  .task-row-cols .task-chips{
+    flex-wrap:wrap;justify-content:flex-end;max-width:48%;
+  }
+  .task-row-cols .task-check{
+    width:40px;height:40px;flex:0 0 40px;padding:0;
+    align-items:center;justify-content:center;
+  }
+  .task-row-cols .task-check input{width:20px;height:20px;}
+  .task-cell-due{grid-area:due;align-self:center;min-width:0;}
+  .task-cell-nb{
+    grid-area:notebook;align-self:center;justify-self:end;
+    max-width:34vw;text-align:right;
+  }
+  .tasks-quickadd input[type="text"],
+  .tasks-quickadd select,
+  .tasks-quickadd .btn,
+  .tasks-search input{min-height:44px;}
+  .task-filter-chip{min-height:40px;}
+  .task-group-chev{width:40px;height:40px;flex-basis:40px;}
+  /* The Things to do page's rows take the same medicine:
+     their chips move to their own line under the title, so
+     a word due label, the flag, and the priority pill can
+     never again eat the title's measure, and the round
+     checkbox gets a full 44px touch target. */
+  .things-rows .task-row{
+    flex-wrap:wrap;row-gap:7px;padding:10px;
+  }
+  .things-rows .task-row-main{flex:1 1 170px;min-width:0;}
+  .things-rows .task-chips{
+    margin-left:53px;flex-wrap:wrap;
+    max-width:calc(100% - 53px);
+  }
+  .things-rows .task-check{
+    width:44px;height:44px;flex:0 0 44px;padding:0;
+    align-items:center;justify-content:center;
+  }
+  .things-rows .task-check input{width:24px;height:24px;}
+  .things-quickadd input[type="text"]{min-height:44px;}
+}
 /* v2.24.3: the Things to do tile and page, Evernote's shape.
    The tile rides the note card system (a .note-card marked
    .task-tile), so it sits in the list exactly like a note
@@ -3867,6 +3963,16 @@ body.dark .tasks-head h2{color:var(--accent);}
 }
 body.dark .task-progress-pill{color:var(--accent);}
 .task-progress-pill svg{display:block;}
+/* v2.24.4: the tile's status line. A note card's rhythm is
+   meta, title, snippet, pills; the tile shipped with no
+   snippet, so on a phone it read as a tall, mostly empty
+   card with its pill stranded at the bottom. The builder
+   now gives the tile a snippet line in the card's own
+   snippet slot (an open count, with the completed count
+   when there is one). It shows only at phone widths, in
+   the v2.24.4 block at the end of this stylesheet, so the
+   desktop card keeps exactly its v2.24.3 height. */
+.task-tile .card-snippet{display:none;}
 .things-crumb{
   font-size:13px;color:var(--muted);margin-bottom:10px;
   display:flex;gap:6px;align-items:center;flex-wrap:wrap;
@@ -4072,6 +4178,117 @@ body.dark .version-date{color:var(--accent);}
   .editor-scroll{padding:18px 16px 28px;}
   .tasks-scroll{padding:18px 16px 28px;}
   .editor-foot{padding:10px 14px;}
+}
+
+/* ---------- v2.24.4: the mobile pass ----------
+   One late block, so its rules win over the component rules
+   above at phone widths only; the desktop stylesheet is
+   untouched. What it does, surface by surface:
+   - Touch targets: the controls a thumb actually meets on
+     the phone surfaces (list toolbar, sidebar rows and
+     menus, the formatting toolbar and its menus, modal
+     buttons, the editor footer's actions, the lightbox
+     close) grow to the 40 to 48px range; the 28 to 30px
+     desktop sizes stay on the desktop.
+   - Form controls take a 16px font at phone widths, the
+     size at which iOS Safari stops auto zooming a focused
+     field; the note title keeps its own larger size through
+     its id rule, and the note body is not a form control.
+   - The tile's v2.24.4 snippet line shows, restoring the
+     note card rhythm (see the tile rules above).
+   - The mobile bar respects the top safe area, and the
+     toast stack the bottom one (the viewport already opts
+     into viewport-fit cover, but nothing consumed the
+     insets before this pass).
+   - Fixed menus and the floating cards cap at the viewport
+     width and let long rows wrap, so a menu parked at the
+     right edge can never push past it. */
+@media (max-width:900px){
+  input,select,textarea{font-size:16px;}
+  #mobileBar{padding-top:calc(8px + env(safe-area-inset-top));}
+  .task-tile .card-snippet{display:block;}
+  .btn{min-height:44px;}
+  .btn.small{min-height:40px;padding:8px 12px;}
+  .nav-item{min-height:44px;}
+  .nav-label button{min-width:36px;min-height:36px;}
+  .filter-tag-row{min-height:40px;}
+  .filter-tag-row input[type="checkbox"]{width:20px;height:20px;}
+  .settings-check{min-height:44px;}
+  .settings-check input{width:22px;height:22px;}
+  .tag-picker-row,.mention-row,.paste-row{min-height:44px;}
+  .link-bar-btn{width:36px;height:36px;}
+  #conflictReloadBtn{min-height:36px;padding:6px 12px;}
+  #cellMenuBtn{width:36px;height:32px;}
+  #tableMenuBtn{min-height:36px;padding:6px 12px;}
+  .ss-att-menu-btn,.ss-card-menu-btn{min-width:40px;height:32px;}
+  .nb-drop-row{min-height:44px;}
+  .sidebar-menu-btn{min-width:44px;min-height:40px;padding:6px 10px;}
+  .sidebar-collapse-btn{min-height:40px;padding:6px 16px;}
+  .list-tb-btn{width:40px;height:40px;}
+  .list-menu-item{min-height:44px;padding:10px 9px;}
+  .gate .btn{min-height:48px;}
+  .toolbar{gap:6px;padding:8px;}
+  .toolbar button,.toolbar select{min-height:40px;}
+  .toolbar button{padding:6px 9px;}
+  .toolbar select{padding:6px 7px;}
+  .tb-menu button{min-height:40px;padding:8px;}
+  .tb-swatches{grid-template-columns:repeat(6,32px);gap:6px;}
+  .tb-swatches .swatch{
+    width:32px;height:32px;min-width:32px;min-height:32px;
+  }
+  .tb-custom-row input[type="color"]{width:44px;height:32px;}
+  .modal{
+    padding:20px 10px calc(20px + env(safe-area-inset-bottom));
+  }
+  .modal .btn,.modal-foot .btn{min-height:44px;}
+  #imgLightboxClose{
+    width:44px;height:44px;
+    top:calc(10px + env(safe-area-inset-top));right:10px;
+  }
+  .editor-actions .btn.small{min-height:40px;padding:8px 12px;}
+  #thingsBackBtn,#editorBackBtn{min-height:44px;padding:9px 14px;}
+  .undo-toast-btn{min-height:36px;padding:7px 14px;}
+  #toastBox{bottom:calc(68px + env(safe-area-inset-bottom));}
+  .note-select input[type="checkbox"]{width:22px;height:22px;}
+  #attMenu,#attCardMenu,#attAlignMenu,#tableMenu,#cellMenu,
+  #linkViewMenu{max-width:calc(100vw - 16px);}
+  .att-menu-item{white-space:normal;overflow-wrap:anywhere;}
+  #linkBarView{flex-wrap:wrap;}
+  #linkBarUrl{flex:1 1 120px;max-width:none;min-width:0;}
+}
+@media (max-width:600px){
+  .modal-card{padding:18px 16px;}
+  .task-form-row{flex-direction:column;}
+  .version-history-list{max-height:240px;}
+  .version-preview{max-height:300px;}
+  .img-editor-actions{flex-wrap:wrap;}
+  .img-editor-actions .btn{flex:1 1 120px;min-height:44px;}
+  .img-color{width:32px;height:32px;}
+  .theme-segmented{max-width:100%;overflow-x:auto;}
+  .theme-segmented button{
+    min-height:40px;padding:8px 12px;white-space:nowrap;
+  }
+  .tasks-head{align-items:flex-start;}
+  .tasks-search{margin-left:0;flex:1 1 100%;}
+  .tasks-search input{width:100%;max-width:none;}
+  .editor-foot{align-items:flex-start;}
+  .foot-tags{flex:1 1 100%;}
+  .foot-tags input{flex:1;max-width:none;}
+  .editor-actions{width:100%;}
+  .ss-att-pdf-frame{height:min(480px,62vh);}
+  #filterPanel{min-width:0;width:min(300px,86vw);}
+  .list-panel{max-width:calc(100vw - 20px);}
+  .voice-bar{flex-wrap:wrap;}
+  .voice-transcript{flex-basis:calc(100% - 80px);}
+}
+@media (max-width:430px){
+  #mobileBar{gap:6px;padding-left:8px;padding-right:8px;}
+  #mobileBar .logo-slot svg{width:18px;}
+  #mobileBar .brand-mini{font-size:15px;line-height:1.05;}
+  #mobileBar .btn{padding:8px 9px;font-size:12.5px;}
+  .note-card .card-thumb-box{width:52px;height:52px;}
+  .gate-card{padding:22px 16px 18px;}
+  .gate-brand .wordmark{font-size:24px;}
 }
 </style>
 </head>
@@ -5406,8 +5623,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-23-SSN-V2243";
-const APP_VERSION = "2.24.3";
+const APP_BUILD = "2026-10-23-SSN-V2244";
+const APP_VERSION = "2.24.4";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -12511,6 +12728,22 @@ function buildTaskTileEl(tile) {
   titleText.textContent = "Things to do";
   titleRow.appendChild(titleText);
   main.appendChild(titleRow);
+  /* v2.24.4: a snippet line in the note card's own snippet
+     slot, so the tile carries the same three line rhythm as
+     a note card (meta, title, one quiet line, pills) instead
+     of an empty gap over its pill. Presentation only, from
+     the counts the tile already carries; the stylesheet
+     shows it at phone widths and keeps the desktop card at
+     its v2.24.3 height. */
+  const snippet = document.createElement("div");
+  snippet.className = "card-snippet task-tile-snippet";
+  const openCount = tile.total - tile.completed;
+  snippet.textContent = openCount === 0
+    ? "All tasks completed"
+    : openCount + (openCount === 1 ? " open task" : " open tasks") +
+      (tile.completed
+        ? " · " + tile.completed + " completed" : "");
+  main.appendChild(snippet);
   const row = document.createElement("div");
   row.className = "chip-row";
   const pill = document.createElement("span");
