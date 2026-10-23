@@ -40,10 +40,35 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-23-SSN-V2241
-  Version: 2.24.1
+  BUILD STAMP: 2026-10-23-SSN-V2242
+  Version: 2.24.2
 
   Revision history:
+    v2.24.2 2026-10-23 The palettes' Custom color flow does
+                      what Chris described: clicking Custom
+                      paints the selection at once with the
+                      current custom color and opens the
+                      picker, the picker's input ticks repaint
+                      the same text live, its change event
+                      commits the final color, and a dismissal
+                      with no picker events leaves the at-click
+                      color standing. The old flow applied only
+                      on change, over the saved format range,
+                      which a browser that collapses the editor
+                      selection under the native dialog (Edge)
+                      could overwrite with a collapsed caret,
+                      so the picked color silently did
+                      nothing; the flow now works over a range
+                      bookmarked at the click, like the paste
+                      popup's bookmarks, and live ticks
+                      recolor the painted spans in place
+                      instead of stacking a span per tick.
+                      Both palettes run the same flow, and the
+                      picked colors are remembered in settings
+                      (customHighlightColor, customTextColor),
+                      seeding the inputs at boot. The preset
+                      swatches, None, and the apply routines
+                      themselves are unchanged.
     v2.24.1 2026-10-23 The Tasks view gets its own pane.
                       Chris's call, from his Evernote
                       screenshot: the Tasks view no longer
@@ -5276,8 +5301,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-23-SSN-V2241";
-const APP_VERSION = "2.24.1";
+const APP_BUILD = "2026-10-23-SSN-V2242";
+const APP_VERSION = "2.24.2";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -5402,6 +5427,16 @@ const state = {
                             // and edited by the Settings Editor
                             // section's Default paste select; see
                             // the paste options block.
+  customHighlightColor: "#fff3a3", // v2.24.2: the highlight
+                            // palette's remembered Custom color
+                            // (the input's shipped default),
+                            // remembered in settings, seeded
+                            // into the picker when the toolbar
+                            // is wired; see the custom color
+                            // flow in the colors code.
+  customTextColor: "#14532d", // v2.24.2: the text palette's
+                            // remembered Custom color, with
+                            // the same treatment as above.
   tasks: [],                // v2.24: the task objects from
                             // tasks.json (see the tasks block for
                             // the shape). Loaded with the library
@@ -5948,6 +5983,17 @@ function loadSettings() {
   if (["source", "merge", "text"].indexOf(s.defaultPasteMode) >= 0) {
     state.defaultPasteMode = s.defaultPasteMode;
   }
+  /* v2.24.2: the palettes' remembered Custom colors. Only a
+     full hex value of the shape the color inputs themselves
+     produce is honored; anything else (an absent field from
+     an older build, a damaged value) leaves the shipped
+     defaults in place. */
+  if (/^#[0-9a-fA-F]{6}$/.test(s.customHighlightColor || "")) {
+    state.customHighlightColor = s.customHighlightColor.toLowerCase();
+  }
+  if (/^#[0-9a-fA-F]{6}$/.test(s.customTextColor || "")) {
+    state.customTextColor = s.customTextColor.toLowerCase();
+  }
   /* v2.24: task reminder notifications. The default is on, so
      only an explicitly stored false turns them off, exactly
      like autoSync above. */
@@ -5965,6 +6011,8 @@ function saveSettings() {
     onboardingSeen: state.onboardingSeen,   // v2.13: the walkthrough record
     autoSync: state.autoSync,   // v2.16: the idle auto-sync choice
     defaultPasteMode: state.defaultPasteMode,   // v2.23: the paste default
+    customHighlightColor: state.customHighlightColor,   // v2.24.2: palette memory
+    customTextColor: state.customTextColor,   // v2.24.2: palette memory
     taskReminders: state.taskReminders   // v2.24: reminder notifications
   }));
 }
@@ -21511,7 +21559,7 @@ function applyFontSize(pt) {
    reset cannot be an execCommand value, so it wraps the selection in a
    span with color: inherit, which renders in the note's own text color
    on every device and stays removable by Remove formatting. */
-function applyTextColor(value) {
+function applyTextColor(value, opts) {
   restoreFormatSelection();
   if (value === "inherit") {
     applySpanStyle({ color: "inherit" });
@@ -21523,7 +21571,11 @@ function applyTextColor(value) {
   }
   document.getElementById("textColorBar").style.background =
     value === "inherit" ? "" : value;
-  closeToolbarMenus();
+  /* v2.24.2: the Custom color flow passes keepMenus while its
+     picker is open, so the menu holding the picker input is
+     never hidden mid-pick. Every other caller closes as
+     before. */
+  if (!opts || !opts.keepMenus) { closeToolbarMenus(); }
   markDirty();
 }
 
@@ -21546,7 +21598,7 @@ function applyTextColor(value) {
    runs after all, so a highlight the user asked for is guaranteed by
    the proven path. A range that really was painted verifies clean
    and gains no second span layer. */
-function applyHighlight(value) {
+function applyHighlight(value, opts) {
   restoreFormatSelection();
   let ok = false;
   try { ok = document.execCommand("hiliteColor", false, value); }
@@ -21559,7 +21611,8 @@ function applyHighlight(value) {
   if (value !== "transparent") { ensureHighlightLanded(value); }
   document.getElementById("highlightBar").style.background =
     value === "transparent" ? "" : value;
-  closeToolbarMenus();
+  /* v2.24.2: keepMenus, as in applyTextColor above. */
+  if (!opts || !opts.keepMenus) { closeToolbarMenus(); }
   markDirty();
 }
 
@@ -21659,6 +21712,231 @@ function ensureHighlightLanded(value) {
   if (!rangeHasVisibleBackground(range)) {
     applySpanStyle({ backgroundColor: value });
   }
+}
+
+/* ----- the Custom color flow (v2.24.2) -------------------------------------
+   Chris's contract for both palettes' Custom row: clicking
+   Custom paints the selection at once with the current
+   custom color, and the same click opens the native picker;
+   while the picker is open, its input ticks repaint the
+   same text live; when the picker commits (its change
+   event), the final color stands and is remembered; a
+   dismissal with no picker events leaves the at-click
+   color standing.
+
+   The flow this replaces applied only on change, over the
+   saved format range. That range is kept current by
+   listeners that accept any selection anchored in the body,
+   collapsed carets included, so a browser that collapses
+   the editor selection while the native dialog holds focus
+   (the Edge behavior behind Chris's report, and the reason
+   v2.13.1 needed its verifier) overwrote the saved range
+   with a collapsed caret, and the change-time apply then
+   painted nothing at all. This flow therefore works over
+   its own bookmark: a clone of the selection taken
+   synchronously at the Custom click, before the picker
+   can disturb anything, the way the paste popup bookmarks
+   its range. Every application pins the saved format range
+   from the bookmark first, so nothing the dialog does to
+   the live selection or the saved range can move the
+   paint, and after each application the bookmark is
+   recaptured from the selection the apply leaves over the
+   painted text (the span helpers reselect their wraps, and
+   a painting engine leaves the selection over its own
+   paint), which keeps the bookmark valid across the node
+   splits a wrap performs. */
+let customColorSession = null;
+
+/* Recolor, in place, the spans an earlier application in
+   this session painted over the bookmarked range, and
+   report whether any were found. The walk mirrors
+   wrapRangeTextWithSpan (boundary text nodes counted only
+   for the part inside the range, attachment placeholders
+   skipped), and for each covered text node only the
+   NEAREST ancestor span carrying the session's property is
+   recolored: that is the span the earlier application
+   painted, and stopping there leaves a wider span that
+   extends past the selection (a highlight the selection
+   only partly covers) untouched on its outside text.
+   Recoloring in place is what lets a picker tick follow
+   the user's eye without stacking a fresh span layer per
+   tick. */
+function repaintCustomSpans(session, value) {
+  const bodyEl = document.getElementById("noteBody");
+  const range = session.range;
+  if (!range || range.collapsed ||
+      !bodyEl.contains(range.commonAncestorContainer)) {
+    return false;
+  }
+  const prop = session.kind === "highlight" ? "backgroundColor" : "color";
+  const walker = document.createTreeWalker(
+    bodyEl, NodeFilter.SHOW_TEXT, null);
+  const spans = [];
+  let node = walker.nextNode();
+  while (node) {
+    const parent = node.parentElement;
+    const inAttachment = parent && parent.closest(".ss-attachment");
+    if (!inAttachment && node.nodeValue.length &&
+        range.intersectsNode(node)) {
+      let start = 0;
+      let end = node.nodeValue.length;
+      if (node === range.startContainer) { start = range.startOffset; }
+      if (node === range.endContainer) { end = range.endOffset; }
+      if (start < end) {
+        let el = parent;
+        while (el && el !== bodyEl) {
+          if (el.tagName === "SPAN" && el.style &&
+              (prop === "backgroundColor"
+                ? (el.style.backgroundColor || el.style.background)
+                : el.style.color)) {
+            if (spans.indexOf(el) === -1) { spans.push(el); }
+            break;
+          }
+          el = el.parentElement;
+        }
+      }
+    }
+    node = walker.nextNode();
+  }
+  spans.forEach(function (span) { span.style[prop] = value; });
+  return spans.length > 0;
+}
+
+/* One application of a value inside a Custom session: pin
+   the bookmark into the saved format range, recolor the
+   already painted spans when there are any (the live tick
+   path), and otherwise run the palette's own apply (the
+   first application, or a tick whose paint is not found).
+   The toolbar menus stay open throughout: the picker is
+   up, and hiding the menu would hide the input it is
+   anchored to. */
+function applyCustomColor(session, value) {
+  if (session.range) {
+    savedFormatRange = session.range.cloneRange();
+  }
+  let painted = false;
+  if (session.appliedValue !== null && session.range) {
+    painted = repaintCustomSpans(session, value);
+    if (painted) {
+      document.getElementById(
+        session.kind === "highlight" ? "highlightBar" : "textColorBar"
+      ).style.background = value;
+      markDirty();
+    }
+  }
+  if (!painted) {
+    if (session.kind === "highlight") {
+      applyHighlight(value, { keepMenus: true });
+    } else {
+      applyTextColor(value, { keepMenus: true });
+    }
+  }
+  session.appliedValue = value;
+  /* Recapture the bookmark from the selection the apply
+     left over the painted text, when that selection is a
+     usable range inside the body. The repaint path never
+     moves the live selection, so a dialog-collapsed caret
+     simply keeps the previous bookmark. */
+  const bodyEl = document.getElementById("noteBody");
+  const sel = window.getSelection();
+  if (sel && sel.rangeCount) {
+    const live = sel.getRangeAt(0);
+    if (!live.collapsed &&
+        bodyEl.contains(live.commonAncestorContainer)) {
+      session.range = live.cloneRange();
+    }
+  }
+}
+
+/* The Custom click: bookmark the selection exactly as it
+   stands, then paint with the input's current value. The
+   bookmark, the part the dialog could destroy, is captured
+   synchronously here; the paint itself is deferred one
+   tick so the click's own activation behavior (opening
+   the native picker) is never preceded by the focus and
+   DOM changes an application performs. */
+function beginCustomColor(kind, input) {
+  saveFormatSelection();
+  const bodyEl = document.getElementById("noteBody");
+  let range = null;
+  const sel = window.getSelection();
+  if (sel && sel.rangeCount) {
+    const live = sel.getRangeAt(0);
+    if (!live.collapsed &&
+        bodyEl.contains(live.commonAncestorContainer)) {
+      range = live.cloneRange();
+    }
+  }
+  if (!range && savedFormatRange &&
+      bodyEl.contains(savedFormatRange.startContainer) &&
+      bodyEl.contains(savedFormatRange.endContainer)) {
+    range = savedFormatRange.cloneRange();
+  }
+  customColorSession = {
+    kind: kind, input: input, range: range, appliedValue: null
+  };
+  const session = customColorSession;
+  setTimeout(function () {
+    if (customColorSession === session) {
+      applyCustomColor(session, input.value);
+    }
+  }, 0);
+}
+
+/* The picker's input ticks repaint live over the bookmark.
+   A tick with no live session cannot occur (the picker
+   opens only from the click that begins one), and one that
+   somehow slips through is ignored rather than painting
+   over whatever selection happens to be live. */
+function customColorInput(kind, input) {
+  const session = customColorSession;
+  if (!session || session.input !== input) { return; }
+  applyCustomColor(session, input.value);
+}
+
+/* Remember a committed pick: the state value loadSettings
+   restores and the toolbar wiring seeds into the input,
+   so the next Custom click, in this session or after a
+   reload, starts from it. */
+function rememberCustomColor(kind, value) {
+  if (!/^#[0-9a-fA-F]{6}$/.test(value || "")) { return; }
+  if (kind === "highlight") {
+    state.customHighlightColor = value.toLowerCase();
+  } else {
+    state.customTextColor = value.toLowerCase();
+  }
+  saveSettings();
+}
+
+/* The picker's change event: the picker has closed with a
+   committed value. With a live session, apply the value
+   over the bookmark unless the live ticks already painted
+   exactly it (the common case, where a second application
+   could only stack paint), remember it either way, and
+   hand focus and the selection back to the editor; the
+   final apply closes the toolbar menus, matching the
+   flow's old end state. A change with no session (this
+   event was the palette's only entry point before
+   v2.24.2) applies and remembers plainly. */
+function commitCustomColor(kind, input) {
+  const session = customColorSession;
+  if (!session || session.input !== input) {
+    if (kind === "highlight") { applyHighlight(input.value); }
+    else { applyTextColor(input.value); }
+    rememberCustomColor(kind, input.value);
+    return;
+  }
+  customColorSession = null;
+  if (session.range) {
+    savedFormatRange = session.range.cloneRange();
+  }
+  if (session.appliedValue !== input.value) {
+    if (kind === "highlight") { applyHighlight(input.value); }
+    else { applyTextColor(input.value); }
+  } else {
+    restoreFormatSelection();
+  }
+  rememberCustomColor(kind, input.value);
 }
 
 /* v2.6.0: split el around one of its child nodes: el keeps the child,
@@ -22809,12 +23087,34 @@ function wireToolbar() {
   document.getElementById("highlightNone").addEventListener("click",
     function () { clearHighlightSelection(); });
 
-  /* Custom color inputs apply when the picker is committed (the
-     change event), not on every intermediate input tick. */
-  document.getElementById("textColorCustom").addEventListener("change",
-    function (ev) { applyTextColor(ev.target.value); });
-  document.getElementById("highlightCustom").addEventListener("change",
-    function (ev) { applyHighlight(ev.target.value); });
+  /* Custom color inputs (v2.24.2): the full flow lives in
+     the custom color block in the colors code (a bookmark at
+     the click, a paint at the click, live repaints on the
+     picker's input ticks, a commit and remember on its
+     change event). The inputs are seeded from the
+     remembered colors first; loadSettings has already run. */
+  const textCustomInput = document.getElementById("textColorCustom");
+  const highlightCustomInput = document.getElementById("highlightCustom");
+  textCustomInput.value = state.customTextColor;
+  highlightCustomInput.value = state.customHighlightColor;
+  textCustomInput.addEventListener("click", function () {
+    beginCustomColor("text", textCustomInput);
+  });
+  highlightCustomInput.addEventListener("click", function () {
+    beginCustomColor("highlight", highlightCustomInput);
+  });
+  textCustomInput.addEventListener("input", function () {
+    customColorInput("text", textCustomInput);
+  });
+  highlightCustomInput.addEventListener("input", function () {
+    customColorInput("highlight", highlightCustomInput);
+  });
+  textCustomInput.addEventListener("change", function () {
+    commitCustomColor("text", textCustomInput);
+  });
+  highlightCustomInput.addEventListener("change", function () {
+    commitCustomColor("highlight", highlightCustomInput);
+  });
 }
 
 /* --------------------------------------------------------------------------
