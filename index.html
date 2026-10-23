@@ -40,10 +40,62 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-22-SSN-V2230
-  Version: 2.23.0
+  BUILD STAMP: 2026-10-23-SSN-V2240
+  Version: 2.24.0
 
   Revision history:
+    v2.24.0 2026-10-23 Tasks, with reminder notifications.
+                      Tasks are their own objects, modeled on
+                      Evernote Tasks and adapted to notebooks:
+                      each task belongs to a notebook and carries
+                      a title, a description, a due date with an
+                      optional time, a flag, a priority (low,
+                      medium, high), a recurrence (none, daily,
+                      weekly, monthly, yearly), and an optional
+                      reminder offset. They live in one new app
+                      owned file, tasks.json, in the store root
+                      beside catalog.json and incoming.json,
+                      written by a coalesced writer in the
+                      catalog writer's mold (debounced, flushed
+                      inside syncNow, conflicts retried once,
+                      failures swallowed so a tasks write can
+                      never fail a note operation). A missing
+                      file means no tasks yet; a damaged one
+                      loads as empty and is never overwritten
+                      until a real task change happens. Notebook
+                      folders gain no new files, and the note
+                      loader and the catalog are untouched by
+                      the feature. Open tasks show as a Tasks
+                      group at the top of their notebook's list
+                      and of All Notes; a Tasks entry in the
+                      sidebar, directly under All Notes with the
+                      open count, opens a Tasks view listing
+                      every task in every notebook, grouped by
+                      due date (Overdue, Today, Upcoming, No due
+                      date, Completed), by notebook, or by
+                      priority, with All, Open, Flagged, and
+                      Completed filters, a quick add row, and a
+                      full task editor dialog. Completing a
+                      recurring task rolls its due date forward
+                      by the interval instead of closing it.
+                      Reminders are real notifications: a
+                      scheduler checks every 30 seconds while
+                      the app runs, on boot, on becoming
+                      visible, and after every task change, and
+                      fires through the service worker
+                      registration when there is one (the plain
+                      Notification constructor otherwise), once
+                      per due moment, with the moment recorded
+                      on the task so a reminder whose time
+                      passed while the app was closed fires once
+                      when it next opens. Clicking a notification
+                      focuses the app and opens that task's
+                      editor. Settings gains a Notifications
+                      section (permission status, an enable
+                      button, and the task reminders switch,
+                      on by default). There is no push server,
+                      so a fully closed app cannot fire; the
+                      catch up on next open is the backstop.
     v2.23.0 2026-10-22 Paste options, and attachments ride
                       the drop box. A rich paste (one carrying
                       HTML) now keeps its clipboard payloads and
@@ -2116,7 +2168,7 @@ body.note-drag-active{touch-action:none;overscroll-behavior:none;}
    without ever shouting. */
 #noteList, .editor-scroll, #sidebar, #sidebarRail, #railFlyout,
 #tagPicker, .mention-list, .note-link-list, .filter-tag-list,
-.version-history-list, .version-preview, .tb-menu{
+.version-history-list, .version-preview, .tb-menu, .modal{
   scrollbar-width: thin;
   scrollbar-color: transparent transparent;
   transition: scrollbar-color 250ms ease;
@@ -2124,7 +2176,7 @@ body.note-drag-active{touch-action:none;overscroll-behavior:none;}
 #noteList:hover, .editor-scroll:hover, #tagPicker:hover,
 .mention-list:hover, .note-link-list:hover,
 .filter-tag-list:hover, .version-history-list:hover,
-.version-preview:hover, .tb-menu:hover{
+.version-preview:hover, .tb-menu:hover, .modal:hover{
   scrollbar-color: rgba(87,167,115,.55) transparent;
 }
 #sidebar:hover, #sidebarRail:hover, #railFlyout:hover{
@@ -2134,7 +2186,8 @@ body.dark #noteList:hover, body.dark .editor-scroll:hover,
 body.dark #tagPicker:hover, body.dark .mention-list:hover,
 body.dark .note-link-list:hover, body.dark .filter-tag-list:hover,
 body.dark .version-history-list:hover,
-body.dark .version-preview:hover, body.dark .tb-menu:hover{
+body.dark .version-preview:hover, body.dark .tb-menu:hover,
+body.dark .modal:hover{
   scrollbar-color: rgba(87,167,115,.65) transparent;
 }
 #noteList::-webkit-scrollbar, .editor-scroll::-webkit-scrollbar,
@@ -2144,7 +2197,8 @@ body.dark .version-preview:hover, body.dark .tb-menu:hover{
 .note-link-list::-webkit-scrollbar,
 .filter-tag-list::-webkit-scrollbar,
 .version-history-list::-webkit-scrollbar,
-.version-preview::-webkit-scrollbar, .tb-menu::-webkit-scrollbar{
+.version-preview::-webkit-scrollbar, .tb-menu::-webkit-scrollbar,
+.modal::-webkit-scrollbar{
   width:10px;height:10px;
 }
 #noteList::-webkit-scrollbar-track,
@@ -2158,7 +2212,8 @@ body.dark .version-preview:hover, body.dark .tb-menu:hover{
 .filter-tag-list::-webkit-scrollbar-track,
 .version-history-list::-webkit-scrollbar-track,
 .version-preview::-webkit-scrollbar-track,
-.tb-menu::-webkit-scrollbar-track{
+.tb-menu::-webkit-scrollbar-track,
+.modal::-webkit-scrollbar-track{
   background:transparent;
 }
 #noteList::-webkit-scrollbar-thumb,
@@ -2172,7 +2227,8 @@ body.dark .version-preview:hover, body.dark .tb-menu:hover{
 .filter-tag-list::-webkit-scrollbar-thumb,
 .version-history-list::-webkit-scrollbar-thumb,
 .version-preview::-webkit-scrollbar-thumb,
-.tb-menu::-webkit-scrollbar-thumb{
+.tb-menu::-webkit-scrollbar-thumb,
+.modal::-webkit-scrollbar-thumb{
   background-color:transparent;border-radius:8px;
   border:2px solid transparent;background-clip:padding-box;
   transition:background-color 250ms ease;
@@ -2185,7 +2241,8 @@ body.dark .version-preview:hover, body.dark .tb-menu:hover{
 .filter-tag-list:hover::-webkit-scrollbar-thumb,
 .version-history-list:hover::-webkit-scrollbar-thumb,
 .version-preview:hover::-webkit-scrollbar-thumb,
-.tb-menu:hover::-webkit-scrollbar-thumb{
+.tb-menu:hover::-webkit-scrollbar-thumb,
+.modal:hover::-webkit-scrollbar-thumb{
   background-color:rgba(87,167,115,.45);
 }
 #sidebar:hover::-webkit-scrollbar-thumb,
@@ -2201,7 +2258,8 @@ body.dark .note-link-list:hover::-webkit-scrollbar-thumb,
 body.dark .filter-tag-list:hover::-webkit-scrollbar-thumb,
 body.dark .version-history-list:hover::-webkit-scrollbar-thumb,
 body.dark .version-preview:hover::-webkit-scrollbar-thumb,
-body.dark .tb-menu:hover::-webkit-scrollbar-thumb{
+body.dark .tb-menu:hover::-webkit-scrollbar-thumb,
+body.dark .modal:hover::-webkit-scrollbar-thumb{
   background-color:rgba(87,167,115,.6);
 }
 #noteList::-webkit-scrollbar-thumb:hover,
@@ -2215,7 +2273,8 @@ body.dark .tb-menu:hover::-webkit-scrollbar-thumb{
 .filter-tag-list::-webkit-scrollbar-thumb:hover,
 .version-history-list::-webkit-scrollbar-thumb:hover,
 .version-preview::-webkit-scrollbar-thumb:hover,
-.tb-menu::-webkit-scrollbar-thumb:hover{
+.tb-menu::-webkit-scrollbar-thumb:hover,
+.modal::-webkit-scrollbar-thumb:hover{
   background-color:rgba(46,125,79,.85);
 }
 /* v2.18 themed scrollbars: end */
@@ -3534,6 +3593,142 @@ body.dark .settings-section h3{color:var(--accent);}
   border-radius:var(--radius-button);background:var(--surface);
   color:var(--text);
 }
+/* v2.24: tasks and notifications.
+   Native controls in the new surfaces follow the theme through
+   the CSS color scheme, set per theme here so dropdown popups,
+   date and time pickers, and scrollbars in the task dialog and
+   the Tasks view render dark under the dark theme and light
+   under the light one instead of following the OS alone. */
+body{color-scheme:light;}
+body.dark{color-scheme:dark;}
+/* The tasks group at the top of a notebook or All Notes list,
+   and the group blocks inside the Tasks view. */
+.task-group{margin:0 0 14px;}
+.task-group-head{
+  display:flex;align-items:center;gap:8px;padding:4px 4px 7px;
+}
+.task-group-title{
+  font-weight:700;font-size:13px;letter-spacing:.04em;
+  text-transform:uppercase;color:var(--primary);
+}
+body.dark .task-group-title{color:var(--accent);}
+.task-group-count{font-size:12.5px;color:var(--muted);font-weight:600;}
+.task-add-btn{margin-left:auto;}
+.task-row{
+  display:flex;align-items:flex-start;gap:9px;padding:8px 10px;
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius-card);margin-bottom:6px;cursor:pointer;
+  transition:border-color var(--motion),background-color var(--motion);
+}
+.task-row:hover{border-color:var(--secondary);}
+.task-row .task-check{
+  display:flex;padding:2px;cursor:pointer;flex:none;
+}
+.task-row .task-check input{
+  width:17px;height:17px;margin:0;cursor:pointer;
+  accent-color:var(--primary);
+}
+.task-row-main{flex:1;min-width:0;}
+.task-row-title{
+  font-weight:600;font-size:14.5px;color:var(--text);
+  overflow-wrap:anywhere;
+}
+.task-row.completed .task-row-title{
+  text-decoration:line-through;color:var(--muted);
+}
+.task-row-meta{font-size:12.5px;color:var(--muted);margin-top:1px;}
+.task-chips{
+  margin-left:auto;display:flex;gap:6px;align-items:center;
+  flex:none;padding-top:1px;
+}
+.due-chip{
+  font-size:12px;font-weight:700;padding:2px 8px;white-space:nowrap;
+  border-radius:var(--radius-pill);background:var(--soft);
+  color:var(--primary);
+}
+body.dark .due-chip{color:var(--accent);}
+.due-chip.today{background:var(--accent);color:#0B3D2E;}
+.due-chip.overdue{background:var(--danger);color:#fff;}
+.task-flag{display:inline-flex;color:var(--danger);}
+.priority-pill{
+  font-size:11px;font-weight:700;padding:2px 7px;white-space:nowrap;
+  border-radius:var(--radius-pill);border:1px solid var(--border);
+  color:var(--muted);
+}
+.priority-pill.high{color:var(--danger);border-color:var(--danger);}
+.priority-pill.medium{color:var(--secondary);border-color:var(--secondary);}
+body.dark .priority-pill.medium{color:var(--accent);border-color:var(--accent);}
+/* The Tasks view controls: quick add, the grouping segmented
+   control (the Settings .theme-segmented pill, whose pressed
+   side is filled so the active grouping is obvious), and the
+   filter chips (the active chip is filled the same way). */
+.tasks-quickadd{display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;}
+.tasks-quickadd input[type="text"]{
+  flex:1;min-width:140px;padding:9px 10px;border:1px solid var(--border);
+  border-radius:var(--radius-button);background:var(--surface);
+  color:var(--text);font:inherit;
+}
+.tasks-quickadd select{
+  padding:9px;border:1px solid var(--border);max-width:45%;
+  border-radius:var(--radius-button);background:var(--surface);
+  color:var(--text);font:inherit;
+}
+.tasks-quickadd input[type="text"]:focus,.tasks-quickadd select:focus{
+  border-color:var(--secondary);outline:none;
+  box-shadow:0 0 0 3px rgba(87,167,115,.22);
+}
+.tasks-controls-row{
+  display:flex;gap:10px;align-items:center;flex-wrap:wrap;
+  margin-bottom:12px;
+}
+.task-filters{display:flex;gap:6px;flex-wrap:wrap;}
+.task-filter-chip{
+  border:1px solid var(--border);background:var(--surface);
+  color:var(--text);border-radius:var(--radius-pill);
+  padding:5px 12px;font-weight:600;font-size:13px;cursor:pointer;
+  transition:background-color var(--motion),border-color var(--motion),
+    color var(--motion);
+}
+.task-filter-chip:hover{border-color:var(--secondary);}
+.task-filter-chip.active{
+  background:var(--primary);border-color:var(--primary);color:#fff;
+}
+/* The task editor dialog: the Settings dialog family's field
+   styling, extended to the textarea and the date and time
+   inputs so every control in it is themed in both themes, with
+   labels padded above their controls like every other field. */
+.task-modal-card{max-width:560px;}
+.modal .field textarea{
+  width:100%;padding:8px 10px;border:1px solid var(--border);
+  border-radius:var(--radius-button);background:var(--surface);
+  color:var(--text);font:inherit;resize:vertical;min-height:64px;
+  box-sizing:border-box;
+}
+.modal .field input[type="text"],.modal .field input[type="date"],
+.modal .field input[type="time"]{
+  width:100%;padding:8px 10px;border:1px solid var(--border);
+  border-radius:var(--radius-button);background:var(--surface);
+  color:var(--text);font:inherit;box-sizing:border-box;
+}
+.modal .field input:focus,.modal .field textarea:focus{
+  border-color:var(--secondary);outline:none;
+  box-shadow:0 0 0 3px rgba(87,167,115,.22);
+}
+.modal .field select:disabled{opacity:.55;}
+.task-form-row{display:flex;gap:10px;}
+.task-form-row .field{flex:1;min-width:0;}
+.task-stamps{font-size:12.5px;color:var(--muted);margin-top:2px;}
+.task-modal-foot{justify-content:flex-end;}
+.task-modal-foot #taskDeleteBtn{margin-right:auto;}
+/* The Settings Notifications section: the permission status is
+   a colored line, a different color per state, so granted,
+   blocked, and not yet asked never look alike. */
+.notif-status{font-size:14px;font-weight:600;margin:8px 0;line-height:1.45;}
+.notif-status[data-state="granted"]{color:var(--secondary);}
+body.dark .notif-status[data-state="granted"]{color:var(--accent);}
+.notif-status[data-state="denied"]{color:var(--danger);}
+.notif-status[data-state="default"],
+.notif-status[data-state="unsupported"]{color:var(--muted);}
 /* v2.8: the note History modal. Rows are compact cards; the
    preview is a read only rendering under the list, with pointer
    interaction disabled so links and controls inside an old
@@ -3795,6 +3990,9 @@ body.dark .version-date{color:var(--accent);}
 
     <div class="nav-section">
       <button class="nav-item" id="navAll" type="button">All Notes <span class="count count-pill" id="countAll"></span></button>
+      <!-- v2.24: the Tasks view's entry, directly under All
+           Notes, with the open task count as its pill. -->
+      <button class="nav-item" id="navTasks" type="button">Tasks <span class="count count-pill" id="countTasks"></span></button>
       <button class="nav-item" id="navPinned" type="button">Pinned <span class="count count-pill" id="countPinned"></span></button>
       <!-- v2.5: Trash and Archive are drag and drop destinations
            too (data-drop-action is what the note drag hit test
@@ -4694,6 +4892,27 @@ body.dark .version-date{color:var(--accent);}
       </div>
     </section>
 
+    <!-- v2.24: task reminder notifications. The status line
+         reports the browser permission in its own color per
+         state; the Enable button shows only while permission
+         has not been asked yet, and asks from the click, as a
+         permission request must. The switch below it is the
+         task reminders setting itself: a real checkbox, so its
+         state is the control, never silently remembered. -->
+    <section class="settings-section" aria-labelledby="settingsNotifTitle">
+      <h3 id="settingsNotifTitle">Notifications</h3>
+      <p>Tasks can carry a reminder. When one comes due, this device shows a notification, generated here in the app: nothing about your tasks is sent anywhere to deliver it. Reminders fire while the app is open on this device; a reminder whose time passed while the app was closed arrives when you next open it.</p>
+      <div class="notif-status" id="settingsNotifStatus" data-state="default" aria-live="polite"></div>
+      <button class="btn hidden" id="settingsNotifEnableBtn" type="button">Enable notifications</button>
+      <div class="settings-autosync">
+        <label class="settings-check" for="settingsTaskRemindersToggle">
+          <input type="checkbox" id="settingsTaskRemindersToggle">
+          <span>Task reminders</span>
+        </label>
+        <div class="settings-help">When off, due tasks still show in your lists, but no notifications appear.</div>
+      </div>
+    </section>
+
     <!-- v2.23: the default paste mode. The select is the whole
          control: its shown value is the saved choice, and
          changing it persists at once, like every Settings
@@ -4737,6 +4956,93 @@ body.dark .version-date{color:var(--accent);}
 
     <div class="modal-foot">
       <button class="btn" id="settingsCloseBtn" type="button">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==========================================================================
+     v2.24: the task editor
+     A modal in the Settings dialog family. The script fills the
+     fields from the task being edited (or with defaults for a
+     new one), and Save writes through the tasks writer and
+     re-renders every task surface. The reminder select is
+     disabled until a due date exists, and an Enable
+     notifications button appears inside it when a reminder is
+     chosen but this browser has not granted permission yet, so
+     the permission ask happens on a real click. Deleting a task
+     removes it outright; tasks have no trash in this version.
+     ========================================================================== -->
+<div id="taskModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="taskModalTitle">
+  <div class="modal-card task-modal-card">
+    <h2 id="taskModalTitle">Task</h2>
+    <p class="modal-sub">Tasks live in a notebook, next to its notes.</p>
+
+    <div class="field">
+      <label for="taskTitleInput">Title</label>
+      <input id="taskTitleInput" type="text" placeholder="What needs doing?" autocomplete="off">
+    </div>
+    <div class="field">
+      <label for="taskDescInput">Description</label>
+      <textarea id="taskDescInput" placeholder="Details, links, anything the task needs"></textarea>
+    </div>
+    <div class="field">
+      <label for="taskNotebookSelect">Notebook</label>
+      <select id="taskNotebookSelect"></select>
+    </div>
+    <div class="task-form-row">
+      <div class="field">
+        <label for="taskDueDateInput">Due date</label>
+        <input id="taskDueDateInput" type="date">
+      </div>
+      <div class="field">
+        <label for="taskDueTimeInput">Due time</label>
+        <input id="taskDueTimeInput" type="time">
+      </div>
+    </div>
+    <div class="task-form-row">
+      <div class="field">
+        <label for="taskRecurrenceSelect">Repeat</label>
+        <select id="taskRecurrenceSelect">
+          <option value="none">Does not repeat</option>
+          <option value="daily">Daily</option>
+          <option value="weekly">Weekly</option>
+          <option value="monthly">Monthly</option>
+          <option value="yearly">Yearly</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="taskPrioritySelect">Priority</label>
+        <select id="taskPrioritySelect">
+          <option value="low">Low</option>
+          <option value="medium">Medium</option>
+          <option value="high">High</option>
+        </select>
+      </div>
+    </div>
+    <div class="field">
+      <label for="taskReminderSelect">Reminder</label>
+      <select id="taskReminderSelect">
+        <option value="">None</option>
+        <option value="0">At due time</option>
+        <option value="15">15 minutes before</option>
+        <option value="60">1 hour before</option>
+        <option value="1440">1 day before</option>
+      </select>
+      <div class="settings-help" id="taskReminderHint"></div>
+      <button class="btn small hidden" id="taskNotifEnableBtn" type="button">Enable notifications</button>
+    </div>
+    <div class="field">
+      <label class="settings-check" for="taskFlaggedInput">
+        <input type="checkbox" id="taskFlaggedInput">
+        <span>Flagged</span>
+      </label>
+    </div>
+    <div class="task-stamps" id="taskStampsLine"></div>
+
+    <div class="modal-foot task-modal-foot">
+      <button class="btn danger" id="taskDeleteBtn" type="button">Delete task</button>
+      <button class="btn" id="taskCancelBtn" type="button">Cancel</button>
+      <button class="btn primary" id="taskSaveBtn" type="button">Save task</button>
     </div>
   </div>
 </div>
@@ -4853,8 +5159,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-22-SSN-V2230";
-const APP_VERSION = "2.23.0";
+const APP_BUILD = "2026-10-23-SSN-V2240";
+const APP_VERSION = "2.24.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -4937,7 +5243,7 @@ const state = {
   trash: [],                // note objects with trashed = true
   archive: [],              // v1.5: note objects with archived = true
   index: null,              // parsed index.json contents, or null
-  view: { kind: "all", value: null }, // all | pinned | trash | archive | notebook | tag
+  view: { kind: "all", value: null }, // all | tasks | pinned | trash | archive | notebook | tag
   selectedId: null,         // id of the note open in the editor
   search: "",               // current search text, lowercased
   listFilters: {            // v1.8: notes list filters, session only.
@@ -4979,6 +5285,24 @@ const state = {
                             // and edited by the Settings Editor
                             // section's Default paste select; see
                             // the paste options block.
+  tasks: [],                // v2.24: the task objects from
+                            // tasks.json (see the tasks block for
+                            // the shape). Loaded with the library
+                            // and kept in step by the tasks writer;
+                            // never part of the note cache.
+  taskReminders: true,      // v2.24: whether the reminder
+                            // scheduler may fire notifications,
+                            // remembered in settings and edited
+                            // by the Settings Notifications
+                            // switch. On unless a stored settings
+                            // record explicitly says false.
+  tasksView: {              // v2.24: the Tasks view's controls,
+    grouping: "due",        // session only: "due", "notebook",
+    filter: "all"           // or "priority"; and "all", "open",
+  },                        // "flagged", or "completed".
+  taskLastNotebook: null,   // v2.24: the notebook the last task
+                            // was created in, session only; the
+                            // quick add and group defaults.
   trashSelection: [],       // v1.8.1: ids of the notes checked in the
                             // Trash view, for Delete Selected
   archiveSelection: [],     // v1.8.1: ids of the notes checked in the
@@ -5381,6 +5705,11 @@ async function signOut() {
   clearVersionRuntimeState();
   /* v2.20: the catalog and drop box session state goes with them. */
   resetCatalogRuntimeState();
+  /* v2.24: tasks session state likewise; the tasks themselves
+     stay in Drive, and the editor closes with the session. */
+  state.tasks = [];
+  resetTasksRuntimeState();
+  closeTaskEditor();
   /* v2.15: signing out cancels the pending automatic renewal,
      so no silent ask can resurrect the session just left. */
   clearGoogleRenewalTimer();
@@ -5499,6 +5828,10 @@ function loadSettings() {
   if (["source", "merge", "text"].indexOf(s.defaultPasteMode) >= 0) {
     state.defaultPasteMode = s.defaultPasteMode;
   }
+  /* v2.24: task reminder notifications. The default is on, so
+     only an explicitly stored false turns them off, exactly
+     like autoSync above. */
+  if (s.taskReminders === false) { state.taskReminders = false; }
 }
 
 
@@ -5511,7 +5844,8 @@ function saveSettings() {
     versionsLimit: state.versionsLimit,   // v2.8: versions kept per note
     onboardingSeen: state.onboardingSeen,   // v2.13: the walkthrough record
     autoSync: state.autoSync,   // v2.16: the idle auto-sync choice
-    defaultPasteMode: state.defaultPasteMode   // v2.23: the paste default
+    defaultPasteMode: state.defaultPasteMode,   // v2.23: the paste default
+    taskReminders: state.taskReminders   // v2.24: reminder notifications
   }));
 }
 
@@ -6887,6 +7221,544 @@ function flushCatalogWrites() {
   });
 }
 
+/* --------------------------------------------------------------------------
+   v2.24: tasks (tasks.json)
+
+   Tasks are their own objects, modeled on Evernote Tasks and
+   adapted to notebooks: a task belongs to a notebook (never to
+   a folder of its own), and carries a title, a description, a
+   due date with an optional time, a flag, a priority, a
+   recurrence, and an optional reminder offset. They live in
+   ONE new app owned file, tasks.json, in the store root beside
+   catalog.json and incoming.json. Notebook folders gain no new
+   files, and neither the note loader nor the catalog knows the
+   file exists (the TK suite proves both load paths ignore it).
+
+   The task object shape:
+     {
+       id:              string,   minted like a note id
+       title:           string,
+       description:     string,
+       notebook:        string,   notebook slug
+       dueDate:         "YYYY-MM-DD" or null,
+       dueTime:         "HH:MM" or null,
+       flagged:         boolean,
+       priority:        "low", "medium", or "high",
+       recurrence:      "none", "daily", "weekly", "monthly",
+                        or "yearly",
+       reminderOffsetMin: null, or 0, 15, 60, or 1440 (notify
+                        that many minutes before the due moment),
+       status:          "open" or "completed",
+       completedAt:     ISO string or null,
+       created:         ISO string,
+       updated:         ISO string,
+       lastReminderFor: the due moment ISO the reminder last
+                        fired for, or null
+     }
+
+   The writer is the catalog writer's twin: debounced, coalesced
+   behind a running loop, flushed inside syncNow before its
+   load, and forgiving: a StoreConflict is retried once over the
+   winner's token (last writer wins; tasks carry no conflict
+   copies), and every other failure is swallowed, because a
+   tasks write must never fail a note operation; the next load
+   reconciles. The load side reads the file beside the catalog:
+   a missing file means an empty list (the file is created
+   lazily by the first real write), and an unparseable or
+   wrongly shaped file loads as empty in memory but is NOT
+   overwritten until a real task mutation arms the writer
+   (tasksWritable), so a damaged file is evidence, not a
+   casualty. Reminder bookkeeping (lastReminderFor) also flows
+   through this writer; it deliberately does not move the
+   task's updated stamp, which records human edits.
+   -------------------------------------------------------------------------- */
+const TASKS_FILE = "tasks.json";
+const TASKS_SHAPE_VERSION = 1;
+const TASKS_WRITE_DEBOUNCE_MS = 800;
+
+let tasksWriteTimer = null;      /* pending debounce timer, or null */
+let tasksWritePromise = null;    /* the running write loop, or null */
+let tasksWriteDirty = false;     /* state changed since the last write began */
+let tasksFlushWaiters = [];      /* flushTasksWrites() resolvers */
+let lastTasksToken = null;       /* token of the tasks file last read or written */
+let tasksArmed = false;          /* true once a load completed this session */
+let tasksFileBroken = false;     /* the stored file could not be used */
+let tasksWritable = false;       /* a real mutation has armed overwriting */
+
+/* One stored task, cleaned into the shape above. Entries with
+   no usable id are dropped; every other field falls back to
+   its default rather than failing the file, the same tolerance
+   the note parser shows old notes. */
+function sanitizeTask(raw) {
+  if (!raw || typeof raw !== "object") { return null; }
+  if (typeof raw.id !== "string" || !raw.id) { return null; }
+  const dueDate = typeof raw.dueDate === "string" &&
+    /^\d{4}-\d{2}-\d{2}$/.test(raw.dueDate) ? raw.dueDate : null;
+  const dueTime = typeof raw.dueTime === "string" &&
+    /^\d{2}:\d{2}$/.test(raw.dueTime) ? raw.dueTime : null;
+  const offsets = [0, 15, 60, 1440];
+  return {
+    id: raw.id,
+    title: typeof raw.title === "string" && raw.title
+      ? raw.title : "Untitled task",
+    description: typeof raw.description === "string"
+      ? raw.description : "",
+    notebook: typeof raw.notebook === "string" ? raw.notebook : "",
+    dueDate: dueDate,
+    dueTime: dueDate ? dueTime : null,
+    flagged: !!raw.flagged,
+    priority: ["low", "medium", "high"].indexOf(raw.priority) >= 0
+      ? raw.priority : "medium",
+    recurrence: ["none", "daily", "weekly", "monthly", "yearly"]
+      .indexOf(raw.recurrence) >= 0 ? raw.recurrence : "none",
+    reminderOffsetMin: offsets.indexOf(raw.reminderOffsetMin) >= 0
+      ? raw.reminderOffsetMin : null,
+    status: raw.status === "completed" ? "completed" : "open",
+    completedAt: typeof raw.completedAt === "string"
+      ? raw.completedAt : null,
+    created: typeof raw.created === "string" && raw.created
+      ? raw.created : new Date().toISOString(),
+    updated: typeof raw.updated === "string" && raw.updated
+      ? raw.updated : new Date().toISOString(),
+    lastReminderFor: typeof raw.lastReminderFor === "string"
+      ? raw.lastReminderFor : null
+  };
+}
+
+/* The stored form of one task: the same fields, in the shape's
+   order, nothing else (no runtime state ever reaches the file). */
+function serializeTask(task) {
+  return {
+    id: task.id,
+    title: task.title,
+    description: task.description,
+    notebook: task.notebook,
+    dueDate: task.dueDate,
+    dueTime: task.dueTime,
+    flagged: !!task.flagged,
+    priority: task.priority,
+    recurrence: task.recurrence,
+    reminderOffsetMin: task.reminderOffsetMin,
+    status: task.status,
+    completedAt: task.completedAt,
+    created: task.created,
+    updated: task.updated,
+    lastReminderFor: task.lastReminderFor
+  };
+}
+
+function buildTasksObject() {
+  return {
+    version: TASKS_SHAPE_VERSION,
+    updated: new Date().toISOString(),
+    tasks: state.tasks.map(serializeTask)
+  };
+}
+
+/* Schedule a tasks write from current state. Only mutation
+   paths call this; calling it is itself the arming act, so a
+   load that found a damaged file (which never calls it) can
+   never overwrite the evidence. Inert until a load completed
+   this session, like saveCatalog, so nothing can be built
+   from pre load state and clobber a good file. */
+function saveTasks() {
+  if (!state.repoExists || !tasksArmed) { return; }
+  tasksWritable = true;
+  tasksWriteDirty = true;
+  if (tasksWritePromise) { return; }
+  if (tasksWriteTimer !== null) { return; }
+  tasksWriteTimer = setTimeout(function () {
+    tasksWriteTimer = null;
+    runTasksWriteLoop();
+  }, TASKS_WRITE_DEBOUNCE_MS);
+}
+
+/* One physical tasks write, from a snapshot of current state.
+   A lost token race is retried once over the winner's token,
+   and every failure is swallowed: the next load reconciles. */
+async function writeTasksOnce() {
+  if (tasksFileBroken && !tasksWritable) { return; }
+  const text = JSON.stringify(buildTasksObject(), null, 2);
+  try {
+    lastTasksToken = await storePutFile(TASKS_FILE, text,
+      lastTasksToken, "Update tasks");
+    tasksFileBroken = false;
+  } catch (err) {
+    if (!isStoreConflict(err)) { return; }
+    try {
+      const fresh = await storeGetFile(TASKS_FILE);
+      lastTasksToken = await storePutFile(TASKS_FILE, text,
+        fresh ? fresh.token : null, "Update tasks");
+      tasksFileBroken = false;
+    } catch (err2) { /* swallowed: reconciled on the next load */ }
+  }
+}
+
+function runTasksWriteLoop() {
+  if (tasksWritePromise) { return tasksWritePromise; }
+  tasksWritePromise = (async function () {
+    while (tasksWriteDirty) {
+      tasksWriteDirty = false;
+      await writeTasksOnce();
+    }
+  })();
+  tasksWritePromise.then(function () {
+    tasksWritePromise = null;
+    settleTasksFlushWaiters();
+  });
+  return tasksWritePromise;
+}
+
+function settleTasksFlushWaiters() {
+  if (tasksWriteTimer !== null || tasksWritePromise ||
+      tasksWriteDirty) {
+    return;
+  }
+  const waiters = tasksFlushWaiters;
+  tasksFlushWaiters = [];
+  waiters.forEach(function (resolve) { resolve(); });
+}
+
+/* Resolve once every tasks write scheduled so far has landed
+   (or failed safely). syncNow flushes before its load, the
+   same discipline flushCatalogWrites gives catalog.json. */
+function flushTasksWrites() {
+  if (tasksWriteTimer !== null) {
+    clearTimeout(tasksWriteTimer);
+    tasksWriteTimer = null;
+    runTasksWriteLoop();
+  } else if (!tasksWritePromise && tasksWriteDirty) {
+    runTasksWriteLoop();
+  }
+  if (!tasksWritePromise && !tasksWriteDirty &&
+      tasksWriteTimer === null) {
+    return Promise.resolve();
+  }
+  return new Promise(function (resolve) {
+    tasksFlushWaiters.push(resolve);
+  });
+}
+
+/* The tasks read for a load, lifted out of loadAllFromRepo so
+   the load can start it alongside the catalog read and the
+   folder listings and await it where the rest settle. Returns
+   null on a transport failure (the load keeps the tasks it
+   already holds in memory), and otherwise {tasks, token,
+   broken}: a missing file is an empty list and no token; an
+   unparseable or wrongly shaped file is an empty list, its
+   token kept (so an armed write replaces exactly it), and
+   broken set. */
+async function readTasksForLoad() {
+  let file = null;
+  try {
+    file = await storeGetFile(TASKS_FILE);
+  } catch (err) { return null; }
+  if (!file) { return { tasks: [], token: null, broken: false }; }
+  try {
+    const parsed = JSON.parse(file.text);
+    if (!parsed || typeof parsed !== "object" ||
+        !Array.isArray(parsed.tasks)) {
+      return { tasks: [], token: file.token, broken: true };
+    }
+    const tasks = [];
+    parsed.tasks.forEach(function (raw) {
+      const task = sanitizeTask(raw);
+      if (task) { tasks.push(task); }
+    });
+    return { tasks: tasks, token: file.token, broken: false };
+  } catch (err) {
+    return { tasks: [], token: file.token, broken: true };
+  }
+}
+
+/* Sign out drops the tasks session state, mirroring
+   resetCatalogRuntimeState: no token, no armed writer, and no
+   fired reminder record may leak into the next sign in on this
+   device. The tasks themselves live in Drive and stay there. */
+function resetTasksRuntimeState() {
+  if (tasksWriteTimer !== null) {
+    clearTimeout(tasksWriteTimer);
+    tasksWriteTimer = null;
+  }
+  tasksWriteDirty = false;
+  tasksArmed = false;
+  tasksWritable = false;
+  tasksFileBroken = false;
+  lastTasksToken = null;
+  taskReminderFiredKeys.clear();
+  taskEditorState = null;
+}
+
+/* ---------------- task dates ----------------
+   Due dates are plain "YYYY-MM-DD" strings and all day math is
+   done on their parts, in local time, so a due date means the
+   same calendar day on every device and no timezone can drift
+   it. The due moment adds the time: dueTime when set, else
+   09:00 local, the hour the reminder design promises. */
+function parseTaskDate(str) {
+  if (typeof str !== "string") { return null; }
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(str);
+  if (!m) { return null; }
+  return { y: Number(m[1]), m: Number(m[2]), d: Number(m[3]) };
+}
+
+function formatTaskDateParts(y, m, d) {
+  function pad(n, w) {
+    let s = String(n);
+    while (s.length < w) { s = "0" + s; }
+    return s;
+  }
+  return pad(y, 4) + "-" + pad(m, 2) + "-" + pad(d, 2);
+}
+
+function taskTodayParts() {
+  const now = new Date();
+  return { y: now.getFullYear(), m: now.getMonth() + 1, d: now.getDate() };
+}
+
+/* Whole days from today to the task's due date: negative when
+   overdue, 0 today, null when the task has no due date. */
+function taskDayDiff(task) {
+  const due = parseTaskDate(task && task.dueDate);
+  if (!due) { return null; }
+  const today = taskTodayParts();
+  const a = Date.UTC(today.y, today.m - 1, today.d);
+  const b = Date.UTC(due.y, due.m - 1, due.d);
+  return Math.round((b - a) / 86400000);
+}
+
+/* The due moment as a Date: the due date at its time, or at
+   09:00 local when the task carries no time. Null when the
+   task has no due date at all. */
+function taskDueMoment(task) {
+  const due = parseTaskDate(task && task.dueDate);
+  if (!due) { return null; }
+  let hh = 9, mm = 0;
+  if (task.dueTime && /^\d{2}:\d{2}$/.test(task.dueTime)) {
+    hh = Number(task.dueTime.slice(0, 2));
+    mm = Number(task.dueTime.slice(3, 5));
+  }
+  return new Date(due.y, due.m - 1, due.d, hh, mm, 0, 0);
+}
+
+const TASK_MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/* "Oct 24" for a due date string, in the reader's calendar. */
+function taskDateLabel(str) {
+  const p = parseTaskDate(str);
+  if (!p) { return ""; }
+  return TASK_MONTH_NAMES[p.m - 1] + " " + p.d;
+}
+
+/* "3:00 PM" for an "HH:MM" time string. */
+function taskTimeLabel(str) {
+  if (!str || !/^\d{2}:\d{2}$/.test(str)) { return ""; }
+  let hh = Number(str.slice(0, 2));
+  const mm = str.slice(3, 5);
+  const suffix = hh >= 12 ? "PM" : "AM";
+  hh = hh % 12;
+  if (hh === 0) { hh = 12; }
+  return hh + ":" + mm + " " + suffix;
+}
+
+/* The due chip for a task row: its text and its tone class.
+   Overdue wins the red, today the accent fill, everything else
+   the plain soft chip; a task with no due date gets no chip. */
+function taskDueChip(task) {
+  if (!task || !task.dueDate) { return null; }
+  const diff = taskDayDiff(task);
+  const time = task.dueTime ? " " + taskTimeLabel(task.dueTime) : "";
+  if (diff !== null && diff < 0) {
+    return { text: "Overdue " + taskDateLabel(task.dueDate), cls: "overdue" };
+  }
+  if (diff === 0) { return { text: "Today" + time, cls: "today" }; }
+  if (diff === 1) { return { text: "Tomorrow" + time, cls: "" }; }
+  return { text: taskDateLabel(task.dueDate) + time, cls: "" };
+}
+
+/* The short due phrase the notification body carries after the
+   notebook name: "today 3:00 PM", "tomorrow", "Oct 24", in the
+   same words the chip uses, lowercased to sit mid sentence. */
+function taskDuePhrase(task) {
+  if (!task || !task.dueDate) { return ""; }
+  const diff = taskDayDiff(task);
+  const time = task.dueTime ? " " + taskTimeLabel(task.dueTime) : "";
+  if (diff !== null && diff < 0) {
+    return taskDateLabel(task.dueDate) + time;
+  }
+  if (diff === 0) { return "today" + time; }
+  if (diff === 1) { return "tomorrow" + time; }
+  return taskDateLabel(task.dueDate) + time;
+}
+
+/* Advance a due date string by a recurrence interval. Monthly
+   clamps to the target month's end (Jan 31 becomes Feb 28 or
+   29), and yearly clamps the same way (Feb 29 becomes Feb 28),
+   so a rolled task never lands on a day that does not exist. */
+function advanceTaskDueDate(str, recurrence) {
+  const p = parseTaskDate(str);
+  if (!p) { return str; }
+  if (recurrence === "daily" || recurrence === "weekly") {
+    const dt = new Date(Date.UTC(p.y, p.m - 1,
+      p.d + (recurrence === "daily" ? 1 : 7)));
+    return formatTaskDateParts(dt.getUTCFullYear(),
+      dt.getUTCMonth() + 1, dt.getUTCDate());
+  }
+  if (recurrence === "monthly" || recurrence === "yearly") {
+    let y = p.y, m = p.m;
+    if (recurrence === "monthly") {
+      m += 1;
+      if (m > 12) { m = 1; y += 1; }
+    } else { y += 1; }
+    const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
+    return formatTaskDateParts(y, m, Math.min(p.d, lastDay));
+  }
+  return str;
+}
+
+/* ---------------- the task model ---------------- */
+function findTaskById(id) {
+  return state.tasks.find(function (t) { return t.id === id; }) || null;
+}
+
+function notebookNameForSlug(slug) {
+  const nb = state.notebooks.find(function (n) {
+    return n.slug === slug;
+  });
+  return nb ? nb.name : (slug || "");
+}
+
+/* The notebook a new task lands in when nothing better offers:
+   the last one used when it still exists, else the first. */
+function defaultTaskNotebook() {
+  if (state.taskLastNotebook && state.notebooks.some(
+      function (n) { return n.slug === state.taskLastNotebook; })) {
+    return state.taskLastNotebook;
+  }
+  return state.notebooks.length ? state.notebooks[0].slug : "";
+}
+
+/* List order for task rows everywhere: open tasks first by due
+   moment (no due date last), then by creation; completed tasks
+   after, newest completion first. Used whole by the notebook
+   groupings and per group by the due grouping. */
+function sortTasksForList(tasks) {
+  return tasks.slice().sort(function (a, b) {
+    const aDone = a.status === "completed";
+    const bDone = b.status === "completed";
+    if (aDone !== bDone) { return aDone ? 1 : -1; }
+    if (aDone && bDone) {
+      return String(b.completedAt || "").localeCompare(
+        String(a.completedAt || ""));
+    }
+    const am = taskDueMoment(a), bm = taskDueMoment(b);
+    if (am && bm) {
+      if (am.getTime() !== bm.getTime()) {
+        return am.getTime() - bm.getTime();
+      }
+    } else if (am) { return -1; }
+    else if (bm) { return 1; }
+    return String(a.created).localeCompare(String(b.created));
+  });
+}
+
+/* Every task change lands through here: persist through the
+   writer, re-render the visible task surfaces, and give the
+   reminder scheduler its post write look (a reopened or rolled
+   task can already be due a reminder). */
+function afterTasksChanged() {
+  saveTasks();
+  renderSidebar();
+  if (state.view.kind === "tasks" || state.view.kind === "all" ||
+      state.view.kind === "notebook") {
+    renderNoteList();
+  }
+  checkTaskReminders();
+}
+
+function createTask(fields) {
+  const now = new Date().toISOString();
+  const task = sanitizeTask({
+    id: newNoteId(),
+    title: fields.title || "Untitled task",
+    description: fields.description || "",
+    notebook: fields.notebook || defaultTaskNotebook(),
+    dueDate: fields.dueDate || null,
+    dueTime: fields.dueTime || null,
+    flagged: !!fields.flagged,
+    priority: fields.priority || "medium",
+    recurrence: fields.recurrence || "none",
+    reminderOffsetMin: fields.reminderOffsetMin != null
+      ? fields.reminderOffsetMin : null,
+    status: "open",
+    completedAt: null,
+    created: now,
+    updated: now,
+    lastReminderFor: null
+  });
+  state.tasks.push(task);
+  if (task.notebook) { state.taskLastNotebook = task.notebook; }
+  afterTasksChanged();
+  return task;
+}
+
+function updateTask(id, patch) {
+  const task = findTaskById(id);
+  if (!task) { return null; }
+  ["title", "description", "notebook", "dueDate", "dueTime",
+   "flagged", "priority", "recurrence", "reminderOffsetMin"]
+    .forEach(function (key) {
+      if (patch[key] !== undefined) { task[key] = patch[key]; }
+    });
+  const clean = sanitizeTask(task);
+  Object.keys(clean).forEach(function (key) { task[key] = clean[key]; });
+  task.updated = new Date().toISOString();
+  if (task.notebook) { state.taskLastNotebook = task.notebook; }
+  afterTasksChanged();
+  return task;
+}
+
+function deleteTask(id) {
+  const at = state.tasks.findIndex(function (t) { return t.id === id; });
+  if (at < 0) { return; }
+  state.tasks.splice(at, 1);
+  afterTasksChanged();
+}
+
+/* Complete or reopen a task. Completing a recurring task with
+   a due date does not close it: the due date rolls forward by
+   the interval from the current due date, the reminder re-arms
+   (lastReminderFor clears, so the new occurrence can remind),
+   and a toast names the new date. Completing a plain task
+   stamps it completed; unchecking a completed task reopens it
+   with its due date as it was. */
+function toggleTaskComplete(id) {
+  const task = findTaskById(id);
+  if (!task) { return; }
+  const now = new Date().toISOString();
+  if (task.status === "completed") {
+    task.status = "open";
+    task.completedAt = null;
+    task.updated = now;
+    afterTasksChanged();
+    return;
+  }
+  if (task.recurrence !== "none" && task.dueDate) {
+    task.dueDate = advanceTaskDueDate(task.dueDate, task.recurrence);
+    task.lastReminderFor = null;
+    task.updated = now;
+    afterTasksChanged();
+    toast("Task rolled forward: now due " +
+      taskDateLabel(task.dueDate) + ".");
+    return;
+  }
+  task.status = "completed";
+  task.completedAt = now;
+  task.updated = now;
+  afterTasksChanged();
+}
+
 /* A note object built from one catalog entry: everything the list
    needs, and no body. bodyLoaded false is the shell mark every
    body consumer checks; previewText, shellCardAtt, and
@@ -7644,6 +8516,9 @@ async function loadAllFromRepo() {
     listings.archive = entries;
   }));
   const catalogPromise = readCatalogForLoad();
+  /* v2.24: the tasks file rides along too, read the same way:
+     started with the batch, awaited where the rest settle. */
+  const tasksPromise = readTasksForLoad();
   /* v2.20: the drop box rides along (creates itself if missing,
      stashes unprocessed contents for syncNow's import step). */
   const incomingPromise = loadIncomingStash();
@@ -7667,6 +8542,24 @@ async function loadAllFromRepo() {
   state.notes = loaded.notes;
   state.trash = loaded.trash;
   state.archive = loaded.archive;
+  /* v2.24: the tasks land with the library. A failed read
+     (tasksLoad null) keeps the tasks already in memory rather
+     than emptying them on a transport hiccup. The previous
+     updated stamps ride along to onTasksLoaded, which owns the
+     open task editor's refresh rule and the post load reminder
+     check (the boot catch up lives there). */
+  const tasksLoad = await tasksPromise;
+  let prevTaskUpdatedById = null;
+  if (tasksLoad) {
+    prevTaskUpdatedById = {};
+    state.tasks.forEach(function (t) {
+      prevTaskUpdatedById[t.id] = t.updated;
+    });
+    state.tasks = tasksLoad.tasks;
+    lastTasksToken = tasksLoad.token;
+    tasksFileBroken = tasksLoad.broken;
+    tasksArmed = true;
+  }
   /* v2.16: the auto-sync corpus is whatever this load just
      resolved; see rebuildAutoSyncKnownIds. */
   rebuildAutoSyncKnownIds();
@@ -7681,6 +8574,11 @@ async function loadAllFromRepo() {
   /* v2.20: from here on this session may maintain the catalog;
      the saveCache below schedules its first (re)build check. */
   catalogArmed = true;
+  /* v2.24: the tasks settled above get their post load pass
+     (open editor refresh under the untouched rule, the
+     reminder catch up, and any notification click waiting to
+     open its task). */
+  if (tasksLoad) { onTasksLoaded(prevTaskUpdatedById); }
   saveCache();
   /* v1.2: one readable warning if any note file carried attachment
      metadata that could not be parsed. Those notes still loaded; they
@@ -7749,6 +8647,8 @@ async function syncNow(showToast) {
        load below reads this device's newest catalog, never one
        its own pending write is about to replace. */
     await flushCatalogWrites();
+    /* v2.24: and the same for tasks.json, for the same reason. */
+    await flushTasksWrites();
     await loadAllFromRepo();
     /* v2.20: the drop box imports inside the sync, after the
        load and before the render, so what it brought in shows
@@ -9780,6 +10680,9 @@ function allTagsWithCounts() {
 
 function renderSidebar() {
   document.getElementById("countAll").textContent = state.notes.length || "";
+  /* v2.24: the Tasks entry's pill is the open task count. */
+  document.getElementById("countTasks").textContent =
+    state.tasks.filter(function (t) { return t.status === "open"; }).length || "";
   document.getElementById("countPinned").textContent =
     state.notes.filter(function (n) { return n.pinned; }).length || "";
   document.getElementById("countTrash").textContent = state.trash.length || "";
@@ -9787,6 +10690,8 @@ function renderSidebar() {
 
   document.getElementById("navAll").classList.toggle("active",
     state.view.kind === "all");
+  document.getElementById("navTasks").classList.toggle("active",
+    state.view.kind === "tasks");
   document.getElementById("navPinned").classList.toggle("active",
     state.view.kind === "pinned");
   document.getElementById("navTrash").classList.toggle("active",
@@ -10077,6 +10982,9 @@ function anyOverlayOpen() {
      Escape that cancels it never also exits Maximize. */
   if (blockDrag) { return true; }
   const ids = ["noteLinkModal", "settingsModal", "versionHistoryModal",
+    /* v2.24: the task editor modal joins the set for the same
+       reasons as every other dialog. */
+    "taskModal",
     "nbDropOverlay", "notebookMenu",
     "railFlyout", "linkBar", "linkViewMenu", "noteLinkCard",
     "tableMenu", "cellMenu", "attMenu",
@@ -10350,6 +11258,12 @@ function chooseListSort(field) {
    would have nothing to act on. */
 function renderListToolbar() {
   const kind = state.view.kind;
+  /* v2.24: the notes list toolbar is note furniture; the Tasks
+     view carries its own controls, so the toolbar hides there. */
+  const toolbarEl = document.getElementById("listToolbar");
+  if (toolbarEl) {
+    toolbarEl.classList.toggle("hidden", kind === "tasks");
+  }
   const newBtn = document.getElementById("listNewNoteBtn");
   if (newBtn) {
     newBtn.disabled = kind === "trash" || kind === "archive";
@@ -10670,6 +11584,7 @@ function visibleNotes() {
 }
 
 function viewTitle() {
+  if (state.view.kind === "tasks") { return "Tasks"; }
   if (state.view.kind === "pinned") { return "Pinned"; }
   if (state.view.kind === "trash") { return "Trash"; }
   if (state.view.kind === "archive") { return "Archive"; }
@@ -10795,6 +11710,22 @@ function renderNoteList() {
      before the list is rebuilt. */
   revokeListThumbUrls();
   const listEl = document.getElementById("noteList");
+  /* v2.24: the Tasks view replaces the note list wholesale:
+     its own header counts, its own controls, its own groups. */
+  if (state.view.kind === "tasks") {
+    const openTasks = state.tasks.filter(function (t) {
+      return t.status === "open";
+    }).length;
+    const doneTasks = state.tasks.length - openTasks;
+    document.getElementById("listTitle").textContent = "Tasks";
+    document.getElementById("listSub").textContent =
+      openTasks + (openTasks === 1 ? " open task" : " open tasks") +
+      (doneTasks ? " · " + doneTasks + " completed" : "");
+    renderListToolbar();
+    listEl.innerHTML = "";
+    renderTasksView(listEl);
+    return;
+  }
   const list = visibleNotes();
   document.getElementById("listTitle").textContent = viewTitle();
   document.getElementById("listSub").textContent =
@@ -10813,7 +11744,15 @@ function renderNoteList() {
     listEl.appendChild(empty);
     return;
   }
-  if (!list.length) {
+  /* v2.24: the Tasks group heads the All Notes and notebook
+     lists (never Trash, Archive, Pinned, or a tag view, and not
+     while a search or the list filters are narrowing the notes:
+     the group is the scope's open work at a glance, and the
+     Tasks view is one click away for a filtered hunt). A view
+     with tasks but no notes shows the group and a quiet line
+     where the empty state would have been. */
+  const groupTasks = tasksGroupForCurrentView();
+  if (!list.length && !groupTasks.length) {
     const empty = document.createElement("div");
     empty.className = "empty-state";
     if (state.view.kind === "trash") {
@@ -10828,6 +11767,22 @@ function renderNoteList() {
       empty.innerHTML = "<div class=\"big\">No notes here yet</div>Press New Note to write your first one.";
     }
     listEl.appendChild(empty);
+    return;
+  }
+  if (groupTasks.length) {
+    listEl.appendChild(buildTasksGroupEl(groupTasks, {
+      showNotebook: state.view.kind === "all",
+      addNotebook: state.view.kind === "notebook"
+        ? state.view.value : defaultTaskNotebook()
+    }));
+  }
+  if (!list.length) {
+    const noNotes = document.createElement("div");
+    noNotes.className = "hint";
+    noNotes.style.padding = "4px 10px";
+    noNotes.textContent =
+      "No notes here yet. Press New Note to write your first one.";
+    listEl.appendChild(noNotes);
     return;
   }
 
@@ -11124,6 +12079,808 @@ function restoreEditorViewState(view) {
   if (!sel) { return; }
   sel.removeAllRanges();
   sel.addRange(range);
+}
+
+/* --------------------------------------------------------------------------
+   v2.24: task surfaces: the list group, the Tasks view, the
+   task editor, and reminder notifications
+
+   Rendering mirrors the note list's habits: rows are built
+   with DOM APIs and textContent, rebuilt wholesale on every
+   render, and their controls are wired as they are built. The
+   checkbox on a row completes (or reopens) without opening;
+   the row itself opens the editor. Every mutation re-renders
+   through afterTasksChanged, so the sidebar count, the list
+   group, and the Tasks view can never disagree.
+   -------------------------------------------------------------------------- */
+const TASK_FLAG_SVG =
+  "<svg viewBox=\"0 0 16 16\" width=\"13\" height=\"13\" " +
+  "aria-hidden=\"true\" focusable=\"false\">" +
+  "<path d=\"M4 14.5v-12\" stroke=\"currentColor\" stroke-width=\"1.7\" " +
+  "stroke-linecap=\"round\" fill=\"none\"/>" +
+  "<path d=\"M4 2.8c2.2-1.3 4.2 1 6.8 0l1.2-.5v5.4l-1.2.5c-2.6 1-4.6-1.3-6.8 0z\" " +
+  "fill=\"currentColor\"/></svg>";
+
+/* The open tasks a notebook or All Notes list shows in its
+   Tasks group: this scope's open tasks only (completed tasks
+   live in the Tasks view), in list order. Empty outside those
+   two views, and while a search or the list filters narrow
+   the notes (see renderNoteList). */
+function tasksGroupForCurrentView() {
+  if (state.view.kind !== "all" && state.view.kind !== "notebook") {
+    return [];
+  }
+  if (state.search || listFiltersActive()) { return []; }
+  let tasks = state.tasks.filter(function (t) {
+    return t.status === "open";
+  });
+  if (state.view.kind === "notebook") {
+    tasks = tasks.filter(function (t) {
+      return t.notebook === state.view.value;
+    });
+  }
+  return sortTasksForList(tasks);
+}
+
+function buildTaskGroupHeadEl(title, count) {
+  const head = document.createElement("div");
+  head.className = "task-group-head";
+  const titleEl = document.createElement("span");
+  titleEl.className = "task-group-title";
+  titleEl.textContent = title;
+  head.appendChild(titleEl);
+  const countEl = document.createElement("span");
+  countEl.className = "task-group-count";
+  countEl.textContent = String(count);
+  head.appendChild(countEl);
+  return head;
+}
+
+/* One task row, shared by the list group and the Tasks view:
+   the completion checkbox, the title (with the notebook named
+   under it where the caller asks), and the chips (due, flag,
+   priority). Completed rows render struck through with the
+   box checked, wherever they appear. */
+function buildTaskRowEl(task, opts) {
+  opts = opts || {};
+  const row = document.createElement("div");
+  row.className = "task-row" +
+    (task.status === "completed" ? " completed" : "");
+  row.setAttribute("data-task-id", task.id);
+  const picker = document.createElement("label");
+  picker.className = "task-check";
+  picker.title = task.status === "completed"
+    ? "Reopen task" : "Complete task";
+  const box = document.createElement("input");
+  box.type = "checkbox";
+  box.checked = task.status === "completed";
+  box.setAttribute("aria-label",
+    (task.status === "completed" ? "Reopen task: " : "Complete task: ") +
+    task.title);
+  /* The picker's click is stopped here, like the note list's
+     selection checkboxes, so toggling can never fall through
+     to the row's own click and open the editor. */
+  picker.addEventListener("click", function (ev) {
+    ev.stopPropagation();
+  });
+  box.addEventListener("change", function () {
+    toggleTaskComplete(task.id);
+  });
+  picker.appendChild(box);
+  row.appendChild(picker);
+
+  const main = document.createElement("div");
+  main.className = "task-row-main";
+  const title = document.createElement("div");
+  title.className = "task-row-title";
+  title.textContent = task.title;
+  main.appendChild(title);
+  if (opts.showNotebook) {
+    const meta = document.createElement("div");
+    meta.className = "task-row-meta";
+    meta.textContent = notebookNameForSlug(task.notebook);
+    main.appendChild(meta);
+  }
+  row.appendChild(main);
+
+  const chips = document.createElement("div");
+  chips.className = "task-chips";
+  const chip = taskDueChip(task);
+  if (chip) {
+    const chipEl = document.createElement("span");
+    chipEl.className = "due-chip" + (chip.cls ? " " + chip.cls : "");
+    chipEl.textContent = chip.text;
+    chips.appendChild(chipEl);
+  }
+  if (task.flagged) {
+    const flag = document.createElement("span");
+    flag.className = "task-flag";
+    flag.title = "Flagged";
+    flag.innerHTML = TASK_FLAG_SVG;
+    chips.appendChild(flag);
+  }
+  const prio = document.createElement("span");
+  prio.className = "priority-pill " + task.priority;
+  prio.textContent = task.priority === "high" ? "High"
+    : task.priority === "low" ? "Low" : "Medium";
+  chips.appendChild(prio);
+  row.appendChild(chips);
+
+  row.addEventListener("click", function () {
+    openTaskEditor(task.id);
+  });
+  return row;
+}
+
+/* The Tasks group at the top of a notebook or All Notes list:
+   the header (with its open count and the + Task affordance,
+   which opens the editor on a fresh task for this scope) and
+   one row per open task. */
+function buildTasksGroupEl(tasks, opts) {
+  opts = opts || {};
+  const group = document.createElement("div");
+  group.className = "task-group";
+  const head = buildTaskGroupHeadEl("Tasks",
+    tasks.length + (tasks.length === 1 ? " open" : " open"));
+  const add = document.createElement("button");
+  add.type = "button";
+  add.className = "btn small task-add-btn";
+  add.textContent = "+ Task";
+  add.addEventListener("click", function () {
+    openTaskEditor(null, opts.addNotebook || defaultTaskNotebook());
+  });
+  head.appendChild(add);
+  group.appendChild(head);
+  tasks.forEach(function (task) {
+    group.appendChild(buildTaskRowEl(task, opts));
+  });
+  return group;
+}
+
+/* The tasks the Tasks view shows after its filter: All keeps
+   both statuses, Open and Completed keep one, Flagged keeps
+   the flagged of both. */
+function tasksMatchingFilter() {
+  const f = state.tasksView.filter;
+  return state.tasks.filter(function (t) {
+    if (f === "open") { return t.status === "open"; }
+    if (f === "completed") { return t.status === "completed"; }
+    if (f === "flagged") { return t.flagged; }
+    return true;
+  });
+}
+
+/* The Tasks view's groups for the current grouping. Due date
+   is the default and the Evernote shape: the open work split
+   into Overdue, Today, Upcoming, and No due date, with the
+   completed set as one trailing group (present whenever the
+   filter lets completed tasks through). Notebook groups
+   follow the sidebar's notebook order; priority groups run
+   High, Medium, Low. Empty groups are omitted. */
+function taskGroupsForView() {
+  const tasks = tasksMatchingFilter();
+  const groups = [];
+  function pushGroup(title, list) {
+    if (list.length) {
+      groups.push({ title: title, tasks: sortTasksForList(list) });
+    }
+  }
+  if (state.tasksView.grouping === "notebook") {
+    const seen = {};
+    state.notebooks.forEach(function (nb) {
+      seen[nb.slug] = true;
+      pushGroup(nb.name, tasks.filter(function (t) {
+        return t.notebook === nb.slug;
+      }));
+    });
+    /* Tasks whose notebook no longer exists still show, under
+       their slug, rather than vanishing from the view. */
+    const orphanSlugs = [];
+    tasks.forEach(function (t) {
+      if (!seen[t.notebook] &&
+          orphanSlugs.indexOf(t.notebook) < 0) {
+        orphanSlugs.push(t.notebook);
+      }
+    });
+    orphanSlugs.forEach(function (slug) {
+      pushGroup(notebookNameForSlug(slug), tasks.filter(function (t) {
+        return t.notebook === slug;
+      }));
+    });
+    return groups;
+  }
+  if (state.tasksView.grouping === "priority") {
+    pushGroup("High", tasks.filter(function (t) {
+      return t.priority === "high";
+    }));
+    pushGroup("Medium", tasks.filter(function (t) {
+      return t.priority === "medium";
+    }));
+    pushGroup("Low", tasks.filter(function (t) {
+      return t.priority === "low";
+    }));
+    return groups;
+  }
+  const open = tasks.filter(function (t) {
+    return t.status === "open";
+  });
+  const done = tasks.filter(function (t) {
+    return t.status === "completed";
+  });
+  pushGroup("Overdue", open.filter(function (t) {
+    const d = taskDayDiff(t);
+    return d !== null && d < 0;
+  }));
+  pushGroup("Today", open.filter(function (t) {
+    return taskDayDiff(t) === 0;
+  }));
+  pushGroup("Upcoming", open.filter(function (t) {
+    const d = taskDayDiff(t);
+    return d !== null && d > 0;
+  }));
+  pushGroup("No due date", open.filter(function (t) {
+    return taskDayDiff(t) === null;
+  }));
+  pushGroup("Completed", done);
+  return groups;
+}
+
+/* The Tasks view itself: the quick add row (title input,
+   notebook select, and the New Task button that opens the
+   full editor), the grouping segmented control and the filter
+   chips (both rebuilt with the view, so the active choice is
+   always the filled one), then the groups. Enter in the quick
+   add creates the task with defaults in the chosen notebook
+   and puts focus back into the fresh input for rapid entry. */
+function renderTasksView(listEl) {
+  const wrap = document.createElement("div");
+  wrap.className = "tasks-view";
+
+  const quick = document.createElement("div");
+  quick.className = "tasks-quickadd";
+  const input = document.createElement("input");
+  input.type = "text";
+  input.id = "taskQuickTitle";
+  input.placeholder = "Add a task and press Enter";
+  input.setAttribute("aria-label", "New task title");
+  quick.appendChild(input);
+  const select = document.createElement("select");
+  select.id = "taskQuickNotebook";
+  select.setAttribute("aria-label", "Notebook for the new task");
+  state.notebooks.forEach(function (nb) {
+    const opt = document.createElement("option");
+    opt.value = nb.slug;
+    opt.textContent = nb.name;
+    select.appendChild(opt);
+  });
+  if (state.notebooks.length) {
+    select.value = defaultTaskNotebook();
+  }
+  select.addEventListener("change", function () {
+    state.taskLastNotebook = select.value;
+  });
+  quick.appendChild(select);
+  const newBtn = document.createElement("button");
+  newBtn.type = "button";
+  newBtn.className = "btn accent";
+  newBtn.id = "taskNewBtn";
+  newBtn.textContent = "New Task";
+  newBtn.addEventListener("click", function () {
+    openTaskEditor(null, select.value || defaultTaskNotebook());
+  });
+  quick.appendChild(newBtn);
+  input.addEventListener("keydown", function (ev) {
+    if (ev.key !== "Enter") { return; }
+    ev.preventDefault();
+    const title = input.value.trim();
+    if (!title) { return; }
+    createTask({
+      title: title,
+      notebook: select.value || defaultTaskNotebook()
+    });
+    const fresh = document.getElementById("taskQuickTitle");
+    if (fresh) { fresh.focus(); }
+  });
+  wrap.appendChild(quick);
+
+  const controls = document.createElement("div");
+  controls.className = "tasks-controls-row";
+  const seg = document.createElement("div");
+  seg.className = "theme-segmented";
+  seg.setAttribute("role", "group");
+  seg.setAttribute("aria-label", "Group tasks by");
+  [["due", "Due date"], ["notebook", "Notebook"],
+   ["priority", "Priority"]].forEach(function (pair) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = pair[1];
+    b.setAttribute("data-grouping", pair[0]);
+    b.setAttribute("aria-pressed",
+      state.tasksView.grouping === pair[0] ? "true" : "false");
+    b.addEventListener("click", function () {
+      state.tasksView.grouping = pair[0];
+      renderNoteList();
+    });
+    seg.appendChild(b);
+  });
+  controls.appendChild(seg);
+  const filters = document.createElement("div");
+  filters.className = "task-filters";
+  filters.setAttribute("role", "group");
+  filters.setAttribute("aria-label", "Filter tasks");
+  [["all", "All"], ["open", "Open"], ["flagged", "Flagged"],
+   ["completed", "Completed"]].forEach(function (pair) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "task-filter-chip" +
+      (state.tasksView.filter === pair[0] ? " active" : "");
+    b.textContent = pair[1];
+    b.setAttribute("data-filter", pair[0]);
+    b.setAttribute("aria-pressed",
+      state.tasksView.filter === pair[0] ? "true" : "false");
+    b.addEventListener("click", function () {
+      state.tasksView.filter = pair[0];
+      renderNoteList();
+    });
+    filters.appendChild(b);
+  });
+  controls.appendChild(filters);
+  wrap.appendChild(controls);
+
+  const groups = taskGroupsForView();
+  if (!groups.length) {
+    const empty = document.createElement("div");
+    empty.className = "empty-state";
+    empty.innerHTML = "<div class=\"big\">No tasks here</div>" +
+      (state.tasks.length
+        ? "No tasks match this filter. Clear it to see everything again."
+        : "Add your first task above, or press New Task for the full editor.");
+    wrap.appendChild(empty);
+  }
+  groups.forEach(function (g) {
+    const group = document.createElement("div");
+    group.className = "task-group";
+    group.appendChild(buildTaskGroupHeadEl(g.title,
+      g.tasks.length + (g.tasks.length === 1 ? " task" : " tasks")));
+    g.tasks.forEach(function (task) {
+      group.appendChild(buildTaskRowEl(task, {
+        showNotebook: state.tasksView.grouping !== "notebook"
+      }));
+    });
+    wrap.appendChild(group);
+  });
+  listEl.appendChild(wrap);
+}
+
+/* ---------------- the task editor ----------------
+   One modal, two births: a null id (a fresh task, seeded with
+   the caller's notebook) or an existing task's id. The editor
+   tracks its own dirtiness: a sync that reloads tasks while
+   the editor is open refills it only when nothing has been
+   typed into it (see onTasksLoaded), the same care standard
+   the open note gets. Saving writes through the tasks writer
+   like every mutation; deleting removes the task outright
+   (tasks have no trash in this version). */
+let taskEditorState = null;   /* {id: string|null, dirty: boolean} */
+
+function fillTaskNotebookSelect(selected) {
+  const select = document.getElementById("taskNotebookSelect");
+  if (!select) { return; }
+  select.innerHTML = "";
+  state.notebooks.forEach(function (nb) {
+    const opt = document.createElement("option");
+    opt.value = nb.slug;
+    opt.textContent = nb.name;
+    select.appendChild(opt);
+  });
+  if (selected) { select.value = selected; }
+}
+
+function openTaskEditor(taskId, presetNotebook) {
+  const modal = document.getElementById("taskModal");
+  if (!modal) { return; }
+  const task = taskId ? findTaskById(taskId) : null;
+  taskEditorState = { id: task ? task.id : null, dirty: false };
+  document.getElementById("taskModalTitle").textContent =
+    task ? "Edit task" : "New task";
+  fillTaskNotebookSelect(task ? task.notebook
+    : (presetNotebook || defaultTaskNotebook()));
+  if (task) {
+    fillTaskEditor(task);
+  } else {
+    document.getElementById("taskTitleInput").value = "";
+    document.getElementById("taskDescInput").value = "";
+    document.getElementById("taskDueDateInput").value = "";
+    document.getElementById("taskDueTimeInput").value = "";
+    document.getElementById("taskRecurrenceSelect").value = "none";
+    document.getElementById("taskPrioritySelect").value = "medium";
+    document.getElementById("taskReminderSelect").value = "";
+    document.getElementById("taskFlaggedInput").checked = false;
+    document.getElementById("taskStampsLine").textContent = "";
+    document.getElementById("taskDeleteBtn")
+      .classList.add("hidden");
+    syncTaskReminderControls();
+  }
+  modal.classList.remove("hidden");
+  const titleInput = document.getElementById("taskTitleInput");
+  if (titleInput) { titleInput.focus(); }
+}
+
+/* Push one task's facts into the editor's fields. Also the
+   sync refill path, so it ends by clearing the dirty flag it
+   is allowed to clear: a refill only ever runs on an untouched
+   editor (see onTasksLoaded). */
+function fillTaskEditor(task) {
+  document.getElementById("taskTitleInput").value = task.title || "";
+  document.getElementById("taskDescInput").value =
+    task.description || "";
+  fillTaskNotebookSelect(task.notebook);
+  document.getElementById("taskDueDateInput").value =
+    task.dueDate || "";
+  document.getElementById("taskDueTimeInput").value =
+    task.dueTime || "";
+  document.getElementById("taskRecurrenceSelect").value =
+    task.recurrence;
+  document.getElementById("taskPrioritySelect").value =
+    task.priority;
+  document.getElementById("taskReminderSelect").value =
+    task.reminderOffsetMin == null
+      ? "" : String(task.reminderOffsetMin);
+  document.getElementById("taskFlaggedInput").checked =
+    !!task.flagged;
+  document.getElementById("taskStampsLine").textContent =
+    "Created " + formatDate(task.created) +
+    " · Updated " + formatDate(task.updated);
+  document.getElementById("taskDeleteBtn")
+    .classList.remove("hidden");
+  if (taskEditorState && taskEditorState.id === task.id) {
+    taskEditorState.dirty = false;
+  }
+  syncTaskReminderControls();
+}
+
+function markTaskEditorDirty() {
+  if (taskEditorState) { taskEditorState.dirty = true; }
+}
+
+/* The reminder row's live state: the select is disabled until
+   a due date exists, the hint says what will happen with the
+   current choices on this device, and the Enable notifications
+   button appears exactly when a reminder is chosen but this
+   browser has not granted permission yet (the ask then runs
+   from the click, as permission requests must). */
+function syncTaskReminderControls() {
+  const dateInput = document.getElementById("taskDueDateInput");
+  const select = document.getElementById("taskReminderSelect");
+  const hint = document.getElementById("taskReminderHint");
+  const enableBtn = document.getElementById("taskNotifEnableBtn");
+  if (!select || !hint || !enableBtn) { return; }
+  const hasDate = !!(dateInput && dateInput.value);
+  select.disabled = !hasDate;
+  const reminderChosen = select.value !== "";
+  const perm = notificationPermission();
+  if (!hasDate) {
+    hint.textContent = "Set a due date to add a reminder.";
+    enableBtn.classList.add("hidden");
+  } else if (!reminderChosen) {
+    hint.textContent = "No reminder set for this task.";
+    enableBtn.classList.add("hidden");
+  } else if (perm === "granted") {
+    hint.textContent = "This device shows the reminder while " +
+      "the app is open, and on next open if its time has passed.";
+    enableBtn.classList.add("hidden");
+  } else if (perm === "denied") {
+    hint.textContent = "Notifications are blocked for this site " +
+      "in your browser settings, so this reminder cannot appear " +
+      "until that changes.";
+    enableBtn.classList.add("hidden");
+  } else if (perm === "unsupported") {
+    hint.textContent = "This browser does not support " +
+      "notifications, so this reminder cannot appear here.";
+    enableBtn.classList.add("hidden");
+  } else {
+    hint.textContent =
+      "Notifications are not enabled on this device yet.";
+    enableBtn.classList.remove("hidden");
+  }
+}
+
+function saveTaskEditor() {
+  if (!taskEditorState) { return; }
+  const reminderRaw =
+    document.getElementById("taskReminderSelect").value;
+  const fields = {
+    title: document.getElementById("taskTitleInput").value.trim()
+      || "Untitled task",
+    description: document.getElementById("taskDescInput").value,
+    notebook: document.getElementById("taskNotebookSelect").value
+      || defaultTaskNotebook(),
+    dueDate: document.getElementById("taskDueDateInput").value
+      || null,
+    dueTime: document.getElementById("taskDueTimeInput").value
+      || null,
+    recurrence: document.getElementById("taskRecurrenceSelect")
+      .value,
+    priority: document.getElementById("taskPrioritySelect").value,
+    reminderOffsetMin: reminderRaw === "" ? null
+      : Number(reminderRaw),
+    flagged: document.getElementById("taskFlaggedInput").checked
+  };
+  /* No due date, no due time and no reminder: the select is
+     disabled in that state, but its stale value must not leak
+     into the saved task. */
+  if (!fields.dueDate) {
+    fields.dueTime = null;
+    fields.reminderOffsetMin = null;
+  }
+  if (taskEditorState.id) {
+    updateTask(taskEditorState.id, fields);
+  } else {
+    createTask(fields);
+  }
+  closeTaskEditor();
+}
+
+function deleteTaskFromEditor() {
+  if (!taskEditorState || !taskEditorState.id) { return; }
+  const task = findTaskById(taskEditorState.id);
+  const ok = confirm("Delete the task \"" +
+    (task ? task.title : "") +
+    "\"? This cannot be undone; tasks have no trash.");
+  if (!ok) { return; }
+  const id = taskEditorState.id;
+  closeTaskEditor();
+  deleteTask(id);
+}
+
+function closeTaskEditor() {
+  const modal = document.getElementById("taskModal");
+  if (modal) { modal.classList.add("hidden"); }
+  taskEditorState = null;
+}
+
+/* ---------------- reminder notifications ----------------
+   Delivery prefers the service worker registration's
+   showNotification (it is what an installed PWA expects, and
+   its clicks route through the worker's notificationclick
+   handler in sw.js); the Notification constructor is the
+   fallback when there is no registration. There is no push
+   server, so a notification can only be raised while the app
+   runs on the device, in a tab or as an installed app; the
+   scheduler's catch up on open covers the closed hours. */
+function notificationsSupported() {
+  return typeof window.Notification === "function";
+}
+
+function notificationPermission() {
+  if (!notificationsSupported()) { return "unsupported"; }
+  return window.Notification.permission || "default";
+}
+
+/* The Settings Notifications section, pushed to the state it
+   describes on every Settings open and after every permission
+   change: the status line names the permission in a state
+   colored line, the Enable button shows only while permission
+   has not been asked, and the switch shows the saved choice. */
+function renderNotificationSettings() {
+  const toggle =
+    document.getElementById("settingsTaskRemindersToggle");
+  if (toggle) { toggle.checked = state.taskReminders !== false; }
+  const status = document.getElementById("settingsNotifStatus");
+  const enableBtn =
+    document.getElementById("settingsNotifEnableBtn");
+  if (!status) { return; }
+  const perm = notificationPermission();
+  status.setAttribute("data-state", perm);
+  if (perm === "granted") {
+    status.textContent = "Notifications are on for this " +
+      "browser. Task reminders will appear on this device.";
+  } else if (perm === "denied") {
+    status.textContent = "Notifications are blocked for this " +
+      "site in your browser settings. Allow them there to use " +
+      "task reminders on this device.";
+  } else if (perm === "unsupported") {
+    status.textContent = "This browser does not support " +
+      "notifications, so task reminders cannot appear here.";
+  } else {
+    status.textContent = "Notifications are not enabled yet " +
+      "on this device.";
+  }
+  if (enableBtn) {
+    enableBtn.classList.toggle("hidden", perm !== "default");
+  }
+}
+
+/* Ask for notification permission. Only ever called from a
+   click (the Settings button or the task editor's inline one),
+   because a permission request needs a user gesture; the
+   result re-renders both surfaces and gives the scheduler a
+   look, since a grant can make a waiting reminder due. */
+async function requestNotificationPermission() {
+  if (!notificationsSupported()) { return "unsupported"; }
+  let result = notificationPermission();
+  if (result === "default") {
+    try {
+      const pending = window.Notification.requestPermission(
+        function (res) { result = res; });
+      if (pending && typeof pending.then === "function") {
+        result = await pending;
+      }
+    } catch (err) { /* the surfaces below report the state as it stands */ }
+  }
+  renderNotificationSettings();
+  if (taskEditorState) { syncTaskReminderControls(); }
+  checkTaskReminders();
+  return result;
+}
+
+/* The Settings task reminders switch. Off silences the
+   scheduler completely (the tasks still show everywhere);
+   on gives it an immediate look. */
+function applyTaskRemindersFromToggle() {
+  const toggle =
+    document.getElementById("settingsTaskRemindersToggle");
+  if (!toggle) { return; }
+  state.taskReminders = !!toggle.checked;
+  saveSettings();
+  if (state.taskReminders) { checkTaskReminders(); }
+}
+
+let swRegistrationPromise = null;
+function getSwRegistration() {
+  if (!("serviceWorker" in navigator)) {
+    return Promise.resolve(null);
+  }
+  if (!swRegistrationPromise) {
+    try {
+      swRegistrationPromise = navigator.serviceWorker
+        .getRegistration()
+        .then(function (reg) { return reg || null; })
+        .catch(function () { return null; });
+    } catch (err) {
+      swRegistrationPromise = Promise.resolve(null);
+    }
+  }
+  return swRegistrationPromise;
+}
+
+/* Raise one task's notification. Title is the task; the body
+   names the notebook and the due moment ("JHA · Due today
+   3:00 PM", "Personal · Due Oct 24"). The tag is the task id,
+   so a repeat for the same task replaces rather than stacks,
+   and the task id rides in the data for the click routing. */
+async function deliverTaskNotification(task) {
+  const title = task.title || "Untitled task";
+  const nbName = notebookNameForSlug(task.notebook);
+  const options = {
+    body: (nbName ? nbName + " · " : "") +
+      "Due " + taskDuePhrase(task),
+    tag: task.id,
+    icon: "icon-192.png",
+    data: { taskId: task.id }
+  };
+  try {
+    const reg = await getSwRegistration();
+    if (reg && typeof reg.showNotification === "function") {
+      await reg.showNotification(title, options);
+      return;
+    }
+  } catch (err) { /* fall through to the constructor */ }
+  if (!notificationsSupported()) { return; }
+  try {
+    const note = new window.Notification(title, options);
+    note.onclick = function () {
+      try { window.focus(); } catch (err) { /* best effort */ }
+      queueTaskOpen(task.id);
+      if (typeof note.close === "function") { note.close(); }
+    };
+  } catch (err) { /* a refused constructor leaves the lists to speak */ }
+}
+
+/* The scheduler. A 30 second timer owned by boot, independent
+   of the Drive auto-sync setting, with extra looks on boot
+   (inside onTasksLoaded below), on becoming visible, and after
+   every task write or sync reload (afterTasksChanged and
+   onTasksLoaded both call in). A task is due to notify when it
+   is open, has a reminder and a due date, the setting is on,
+   permission is granted, now has reached the due moment minus
+   the offset, and the reminder has not already fired for this
+   due moment. The fired keys live in memory so a session can
+   never double fire while its lastReminderFor write is still
+   landing; the stamp on the task makes the once only rule
+   survive restarts, which is also what makes the boot catch
+   up fire exactly once for a moment that passed while the app
+   was closed. */
+const TASK_REMINDER_TICK_MS = 30000;
+const taskReminderFiredKeys = new Set();
+let taskReminderTimer = null;
+let pendingTaskOpenId = null;
+
+function startTaskReminderScheduler() {
+  if (taskReminderTimer !== null) { return; }
+  taskReminderTimer = setInterval(checkTaskReminders,
+    TASK_REMINDER_TICK_MS);
+}
+
+function checkTaskReminders() {
+  if (!state.taskReminders) { return; }
+  if (notificationPermission() !== "granted") { return; }
+  const now = Date.now();
+  state.tasks.forEach(function (task) {
+    if (task.status !== "open") { return; }
+    if (task.reminderOffsetMin == null) { return; }
+    const moment = taskDueMoment(task);
+    if (!moment) { return; }
+    const momentIso = moment.toISOString();
+    if (task.lastReminderFor === momentIso) { return; }
+    const key = task.id + "|" + momentIso;
+    if (taskReminderFiredKeys.has(key)) { return; }
+    if (now < moment.getTime() -
+        task.reminderOffsetMin * 60000) { return; }
+    taskReminderFiredKeys.add(key);
+    task.lastReminderFor = momentIso;
+    saveTasks();
+    deliverTaskNotification(task);
+  });
+}
+
+/* Notification click routing, the page side. The service
+   worker's handler focuses a running client and posts it a
+   message, or opens the app URL with a task parameter when no
+   client is running; the constructor fallback's own click
+   handler calls queueTaskOpen directly. Either way the ask
+   waits here until tasks have loaded, then opens the Tasks
+   view with that task's editor up. */
+function queueTaskOpen(taskId) {
+  if (!taskId) { return; }
+  pendingTaskOpenId = taskId;
+  maybeOpenPendingTask();
+}
+
+function maybeOpenPendingTask() {
+  if (!pendingTaskOpenId) { return; }
+  if (!tasksArmed) { return; }
+  const task = findTaskById(pendingTaskOpenId);
+  pendingTaskOpenId = null;
+  if (!task) { return; }
+  state.view = { kind: "tasks", value: null };
+  renderAll();
+  setMobileView("list");
+  openTaskEditor(task.id);
+}
+
+function readTaskOpenParamFromUrl() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const id = params.get("task");
+    if (id) { pendingTaskOpenId = id; }
+  } catch (err) { /* no parameter, no pending open */ }
+}
+
+/* The post load pass for tasks, called by loadAllFromRepo
+   whenever the tasks read landed. Three jobs: refresh the
+   open task editor under the untouched rule (a remote change
+   refills an untouched editor with the new facts, and closes
+   it when its task is gone; a dirty editor is left exactly
+   alone, the care standard the open note gets), run the
+   reminder check (the boot catch up lives here), and open
+   any task a notification click is waiting on. */
+function onTasksLoaded(prevTaskUpdatedById) {
+  if (taskEditorState && taskEditorState.id &&
+      prevTaskUpdatedById) {
+    const task = findTaskById(taskEditorState.id);
+    if (!task) {
+      if (!taskEditorState.dirty) { closeTaskEditor(); }
+    } else if (prevTaskUpdatedById[task.id] !== undefined &&
+        prevTaskUpdatedById[task.id] !== task.updated &&
+        !taskEditorState.dirty) {
+      document.getElementById("taskModalTitle").textContent =
+        "Edit task";
+      fillTaskEditor(task);
+    }
+  }
+  checkTaskReminders();
+  maybeOpenPendingTask();
 }
 
 /* Open one note in the editor. On mobile this also switches the visible
@@ -11534,6 +13291,9 @@ function syncSettingsControls() {
       .indexOf(state.defaultPasteMode) >= 0
       ? state.defaultPasteMode : "source";
   }
+  /* v2.24: the Notifications section shows the live
+     permission and the saved reminders switch. */
+  renderNotificationSettings();
   /* v2.21: the Last load readout shows this session's boot. */
   renderLastLoadReadout();
 }
@@ -21222,6 +22982,20 @@ function autoSyncChangeTouchesStore(change) {
   if (catalogFileId && change.fileId === catalogFileId) {
     return false;
   }
+  /* v2.24: tasks.json joins the store's triggers. Another
+     device's task change syncs like a drop box change; this
+     device's own write is recognized by its token being the
+     last one read or written here, and skipped, so our own
+     writes never loop a sync. */
+  const tasksFileId = driveCache.fileIds[TASKS_FILE];
+  if (tasksFileId && change.fileId === tasksFileId) {
+    if (change.removed) { return true; }
+    if (change.file && lastTasksToken &&
+        driveTokenFromMetadata(change.file) === lastTasksToken) {
+      return false;
+    }
+    return true;
+  }
   const incomingFileId = driveCache.fileIds[INCOMING_FILE];
   if (incomingFileId && change.fileId === incomingFileId) {
     if (change.removed) { return true; }
@@ -25901,6 +27675,13 @@ function wireEvents() {
     renderAll();
     setMobileView("list");
   });
+  /* v2.24: the Tasks entry under All Notes opens the Tasks
+     view, the same one line navigation as its neighbours. */
+  document.getElementById("navTasks").addEventListener("click", function () {
+    state.view = { kind: "tasks", value: null };
+    renderAll();
+    setMobileView("list");
+  });
   document.getElementById("navPinned").addEventListener("click", function () {
     state.view = { kind: "pinned", value: null };
     renderAll();
@@ -26137,6 +27918,78 @@ function wireEvents() {
   /* v2.23: the Default paste select in Settings Editor. */
   document.getElementById("settingsDefaultPasteSelect")
     .addEventListener("change", applyDefaultPasteFromSelect);
+
+  /* v2.24: the Settings Notifications controls, and the task
+     editor modal, following the Settings modal's own close
+     patterns (Close or Cancel buttons, a click on the dimmed
+     backdrop, Escape). Every field in the editor marks it
+     dirty as it changes, which is what the sync refill rule
+     reads; the due date and reminder fields additionally keep
+     the reminder row's state (disabled select, hint, enable
+     button) live. Both Enable notifications buttons ask from
+     their click, as a permission request must. */
+  document.getElementById("settingsNotifEnableBtn")
+    .addEventListener("click", function () {
+      requestNotificationPermission().catch(function () {
+        renderNotificationSettings();
+      });
+    });
+  document.getElementById("settingsTaskRemindersToggle")
+    .addEventListener("change", applyTaskRemindersFromToggle);
+  document.getElementById("taskSaveBtn")
+    .addEventListener("click", saveTaskEditor);
+  document.getElementById("taskCancelBtn")
+    .addEventListener("click", closeTaskEditor);
+  document.getElementById("taskDeleteBtn")
+    .addEventListener("click", deleteTaskFromEditor);
+  document.getElementById("taskNotifEnableBtn")
+    .addEventListener("click", function () {
+      requestNotificationPermission().catch(function () {
+        syncTaskReminderControls();
+      });
+    });
+  document.getElementById("taskModal").addEventListener("click",
+    function (ev) {
+      if (ev.target === ev.currentTarget) { closeTaskEditor(); }
+    });
+  document.getElementById("taskModal").addEventListener("keydown",
+    function (ev) {
+      if (ev.key === "Escape") { closeTaskEditor(); }
+    });
+  ["taskTitleInput", "taskDescInput", "taskNotebookSelect",
+   "taskDueDateInput", "taskDueTimeInput", "taskRecurrenceSelect",
+   "taskPrioritySelect", "taskReminderSelect", "taskFlaggedInput"]
+    .forEach(function (id) {
+      const el = document.getElementById(id);
+      if (!el) { return; }
+      el.addEventListener("input", markTaskEditorDirty);
+      el.addEventListener("change", markTaskEditorDirty);
+    });
+  document.getElementById("taskDueDateInput")
+    .addEventListener("change", syncTaskReminderControls);
+  document.getElementById("taskReminderSelect")
+    .addEventListener("change", syncTaskReminderControls);
+
+  /* v2.24: the reminder scheduler's visibility look (a tab
+     coming back to the front can owe a reminder), and the
+     service worker's half of the notification click routing:
+     the worker focuses this window and posts the task id, and
+     the pending open machinery takes it from there. */
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState === "visible") {
+      checkTaskReminders();
+    }
+  });
+  if ("serviceWorker" in navigator &&
+      typeof navigator.serviceWorker.addEventListener ===
+        "function") {
+    navigator.serviceWorker.addEventListener("message",
+      function (ev) {
+        if (ev.data && ev.data.type === "snakescale-open-task") {
+          queueTaskOpen(ev.data.taskId);
+        }
+      });
+  }
 
   /* v2.13: the Settings Getting started actions, and the first run
      walkthrough's controls. The walkthrough follows the Settings
@@ -27637,6 +29490,14 @@ async function boot() {
   loadSettings();
   const foundLegacy = cleanupLegacyStorage();
   wireEvents();
+  /* v2.24: a notification click that opened the app cold left
+     its task id in the URL; the pending open machinery holds
+     it until the first load lands the tasks. The reminder
+     scheduler starts here too: its 30 second tick is owned by
+     the app itself, independent of the auto-sync setting, and
+     its checks simply find no tasks until a store loads. */
+  readTaskOpenParamFromUrl();
+  startTaskReminderScheduler();
   /* Small diagnostic hook: the build stamp is searchable in the file,
      and also visible in the console for support. */
   console.log("SnakeScale Notes v" + APP_VERSION + " build " + APP_BUILD);

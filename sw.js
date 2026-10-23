@@ -2,7 +2,7 @@
   ==========================================================================
   SnakeScale Notes service worker
   ==========================================================================
-  BUILD STAMP: 2026-10-22-SSN-V2230
+  BUILD STAMP: 2026-10-23-SSN-V2240
   Version: 2.11.0
 
   This worker exists for exactly one job: making SnakeScale Notes
@@ -39,6 +39,17 @@
   Everything else, including same origin requests that are not GET,
   falls through to the browser untouched.
 
+  Notifications (v2.24): the page raises task reminder
+  notifications through this worker's registration when it can
+  (showNotification), and the notificationclick handler below
+  is the return trip: it closes the notification, focuses a
+  running app window and posts it the task id, or opens the app
+  URL carrying the task id when no window is running. The page
+  reads both arrivals the same way (see queueTaskOpen in
+  index.html) and opens that task's editor. The worker stores
+  nothing about tasks; the id travels in the notification's own
+  data, set by the page when the notification was raised.
+
   Updates: install precaches the new shell (the new build's page
   included, fetched fresh from the network at install time) under
   the new cache name and skips waiting, and activate clears the
@@ -54,7 +65,7 @@
 
 "use strict";
 
-const CACHE_NAME = "snakescale-shell-2026-10-22-SSN-V2230";
+const CACHE_NAME = "snakescale-shell-2026-10-23-SSN-V2240";
 
 /* The shell, as paths relative to this worker's scope (the site
    root). "./" and "./index.html" are both listed: the first is the
@@ -167,4 +178,45 @@ self.addEventListener("fetch", function (event) {
 
   /* Any other same origin GET (there is currently nothing else in
      the repo, but future static files land here) passes through. */
+});
+
+/* v2.24: a task reminder notification was clicked. The
+   notification closes either way. When an app window is
+   already running, it is focused and posted the task id (the
+   page opens that task's editor on receipt); when none is
+   running, the app opens at its URL with the task id as a
+   query parameter, which the page reads at boot for the same
+   purpose. A notification without a task id simply focuses or
+   opens the app. */
+self.addEventListener("notificationclick", function (event) {
+  if (event.notification && event.notification.close) {
+    event.notification.close();
+  }
+  const data = (event.notification && event.notification.data) || {};
+  const taskId = typeof data.taskId === "string" && data.taskId
+    ? data.taskId : null;
+  const targetUrl = taskId
+    ? "./?task=" + encodeURIComponent(taskId)
+    : "./";
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true })
+      .then(function (windowClients) {
+        for (let i = 0; i < windowClients.length; i++) {
+          const client = windowClients[i];
+          if (client && "focus" in client) {
+            if (taskId && "postMessage" in client) {
+              client.postMessage({
+                type: "snakescale-open-task",
+                taskId: taskId
+              });
+            }
+            return client.focus();
+          }
+        }
+        if (self.clients.openWindow) {
+          return self.clients.openWindow(targetUrl);
+        }
+        return undefined;
+      })
+  );
 });
