@@ -40,10 +40,36 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-23-SSN-V2244
-  Version: 2.24.4
+  BUILD STAMP: 2026-10-23-SSN-V2245
+  Version: 2.24.5
 
   Revision history:
+    v2.24.5 2026-10-23 The editor's formatting toolbar is
+                      one line at phone widths (900px and
+                      under), Chris's call after the v2.24.4
+                      mobile pass left it wrapping into a tall
+                      stack: the line holds Insert, Voice,
+                      Bold, Italic, Highlight, and the More
+                      button pinned last, and More pops out a
+                      panel under the bar holding the rest of
+                      the controls (the style, family, and
+                      size selects, text color, Underline,
+                      Strike, the three list buttons, and the
+                      More menu's own align, indent, outdent,
+                      and remove formatting items). The panel
+                      holds the real controls, never clones:
+                      entering phone width moves them in and
+                      leaving it restores each one to its
+                      recorded home, so every listener, palette,
+                      and the v2.24.2 Custom color flow are
+                      untouched, and the desktop toolbar (above
+                      900px) renders and behaves exactly as
+                      before, its More button opening its menu
+                      as always. The panel closes on a second
+                      More tap, an outside tap, Escape, a note
+                      switch, and after a command completes;
+                      select changes and the color palettes
+                      complete inside it without closing it.
     v2.24.4 2026-10-23 A mobile pass over the whole app,
                       driven by phone testing of the Tasks
                       surfaces. The Tasks view's three column
@@ -4256,6 +4282,68 @@ body.dark .version-date{color:var(--accent);}
   #linkBarView{flex-wrap:wrap;}
   #linkBarUrl{flex:1 1 120px;max-width:none;min-width:0;}
 }
+/* ---------- v2.24.5: the one line phone toolbar ----------
+   At phone widths the formatting toolbar stops wrapping into
+   a tall stack. The bar itself becomes one nowrap line: the
+   groups that stay on it (Insert and Voice, then Bold, Italic,
+   and Highlight, then More) keep the phone touch sizes from
+   the v2.24.4 pass, cannot shrink, and lose their divider
+   rules, since spacing does that work on a single line; the
+   More group is pinned to the right end. Everything else
+   moves into #tbPanel (the relocation itself lives in the
+   script, beside the other toolbar code), a pop out under
+   the bar: themed in both themes through the shared palette
+   variables, capped to the viewport width, and wearing the
+   themed scrollbar values on its own scroll area for when
+   its content runs tall. Above 900px none of this applies:
+   the panel is an empty hidden element and the toolbar is
+   exactly the five groups it has always been. */
+@media (max-width:900px){
+  #toolbar{flex-wrap:nowrap;gap:4px;}
+  #toolbar > .tb-group{flex:none;flex-wrap:nowrap;}
+  #toolbar > .tb-group + .tb-group{
+    border-left:none;padding-left:0;margin-left:0;
+  }
+  #toolbar > .tb-group:has(> .tb-menu-wrap > #moreBtn){
+    margin-left:auto;
+  }
+  #tbPanel{
+    position:absolute;top:calc(100% + 6px);left:0;right:0;
+    max-width:calc(100vw - 16px);max-height:min(64vh,520px);
+    overflow-y:auto;z-index:30;display:flex;
+    flex-direction:column;gap:9px;padding:10px;
+    background:var(--surface);border:1px solid var(--border);
+    border-radius:var(--radius-card);box-shadow:var(--shadow);
+    scrollbar-width:thin;scrollbar-color:transparent transparent;
+    transition:scrollbar-color 250ms ease;
+  }
+  #tbPanel:hover{scrollbar-color:rgba(87,167,115,.55) transparent;}
+  body.dark #tbPanel:hover{
+    scrollbar-color:rgba(87,167,115,.65) transparent;
+  }
+  #tbPanel::-webkit-scrollbar{width:10px;height:10px;}
+  #tbPanel::-webkit-scrollbar-track{background:transparent;}
+  #tbPanel::-webkit-scrollbar-thumb{
+    background-color:transparent;border-radius:8px;
+    border:2px solid transparent;background-clip:padding-box;
+    transition:background-color 250ms ease;
+  }
+  #tbPanel:hover::-webkit-scrollbar-thumb{
+    background-color:rgba(87,167,115,.55);
+  }
+  body.dark #tbPanel:hover::-webkit-scrollbar-thumb{
+    background-color:rgba(87,167,115,.65);
+  }
+  #tbPanel::-webkit-scrollbar-thumb:hover{
+    background-color:rgba(87,167,115,.8);
+  }
+  #tbPanel .tb-group{flex-wrap:wrap;}
+  #tbPanel .tb-group + .tb-group{
+    border-left:none;padding-left:0;margin-left:0;
+  }
+  #tbPanel select{flex:1 1 128px;max-width:100%;}
+  #tbPanel .tb-menu{max-width:calc(100vw - 32px);}
+}
 @media (max-width:600px){
   .modal-card{padding:18px 16px;}
   .task-form-row{flex-direction:column;}
@@ -4822,6 +4910,23 @@ body.dark .version-date{color:var(--accent);}
                 </div>
               </span>
             </div>
+            <!-- v2.24.5: the phone More panel. It lives inside the
+                 toolbar so the toolbar's selection backstops and its
+                 outside tap rule cover it with no new plumbing. At
+                 desktop widths it is always empty and hidden and the
+                 five groups above are the whole toolbar. At phone
+                 widths the script (tbRelocate below) moves the
+                 overflow controls into it: the style group, the
+                 lists group, text color, Underline, and Strike as
+                 direct children or in the panel's own row groups,
+                 and the More menu's six items into a row of their
+                 own; the More button then toggles this panel
+                 instead of its menu. Leaving phone width restores
+                 every control to its recorded home. The controls
+                 are the same elements throughout: nothing is ever
+                 cloned, so every listener, palette, and the Custom
+                 color flow are exactly as wired. -->
+            <div id="tbPanel" class="tb-panel hidden" role="group" aria-label="More formatting controls"></div>
           </div>
 
           <!-- v1.2 upload progress: shows the active upload and how many
@@ -5623,8 +5728,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-23-SSN-V2244";
-const APP_VERSION = "2.24.4";
+const APP_BUILD = "2026-10-23-SSN-V2245";
+const APP_VERSION = "2.24.5";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -13334,6 +13439,8 @@ function thingsDueLabel(task) {
    editor, exactly as openNote does. */
 function openThingsToDo(slug) {
   state.thingsNotebook = slug;
+  /* v2.24.5: the Things page replaces the editor, panel and all. */
+  closeTbPanel();
   renderNoteList();
   renderEditor();
   setMobileView("editor");
@@ -13878,6 +13985,8 @@ function openNote(id) {
   state.selectedId = id;
   /* v2.24.3: a note opening replaces any Things to do page. */
   state.thingsNotebook = null;
+  /* v2.24.5: a note switch closes the phone toolbar panel. */
+  closeTbPanel();
   renderNoteList();
   renderEditor();
   setMobileView("editor");
@@ -23485,6 +23594,152 @@ function keepMenuInViewport(menu) {
   }
 }
 
+/* ----- v2.24.5: the phone toolbar's overflow panel ------------------------
+   At phone widths (900px and under, the app's one pane
+   breakpoint) the toolbar is one line: Insert, Voice, Bold,
+   Italic, Highlight, and More. Every other control lives in
+   #tbPanel, a pop out under the bar that the More button
+   toggles. The mechanism is breakpoint driven relocation:
+   entering phone width moves the overflow controls (the real
+   elements, never clones) into the panel in the order below,
+   and leaving it restores each one before its recorded next
+   sibling, so the desktop toolbar's DOM, order, and behavior
+   are exactly what they were. Listeners ride along with the
+   elements, the palettes and the Custom color session flow
+   included, and because the panel sits inside #toolbar, the
+   toolbar's mousedown and focusin selection backstops and
+   the outside tap rule (a click outside #toolbar closes the
+   menus) cover the panel's controls with no new plumbing.
+   The mode is read from window.innerWidth on resize, the
+   same idiom setMobileView and the drag code already use. */
+let tbPhoneMode = false;
+let tbHomes = null;
+let tbPanelRows = null;
+
+/* The overflow controls, in panel order. slot "panel" items
+   become direct children of the panel (the two whole groups);
+   slot "color" and "more" items collect into row groups the
+   panel grows for them, since they have no group of their
+   own to travel in. Resolved once, while the toolbar is in
+   its desktop arrangement. */
+function tbOverflowItems() {
+  const items = [];
+  const styleSel = document.getElementById("styleSelect");
+  if (styleSel && styleSel.closest(".tb-group")) {
+    items.push({ el: styleSel.closest(".tb-group"), slot: "panel" });
+  }
+  const tcBtn = document.getElementById("textColorBtn");
+  if (tcBtn && tcBtn.closest(".tb-menu-wrap")) {
+    items.push({ el: tcBtn.closest(".tb-menu-wrap"), slot: "color" });
+  }
+  const underline = document.querySelector(
+    "#toolbar [data-cmd=\"underline\"]");
+  if (underline) { items.push({ el: underline, slot: "color" }); }
+  const strike = document.querySelector(
+    "#toolbar [data-cmd=\"strike\"]");
+  if (strike) { items.push({ el: strike, slot: "color" }); }
+  const ul = document.querySelector("#toolbar [data-cmd=\"ul\"]");
+  if (ul && ul.closest(".tb-group")) {
+    items.push({ el: ul.closest(".tb-group"), slot: "panel" });
+  }
+  document.querySelectorAll("#moreMenu [data-more]").forEach(
+    function (btn) { items.push({ el: btn, slot: "more" }); });
+  return items;
+}
+
+function tbRecordHomes() {
+  tbHomes = tbOverflowItems().map(function (it) {
+    return {
+      el: it.el, slot: it.slot,
+      parent: it.el.parentNode, next: it.el.nextSibling
+    };
+  });
+}
+
+function tbRelocate() {
+  if (!tbHomes) { tbRecordHomes(); }
+  const panel = document.getElementById("tbPanel");
+  if (!panel) { return; }
+  if (!tbPanelRows) {
+    const color = document.createElement("div");
+    color.className = "tb-group";
+    const more = document.createElement("div");
+    more.className = "tb-group";
+    tbPanelRows = { color: color, more: more };
+  }
+  const groups = [];
+  tbHomes.forEach(function (h) {
+    if (h.slot === "color") { tbPanelRows.color.appendChild(h.el); }
+    else if (h.slot === "more") { tbPanelRows.more.appendChild(h.el); }
+    else { groups.push(h.el); }
+  });
+  /* Panel order: the style group, the color and emphasis
+     row, the lists group, the More actions row. */
+  if (groups[0]) { panel.appendChild(groups[0]); }
+  panel.appendChild(tbPanelRows.color);
+  if (groups[1]) { panel.appendChild(groups[1]); }
+  panel.appendChild(tbPanelRows.more);
+}
+
+function tbRestore() {
+  closeTbPanel();
+  if (!tbHomes) { return; }
+  /* Homes were recorded in document order; restoring in
+     reverse puts every recorded next sibling back in place
+     before the element that precedes it is reinserted, so
+     each insertBefore lands on a sibling that is already
+     home (or never left). */
+  for (let i = tbHomes.length - 1; i >= 0; i--) {
+    const h = tbHomes[i];
+    if (!h.parent) { continue; }
+    if (h.next && h.next.parentNode === h.parent) {
+      h.parent.insertBefore(h.el, h.next);
+    } else {
+      h.parent.appendChild(h.el);
+    }
+  }
+  if (tbPanelRows) {
+    tbPanelRows.color.remove();
+    tbPanelRows.more.remove();
+  }
+}
+
+function tbPanelIsOpen() {
+  const panel = document.getElementById("tbPanel");
+  return !!panel && !panel.classList.contains("hidden");
+}
+
+function openTbPanel() {
+  closeToolbarMenus();
+  const panel = document.getElementById("tbPanel");
+  if (panel) { panel.classList.remove("hidden"); }
+}
+
+function closeTbPanel() {
+  const panel = document.getElementById("tbPanel");
+  if (panel) { panel.classList.add("hidden"); }
+}
+
+function toggleTbPanel() {
+  if (tbPanelIsOpen()) { closeTbPanel(); }
+  else { openTbPanel(); }
+}
+
+function applyTbPhoneMode() {
+  const toolbar = document.getElementById("toolbar");
+  if (!toolbar) { return; }
+  const phone = window.innerWidth <= 900;
+  if (phone === tbPhoneMode) { return; }
+  tbPhoneMode = phone;
+  if (phone) {
+    tbRelocate();
+    toolbar.classList.add("tb-phone");
+  } else {
+    toolbar.classList.remove("tb-phone");
+    tbRestore();
+  }
+}
+
 /* ----- Insert and More actions ------------------------------------------- */
 function runInsertAction(kind) {
   closeToolbarMenus();
@@ -23543,6 +23798,10 @@ function runInsertAction(kind) {
 
 function runMoreAction(kind) {
   closeToolbarMenus();
+  /* v2.24.5: on phones these items live in the More panel,
+     and a completed action closes it. On desktop the panel is
+     never open, so this is a no-op there. */
+  closeTbPanel();
   restoreFormatSelection();
   if (kind === "alignLeft") {
     document.execCommand("justifyLeft", false, null);
@@ -23636,26 +23895,40 @@ function wireToolbar() {
 
   /* Menu toggles. */
   document.getElementById("insertBtn").addEventListener("click", function () {
+    /* v2.24.5: a line menu opening over the phone panel
+       replaces it, so the two never stack. */
+    if (tbPhoneMode) { closeTbPanel(); }
     toggleToolbarMenu("insertMenu");
   });
   document.getElementById("textColorBtn").addEventListener("click", function () {
     toggleToolbarMenu("textColorMenu");
   });
   document.getElementById("highlightBtn").addEventListener("click", function () {
+    if (tbPhoneMode) { closeTbPanel(); }
     toggleToolbarMenu("highlightMenu");
   });
   document.getElementById("moreBtn").addEventListener("click", function () {
-    toggleToolbarMenu("moreMenu");
+    /* v2.24.5: at phone widths More toggles the overflow
+       panel; the desktop menu below is untouched. */
+    if (tbPhoneMode) { toggleTbPanel(); }
+    else { toggleToolbarMenu("moreMenu"); }
   });
 
   /* Clicking anywhere outside the toolbar closes open menus, and so
      does Escape. Clicks inside the toolbar are handled by their own
-     controls. */
+     controls. v2.24.5: the phone panel rides along on both rules; it
+     sits inside #toolbar, so its own clicks never read as outside. */
   document.addEventListener("click", function (ev) {
-    if (!ev.target.closest("#toolbar")) { closeToolbarMenus(); }
+    if (!ev.target.closest("#toolbar")) {
+      closeToolbarMenus();
+      closeTbPanel();
+    }
   });
   document.addEventListener("keydown", function (ev) {
-    if (ev.key === "Escape") { closeToolbarMenus(); }
+    if (ev.key === "Escape") {
+      closeToolbarMenus();
+      closeTbPanel();
+    }
   });
 
   /* Insert and More menu items. */
@@ -23747,6 +24020,14 @@ function wireToolbar() {
   highlightCustomInput.addEventListener("change", function () {
     commitCustomColor("highlight", highlightCustomInput);
   });
+
+  /* v2.24.5: the phone toolbar's one line form. Apply the
+     current width's arrangement now (a phone boot starts
+     relocated) and follow the width across the breakpoint
+     from here on: rotation, a window resize, and a device
+     switch all cross through the same apply. */
+  applyTbPhoneMode();
+  window.addEventListener("resize", applyTbPhoneMode);
 }
 
 /* --------------------------------------------------------------------------
@@ -30194,6 +30475,11 @@ function wireEvents() {
     btn.addEventListener("mousedown", function (ev) { ev.preventDefault(); });
     btn.addEventListener("click", function () {
       runToolbarCommand(btn.getAttribute("data-cmd"));
+      /* v2.24.5: on phones a completed command closes the
+         More panel, whether the button sits on the line or
+         in the panel. Desktop never opens the panel, so the
+         mode check is what keeps this phone only. */
+      if (tbPhoneMode) { closeTbPanel(); }
     });
   });
 
