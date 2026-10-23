@@ -40,10 +40,35 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-23-SSN-V2240
-  Version: 2.24.0
+  BUILD STAMP: 2026-10-23-SSN-V2241
+  Version: 2.24.1
 
   Revision history:
+    v2.24.1 2026-10-23 The Tasks view gets its own pane.
+                      Chris's call, from his Evernote
+                      screenshot: the Tasks view no longer
+                      borrows the notes list. While Tasks is
+                      the active view, the list and editor
+                      panes hide and the tasks interface
+                      takes the whole main area beside the
+                      sidebar; leaving restores both panes
+                      and the open note exactly as they
+                      were. The header shows the open count
+                      beside the title and a Find tasks
+                      search (filtering rows by title or
+                      notebook name, across the active
+                      grouping and filter). The grouped list
+                      becomes a table: one column header row
+                      (Title, Due date, Notebook; Evernote's
+                      Assigned note column is Notebook here,
+                      and its Assigned to column has no
+                      counterpart in a single user app), rows
+                      aligned to the columns, and group
+                      headers that collapse and expand from
+                      a chevron, session only. Nothing about
+                      tasks.json, the task fields, the
+                      writer, the notifications, or the list
+                      pane's Tasks groups changes.
     v2.24.0 2026-10-23 Tasks, with reminder notifications.
                       Tasks are their own objects, modeled on
                       Evernote Tasks and adapted to notebooks:
@@ -2142,6 +2167,15 @@ body.note-drag-active{touch-action:none;overscroll-behavior:none;}
 
 /* ----- right pane: editor ----- */
 #editorpane{flex:1;display:flex;flex-direction:column;overflow:hidden;background:var(--surface);}
+/* v2.24.1: the Tasks view's pane, the editor pane's sibling:
+   it takes the whole main area while Tasks is the active
+   view (the hidden class, traded by syncTasksPane, is what
+   hides it the rest of the time, and hides the list and
+   editor panes while it shows). Its scroll area and inner
+   column mirror the editor's, padding included. */
+#taskspane{flex:1;display:flex;flex-direction:column;overflow:hidden;background:var(--surface);}
+.tasks-scroll{overflow-y:auto;overflow-x:auto;flex:1;padding:26px 30px 40px;}
+.tasks-inner{width:100%;max-width:860px;margin:0 auto;}
 /* v1.7.2: overflow-x is named explicitly so an image sized wider
    than the reading column scrolls horizontally inside this pane
    instead of breaking the layout or sliding under the sidebar;
@@ -2166,14 +2200,14 @@ body.note-drag-active{touch-action:none;overscroll-behavior:none;}
    Dark mode and the always dark sidebar surfaces get a
    slightly stronger accent so the thumb stays visible there
    without ever shouting. */
-#noteList, .editor-scroll, #sidebar, #sidebarRail, #railFlyout,
+#noteList, .editor-scroll, .tasks-scroll, #sidebar, #sidebarRail, #railFlyout,
 #tagPicker, .mention-list, .note-link-list, .filter-tag-list,
 .version-history-list, .version-preview, .tb-menu, .modal{
   scrollbar-width: thin;
   scrollbar-color: transparent transparent;
   transition: scrollbar-color 250ms ease;
 }
-#noteList:hover, .editor-scroll:hover, #tagPicker:hover,
+#noteList:hover, .editor-scroll:hover, .tasks-scroll:hover, #tagPicker:hover,
 .mention-list:hover, .note-link-list:hover,
 .filter-tag-list:hover, .version-history-list:hover,
 .version-preview:hover, .tb-menu:hover, .modal:hover{
@@ -2182,7 +2216,7 @@ body.note-drag-active{touch-action:none;overscroll-behavior:none;}
 #sidebar:hover, #sidebarRail:hover, #railFlyout:hover{
   scrollbar-color: rgba(87,167,115,.65) transparent;
 }
-body.dark #noteList:hover, body.dark .editor-scroll:hover,
+body.dark #noteList:hover, body.dark .editor-scroll:hover, body.dark .tasks-scroll:hover,
 body.dark #tagPicker:hover, body.dark .mention-list:hover,
 body.dark .note-link-list:hover, body.dark .filter-tag-list:hover,
 body.dark .version-history-list:hover,
@@ -2190,7 +2224,7 @@ body.dark .version-preview:hover, body.dark .tb-menu:hover,
 body.dark .modal:hover{
   scrollbar-color: rgba(87,167,115,.65) transparent;
 }
-#noteList::-webkit-scrollbar, .editor-scroll::-webkit-scrollbar,
+#noteList::-webkit-scrollbar, .editor-scroll::-webkit-scrollbar, .tasks-scroll::-webkit-scrollbar,
 #sidebar::-webkit-scrollbar, #sidebarRail::-webkit-scrollbar,
 #railFlyout::-webkit-scrollbar, #tagPicker::-webkit-scrollbar,
 .mention-list::-webkit-scrollbar,
@@ -2202,7 +2236,7 @@ body.dark .modal:hover{
   width:10px;height:10px;
 }
 #noteList::-webkit-scrollbar-track,
-.editor-scroll::-webkit-scrollbar-track,
+.editor-scroll::-webkit-scrollbar-track, .tasks-scroll::-webkit-scrollbar-track,
 #sidebar::-webkit-scrollbar-track,
 #sidebarRail::-webkit-scrollbar-track,
 #railFlyout::-webkit-scrollbar-track,
@@ -2217,7 +2251,7 @@ body.dark .modal:hover{
   background:transparent;
 }
 #noteList::-webkit-scrollbar-thumb,
-.editor-scroll::-webkit-scrollbar-thumb,
+.editor-scroll::-webkit-scrollbar-thumb, .tasks-scroll::-webkit-scrollbar-thumb,
 #sidebar::-webkit-scrollbar-thumb,
 #sidebarRail::-webkit-scrollbar-thumb,
 #railFlyout::-webkit-scrollbar-thumb,
@@ -2234,7 +2268,7 @@ body.dark .modal:hover{
   transition:background-color 250ms ease;
 }
 #noteList:hover::-webkit-scrollbar-thumb,
-.editor-scroll:hover::-webkit-scrollbar-thumb,
+.editor-scroll:hover::-webkit-scrollbar-thumb, .tasks-scroll:hover::-webkit-scrollbar-thumb,
 #tagPicker:hover::-webkit-scrollbar-thumb,
 .mention-list:hover::-webkit-scrollbar-thumb,
 .note-link-list:hover::-webkit-scrollbar-thumb,
@@ -2251,7 +2285,7 @@ body.dark .modal:hover{
   background-color:rgba(87,167,115,.6);
 }
 body.dark #noteList:hover::-webkit-scrollbar-thumb,
-body.dark .editor-scroll:hover::-webkit-scrollbar-thumb,
+body.dark .editor-scroll:hover::-webkit-scrollbar-thumb, body.dark .tasks-scroll:hover::-webkit-scrollbar-thumb,
 body.dark #tagPicker:hover::-webkit-scrollbar-thumb,
 body.dark .mention-list:hover::-webkit-scrollbar-thumb,
 body.dark .note-link-list:hover::-webkit-scrollbar-thumb,
@@ -2263,7 +2297,7 @@ body.dark .modal:hover::-webkit-scrollbar-thumb{
   background-color:rgba(87,167,115,.6);
 }
 #noteList::-webkit-scrollbar-thumb:hover,
-.editor-scroll::-webkit-scrollbar-thumb:hover,
+.editor-scroll::-webkit-scrollbar-thumb:hover, .tasks-scroll::-webkit-scrollbar-thumb:hover,
 #sidebar::-webkit-scrollbar-thumb:hover,
 #sidebarRail::-webkit-scrollbar-thumb:hover,
 #railFlyout::-webkit-scrollbar-thumb:hover,
@@ -3693,6 +3727,72 @@ body.dark .priority-pill.medium{color:var(--accent);border-color:var(--accent);}
 .task-filter-chip.active{
   background:var(--primary);border-color:var(--primary);color:#fff;
 }
+/* v2.24.1: the Tasks view's own furniture in its pane: the
+   head (the title with the open count beside it, and the
+   Find tasks search at its right, styled on the app's other
+   text inputs so it themes in both themes), the one column
+   header row, the rows' three column form, and the group
+   collapse chevron. The list pane's task groups keep the
+   v2.24 card form above; only the Tasks view's rows take
+   the column grid. */
+.tasks-head{
+  display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+  margin-bottom:14px;
+}
+.tasks-head h2{margin:0;font-size:22px;color:var(--primary);}
+body.dark .tasks-head h2{color:var(--accent);}
+.tasks-count{font-size:15px;font-weight:600;color:var(--muted);}
+.tasks-search{margin-left:auto;}
+.tasks-search input{
+  width:230px;max-width:60vw;padding:9px 11px;font:inherit;
+  border-radius:var(--radius-button);border:1px solid var(--border);
+  background:var(--surface);color:var(--text);
+  transition:border-color var(--motion),box-shadow var(--motion);
+}
+.tasks-search input:focus{
+  border-color:var(--secondary);outline:none;
+  box-shadow:0 0 0 3px rgba(87,167,115,.22);
+}
+.tasks-colhead{
+  display:grid;grid-template-columns:minmax(0,1fr) 170px 190px;
+  gap:12px;padding:0 10px 6px;font-size:12px;font-weight:700;
+  letter-spacing:.05em;text-transform:uppercase;color:var(--muted);
+}
+.task-row-cols{
+  display:grid;grid-template-columns:minmax(0,1fr) 170px 190px;
+  gap:12px;align-items:center;
+}
+.task-cell-title{
+  display:flex;align-items:flex-start;gap:9px;min-width:0;
+}
+.task-cell-due{min-width:0;}
+.task-due-none{color:var(--muted);font-size:13px;}
+.task-cell-nb{
+  font-size:13.5px;color:var(--muted);overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap;
+}
+/* The group collapse chevron: the app's own ">" glyph,
+   pointing right while collapsed and rotated down while
+   expanded, the sidebar chip's language. */
+.task-group-chev{
+  flex:none;display:inline-flex;align-items:center;
+  justify-content:center;width:22px;height:22px;padding:0;
+  background:transparent;border:1px solid transparent;
+  border-radius:6px;color:var(--muted);font-size:13px;
+  font-weight:700;cursor:pointer;transform:rotate(90deg);
+  transition:transform var(--motion),color var(--motion),
+    border-color var(--motion);
+}
+.task-group-chev:hover{color:var(--primary);border-color:var(--border);}
+.task-group-chev.collapsed{transform:rotate(0deg);}
+@media (max-width:700px){
+  .tasks-colhead,.task-row-cols{
+    grid-template-columns:minmax(0,1fr) 96px 104px;gap:8px;
+  }
+  .task-cell-due .due-chip{
+    max-width:100%;overflow:hidden;text-overflow:ellipsis;
+  }
+}
 /* The task editor dialog: the Settings dialog family's field
    styling, extended to the textarea and the date and time
    inputs so every control in it is themed in both themes, with
@@ -3851,13 +3951,15 @@ body.dark .version-date{color:var(--accent);}
   }
   #mobileBar .brand-mini{font-size:17px;font-weight:800;margin-right:auto;}
   #mobileBar .brand-mini span{color:var(--accent);}
-  #sidebar,#listpane,#editorpane{width:100%;flex:1 1 auto;display:none;min-height:0;}
+  #sidebar,#listpane,#editorpane,#taskspane{width:100%;flex:1 1 auto;display:none;min-height:0;}
   body.view-nav #sidebar{display:flex;}
   body.view-list #listpane{display:flex;}
+  body.view-list #taskspane{display:flex;}
   body.view-editor #editorpane{display:flex;}
   .gate{padding:20px 12px;}
   .gate-card{padding:24px 20px 20px;}
   .editor-scroll{padding:18px 16px 28px;}
+  .tasks-scroll{padding:18px 16px 28px;}
   .editor-foot{padding:10px 14px;}
 }
 </style>
@@ -4816,6 +4918,21 @@ body.dark .version-date{color:var(--accent);}
       </div>
     </div>
   </main>
+
+  <!-- v2.24.1: the Tasks view is its own pane, beside the
+       sidebar and across the whole main area (Chris's call,
+       from Evernote's dedicated Tasks view): while Tasks is
+       the active view the list and editor panes hide
+       (syncTasksPane trades the hidden classes), and the
+       editor keeps whatever note was open, untouched, for
+       the way back. The scroll area and inner column mirror
+       the editor's, so the grouped task table reads at the
+       same measure. renderTasksView fills #tasksInner. -->
+  <section id="taskspane" class="hidden">
+    <div class="tasks-scroll" id="tasksScroll">
+      <div class="tasks-inner" id="tasksInner"></div>
+    </div>
+  </section>
 </div>
 
 <!-- ==========================================================================
@@ -5159,8 +5276,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-23-SSN-V2240";
-const APP_VERSION = "2.24.0";
+const APP_BUILD = "2026-10-23-SSN-V2241";
+const APP_VERSION = "2.24.1";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -5298,8 +5415,11 @@ const state = {
                             // record explicitly says false.
   tasksView: {              // v2.24: the Tasks view's controls,
     grouping: "due",        // session only: "due", "notebook",
-    filter: "all"           // or "priority"; and "all", "open",
-  },                        // "flagged", or "completed".
+    filter: "all",          // or "priority"; and "all", "open",
+    query: "",              // "flagged", or "completed". v2.24.1:
+    collapsed: {}           // the Find tasks text and the set of
+  },                        // collapsed group keys join them,
+                            // still session only, never saved.
   taskLastNotebook: null,   // v2.24: the notebook the last task
                             // was created in, session only; the
                             // quick add and group defaults.
@@ -10660,10 +10780,31 @@ function showScreen(name) {
 
 
 function renderAll() {
+  syncTasksPane();
   renderSidebar();
   renderNoteList();
   renderEditor();
   refreshSyncPill();
+}
+
+/* v2.24.1: which panes show follows the view. While the
+   Tasks view is active, the tasks pane shows and the list
+   and editor panes hide; every other view hides the tasks
+   pane and shows both of them again. Nothing is rendered
+   or discarded here: the panes only trade the hidden
+   class, so the open note and the list survive a trip to
+   Tasks and back exactly as they were. Called at the top
+   of renderAll and renderNoteList, so no view change can
+   leave the panes stale. */
+function syncTasksPane() {
+  const tasksActive = state.view.kind === "tasks";
+  document.body.classList.toggle("tasks-view", tasksActive);
+  const pane = document.getElementById("taskspane");
+  if (pane) { pane.classList.toggle("hidden", !tasksActive); }
+  const list = document.getElementById("listpane");
+  if (list) { list.classList.toggle("hidden", tasksActive); }
+  const editor = document.getElementById("editorpane");
+  if (editor) { editor.classList.toggle("hidden", tasksActive); }
 }
 
 /* Count helpers for the sidebar badges. */
@@ -11698,6 +11839,7 @@ function attachmentTypeIconSvg(att) {
 }
 
 function renderNoteList() {
+  syncTasksPane();
   const viewKey = state.view.kind + ":" + (state.view.value || "");
   if (lastRenderedListViewKey !== null &&
       lastRenderedListViewKey !== viewKey) {
@@ -11710,20 +11852,12 @@ function renderNoteList() {
      before the list is rebuilt. */
   revokeListThumbUrls();
   const listEl = document.getElementById("noteList");
-  /* v2.24: the Tasks view replaces the note list wholesale:
-     its own header counts, its own controls, its own groups. */
+  /* v2.24.1: the Tasks view renders into its own pane
+     (syncTasksPane, above, has already traded the panes'
+     hidden classes). The list pane is left exactly as it
+     was, title, toolbar, and rows, for the way back. */
   if (state.view.kind === "tasks") {
-    const openTasks = state.tasks.filter(function (t) {
-      return t.status === "open";
-    }).length;
-    const doneTasks = state.tasks.length - openTasks;
-    document.getElementById("listTitle").textContent = "Tasks";
-    document.getElementById("listSub").textContent =
-      openTasks + (openTasks === 1 ? " open task" : " open tasks") +
-      (doneTasks ? " · " + doneTasks + " completed" : "");
-    renderListToolbar();
-    listEl.innerHTML = "";
-    renderTasksView(listEl);
+    renderTasksView();
     return;
   }
   const list = visibleNotes();
@@ -12122,9 +12256,30 @@ function tasksGroupForCurrentView() {
   return sortTasksForList(tasks);
 }
 
-function buildTaskGroupHeadEl(title, count) {
+function buildTaskGroupHeadEl(title, count, opts) {
+  opts = opts || {};
   const head = document.createElement("div");
   head.className = "task-group-head";
+  /* v2.24.1: in the Tasks view the head is collapsible: a
+     chevron button at its left toggles the group's rows
+     (the caller owns the collapsed state and the re-render).
+     The list pane's groups pass no opts and keep the plain
+     head they have always had. */
+  if (opts.collapsible) {
+    const chev = document.createElement("button");
+    chev.type = "button";
+    chev.className = "task-group-chev" +
+      (opts.collapsed ? " collapsed" : "");
+    chev.textContent = ">";
+    chev.setAttribute("aria-expanded",
+      opts.collapsed ? "false" : "true");
+    chev.setAttribute("aria-label",
+      (opts.collapsed ? "Expand " : "Collapse ") + title + " group");
+    chev.addEventListener("click", function () {
+      if (opts.onToggle) { opts.onToggle(); }
+    });
+    head.appendChild(chev);
+  }
   const titleEl = document.createElement("span");
   titleEl.className = "task-group-title";
   titleEl.textContent = title;
@@ -12167,6 +12322,71 @@ function buildTaskRowEl(task, opts) {
     toggleTaskComplete(task.id);
   });
   picker.appendChild(box);
+
+  /* v2.24.1: the Tasks view's column form of the row, under
+     the view's one header row: the checkbox and the markers
+     (flag, priority) ride in the Title column, the due chip
+     (or a dash when there is no due date) sits in the Due
+     date column, and the notebook name fills the Notebook
+     column. The list pane's groups keep the card form
+     below, unchanged. */
+  if (opts.columns) {
+    row.classList.add("task-row-cols");
+    const titleCell = document.createElement("div");
+    titleCell.className = "task-cell-title";
+    titleCell.appendChild(picker);
+    const colMain = document.createElement("div");
+    colMain.className = "task-row-main";
+    const colTitle = document.createElement("div");
+    colTitle.className = "task-row-title";
+    colTitle.textContent = task.title;
+    colMain.appendChild(colTitle);
+    titleCell.appendChild(colMain);
+    const markers = document.createElement("div");
+    markers.className = "task-chips";
+    if (task.flagged) {
+      const flag = document.createElement("span");
+      flag.className = "task-flag";
+      flag.title = "Flagged";
+      flag.innerHTML = TASK_FLAG_SVG;
+      markers.appendChild(flag);
+    }
+    const colPrio = document.createElement("span");
+    colPrio.className = "priority-pill " + task.priority;
+    colPrio.textContent = task.priority === "high" ? "High"
+      : task.priority === "low" ? "Low" : "Medium";
+    markers.appendChild(colPrio);
+    titleCell.appendChild(markers);
+    row.appendChild(titleCell);
+
+    const dueCell = document.createElement("div");
+    dueCell.className = "task-cell-due";
+    const colChip = taskDueChip(task);
+    if (colChip) {
+      const chipEl = document.createElement("span");
+      chipEl.className = "due-chip" +
+        (colChip.cls ? " " + colChip.cls : "");
+      chipEl.textContent = colChip.text;
+      dueCell.appendChild(chipEl);
+    } else {
+      const none = document.createElement("span");
+      none.className = "task-due-none";
+      none.textContent = "-";
+      dueCell.appendChild(none);
+    }
+    row.appendChild(dueCell);
+
+    const nbCell = document.createElement("div");
+    nbCell.className = "task-cell-nb";
+    nbCell.textContent = notebookNameForSlug(task.notebook);
+    nbCell.title = nbCell.textContent;
+    row.appendChild(nbCell);
+
+    row.addEventListener("click", function () {
+      openTaskEditor(task.id);
+    });
+    return row;
+  }
   row.appendChild(picker);
 
   const main = document.createElement("div");
@@ -12239,13 +12459,26 @@ function buildTasksGroupEl(tasks, opts) {
 
 /* The tasks the Tasks view shows after its filter: All keeps
    both statuses, Open and Completed keep one, Flagged keeps
-   the flagged of both. */
+   the flagged of both. The Find tasks text (v2.24.1) narrows
+   further, across whichever grouping and filter are active:
+   a task stays when the text appears in its title or in its
+   notebook's name. */
 function tasksMatchingFilter() {
   const f = state.tasksView.filter;
+  const q = (state.tasksView.query || "").trim().toLowerCase();
   return state.tasks.filter(function (t) {
-    if (f === "open") { return t.status === "open"; }
-    if (f === "completed") { return t.status === "completed"; }
-    if (f === "flagged") { return t.flagged; }
+    if (f === "open" && t.status !== "open") { return false; }
+    if (f === "completed" && t.status !== "completed") {
+      return false;
+    }
+    if (f === "flagged" && !t.flagged) { return false; }
+    if (q) {
+      const inTitle = (t.title || "").toLowerCase()
+        .indexOf(q) >= 0;
+      const inNotebook = notebookNameForSlug(t.notebook)
+        .toLowerCase().indexOf(q) >= 0;
+      if (!inTitle && !inNotebook) { return false; }
+    }
     return true;
   });
 }
@@ -12260,16 +12493,21 @@ function tasksMatchingFilter() {
 function taskGroupsForView() {
   const tasks = tasksMatchingFilter();
   const groups = [];
-  function pushGroup(title, list) {
+  /* v2.24.1: every group also carries a stable key, so the
+     view can remember which groups are collapsed (session
+     only) across re-renders and grouping switches. */
+  function pushGroup(key, title, list) {
     if (list.length) {
-      groups.push({ title: title, tasks: sortTasksForList(list) });
+      groups.push({
+        key: key, title: title, tasks: sortTasksForList(list)
+      });
     }
   }
   if (state.tasksView.grouping === "notebook") {
     const seen = {};
     state.notebooks.forEach(function (nb) {
       seen[nb.slug] = true;
-      pushGroup(nb.name, tasks.filter(function (t) {
+      pushGroup("nb:" + nb.slug, nb.name, tasks.filter(function (t) {
         return t.notebook === nb.slug;
       }));
     });
@@ -12283,20 +12521,21 @@ function taskGroupsForView() {
       }
     });
     orphanSlugs.forEach(function (slug) {
-      pushGroup(notebookNameForSlug(slug), tasks.filter(function (t) {
-        return t.notebook === slug;
-      }));
+      pushGroup("nb:" + slug, notebookNameForSlug(slug),
+        tasks.filter(function (t) {
+          return t.notebook === slug;
+        }));
     });
     return groups;
   }
   if (state.tasksView.grouping === "priority") {
-    pushGroup("High", tasks.filter(function (t) {
+    pushGroup("prio:high", "High", tasks.filter(function (t) {
       return t.priority === "high";
     }));
-    pushGroup("Medium", tasks.filter(function (t) {
+    pushGroup("prio:medium", "Medium", tasks.filter(function (t) {
       return t.priority === "medium";
     }));
-    pushGroup("Low", tasks.filter(function (t) {
+    pushGroup("prio:low", "Low", tasks.filter(function (t) {
       return t.priority === "low";
     }));
     return groups;
@@ -12307,34 +12546,72 @@ function taskGroupsForView() {
   const done = tasks.filter(function (t) {
     return t.status === "completed";
   });
-  pushGroup("Overdue", open.filter(function (t) {
+  pushGroup("due:overdue", "Overdue", open.filter(function (t) {
     const d = taskDayDiff(t);
     return d !== null && d < 0;
   }));
-  pushGroup("Today", open.filter(function (t) {
+  pushGroup("due:today", "Today", open.filter(function (t) {
     return taskDayDiff(t) === 0;
   }));
-  pushGroup("Upcoming", open.filter(function (t) {
+  pushGroup("due:upcoming", "Upcoming", open.filter(function (t) {
     const d = taskDayDiff(t);
     return d !== null && d > 0;
   }));
-  pushGroup("No due date", open.filter(function (t) {
+  pushGroup("due:nodate", "No due date", open.filter(function (t) {
     return taskDayDiff(t) === null;
   }));
-  pushGroup("Completed", done);
+  pushGroup("due:completed", "Completed", done);
   return groups;
 }
 
-/* The Tasks view itself: the quick add row (title input,
-   notebook select, and the New Task button that opens the
-   full editor), the grouping segmented control and the filter
-   chips (both rebuilt with the view, so the active choice is
-   always the filled one), then the groups. Enter in the quick
-   add creates the task with defaults in the chosen notebook
-   and puts focus back into the fresh input for rapid entry. */
-function renderTasksView(listEl) {
-  const wrap = document.createElement("div");
-  wrap.className = "tasks-view";
+/* The Tasks view itself, in its own pane since v2.24.1: the
+   head (the title with the open count beside it, and the
+   Find tasks search at its right), the quick add row (title
+   input, notebook select, and the New Task button that
+   opens the full editor), the grouping segmented control
+   and the filter chips (both rebuilt with the view, so the
+   active choice is always the filled one), then the column
+   header row and the groups, which fillTasksBody builds so
+   the search can re-render them alone on every keystroke
+   without rebuilding (and refocusing) the input itself.
+   Enter in the quick add creates the task with defaults in
+   the chosen notebook and puts focus back into the fresh
+   input for rapid entry. */
+function renderTasksView() {
+  const inner = document.getElementById("tasksInner");
+  if (!inner) { return; }
+  inner.innerHTML = "";
+
+  const head = document.createElement("div");
+  head.className = "tasks-head";
+  const heading = document.createElement("h2");
+  heading.textContent = "Tasks ";
+  const countEl = document.createElement("span");
+  countEl.className = "tasks-count";
+  countEl.id = "tasksOpenCount";
+  const openCount = state.tasks.filter(function (t) {
+    return t.status === "open";
+  }).length;
+  countEl.textContent = String(openCount);
+  heading.appendChild(countEl);
+  head.appendChild(heading);
+  const searchWrap = document.createElement("div");
+  searchWrap.className = "tasks-search";
+  const search = document.createElement("input");
+  search.type = "search";
+  search.id = "tasksSearch";
+  search.placeholder = "Find tasks...";
+  search.setAttribute("aria-label", "Find tasks");
+  search.value = state.tasksView.query || "";
+  /* Typing re-renders only the body (the groups), so the
+     input keeps its focus and its caret. */
+  search.addEventListener("input", function () {
+    state.tasksView.query = search.value;
+    fillTasksBody();
+  });
+  searchWrap.appendChild(search);
+  head.appendChild(searchWrap);
+  inner.appendChild(head);
 
   const quick = document.createElement("div");
   quick.className = "tasks-quickadd";
@@ -12381,7 +12658,7 @@ function renderTasksView(listEl) {
     const fresh = document.getElementById("taskQuickTitle");
     if (fresh) { fresh.focus(); }
   });
-  wrap.appendChild(quick);
+  inner.appendChild(quick);
 
   const controls = document.createElement("div");
   controls.className = "tasks-controls-row";
@@ -12425,31 +12702,85 @@ function renderTasksView(listEl) {
     filters.appendChild(b);
   });
   controls.appendChild(filters);
-  wrap.appendChild(controls);
+  inner.appendChild(controls);
 
+  const body = document.createElement("div");
+  body.id = "tasksBody";
+  inner.appendChild(body);
+  fillTasksBody();
+}
+
+/* The Tasks view's one column header row: Title, Due date,
+   Notebook (Evernote's Assigned note column is Notebook
+   here, where tasks belong to notebooks; its Assigned to
+   column has no counterpart in a single user app). */
+function buildTasksColHeadEl() {
+  const head = document.createElement("div");
+  head.className = "tasks-colhead";
+  ["Title", "Due date", "Notebook"].forEach(function (label) {
+    const cell = document.createElement("span");
+    cell.textContent = label;
+    head.appendChild(cell);
+  });
+  return head;
+}
+
+/* The Tasks view's body: the column header row and the
+   groups, each with its collapsible head (the chevron
+   toggles the group's key in the session's collapsed set
+   and the view re-renders). Split from renderTasksView so
+   the Find tasks search can rebuild just this part on
+   every keystroke. */
+function fillTasksBody() {
+  const body = document.getElementById("tasksBody");
+  if (!body) { return; }
+  body.innerHTML = "";
   const groups = taskGroupsForView();
   if (!groups.length) {
     const empty = document.createElement("div");
     empty.className = "empty-state";
-    empty.innerHTML = "<div class=\"big\">No tasks here</div>" +
-      (state.tasks.length
+    const big = document.createElement("div");
+    big.className = "big";
+    big.textContent = "No tasks here";
+    empty.appendChild(big);
+    const query = (state.tasksView.query || "").trim();
+    const note = document.createElement("div");
+    note.textContent = query
+      ? "No tasks match \"" + query +
+        "\". Clear the search to see everything again."
+      : (state.tasks.length
         ? "No tasks match this filter. Clear it to see everything again."
         : "Add your first task above, or press New Task for the full editor.");
-    wrap.appendChild(empty);
+    empty.appendChild(note);
+    body.appendChild(empty);
+    return;
   }
+  body.appendChild(buildTasksColHeadEl());
   groups.forEach(function (g) {
     const group = document.createElement("div");
     group.className = "task-group";
+    const collapsed = !!state.tasksView.collapsed[g.key];
     group.appendChild(buildTaskGroupHeadEl(g.title,
-      g.tasks.length + (g.tasks.length === 1 ? " task" : " tasks")));
-    g.tasks.forEach(function (task) {
-      group.appendChild(buildTaskRowEl(task, {
-        showNotebook: state.tasksView.grouping !== "notebook"
+      g.tasks.length + (g.tasks.length === 1 ? " task" : " tasks"),
+      {
+        collapsible: true,
+        collapsed: collapsed,
+        onToggle: function () {
+          if (state.tasksView.collapsed[g.key]) {
+            delete state.tasksView.collapsed[g.key];
+          } else {
+            state.tasksView.collapsed[g.key] = true;
+          }
+          renderTasksView();
+        }
       }));
-    });
-    wrap.appendChild(group);
+    if (!collapsed) {
+      g.tasks.forEach(function (task) {
+        group.appendChild(buildTaskRowEl(task, { columns: true }));
+      });
+    }
+    body.appendChild(group);
   });
-  listEl.appendChild(wrap);
 }
 
 /* ---------------- the task editor ----------------
@@ -28034,7 +28365,18 @@ function wireEvents() {
 
   /* Mobile bar. */
   document.getElementById("mobileNavBtn").addEventListener("click", function () { setMobileView("nav"); });
-  document.getElementById("mobileListBtn").addEventListener("click", function () { setMobileView("list"); });
+  document.getElementById("mobileListBtn").addEventListener("click", function () {
+    /* v2.24.1: the Tasks view is its own pane now, no longer
+       the list pane's content, so the Notes button leaves it
+       for the notes list (All Notes), the way Back to list
+       leaves the editor. Everywhere else it only switches
+       panes, as always. */
+    if (state.view.kind === "tasks") {
+      state.view = { kind: "all", value: null };
+      renderAll();
+    }
+    setMobileView("list");
+  });
   document.getElementById("mobileNewBtn").addEventListener("click", function () {
     document.getElementById("newNoteBtn").click();
   });
