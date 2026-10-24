@@ -40,10 +40,40 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-24-SSN-V2246
-  Version: 2.24.6
+  BUILD STAMP: 2026-10-24-SSN-V2247
+  Version: 2.24.7
 
   Revision history:
+    v2.24.7 2026-10-24 Toggling a checklist item off is
+                      spacing neutral. Through v2.24.6 the
+                      item became a bare paragraph, and a
+                      paragraph carries the browser's default
+                      margins (about 1em above and below)
+                      that a checklist item never had; the
+                      split also exposed the two checklist
+                      halves' end margins, so the line
+                      gained about a line of space on both
+                      sides when only its checkbox went away
+                      (Chris's report: the toggle should
+                      just add or remove the checkbox at the
+                      start of the line, nothing else). The
+                      conversion now tags the pieces it
+                      leaves behind (ss-checklist-exit on
+                      the paragraph, ss-checklist-split on
+                      each surviving list half), and four
+                      stylesheet rules zero exactly the
+                      margins that face each other inside
+                      that arrangement, so the converted
+                      line keeps the checklist's tight rhythm
+                      whether the item headed its list, sat
+                      in the middle, ended it, or was the
+                      whole list. The Enter exit on an empty
+                      item takes the same tags. The margins
+                      facing away from the arrangement are
+                      untouched, no paragraph or list that
+                      did not come out of the conversion is
+                      affected, and notes saved before this
+                      build render exactly as before.
     v2.24.6 2026-10-24 Automatic Google renewal stops
                       giving up. Through v2.24.5 the v2.15
                       machinery asked silently once per
@@ -2783,6 +2813,40 @@ body.dark .modal:hover::-webkit-scrollbar-thumb{
   margin-right:8px;vertical-align:-1px;
 }
 #noteBody li.done input[type="checkbox"]{accent-color:var(--secondary);}
+/* v2.24.7: spacing neutral checklist exits. An item toggled out of
+   a checklist (the toolbar command) or exited with Enter on an
+   empty item becomes a paragraph standing between the list's two
+   halves. A paragraph carries the browser's default margins
+   (about 1em above and below) that a checklist item never had,
+   and the split also exposes each half's own end margin, so the
+   line used to gain about a line of space on both sides when
+   nothing but its checkbox went away (Chris's report). The
+   conversion tags exactly the pieces it leaves behind:
+   ss-checklist-exit on the paragraph and ss-checklist-split on
+   each surviving half (see markChecklistExit). The four rules
+   below zero only the margins that face each other inside that
+   arrangement, so the converted line keeps the checklist's tight
+   rhythm and the checkbox is the only thing that disappears.
+   The margins facing away from the arrangement are untouched:
+   the paragraph's top when the item headed its list, its bottom
+   when the item ended it, and both when the item was the list's
+   only one (no half survives, nothing is tagged, and the
+   paragraph simply stands where the list stood). Neither class
+   has any other rule and both are minted only by the conversion,
+   so notes saved before this build, and every paragraph or list
+   that did not come out of one, render exactly as before. */
+#noteBody ul.ss-checklist-split:has(+ p.ss-checklist-exit){
+  margin-bottom:0;
+}
+#noteBody ul.ss-checklist-split + p.ss-checklist-exit{
+  margin-top:0;
+}
+#noteBody p.ss-checklist-exit:has(+ ul.ss-checklist-split){
+  margin-bottom:0;
+}
+#noteBody p.ss-checklist-exit + ul.ss-checklist-split{
+  margin-top:0;
+}
 /* v1.3.1: links inside the editable body keep the standard link look and
    get a pointer cursor as the affordance that they can be opened (plain
    click shows the link popup below, Ctrl or Cmd click opens directly).
@@ -5772,8 +5836,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-24-SSN-V2246";
-const APP_VERSION = "2.24.6";
+const APP_BUILD = "2026-10-24-SSN-V2247";
+const APP_VERSION = "2.24.7";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -21863,6 +21927,30 @@ function convertBlockToChecklistItem(block, range) {
   placeCaretAtTextOffset(li, offset);
 }
 
+/* v2.24.7: tag the pieces a checklist split leaves behind, so the
+   stylesheet can keep the converted line at the checklist's own
+   tight spacing instead of the paragraph's default margins (see
+   the ss-checklist-exit rules among the note body styles). The
+   paragraph gets ss-checklist-exit and each half that survives
+   gets ss-checklist-split; when the item was the list's only one,
+   no half survives and nothing is tagged, so the paragraph simply
+   stands where the list stood. Both tags are inert apart from
+   those spacing rules. They cannot accumulate across toggles:
+   toggling the line back into a checklist replaces the paragraph
+   outright, and classList.add on a list that is split again is a
+   no-op the second time. Called with the pieces in their final
+   places (the emptied upper list already removed, the lower half
+   already inserted when it has items). */
+function markChecklistExit(p, ul, rest) {
+  const upperStays = ul.isConnected && !!ul.querySelector("li");
+  const lowerStays = rest.isConnected && !!rest.querySelector("li");
+  if (upperStays) { ul.classList.add("ss-checklist-split"); }
+  if (lowerStays) { rest.classList.add("ss-checklist-split"); }
+  if (upperStays || lowerStays) {
+    p.classList.add("ss-checklist-exit");
+  }
+}
+
 /* Toggle one checklist item back into a normal paragraph, in place.
    The list splits around the paragraph, the same shape the v1.6
    Enter handler leaves when an item exits a checklist: items above
@@ -21905,6 +21993,9 @@ function checklistItemToParagraph(li, ul) {
   ul.after(p);
   if (rest.childNodes.length) { p.after(rest); }
   if (!ul.querySelector("li")) { ul.remove(); }
+  /* v2.24.7: the checkbox is the only thing that goes away; the
+     line keeps the checklist's spacing (see markChecklistExit). */
+  markChecklistExit(p, ul, rest);
   placeCaretAtTextOffset(p, offset);
 }
 
@@ -22122,6 +22213,9 @@ function handleChecklistEnter() {
     ul.after(p);
     if (rest.childNodes.length) { p.after(rest); }
     if (!ul.querySelector("li")) { ul.remove(); }
+    /* v2.24.7: same spacing neutral exit as the toolbar toggle
+       (see markChecklistExit). */
+    markChecklistExit(p, ul, rest);
     const caret = document.createRange();
     caret.setStart(p, 0);
     caret.collapse(true);
