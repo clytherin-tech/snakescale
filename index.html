@@ -40,10 +40,43 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-23-SSN-V2245
-  Version: 2.24.5
+  BUILD STAMP: 2026-10-24-SSN-V2246
+  Version: 2.24.6
 
   Revision history:
+    v2.24.6 2026-10-24 Automatic Google renewal stops
+                      giving up. Through v2.24.5 the v2.15
+                      machinery asked silently once per
+                      trigger and a failure ended the matter:
+                      no retry was scheduled, a session
+                      restored at boot from a still live
+                      stored token never got a proactive
+                      timer at all, and the reason Google
+                      gave for a failed silent ask was thrown
+                      away, so a lapsed sign in sat until the
+                      user pressed Refresh connection by
+                      hand. Now a failed automatic renewal
+                      arms a backoff ladder (about a minute,
+                      then two, then five, then every five)
+                      that retries while the session lives
+                      and the token is inside its last five
+                      minutes or past them; every token
+                      restore path schedules the proactive
+                      timer; the next real click or keypress
+                      after a silent failure re-runs the
+                      renewal from that gesture, escalating
+                      to the interactive capable request
+                      inside the same gesture, once per
+                      expiry cycle, without ever touching
+                      the gesture itself; and the last
+                      automatic failure's type and time are
+                      kept in settings, shown as one muted
+                      line in the sidebar menu, and cleared
+                      by the next successful connect. The
+                      sign in scope, the token store, the
+                      manual Refresh flow, the sign out
+                      wipe, and the 401 rule of one renewal
+                      and one retry are all unchanged.
     v2.24.5 2026-10-23 The editor's formatting toolbar is
                       one line at phone widths (900px and
                       under), Chris's call after the v2.24.4
@@ -1913,6 +1946,16 @@ body.dark .gate-brand .wordmark{color:#EAF3EC;}
   display:flex;flex-direction:column;gap:2px;
 }
 #sidebarMenu.hidden{display:none;}
+/* v2.24.6: the last automatic renewal failure, one muted non
+   interactive line in the sidebar menu under Refresh
+   connection, present only while a failure is on record. It
+   takes the theme's own muted text color, so it follows the
+   app in both themes like every other menu row. */
+.sidebar-renewal-failure{
+  padding:6px 10px;font-size:12.5px;line-height:1.45;
+  color:var(--muted);white-space:normal;overflow-wrap:anywhere;
+}
+.sidebar-renewal-failure.hidden{display:none;}
 #sidebarMenu button .sb-check{
   display:inline-block;width:16px;flex:0 0 16px;font-weight:800;
   color:var(--secondary);
@@ -4569,6 +4612,7 @@ body.dark .version-date{color:var(--accent);}
         <div id="sidebarMenu" class="hidden" role="menu" aria-label="Sidebar actions">
           <button class="att-menu-item" id="sidebarSyncItem" type="button" role="menuitem">Sync now</button>
           <button class="att-menu-item" id="sidebarRefreshItem" type="button" role="menuitem">Refresh connection</button>
+          <div class="sidebar-renewal-failure hidden" id="sidebarRenewalFailure" role="note"></div>
           <button class="att-menu-item hidden" id="sidebarInstallItem" type="button" role="menuitem">Install app</button>
           <button class="att-menu-item" id="sidebarSettingsItem" type="button" role="menuitem">Settings</button>
           <div class="att-menu-sep"></div>
@@ -5728,8 +5772,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-23-SSN-V2245";
-const APP_VERSION = "2.24.5";
+const APP_BUILD = "2026-10-24-SSN-V2246";
+const APP_VERSION = "2.24.6";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -5802,6 +5846,13 @@ const state = {
     googleClientId: "",
     googleFolderId: null,   // the attachments subfolder of the notes root
     googleExpiresAt: 0,
+    googleRenewalFailure: null, // v2.24.6: the last automatic
+                            // renewal failure, {type, at} or
+                            // null. Written by the renewal
+                            // block, cleared by the next
+                            // successful connect, shown as one
+                            // muted line in the sidebar menu
+                            // while it stands.
     legacyConsolidated: false // v2.0: true once the one time move of
                             // pre-v2.0 attachments into the notes folder
                             // has run on this device profile
@@ -6301,6 +6352,10 @@ async function signOut() {
   /* v2.15: signing out cancels the pending automatic renewal,
      so no silent ask can resurrect the session just left. */
   clearGoogleRenewalTimer();
+  /* v2.24.6: and the renewal recovery state goes with it: no
+     ladder, no open episode, and no armed gesture may outlive
+     the session they served. */
+  resetGoogleRenewalRecovery();
   /* v2.16: and the auto-sync watcher stops with the session. */
   stopAutoSync();
   /* v2.17.1: divergence is session state too; none of it may
@@ -10951,6 +11006,12 @@ async function connectAndLoad() {
         "your Google Drive. The same sign in also covers attachments.");
     return;
   }
+  /* v2.24.6: entering with a live sign in schedules the
+     proactive renewal here as well, so the guarantee does not
+     rest on which restore path produced the token (the
+     encrypted store restore in getProviderToken schedules it
+     too; scheduling twice simply re-sets the same timer). */
+  scheduleGoogleRenewal();
   /* v2.21: the boot report's first stage. The sign in is live
      in memory from here on, which is also the standard the
      cache paint below is gated on: this function is only ever
@@ -24105,6 +24166,19 @@ async function getProviderToken(provider) {
       base64ToBytes(rec.data)
     );
     state.providerTokens[provider] = new TextDecoder().decode(plain);
+    /* v2.24.6: a token that becomes active by being restored
+       from the encrypted store never ran googleConnect, so
+       nothing scheduled its proactive renewal. The boot path
+       is the case that mattered: the gate finds the stored
+       token still live and enters without a fresh connect,
+       and through v2.24.5 that session then had no timer at
+       all. Schedule here, at the one moment every restore
+       funnels through, so a restored session carries the
+       timer from the start. (scheduleGoogleRenewal is
+       defined in the renewal block below; this line only
+       ever runs once the app is up, long after the whole
+       script has been evaluated.) */
+    if (provider === "google") { scheduleGoogleRenewal(); }
     return state.providerTokens[provider];
   } catch (e) {
     return null;
@@ -24258,8 +24332,15 @@ async function googleConnect(options) {
         else { reject(new Error("Google sign in did not return an access token.")); }
       },
       error_callback: function (err) {
-        reject(new Error("Google sign in was cancelled or failed" +
-          (err && err.type ? " (" + err.type + ")" : "") + "."));
+        /* v2.24.6: the message is unchanged for the interactive
+           callers, but the GIS error type now also rides on the
+           error object itself, so the silent path can report
+           WHICH failure Google gave instead of discarding it
+           (see googleTrySilentSignInDetailed below). */
+        const gisError = new Error("Google sign in was cancelled or failed" +
+          (err && err.type ? " (" + err.type + ")" : "") + ".");
+        if (err && err.type) { gisError.gisErrorType = String(err.type); }
+        reject(gisError);
       }
     });
     const promptValue = options && typeof options.prompt === "string"
@@ -24270,6 +24351,14 @@ async function googleConnect(options) {
     Date.now() + (Number(resp.expires_in) || 3600) * 1000;
   state.attach.googleFolderId = null;   /* re-resolve for this account */
   resetDriveNotesCache();               /* v1.4: notes folders too */
+  /* v2.24.6: a successful connect ends whatever renewal trouble
+     came before it: the recorded failure clears (and the
+     saveSettings below persists the clear), and its line
+     leaves the sidebar menu. The ladder, the episode, and any
+     armed gesture reset when scheduleGoogleRenewal runs just
+     below, as part of the fresh cycle this connect starts. */
+  state.attach.googleRenewalFailure = null;
+  renderRenewalFailureLine();
   saveSettings();
   await storeProviderToken("google", resp.access_token);
   /* v2.15: every successful connect (a gate sign in, a silent
@@ -24290,13 +24379,27 @@ async function googleConnect(options) {
    Google can do it without showing an interaction." Every failure mode
    (script blocked, interaction required, network trouble) simply
    returns false. The caller then shows the sign in gate with no error
-   toast; a toast belongs only to a manual sign in click. */
+   toast; a toast belongs only to a manual sign in click.
+   v2.24.6: the attempt now also reports WHY it failed, through
+   the detailed form below: googleConnect tags its rejection
+   with the GIS error type, and that type is what the renewal
+   block records for the sidebar menu line. The plain boolean
+   form keeps its exact old contract for its old callers (the
+   gate's background attempt, the manual Refresh flow). */
 async function googleTrySilentSignIn() {
+  const detailed = await googleTrySilentSignInDetailed();
+  return detailed.ok;
+}
+
+async function googleTrySilentSignInDetailed() {
   try {
     await googleConnect({ silent: true });
-    return true;
+    return { ok: true, errorType: null };
   } catch (e) {
-    return false;
+    return {
+      ok: false,
+      errorType: (e && e.gisErrorType) || "unknown"
+    };
   }
 }
 
@@ -24320,15 +24423,41 @@ async function googleTrySilentSignIn() {
    flight guard, so they can never race each other into parallel
    token requests, and none of them can ever raise an
    interactive prompt: the interactive consent attempt belongs
-   to the manual Refresh connection flow alone. A failed
-   automatic renewal changes nothing: no timer is rescheduled
-   (googleConnect did not run), the session state is left
-   exactly as it was, and the remaining triggers, or the manual
-   button, get their own chance later. */
+   to the manual Refresh connection flow alone.
+   v2.24.6: a failed automatic renewal is no longer the end of
+   the matter. Through v2.24.5 the failure changed nothing: no
+   timer was rescheduled (googleConnect did not run), so a
+   session whose one scheduled ask failed coasted to expiry
+   with only the visibility and 401 triggers left, which may
+   never fire for a user sitting in the tab, and the GIS error
+   type behind the failure was discarded. Now every automatic
+   failure settles in one place, onGoogleRenewalFailure below:
+   the failure's type and time are recorded in settings (and
+   shown in the sidebar menu until the next successful
+   connect clears them), an expiry episode opens, a backoff
+   ladder keeps retrying while the session lives, and the
+   next genuine user gesture re-runs the renewal from inside
+   itself. See the recovery notes below. */
 const GOOGLE_RENEW_MARGIN_MS = 5 * 60 * 1000;
 let googleRenewalTimer = null;
 let googleRenewalInFlight = null;
 let googleRenewalLastAttemptAt = 0;
+/* v2.24.6: the renewal recovery state. The ladder delays:
+   after a failed automatic attempt, follow ups are armed at
+   about a minute, then two minutes, then five, then every
+   five minutes for as long as the session lives and the
+   token is inside the margin or past it. The step counts
+   the retries armed in the current cycle and resets
+   whenever a fresh proactive schedule is set. The episode:
+   non null while this expiry cycle has seen an automatic
+   failure and no success since; it carries whether the one
+   gesture escalation it allows has been spent. The armed
+   flag tracks the one time gesture listener. */
+const GOOGLE_RENEWAL_RETRY_DELAYS_MS = [60 * 1000, 2 * 60 * 1000,
+  5 * 60 * 1000];
+let googleRenewalRetryStep = 0;
+let googleRenewalEpisode = null;
+let googleRenewalGestureArmed = false;
 
 /* When the next renewal should fire, in milliseconds from now.
    The plain rule is expiry minus the five minute margin. When
@@ -24355,13 +24484,85 @@ function clearGoogleRenewalTimer() {
 
 function scheduleGoogleRenewal() {
   clearGoogleRenewalTimer();
+  /* v2.24.6: a fresh proactive schedule is a fresh cycle: the
+     ladder, the episode, and any armed gesture reset with it.
+     Every successful connect lands here through googleConnect,
+     and so does every token restore (see getProviderToken),
+     which is what closes the gap, open since v2.15, where a
+     session restored at boot carried no timer at all. */
+  resetGoogleRenewalRecovery();
   if (!state.providerTokens.google || !state.attach.googleExpiresAt) {
     return;
   }
-  googleRenewalTimer = setTimeout(function () {
-    googleRenewalTimer = null;
-    renewGoogleSilently().catch(function () { return false; });
-  }, googleRenewalDelayMs());
+  googleRenewalTimer = setTimeout(fireGoogleRenewalTimer,
+    googleRenewalDelayMs());
+}
+
+/* The proactive timer firing: exactly the v2.15 behavior, one
+   silent renewal through the shared in flight guard. */
+function fireGoogleRenewalTimer() {
+  googleRenewalTimer = null;
+  renewGoogleSilently().catch(function () { return false; });
+}
+
+/* A ladder timer firing: the same silent renewal, but a
+   ladder only runs while its session lives. The token can be
+   gone by firing time without the timer having been
+   cancelled (the 401 path clears the token itself, for one),
+   and then the ladder ends quietly instead of asking Google
+   about a session that no longer exists. */
+function fireGoogleRenewalRetry() {
+  googleRenewalTimer = null;
+  if (!googleRenewalSessionLive()) {
+    resetGoogleRenewalRecovery();
+    return;
+  }
+  renewGoogleSilently().catch(function () { return false; });
+}
+
+/* Arm the next ladder retry at the current step's backoff
+   delay. One timer only: the ladder goes through the same
+   googleRenewalTimer as the proactive schedule, clearing
+   whatever it held, so the two schedules can never multiply
+   or race. Arming is a no op unless a session exists and the
+   token is inside the margin or already past its expiry:
+   outside that window a failure leaves the standing
+   proactive schedule untouched. */
+function scheduleGoogleRenewalRetry() {
+  if (!googleRenewalSessionLive() || !googleRenewalDue()) { return; }
+  const idx = Math.min(googleRenewalRetryStep,
+    GOOGLE_RENEWAL_RETRY_DELAYS_MS.length - 1);
+  const delay = GOOGLE_RENEWAL_RETRY_DELAYS_MS[idx];
+  googleRenewalRetryStep += 1;
+  clearGoogleRenewalTimer();
+  googleRenewalTimer = setTimeout(fireGoogleRenewalRetry, delay);
+}
+
+/* Whether a session exists for renewal purposes: the same
+   test the visibility trigger makes, a token in memory or
+   one waiting in the encrypted store. */
+function googleRenewalSessionLive() {
+  return !!(state.providerTokens.google || loadProviderTokenBlob().google);
+}
+
+/* Whether the token is inside the renewal margin or already
+   past its expiry: the window the ladder and the gesture
+   healing exist for. */
+function googleRenewalDue() {
+  return !!state.attach.googleExpiresAt &&
+    Date.now() > state.attach.googleExpiresAt - GOOGLE_RENEW_MARGIN_MS;
+}
+
+/* Close the recovery state: the ladder back to its first
+   step, the episode closed, the gesture disarmed. Runs when
+   a fresh cycle is scheduled (scheduleGoogleRenewal, so on
+   every successful connect and every restore) and when the
+   session ends (both sign out paths call it beside
+   clearGoogleRenewalTimer). */
+function resetGoogleRenewalRecovery() {
+  googleRenewalRetryStep = 0;
+  googleRenewalEpisode = null;
+  disarmGoogleRenewalGesture();
 }
 
 /* The one silent renewal every automatic trigger shares. A
@@ -24374,15 +24575,153 @@ function renewGoogleSilently() {
   if (googleRenewalInFlight) { return googleRenewalInFlight; }
   googleRenewalLastAttemptAt = Date.now();
   googleRenewalInFlight = (async function () {
+    let result;
     try {
-      return await googleTrySilentSignIn();
+      result = await googleTrySilentSignInDetailed();
     } catch (e) {
-      return false;
+      result = { ok: false, errorType: "unknown" };
     } finally {
       googleRenewalInFlight = null;
     }
+    /* v2.24.6: every automatic failure settles in one place
+       (the record, the episode, the ladder), so the timer,
+       the tab return, and the 401 recovery all leave the
+       same recovery state behind. A success needs nothing
+       here: googleConnect already rescheduled the proactive
+       timer, reset the recovery state, and cleared the
+       recorded failure. */
+    if (!result.ok) { onGoogleRenewalFailure(result.errorType); }
+    return result.ok;
   })();
   return googleRenewalInFlight;
+}
+
+/* v2.24.6: where an automatic renewal failure lands. The
+   failure is recorded first (it stands even when nothing
+   more can be done), then, while the session lives and the
+   token is inside its margin or past it, the episode opens
+   if this cycle has none yet, and the ladder arms its next
+   retry. */
+function onGoogleRenewalFailure(errorType) {
+  recordGoogleRenewalFailure(errorType);
+  if (!googleRenewalSessionLive() || !googleRenewalDue()) { return; }
+  if (!googleRenewalEpisode) {
+    googleRenewalEpisode = { escalated: false };
+    armGoogleRenewalGesture();
+  }
+  scheduleGoogleRenewalRetry();
+}
+
+/* v2.24.6: the failure record. The last automatic renewal
+   failure, its GIS error type and when it happened, kept in
+   settings (state.attach rides along in the settings record)
+   so it survives a reload, and cleared by the next
+   successful connect in googleConnect. Nothing about the
+   session or the account goes in it: a type string and a
+   time, nothing else. */
+function recordGoogleRenewalFailure(errorType) {
+  state.attach.googleRenewalFailure = {
+    type: String(errorType || "unknown"),
+    at: Date.now()
+  };
+  saveSettings();
+  renderRenewalFailureLine();
+}
+
+/* The record's one rendering: a muted line in the sidebar
+   menu under Refresh connection, present only while a
+   failure stands. */
+function renderRenewalFailureLine() {
+  const el = document.getElementById("sidebarRenewalFailure");
+  if (!el) { return; }
+  const rec = state.attach.googleRenewalFailure;
+  if (!rec || typeof rec.type !== "string" || !rec.type) {
+    el.classList.add("hidden");
+    el.textContent = "";
+    return;
+  }
+  const when = rec.at ? new Date(rec.at) : null;
+  el.textContent = "Last automatic renewal failed: " + rec.type +
+    (when && !isNaN(when.getTime())
+      ? " \u00b7 " + when.toLocaleTimeString([],
+          { hour: "numeric", minute: "2-digit" })
+      : "");
+  el.classList.remove("hidden");
+}
+
+/* v2.24.6: gesture healing. While an episode is open, the
+   next genuine user gesture in the app (a pointer press or
+   a key press) re-runs the renewal from inside that gesture:
+   browsers allow the interactive token request only from a
+   real user interaction, so the click Chris was already
+   making becomes the thing that heals the connection,
+   instead of a hunt for the Refresh connection item. The
+   listener never touches the event (no preventDefault, no
+   stopPropagation, no delay): the gesture's own control
+   receives it and acts exactly as it would have anyway. It
+   is one time per episode: the first gesture disarms it,
+   success or failure, and the episode's escalated flag is
+   the second lock, so an episode can never escalate twice;
+   only a successful renewal, starting a fresh cycle, can
+   open a new episode. It never arms on the sign in gate or
+   while signed out: episodes only open on a live session's
+   failure inside the app, and the handler re-checks all of
+   that when the gesture lands. */
+function armGoogleRenewalGesture() {
+  if (googleRenewalGestureArmed) { return; }
+  googleRenewalGestureArmed = true;
+  document.addEventListener("pointerdown", onGoogleRenewalGesture);
+  document.addEventListener("keydown", onGoogleRenewalGesture);
+}
+
+function disarmGoogleRenewalGesture() {
+  if (!googleRenewalGestureArmed) { return; }
+  googleRenewalGestureArmed = false;
+  document.removeEventListener("pointerdown", onGoogleRenewalGesture);
+  document.removeEventListener("keydown", onGoogleRenewalGesture);
+}
+
+function onGoogleRenewalGesture(ev) {
+  disarmGoogleRenewalGesture();
+  /* A gesture aimed at signing out, or at the gate itself,
+     is not a healing gesture: signing out ends the episode
+     through its own cancel path, and the gate is where the
+     ordinary sign in belongs. */
+  if (ev && ev.target && ev.target.closest &&
+      ev.target.closest("#sidebarSignOutItem, #repoLockBtn, " +
+        "#setupScreen, #repoScreen")) {
+    return;
+  }
+  const appEl = document.getElementById("app");
+  if (!appEl || appEl.classList.contains("hidden")) { return; }
+  if (!googleRenewalEpisode || googleRenewalEpisode.escalated) { return; }
+  if (!googleRenewalSessionLive() || !googleRenewalDue()) { return; }
+  googleRenewalEpisode.escalated = true;
+  healGoogleRenewalFromGesture().catch(function () { return false; });
+}
+
+/* The gesture's renewal: the silent ask first (through the
+   shared guard, so its failure settles like any automatic
+   failure), and only when that fails, the interactive
+   capable request inside the same gesture: googleConnect
+   with its default prompt, the very call the gate's sign in
+   button makes. With a live Google session and standing
+   consent it completes with no visible interaction in the
+   normal case. If the user cancels it (the popup closes),
+   the rejection's type is recorded like any other failed
+   attempt and the session state is left exactly as it was:
+   nothing here clears a token or zeroes an expiry, and the
+   manual Refresh connection flow remains the backstop. */
+async function healGoogleRenewalFromGesture() {
+  const silentOk = await renewGoogleSilently();
+  if (silentOk) { return true; }
+  try {
+    await googleConnect();
+    return true;
+  } catch (e) {
+    recordGoogleRenewalFailure((e && e.gisErrorType) || "unknown");
+    return false;
+  }
 }
 
 /* The visibility trigger: the tab came back to the foreground.
@@ -24857,6 +25196,9 @@ async function googleDisconnect() {
   /* v2.15: the session this disconnect drops is the one the
      renewal timer serves; cancel the timer with the token. */
   clearGoogleRenewalTimer();
+  /* v2.24.6: the recovery state (ladder, episode, gesture)
+     serves that same session; it is cancelled with it. */
+  resetGoogleRenewalRecovery();
   /* v2.16: the auto-sync watcher serves the same session. */
   stopAutoSync();
   /* v2.17.1: and so does the divergence state. */
@@ -31051,6 +31393,9 @@ async function boot() {
   injectLogos();
   renderAppVersion();
   loadSettings();
+  /* v2.24.6: a renewal failure recorded by an earlier session
+     stands in the sidebar menu from the start. */
+  renderRenewalFailureLine();
   const foundLegacy = cleanupLegacyStorage();
   wireEvents();
   /* v2.24: a notification click that opened the app cold left

@@ -2,7 +2,7 @@
   ==========================================================================
   SnakeScale Notes service worker
   ==========================================================================
-  BUILD STAMP: 2026-10-23-SSN-V2245
+  BUILD STAMP: 2026-10-24-SSN-V2246
   Version: 2.11.0
 
   This worker exists for exactly one job: making SnakeScale Notes
@@ -65,7 +65,7 @@
 
 "use strict";
 
-const CACHE_NAME = "snakescale-shell-2026-10-23-SSN-V2245";
+const CACHE_NAME = "snakescale-shell-2026-10-24-SSN-V2246";
 
 /* The shell, as paths relative to this worker's scope (the site
    root). "./" and "./index.html" are both listed: the first is the
