@@ -40,10 +40,48 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-24-SSN-V2247
-  Version: 2.24.7
+  BUILD STAMP: 2026-10-25-SSN-V2248
+  Version: 2.24.8
 
   Revision history:
+    v2.24.8 2026-10-25 The app never opens Google's
+                      sign in window on its own. The
+                      v2.24.6 gesture healing could,
+                      after a silent renewal failed,
+                      escalate inside the user's next
+                      click or keypress to the
+                      interactive token request, and
+                      that window appearing off an
+                      ordinary click is the popup Chris
+                      hates (his call, 2026-10-25, after
+                      weighing the CAD app's Worker
+                      based sign in, which holds a
+                      refresh token server side: keep
+                      the in page flow, but forbid the
+                      automatic popup). The escalation
+                      is removed outright: the episode
+                      no longer carries its spent flag,
+                      and every automatic trigger (the
+                      proactive timer and its backoff
+                      ladder, the tab return, the 401
+                      recovery, and gestures while an
+                      episode is open) runs the silent
+                      ask only. Gestures keep re-running
+                      it, throttled to one attempt a
+                      minute off the same last attempt
+                      stamp as the other triggers, and
+                      the gesture listener now stays
+                      armed after a failed attempt for
+                      as long as the episode stays open,
+                      instead of spending itself on one
+                      gesture. A Google window appears
+                      only when the user presses Sign
+                      in or Refresh connection
+                      themselves; those deliberate flows
+                      keep their silent first,
+                      interactive fallback behavior,
+                      and the failure record in the
+                      sidebar menu is unchanged.
     v2.24.7 2026-10-24 Toggling a checklist item off is
                       spacing neutral. Through v2.24.6 the
                       item became a bare paragraph, and a
@@ -5836,8 +5874,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-24-SSN-V2247";
-const APP_VERSION = "2.24.7";
+const APP_BUILD = "2026-10-25-SSN-V2248";
+const APP_VERSION = "2.24.8";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -24544,9 +24582,14 @@ let googleRenewalLastAttemptAt = 0;
    the retries armed in the current cycle and resets
    whenever a fresh proactive schedule is set. The episode:
    non null while this expiry cycle has seen an automatic
-   failure and no success since; it carries whether the one
-   gesture escalation it allows has been spent. The armed
-   flag tracks the one time gesture listener. */
+   failure and no success since. Through v2.24.7 it also
+   carried an escalated flag, spent by the one interactive
+   request a gesture was allowed to make; v2.24.8 removed
+   automatic escalation outright (the app never opens
+   Google's window on its own), so the flag and the code
+   that spent it are gone and the episode is a plain
+   marker. The armed flag tracks the gesture listener,
+   which now stays armed for the episode's whole life. */
 const GOOGLE_RENEWAL_RETRY_DELAYS_MS = [60 * 1000, 2 * 60 * 1000,
   5 * 60 * 1000];
 let googleRenewalRetryStep = 0;
@@ -24700,7 +24743,7 @@ function onGoogleRenewalFailure(errorType) {
   recordGoogleRenewalFailure(errorType);
   if (!googleRenewalSessionLive() || !googleRenewalDue()) { return; }
   if (!googleRenewalEpisode) {
-    googleRenewalEpisode = { escalated: false };
+    googleRenewalEpisode = {};
     armGoogleRenewalGesture();
   }
   scheduleGoogleRenewalRetry();
@@ -24743,24 +24786,35 @@ function renderRenewalFailureLine() {
   el.classList.remove("hidden");
 }
 
-/* v2.24.6: gesture healing. While an episode is open, the
-   next genuine user gesture in the app (a pointer press or
-   a key press) re-runs the renewal from inside that gesture:
-   browsers allow the interactive token request only from a
-   real user interaction, so the click Chris was already
-   making becomes the thing that heals the connection,
-   instead of a hunt for the Refresh connection item. The
-   listener never touches the event (no preventDefault, no
+/* v2.24.6: gesture healing. v2.24.8: silent only, and the
+   listener stays armed for the episode's whole life.
+   While an episode is open, genuine user gestures in the
+   app (pointer presses and key presses) keep re-running
+   the silent renewal: the user is already here and active,
+   which is exactly when a lapsed connection hurts, and a
+   silent ask costs the gesture nothing. The listener
+   never touches the event (no preventDefault, no
    stopPropagation, no delay): the gesture's own control
-   receives it and acts exactly as it would have anyway. It
-   is one time per episode: the first gesture disarms it,
-   success or failure, and the episode's escalated flag is
-   the second lock, so an episode can never escalate twice;
-   only a successful renewal, starting a fresh cycle, can
-   open a new episode. It never arms on the sign in gate or
-   while signed out: episodes only open on a live session's
-   failure inside the app, and the handler re-checks all of
-   that when the gesture lands. */
+   receives it and acts exactly as it would have anyway.
+   Attempts ride the same one attempt a minute throttle as
+   the visibility trigger, off the same last attempt stamp
+   every trigger shares, and a failed attempt leaves the
+   listener armed for the next gesture; only the episode
+   closing disarms it (a successful renewal starting a
+   fresh cycle, a sign out, or a fresh schedule, all
+   through resetGoogleRenewalRecovery). It never arms on
+   the sign in gate or while signed out: episodes only
+   open on a live session's failure inside the app, and
+   the handler re-checks all of that when a gesture lands.
+   Through v2.24.7 the first gesture in an episode could
+   also escalate, inside that same gesture, to the
+   interactive token request. Chris rejected the result:
+   Google's window opening off an ordinary click is the
+   popup he hates, whatever the intention. So no
+   automatic path in this app ever raises the interactive
+   request now: automatic renewal is the silent ask alone,
+   and a Google window appears only when the user presses
+   Sign in or Refresh connection themselves. */
 function armGoogleRenewalGesture() {
   if (googleRenewalGestureArmed) { return; }
   googleRenewalGestureArmed = true;
@@ -24776,11 +24830,11 @@ function disarmGoogleRenewalGesture() {
 }
 
 function onGoogleRenewalGesture(ev) {
-  disarmGoogleRenewalGesture();
   /* A gesture aimed at signing out, or at the gate itself,
      is not a healing gesture: signing out ends the episode
      through its own cancel path, and the gate is where the
-     ordinary sign in belongs. */
+     ordinary sign in belongs. The listener stays armed
+     either way; only the episode closing disarms it. */
   if (ev && ev.target && ev.target.closest &&
       ev.target.closest("#sidebarSignOutItem, #repoLockBtn, " +
         "#setupScreen, #repoScreen")) {
@@ -24788,34 +24842,14 @@ function onGoogleRenewalGesture(ev) {
   }
   const appEl = document.getElementById("app");
   if (!appEl || appEl.classList.contains("hidden")) { return; }
-  if (!googleRenewalEpisode || googleRenewalEpisode.escalated) { return; }
+  if (!googleRenewalEpisode) { return; }
   if (!googleRenewalSessionLive() || !googleRenewalDue()) { return; }
-  googleRenewalEpisode.escalated = true;
-  healGoogleRenewalFromGesture().catch(function () { return false; });
-}
-
-/* The gesture's renewal: the silent ask first (through the
-   shared guard, so its failure settles like any automatic
-   failure), and only when that fails, the interactive
-   capable request inside the same gesture: googleConnect
-   with its default prompt, the very call the gate's sign in
-   button makes. With a live Google session and standing
-   consent it completes with no visible interaction in the
-   normal case. If the user cancels it (the popup closes),
-   the rejection's type is recorded like any other failed
-   attempt and the session state is left exactly as it was:
-   nothing here clears a token or zeroes an expiry, and the
-   manual Refresh connection flow remains the backstop. */
-async function healGoogleRenewalFromGesture() {
-  const silentOk = await renewGoogleSilently();
-  if (silentOk) { return true; }
-  try {
-    await googleConnect();
-    return true;
-  } catch (e) {
-    recordGoogleRenewalFailure((e && e.gisErrorType) || "unknown");
-    return false;
-  }
+  /* The one attempt a minute throttle every automatic
+     trigger shares, off the same last attempt stamp. A
+     gesture inside the minute is simply not an attempt;
+     the next one, a minute on, is. */
+  if (Date.now() - googleRenewalLastAttemptAt < 60 * 1000) { return; }
+  renewGoogleSilently().catch(function () { return false; });
 }
 
 /* The visibility trigger: the tab came back to the foreground.
