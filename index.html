@@ -40,10 +40,34 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-25-SSN-V2248
-  Version: 2.24.8
+  BUILD STAMP: 2026-10-25-SSN-V2249
+  Version: 2.24.9
 
   Revision history:
+    v2.24.9 2026-10-25 Attachment records are reconciled
+                      against the body at save time. The
+                      card thumbnail resolves from the
+                      note's attachment records, but a
+                      record was dropped, and a dangling
+                      thumbnail choice cleared, only by
+                      the undoable delete completion, so
+                      a removal whose completion never
+                      ran (the app closed inside the undo
+                      window, another save landed first)
+                      left the removed image on the card
+                      forever. Every record creating path
+                      pairs its record with a body block
+                      (audited for this build), so a
+                      record with no block in the body is
+                      always damage: the save funnel now
+                      drops it and clears a thumbnail
+                      that named it, repairing the last
+                      saved baseline by the same rule so
+                      the repair never reads as an edit
+                      or forks a conflict. Records with
+                      a deletion pending keep the undo
+                      window's protection, and Trash and
+                      Archive notes are never reconciled.
     v2.24.8 2026-10-25 The app never opens Google's
                       sign in window on its own. The
                       v2.24.6 gesture healing could,
@@ -5874,8 +5898,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-25-SSN-V2248";
-const APP_VERSION = "2.24.8";
+const APP_BUILD = "2026-10-25-SSN-V2249";
+const APP_VERSION = "2.24.9";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -9931,8 +9955,167 @@ async function adoptStoredRevisionOnMismatch(note, path, saveFacts,
    This is the worker behind saveNoteToRepo above, which serializes
    calls per note through the operation chain. Callers use
    saveNoteToRepo. */
+/* --------------------------------------------------------------------------
+   v2.24.9: attachment record reconciliation at save time
+
+   The card thumbnail resolves from the note's attachment
+   RECORDS (cardThumbnailAttachment: the chosen thumbnail
+   record when it is still among the note's attachments,
+   else the first record), never from the body. A record
+   was dropped, and a dangling thumbnail choice cleared,
+   only inside the undoable delete completion (the tail of
+   firePendingAttachmentDelete), after the undo window and
+   a successful cloud delete. Any removal whose completion
+   step never ran to the end (the app closed or reloaded
+   inside the undo window, the note saved through another
+   path first, a sync landing from another device) left
+   an orphaned record in the saved note indefinitely, and
+   the card kept showing an image the note no longer
+   contains. Nothing ever rechecked the records against
+   the body afterward.
+
+   The audit behind this build: every path that creates a
+   record pairs it with a block in the body. The editor
+   insert, the file paste, the drag and drop, and the
+   voice note flows all run through uploadOneAttachment,
+   which puts the .ss-attachment block into the body
+   BEFORE the upload and pushes the record only on
+   success; a failed upload removes the block and pushes
+   nothing. The drop box import of an object entry
+   uploads each carried file and appends the new record's
+   shell to the body in the same step (and plain entries
+   have foreign records stripped, never created). The
+   Word import pre places its image placeholders and
+   pushes a record only for an upload that landed,
+   removing the placeholder of one that did not. A
+   version restore applies the version's body and its
+   records together, out of the one snapshot they were
+   captured in. The image editor's annotate and crop
+   replace mutates the record in place, under the same
+   id and block. So a record with no block in the
+   canonical body is always damage, never a legitimate
+   state, and the funnel below repairs it: drop the
+   record, and clear a thumbnail choice that named it
+   (or names no surviving record).
+
+   The hook sits in saveNoteToRepoNow, the one funnel
+   every content save passes through, after the catalog
+   shell completion and before the ambient gate and the
+   save facts, under three exclusions:
+     - a note that ENTERED the funnel as a catalog shell
+       is not reconciled by the save that completed it:
+       its body became authoritative only by being
+       fetched here, and repair belongs to a save of the
+       note as this session already holds it loaded
+       (opening it loads it; any later save reconciles);
+     - Trash and Archive notes are never reconciled
+       here: their views are read only, and the repair
+       of a live note's damage is not theirs to make;
+     - a record with a deletion pending in the undo
+       engine is owned by that flow: its block is out of
+       the body by design for the whole undo window (the
+       engine counts on the record, and the thumbnail
+       choice, surviving exactly those saves), and Undo
+       must find both untouched.
+
+   Baseline consistency (the v2.19 / v2.22 machinery):
+   the repair is applied to the note AND, computed
+   against the baseline's OWN saved body, to the last
+   saved baseline snapshot, before the ambient gate or
+   any save fact reads either one. The baseline is the
+   record of the same saved state the damage lives in,
+   so repairing it by the same rule keeps every equality
+   the machinery computes (the untouched note gate, the
+   mismatch chain's baseline test, the save facts'
+   content snapshots) seeing the repair on both sides of
+   the comparison: it can never read as this session's
+   edit, never provoke a conflict fork, and a landed save
+   carries the repaired note and the repaired baseline
+   forward together. The catalog rides the same save
+   (saveCache schedules its writer, which snapshots the
+   note object when it runs), so the corrected
+   cardAttachment is written by the save that healed
+   the note.
+   -------------------------------------------------------------------------- */
+
+/* The attachment ids that carry a block in one body HTML
+   string, read the way canonicalizeAttachmentPlaceholders
+   reads them: the .ss-attachment placeholders and their
+   data-attachment-id values. */
+function attachmentBlockIdsInBody(bodyHtml) {
+  const ids = {};
+  if (!bodyHtml) { return ids; }
+  const holder = document.createElement("div");
+  holder.innerHTML = bodyHtml;
+  holder.querySelectorAll(".ss-attachment").forEach(function (el) {
+    const id = el.getAttribute("data-attachment-id");
+    if (id) { ids[id] = true; }
+  });
+  return ids;
+}
+
+/* The repair itself, over one { attachments, thumbnail }
+   field pair against one body: drop every record whose
+   id has no block in the body and no deletion pending
+   for noteId, then clear a thumbnail that names no
+   surviving record. Mutates the pair and returns true
+   when anything changed. Shared by the note and, against
+   its own saved body, the note's baseline snapshot, so
+   both sides of every comparison in the save machinery
+   are repaired by exactly the same rule. */
+function reconcileAttachmentFields(fields, bodyHtml, noteId) {
+  if (!fields) { return false; }
+  const atts = Array.isArray(fields.attachments)
+    ? fields.attachments : [];
+  let changed = false;
+  if (atts.length) {
+    const blockIds = attachmentBlockIdsInBody(bodyHtml);
+    const kept = atts.filter(function (a) {
+      return blockIds[a.id] ||
+        pendingAttachmentDeletes.has(
+          pendingDeleteKey({ id: noteId }, a));
+    });
+    if (kept.length !== atts.length) {
+      fields.attachments = kept;
+      changed = true;
+    }
+  }
+  const thumb = fields.thumbnail || null;
+  if (thumb && !(fields.attachments || []).some(function (a) {
+        return a.id === thumb;
+      })) {
+    fields.thumbnail = null;
+    changed = true;
+  }
+  return changed;
+}
+
+/* Reconcile one loaded note at save time (see the
+   section comment above), and its last saved baseline
+   with it. Never runs on a shell: a note whose body is
+   not loaded has no authoritative body to reconcile
+   against. Returns true when the note itself changed. */
+function reconcileNoteAttachments(note) {
+  if (!note || note.bodyLoaded === false) { return false; }
+  const changed = reconcileAttachmentFields(note, note.body, note.id);
+  const baseline = lastSavedContentByNoteId[note.id];
+  if (baseline) {
+    reconcileAttachmentFields(baseline, baseline.body, note.id);
+  }
+  return changed;
+}
+
 async function saveNoteToRepoNow(note, options) {
   options = options || {};
+  /* v2.24.9: whether the note entered this save already
+     holding its body on this device. The shell completion
+     below makes a shell's body authoritative by fetching
+     it, but the attachment reconciliation further down
+     deliberately does not run for a note that entered as
+     a shell (see the v2.24.9 section above): repair
+     belongs to saves of a note this session already
+     holds loaded. */
+  const enteredAsShell = note.bodyLoaded === false;
   /* v2.17.1: a diverged note's saves pause (see the divergence
      block above). The check sits ahead of every branch, online
      and offline alike, so a paused save neither writes, nor
@@ -9957,6 +10140,17 @@ async function saveNoteToRepoNow(note, options) {
       throw new Error("The note's content is not loaded on this " +
         "device yet, so it cannot be saved.");
     }
+  }
+  /* v2.24.9: attachment record reconciliation (see the
+     section above this function). Runs after the shell
+     completion, before the ambient gate and the save
+     facts, so the gate and every comparison below see
+     the note and its baseline already repaired, on both
+     sides alike. A note that entered as a shell, and
+     Trash and Archive notes, are excluded (the section
+     comment gives the reasons). */
+  if (!enteredAsShell && !note.trashed && !note.archived) {
+    reconcileNoteAttachments(note);
   }
   /* v2.22: the ambient save gate. A save marked ambient
      (options.ambient) exists only to persist whatever the
