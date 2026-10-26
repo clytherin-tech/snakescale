@@ -40,10 +40,37 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-26-SSN-V2250
-  Version: 2.25.0
+  BUILD STAMP: 2026-10-26-SSN-V2251
+  Version: 2.25.1
 
   Revision history:
+    v2.25.1 2026-10-26 Remove formatting: the malformed
+                      heading case. A heading (or quote,
+                      pre, paragraph, or wrapper div) with
+                      other blocks nested inside it could
+                      not be cleared at all: the heading
+                      carried no style attribute for the
+                      deep clean to strip, because its
+                      formatting is the element itself, and
+                      the browser's block conversion
+                      converts the inner pieces of such a
+                      block and leaves the outer wrapper
+                      standing (Chris's SnakeScale CAD
+                      note, saved after his clear attempts,
+                      still held its heading untouched).
+                      The clear operation now lifts the
+                      nested blocks out of a touched block
+                      to the top level before planning its
+                      conversions, drops empty lifted
+                      pieces, wraps bare runs in a fresh
+                      block of the host's tag, and, after
+                      the browser conversions, replaces
+                      any planned block still wearing its
+                      old heading, quote, or pre tag with
+                      a fresh plain block of the target
+                      tag, so a clear lands even when the
+                      browser's own conversion silently
+                      does nothing.
     v2.25.0 2026-10-26 Three fixes around formatting and
                       images. Remove formatting now clears
                       everything: through v2.24.9 it ran
@@ -5954,8 +5981,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-26-SSN-V2250";
-const APP_VERSION = "2.25.0";
+const APP_BUILD = "2026-10-26-SSN-V2251";
+const APP_VERSION = "2.25.1";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -23746,6 +23773,186 @@ function clearDeepCleanRoots(roots, range) {
   }
 }
 
+/* ----- v2.25.1: the malformed block lift and the conversion
+   guarantee ---------------------------------------------------
+   Chris's SnakeScale CAD note held a heading with block
+   elements nested inside it (an empty paragraph and a div
+   holding the text), a shape pasted content can produce and
+   the parser keeps as authored. Remove formatting could not
+   clear that line: the heading carried no style attribute
+   for the v2.25 deep clean to strip, because its formatting
+   IS the element, and the browser's formatBlock, asked to
+   convert a block whose contents include other blocks,
+   converts the inner pieces and leaves the heading wrapper
+   standing (the note he saved after his attempts still held
+   the heading untouched). Two deterministic passes inside
+   the clear operation close the hole. The lift, below, runs
+   before the conversion plan is computed and promotes block
+   children out of a touched host, so the plan and every
+   later pass see ordinary top level blocks. The replacement
+   pass (clearReplaceUnconvertedBlocks) runs after the
+   browser conversions and swaps any planned block the
+   browser still left standing with its old formatting tag
+   for a fresh element of the target tag. */
+
+/* The host tags the lift examines: top level blocks whose
+   own tag carries text formatting or text flow. Lists are
+   not hosts (their items are the conversion plan's
+   business), tables are not hosts (their cells are not text
+   flow), attachment blocks are not hosts (the wrapper is
+   the attachment's card), and figures are not hosts (their
+   children are media and a caption, not flow blocks). */
+const CLEAR_LIFT_HOSTS = { H1: 1, H2: 1, H3: 1, H4: 1, H5: 1,
+  H6: 1, P: 1, DIV: 1, BLOCKQUOTE: 1, PRE: 1, ADDRESS: 1,
+  SECTION: 1, ARTICLE: 1 };
+
+/* The block level tags that count as nested block children
+   inside a host, and that the lift promotes to the top
+   level. */
+const CLEAR_LIFT_CHILDREN = { P: 1, DIV: 1, H1: 1, H2: 1,
+  H3: 1, H4: 1, H5: 1, H6: 1, UL: 1, OL: 1, BLOCKQUOTE: 1,
+  PRE: 1, TABLE: 1, FIGURE: 1, HR: 1 };
+
+/* Lift the block children of ONE host out to the top level,
+   in place. Returns the array of top level blocks the host
+   became (in document order), or null when the host is not
+   a lift case and stands untouched. The guards:
+     - the host must be a lift host tag with at least one
+       block level element child; anything else is ordinary
+       text flow and none of this pass's business;
+     - a host that is an attachment block, or holds one
+       anywhere inside it, is skipped whole: attachments are
+       never moved by the clear operation.
+   The walk goes in document order. A block child is
+   promoted as it stands; an empty one (the strict
+   clearBlockIsEmpty sense) is dropped instead, except a
+   rule, which is content even though it holds nothing. Any
+   bare text or inline run between block children is wrapped
+   in a fresh block of the host's own tag, so the conversion
+   plan judges that run by the flow it lands in, exactly
+   like any other line; whitespace only runs between blocks
+   are dropped. A promoted child that is itself a host
+   holding block children is lifted in turn, so nesting
+   flattens completely in one call. The host shell, emptied
+   by construction, is removed. */
+function clearLiftNestedBlocks(bodyEl, host) {
+  if (!host || host.nodeType !== 1 || !host.parentNode) {
+    return null;
+  }
+  if (!CLEAR_LIFT_HOSTS[host.tagName]) { return null; }
+  if (host.classList && host.classList.contains("ss-attachment")) {
+    return null;
+  }
+  if (host.querySelector && host.querySelector(".ss-attachment")) {
+    return null;
+  }
+  let hasBlockChild = false;
+  Array.prototype.forEach.call(host.children, function (kid) {
+    if (CLEAR_LIFT_CHILDREN[kid.tagName]) { hasBlockChild = true; }
+  });
+  if (!hasBlockChild) { return null; }
+  const pieces = [];
+  let run = [];
+  function flushRun() {
+    const meaningful = run.some(function (node) {
+      return node.nodeType === 1 ||
+        (node.nodeValue &&
+          node.nodeValue.replace(/\s+/g, "") !== "");
+    });
+    if (run.length && meaningful) {
+      const wrap = document.createElement(host.tagName);
+      run.forEach(function (node) { wrap.appendChild(node); });
+      pieces.push(wrap);
+    }
+    /* A run that is not meaningful is plain inter block
+       whitespace: it is simply left in the shell, which is
+       removed below. */
+    run = [];
+  }
+  Array.prototype.slice.call(host.childNodes).forEach(
+    function (node) {
+      if (node.nodeType === 1 && CLEAR_LIFT_CHILDREN[node.tagName]) {
+        flushRun();
+        if (node.tagName !== "HR" && clearBlockIsEmpty(node)) {
+          node.remove();
+          return;
+        }
+        pieces.push(node);
+      } else {
+        run.push(node);
+      }
+    });
+  flushRun();
+  pieces.forEach(function (piece) {
+    host.parentNode.insertBefore(piece, host);
+  });
+  host.remove();
+  const out = [];
+  pieces.forEach(function (piece) {
+    const sub = clearLiftNestedBlocks(bodyEl, piece);
+    if (sub) {
+      sub.forEach(function (s) { out.push(s); });
+    } else {
+      out.push(piece);
+    }
+  });
+  return out;
+}
+
+/* Run the lift over the touched set and return the set the
+   rest of the operation works with: each host the lift
+   rewrote is replaced by the blocks it became, in place,
+   and every other block passes through as it was. */
+function clearLiftTouchedBlocks(bodyEl, touched) {
+  const out = [];
+  (touched || []).forEach(function (block) {
+    const pieces = clearLiftNestedBlocks(bodyEl, block);
+    if (pieces) {
+      pieces.forEach(function (p) { out.push(p); });
+    } else {
+      out.push(block);
+    }
+  });
+  return out;
+}
+
+/* The formatting block tags the replacement pass guarantees
+   against: the tags whose element alone is formatting the
+   clear exists to remove. */
+const CLEAR_REPLACE_TAGS = { H1: 1, H2: 1, H3: 1, H4: 1,
+  H5: 1, H6: 1, BLOCKQUOTE: 1, PRE: 1 };
+
+/* The deterministic conversion guarantee. Walk the
+   conversion plan after the browser commands and the second
+   cleaning passes: any planned block that is still
+   connected, still a direct child of the body, and still
+   wearing a formatting tag different from its planned
+   target is replaced in the DOM with a fresh element of the
+   target tag, its children moved over as they stand. The
+   fresh element carries no attributes by construction, so
+   no further cleaning is owed for it. A block the browser
+   converted is detached (the engine rebuilt it) or already
+   carries the target tag, and is skipped untouched, so this
+   pass is a strict no-op wherever the browser did its work.
+   List entries and the bare entry hold no single block to
+   replace and are out of scope. */
+function clearReplaceUnconvertedBlocks(plan) {
+  const bodyEl = document.getElementById("noteBody");
+  (plan || []).forEach(function (entry) {
+    if (!entry || entry.bare || entry.items || !entry.block) {
+      return;
+    }
+    const block = entry.block;
+    if (!block.isConnected || !block.parentNode) { return; }
+    if (block.parentNode !== bodyEl) { return; }
+    if (!CLEAR_REPLACE_TAGS[block.tagName]) { return; }
+    if (block.tagName === entry.target) { return; }
+    const repl = document.createElement(entry.target);
+    while (block.firstChild) { repl.appendChild(block.firstChild); }
+    block.parentNode.replaceChild(repl, block);
+  });
+}
+
 /* ----- remove formatting (extended) ---------------------------------------
    Starts with the classic behavior (removeFormat plus formatBlock),
    then unwraps the spans our own font, size, color, and highlight
@@ -23791,13 +23998,31 @@ function clearDeepCleanRoots(roots, range) {
    second run matters for the same reason the second
    background pass exists: an engine's formatBlock may rebuild
    a block and carry its attributes onto the replacement, so
-   the final state is cleaned after the conversions settle. */
+   the final state is cleaned after the conversions settle.
+
+   v2.25.1: two deterministic passes join the operation (see
+   the lift and guarantee section above). The lift promotes
+   blocks nested inside a touched block out to the top level
+   before the plan is computed, and after the conversions
+   the replacement pass swaps any planned block the browser
+   left wearing its old heading, quote, or pre tag for a
+   fresh element of the target tag. Both exist for the field
+   case behind this release: a heading with blocks nested
+   inside it, whose formatting is the element itself (no
+   style attribute for the deep clean to strip) and which
+   the browser's block conversion leaves standing. */
 function clearFormattingExtended() {
   const bodyEl = document.getElementById("noteBody");
   restoreFormatSelection();
   const sel0 = window.getSelection();
   const range0 = (sel0 && sel0.rangeCount) ? sel0.getRangeAt(0) : null;
-  const touchedBefore = clearTouchedTopBlocks(bodyEl, range0);
+  /* v2.25.1: the lift runs first, before the plan, so a
+     malformed block (a heading or wrapper holding other
+     blocks) reaches the plan as the ordinary top level
+     blocks it becomes. touchedBefore from here on is the
+     post lift set every later pass works with. */
+  const touchedBefore = clearLiftTouchedBlocks(bodyEl,
+    clearTouchedTopBlocks(bodyEl, range0));
   const plan = clearConversionPlan(bodyEl, range0, touchedBefore);
   /* v2.18: the operation also strips background styling (the
      cleanBackgroundsInRoots pass) from every touched top
@@ -23850,6 +24075,12 @@ function clearFormattingExtended() {
      rebuilt block survives either. */
   clearDeepCleanRoots(touchedBefore.concat(
     clearTouchedTopBlocks(bodyEl, rangeAfter)), rangeAfter);
+  /* v2.25.1: the conversion guarantee, after the cleaning
+     passes and before normalization (a replacement element
+     is fresh and attributeless by construction, so it owes
+     no cleaning; normalization still gets to remove any
+     shell the replacement leaves empty). */
+  clearReplaceUnconvertedBlocks(plan);
   clearFormattingNormalize(bodyEl, touchedBefore);
 }
 
