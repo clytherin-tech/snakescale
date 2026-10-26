@@ -40,10 +40,43 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-26-SSN-V2251
-  Version: 2.25.1
+  BUILD STAMP: 2026-10-26-SSN-V2260
+  Version: 2.26.0
 
   Revision history:
+    v2.26.0 2026-10-26 Conflict handling inverted. A save
+                      that finds its note changed elsewhere
+                      (the v2.19 / v2.22 decision chain
+                      having judged the divergence genuine)
+                      now preserves the version already in
+                      the store as the "(conflict copy)"
+                      and lands the version being edited on
+                      the original note, in place, under its
+                      own title, with saving never pausing:
+                      the stored version is written out
+                      first, only then does the local save
+                      take the original path, and the stored
+                      version is also captured into the
+                      note's version history. Through
+                      v2.25.1 the local version was forked
+                      as the copy and the note in front of
+                      the user was marked diverged and
+                      paused, which froze the note a single
+                      user was actively typing in whenever
+                      an outside edit landed behind the app
+                      (2026-10-26: one checklist note became
+                      four same title notes in a morning).
+                      If the stored version cannot be
+                      preserved, the pre-v2.26 behavior runs
+                      unchanged as the fallback (the local
+                      version forks, the note is marked and
+                      paused, Reload heals); nothing is ever
+                      overwritten without a copy existing
+                      first. The queued offline flush
+                      inverts the same way. The silent
+                      adoptions (baseline, ancestor, content
+                      equal) are unchanged and still run
+                      first.
     v2.25.1 2026-10-26 Remove formatting: the malformed
                       heading case. A heading (or quote,
                       pre, paragraph, or wrapper div) with
@@ -5981,8 +6014,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-26-SSN-V2251";
-const APP_VERSION = "2.25.1";
+const APP_BUILD = "2026-10-26-SSN-V2260";
+const APP_VERSION = "2.26.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -9650,6 +9683,19 @@ function saveNoteToRepo(note, options) {
    is moot); sign out and Google disconnect clear all of it.
    The map and the banner pointer are plain session state: they
    live in memory only and never reach the cache or the store.
+
+   v2.26: this machinery is now the FALLBACK, not the primary
+   flow. When the decision chain judges a divergence genuine,
+   saveLocalOverStoredRevision first preserves the stored
+   version as the conflict copy and lands the local version on
+   the original path, so an ordinary diverged save never marks
+   anything and never pauses (see the v2.26 paragraph in
+   saveNoteToRepoNow's header comment). The mark, the pause,
+   the held queue puts, and Reload remain exactly as described
+   above for the one case that still reaches them: the stored
+   version could not be preserved, so the local version forked
+   instead (saveConflictCopy) and the stored original was left
+   untouched.
    -------------------------------------------------------------------------- */
 const divergedNotes = new Map();   /* noteId -> { text } */
 let conflictBannerNoteId = null;
@@ -10013,13 +10059,13 @@ async function adoptStoredRevisionOnMismatch(note, path, saveFacts,
 /* Save one note to the repo, with the critical conflict rule:
    BEFORE writing, fetch the file fresh and compare its sha with the sha
    the editor loaded. If they differ, someone (or another device) changed
-   the note first. The local version is then saved as a NEW note titled
-   "<title> (conflict copy)" in the same notebook, the original is left
-   untouched, and a banner tells the user what happened. A 409 or 422 from
-   the PUT is handled the same way. Nothing is ever silently overwritten.
+   the note first. A 409 or 422 from the PUT is handled the same way.
+   Nothing is ever silently overwritten: a stored version is only ever
+   replaced once a copy of it exists (see the v2.26 paragraph below).
    v2.17.1: a save that forks a copy also marks the note diverged
    (see the divergence block above), so its later saves pause
-   instead of forking a copy per save.
+   instead of forking a copy per save. Since v2.26 that fork is
+   the fallback; the primary flow is the inversion below.
    v2.19: a differing sha is a question, not a verdict: at both
    decision points (the pre-write comparison and the 409/422
    catch) the freshly fetched stored content is compared
@@ -10033,6 +10079,20 @@ async function adoptStoredRevisionOnMismatch(note, path, saveFacts,
    whose text is an older state of the same note; and saves
    marked ambient return before any of this when the note
    still equals its baseline (see the ambient gate below).
+   v2.26: when the chain judges the divergence genuine, the
+   fork direction inverts (saveLocalOverStoredRevision):
+   the freshly fetched STORED version is written out as the
+   new note titled "<stored title> (conflict copy)" first,
+   and only once that write lands does this save take the
+   original path as an ordinary landed save, with the stored
+   version also captured into the note's version history.
+   The note being edited is never forked, marked, or paused
+   on this path, and a toast names the kept copy. If the
+   stored version cannot be preserved, the save falls back
+   to the pre-v2.26 behavior exactly (saveConflictCopy: the
+   local version forks, the note is marked and paused). The
+   flushQueue conflict branch inverts the same way, with the
+   same fallback.
    When offline, the write is queued instead and the note keeps a dirty
    marker in the cache.
    This is the worker behind saveNoteToRepo above, which serializes
@@ -10350,6 +10410,14 @@ async function saveNoteToRepoNow(note, options) {
         const adopted = await adoptStoredRevisionOnMismatch(
           note, path, saveFacts, fresh);
         if (adopted) { return adopted; }
+        /* v2.26: the divergence is genuine; invert the fork
+           (preserve the stored version as the copy, land this
+           save on the original path). A null return means the
+           stored version could not be preserved, and the
+           pre-v2.26 fork below runs as the fallback. */
+        const inverted = await saveLocalOverStoredRevision(
+          note, path, text, saveFacts, fresh);
+        if (inverted) { return inverted; }
         return await saveConflictCopy(note, path);
       }
       if (!fresh) { shaToUse = null; }
@@ -10386,6 +10454,13 @@ async function saveNoteToRepoNow(note, options) {
       const adopted = await adoptStoredRevisionOnMismatch(
         note, path, saveFacts, null);
       if (adopted) { return adopted; }
+      /* v2.26: the same inversion as the pre-write point;
+         the helper fetches the current file itself here. A
+         null return falls back to the pre-v2.26 fork, exactly
+         as at the pre-write point. */
+      const inverted = await saveLocalOverStoredRevision(
+        note, path, text, saveFacts, null);
+      if (inverted) { return inverted; }
       return await saveConflictCopy(note, path);
     }
     if (err.needsGoogleReconnect) {
@@ -10424,10 +10499,162 @@ async function saveNoteToRepoNow(note, options) {
   }
 }
 
-/* The conflict copy path of the rule above: write the local version as a
-   brand new note file with a new id, register it in state, tell the user
-   with the banner and a toast, and return a conflict result so the editor
-   can show "Conflict saved" in the sync pill. */
+/* v2.26: the inverted conflict resolution, the PRIMARY flow
+   when the decision chain (adoptStoredRevisionOnMismatch)
+   has judged a divergence genuine. Through v2.25.1 the
+   version being edited was forked as the "(conflict copy)"
+   and the note in front of the user was marked diverged and
+   paused behind a Reload banner. For a single user whose
+   note changed elsewhere while he was typing in it (an
+   outside edit landing behind the app, a second device
+   signed in but idle), that froze the note he was actively
+   working in and moved his work into a copy he then had to
+   find and keep using, where the next outside change could
+   fork it again (2026-10-26: one checklist note became
+   four same title notes in a single morning). The
+   inversion keeps both versions with the roles swapped:
+   the version already in the store is written out as the
+   "(conflict copy)" FIRST, and only once that write has
+   landed does the local version take the original path as
+   an ordinary landed save, so the editing session never
+   stops and never moves. Returns the landed result on
+   success, or null when the stored version could not be
+   preserved (its fetch or its copy write failed) or the
+   local write itself was refused with a store conflict;
+   the caller then runs the pre-v2.26 behavior
+   (saveConflictCopy: the local version forks, the note is
+   marked and paused) rather than ever overwriting a
+   version no copy of exists yet. Any other failure of the
+   local write throws, into the same handling the write
+   itself would have met. */
+async function saveLocalOverStoredRevision(note, path, text,
+    saveFacts, prefetched) {
+  let fresh = prefetched || null;
+  if (!fresh) {
+    try {
+      fresh = await storeGetFile(path);
+    } catch (err) {
+      return null;
+    }
+  }
+  if (!fresh) { return null; }
+  const stored = parseNoteFile(fresh.text, fresh.token, note.id,
+    note.trashed, note.archived);
+  /* The copy IS the stored version, so its title, tags,
+     body, attachment records, and thumbnail come from the
+     stored parse: titles can differ when this session
+     renamed the note, and the copy must be findable as the
+     version that was in the store, under the name that
+     version carried. Its placement mirrors the note being
+     saved (the same notebook; the same Trash or Archive
+     list when the note lives there, through notePath), its
+     created stamp is now, and it starts unpinned, exactly
+     as the pre-v2.26 conflict copies were stamped. */
+  const copy = {
+    id: newNoteId(),
+    title: (stored.title || "Untitled note") + " (conflict copy)",
+    notebook: note.notebook,
+    tags: (stored.tags || []).slice(),
+    created: new Date().toISOString(),
+    updated: new Date().toISOString(),
+    pinned: false,
+    body: stored.body,
+    bodyLoaded: true,  /* v2.20: a made note's body is right here */
+    previewText: null, /* v2.20: only catalog shells use this field */
+    /* The copy references the same attachment records as
+       the stored version, so a thumbnail choice carries
+       over and still resolves: the same record sharing the
+       pre-v2.26 copies used, in the other direction. */
+    attachments: sanitizeAttachments(stored.attachments),
+    thumbnail: stored.thumbnail || null,
+    sha: null,
+    fileId: null,      /* v2.20: assigned by a later load */
+    trashed: !!note.trashed,
+    trashedFrom: note.trashedFrom || null,
+    archived: !!note.archived,        /* v1.5 */
+    archivedFrom: note.archivedFrom || null
+  };
+  try {
+    copy.sha = await storePutFile(notePath(copy), serializeNote(copy),
+      null, "Preserve stored version of " + note.id);
+  } catch (err) {
+    return null;
+  }
+  /* v2.8: the copy's content is now its last saved state. */
+  rememberLastSavedContent(copy);
+  if (copy.trashed) { state.trash.push(copy); }
+  else if (copy.archived) { state.archive.push(copy); }
+  else { state.notes.push(copy); }
+  /* The stored version is preserved, so the local save may
+     take the original path: adopt the fresh revision (the
+     pre-write check's own token at that decision point, a
+     token fetched here at the catch point) and write with
+     it, on the checked update path as always. */
+  note.sha = fresh.token;
+  let newSha = null;
+  try {
+    newSha = await storePutFile(path, text, fresh.token,
+      "Update note " + note.id);
+  } catch (err) {
+    if (isStoreConflict(err) || err.status === 409 ||
+        err.status === 422) {
+      return null;
+    }
+    throw err;
+  }
+  note.sha = newSha;
+  const versionStatus = await finishLandedNoteSave(note, path,
+    saveFacts);
+  /* The stored version also belongs in this note's own
+     version history, as the state this save replaced. The
+     landed tail above captures only the session baseline
+     (saveFacts.previousSavedContent), which is an older
+     state than the stored version whenever an outside edit
+     is what advanced the file; without this capture the
+     history would jump from the baseline straight to the
+     local content, and the stored words would survive only
+     in the copy. forceSnapshot, because the tail's own
+     capture a moment earlier starts the coalescing window
+     this one must not be merged into. Fail soft, exactly
+     as the tail's own maintenance is: the save stands
+     either way. Skipped when the caller suppressed version
+     capture (the restore flow preserves its own states). */
+  if (!saveFacts.suppressVersionCapture) {
+    const storedResult = await maintainVersionHistory(note.id,
+      noteContentSnapshot(stored), {
+        forceSnapshot: true,
+        contentChanged: true,
+        notePath: path
+      });
+    if (storedResult.status === "skipped-load" ||
+        storedResult.status === "write-failed" ||
+        storedResult.status === "delete-failed" ||
+        storedResult.status === "skipped-conflict") {
+      console.warn("Version history was not updated with the " +
+        "stored version for note " + note.id + " (" +
+        storedResult.status + ").");
+    }
+  }
+  saveCache();
+  renderAll();
+  setSyncPill("ok", "Saved; copy kept");
+  toast("This note also changed elsewhere, so that version was " +
+    "kept as \"" + copy.title + "\" and your version stayed here.");
+  return { saved: true, versionStatus: versionStatus,
+    keptStoredCopy: copy };
+}
+
+/* The conflict copy path of the rule above, as the FALLBACK
+   since v2.26: write the local version as a brand new note
+   file with a new id, register it in state, tell the user
+   with the banner and a toast, and return a conflict result
+   so the editor can show "Conflict saved" in the sync pill.
+   This runs only when the stored version could not be
+   preserved by saveLocalOverStoredRevision (the primary
+   flow, above): a version is never overwritten without a
+   copy of it existing first, so when the stored version
+   cannot be copied out, the local version forks instead
+   and the original is left untouched in the store. */
 async function saveConflictCopy(note, originalPath) {
   const copy = {
     id: newNoteId(),
@@ -10627,30 +10854,95 @@ async function flushQueue() {
           /* The repo version changed while offline. Keep both copies.
              v1.5: trash moves and archive moves are exempt, exactly
              alike: a queued move must never spawn a conflict copy,
-             because the note now lives at its new path by design. */
-          const parsed = parseNoteFile(op.content, null, op.noteId, false);
-          parsed.id = newNoteId();
-          parsed.title = (parsed.title || "Untitled note") + " (conflict copy)";
-          parsed.sha = await storePutFile(
-            "notebooks/" + parsed.notebook + "/" + parsed.id + ".md",
-            serializeNote(parsed), null, "Save queued conflict copy");
-          /* v2.8: the queued conflict copy is a saved note in its
-             own right, so it gets a baseline; the original note's
-             version entry in this queue (if any) will find that
-             its expected content never landed on the original and
-             skip itself. */
-          rememberLastSavedContent(parsed);
-          state.notes.push(parsed);
-          /* v2.17.1: the queued conflict marks the note diverged
-             through the same path as an online one, so a later
-             flush (or save) can never fork a second copy for
-             this episode; the banner is the persistent one. */
-          markNoteDiverged(op.noteId, "A note edited offline changed on " +
-            storageDisplayName() + " too. Your offline version was kept as \"" +
-            parsed.title + "\". Saving of this note is now paused, so no " +
-            "more copies pile up; use Reload note to load the current " +
-            "version and keep editing it.");
-          setSyncPill("bad", "Conflict saved");
+             because the note now lives at its new path by design.
+             v2.26: the flush inverts like the online save. The
+             STORED version is preserved as the "(conflict copy)"
+             first; only then does the queued put land on its
+             original path. If the stored version cannot be
+             preserved, the pre-v2.26 queued fork below runs
+             unchanged as the fallback. The note's queued version
+             history entries (which follow this put in the queue)
+             now find their expected content on the original, as
+             they were written to expect, instead of skipping
+             themselves the way the fork made them. */
+          const storedParsed = parseNoteFile(existing.text,
+            existing.token, op.noteId, false);
+          const keptCopy = {
+            id: newNoteId(),
+            title: (storedParsed.title || "Untitled note") +
+              " (conflict copy)",
+            notebook: storedParsed.notebook ||
+              (localNote ? localNote.notebook : "personal"),
+            tags: (storedParsed.tags || []).slice(),
+            created: new Date().toISOString(),
+            updated: new Date().toISOString(),
+            pinned: false,
+            body: storedParsed.body,
+            bodyLoaded: true,
+            previewText: null,
+            attachments: sanitizeAttachments(
+              storedParsed.attachments),
+            thumbnail: storedParsed.thumbnail || null,
+            sha: null,
+            fileId: null,
+            trashed: false,
+            trashedFrom: null,
+            archived: false,
+            archivedFrom: null
+          };
+          let preserved = false;
+          try {
+            keptCopy.sha = await storePutFile(
+              "notebooks/" + keptCopy.notebook + "/" +
+                keptCopy.id + ".md",
+              serializeNote(keptCopy), null,
+              "Preserve stored version of " + op.noteId);
+            preserved = true;
+          } catch (err) { preserved = false; }
+          if (preserved) {
+            /* v2.8: the preserved copy is a saved note in its
+               own right, so it gets a baseline. */
+            rememberLastSavedContent(keptCopy);
+            state.notes.push(keptCopy);
+            const newSha = await storePutFile(op.path, op.content,
+              existing.token, "Sync queued change");
+            if (localNote && notePath(localNote) === op.path) {
+              localNote.sha = newSha;
+            }
+            setSyncPill("ok", "Saved; copy kept");
+            toast("This note also changed elsewhere, so that " +
+              "version was kept as \"" + keptCopy.title + "\" " +
+              "and your version stayed here.");
+          } else {
+            /* The repo version changed while offline. Keep both copies.
+               v1.5: trash moves and archive moves are exempt, exactly
+               alike: a queued move must never spawn a conflict copy,
+               because the note now lives at its new path by design. */
+            const parsed = parseNoteFile(op.content, null, op.noteId, false);
+            parsed.id = newNoteId();
+            parsed.title = (parsed.title || "Untitled note") + " (conflict copy)";
+            parsed.sha = await storePutFile(
+              "notebooks/" + parsed.notebook + "/" + parsed.id + ".md",
+              serializeNote(parsed), null, "Save queued conflict copy");
+            /* v2.8: the queued conflict copy is a saved note in its
+               own right, so it gets a baseline; the original note's
+               version entry in this queue (if any) will find that
+               its expected content never landed on the original and
+               skip itself. */
+            rememberLastSavedContent(parsed);
+            state.notes.push(parsed);
+            /* v2.17.1: the queued conflict marks the note diverged
+               through the same path as an online one, so a later
+               flush (or save) can never fork a second copy for
+               this episode; the banner is the persistent one. */
+            markNoteDiverged(op.noteId, "A note edited offline changed on " +
+              storageDisplayName() + " too. Your offline version was kept as \"" +
+              parsed.title + "\". Saving of this note is now paused, so no " +
+              "more copies pile up; use Reload note to load the current " +
+              "version and keep editing it.");
+            setSyncPill("bad", "Conflict saved");
+          }
+
         } else {
           const newSha = await storePutFile(op.path, op.content,
             existing ? existing.token : null, "Sync queued change");
