@@ -40,10 +40,46 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-25-SSN-V2249
-  Version: 2.24.9
+  BUILD STAMP: 2026-10-26-SSN-V2250
+  Version: 2.25.0
 
   Revision history:
+    v2.25.0 2026-10-26 Three fixes around formatting and
+                      images. Remove formatting now clears
+                      everything: through v2.24.9 it ran
+                      removeFormat, unwrapped the spans in
+                      the selection, and stripped
+                      backgrounds, so an inline style sitting
+                      on a pasted block itself (a paragraph,
+                      heading, list item, div, link, or FONT
+                      element carrying font, size, color,
+                      alignment, line height, or margins in
+                      its style attribute) survived untouched
+                      and read as text whose formatting could
+                      not be removed. The clear operation now
+                      also runs a deep clean over the touched
+                      blocks and everything the selection
+                      reaches: style attributes and
+                      presentational attributes come off
+                      every element, spans and font elements
+                      unwrap, links keep their address,
+                      checklist inputs and classes and table
+                      structure survive, and attachment
+                      blocks are never touched. Images:
+                      inserting or pasting one no longer
+                      leaves an empty paragraph after every
+                      image (a single trailing line is added
+                      only when the image ends the note), so
+                      stacked images sit close together, and
+                      Backspace or Delete in an empty line
+                      next to an image removes only the empty
+                      line instead of deleting the image. And
+                      the Image alignment submenu gains Free
+                      move: a free image stays in the text
+                      flow and can be dragged to any caret
+                      point in the note, splitting the line
+                      it lands in, instead of only before or
+                      after whole blocks.
     v2.24.9 2026-10-25 Attachment records are reconciled
                       against the body at save time. The
                       card thumbnail resolves from the
@@ -3638,6 +3674,15 @@ body.dark .ss-att-provider{color:#EAF3EC;}
 #noteBody .ss-attachment.ss-att-image[data-ss-align="wrap-left"]{
   float:right;margin:4px 0 8px 14px;max-width:55% !important;
 }
+/* v2.25: Free move. The figure stays in the document flow
+   (no float, no absolute positioning); it renders inline
+   block like the base image rule, so two free images whose
+   widths fit can sit side by side on one line, and it can
+   be dragged to any caret point in the text (see
+   moveFreeAttachmentToPoint in the script). */
+#noteBody .ss-attachment.ss-att-image[data-ss-align="free"]{
+  display:inline-block;float:none;margin:4px 6px;vertical-align:top;
+}
 /* On narrow screens there is no room to wrap around an image, so
    the wrap modes collapse to a plain block. */
 @media (max-width:700px){
@@ -3789,6 +3834,15 @@ body.dark .ss-att-provider{color:#EAF3EC;}
 #noteBody .ss-attachment.ss-att-image{
   display:inline-block;width:fit-content;max-width:100%;
   padding:0;border:none;background:transparent;border-radius:0;
+  margin-top:6px;margin-bottom:6px;
+}
+/* v2.25: two image figures placed directly one after the
+   other sit close, a few px apart, instead of the stacked
+   empty paragraphs and full margins earlier builds left
+   between inserted images. Non image attachment cards keep
+   the base .ss-attachment margins above. */
+#noteBody .ss-attachment.ss-att-image + .ss-attachment.ss-att-image{
+  margin-top:2px;
 }
 #noteBody .ss-attachment.ss-att-image img.ss-att-img{
   width:100%;margin-bottom:0;border-radius:4px;
@@ -5311,6 +5365,8 @@ body.dark .version-date{color:var(--accent);}
             <div class="att-menu-sep"></div>
             <button class="att-menu-item" type="button" data-align="wrap-right"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="5" width="7" height="7" rx="1"/><path d="M13 7h8M13 11h8M3 17h18"/></svg><span class="att-menu-label">Wrap text right</span><span class="att-dot" aria-hidden="true"></span></button>
             <button class="att-menu-item" type="button" data-align="wrap-left"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 7h8M3 11h8M3 17h18"/><rect x="14" y="5" width="7" height="7" rx="1"/></svg><span class="att-menu-label">Wrap text left</span><span class="att-dot" aria-hidden="true"></span></button>
+            <div class="att-menu-sep"></div>
+            <button class="att-menu-item" type="button" data-align="free"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9l-3 3 3 3M9 5l3-3 3 3M15 19l-3 3-3-3M19 9l3 3-3 3M2 12h20M12 2v20"/></svg><span class="att-menu-label">Free move</span><span class="att-dot" aria-hidden="true"></span></button>
           </div>
 
           <!-- v2.14.1: the audio attachment card's three dot menu,
@@ -5898,8 +5954,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-25-SSN-V2249";
-const APP_VERSION = "2.24.9";
+const APP_BUILD = "2026-10-26-SSN-V2250";
+const APP_VERSION = "2.25.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -15548,7 +15604,7 @@ function setMobileView(which) {
    this app writes and is dropped at save time, like an unknown
    width form. */
 const IMAGE_ALIGN_VALUES = ["left", "center", "right", "fill",
-  "wrap-left", "wrap-right"];
+  "wrap-left", "wrap-right", "free"];
 function imageAlignOf(el) {
   const v = el ? el.getAttribute("data-ss-align") : null;
   return IMAGE_ALIGN_VALUES.indexOf(v) >= 0 ? v : "left";
@@ -23581,6 +23637,115 @@ function clearHighlightSelection() {
   markDirty();
 }
 
+/* ----- v2.25: the clear formatting deep clean -------------------
+   The elements whose tag is pure presentation. SPAN and FONT
+   are unwrapped unconditionally: the span unwrap is the
+   extended clear's oldest behavior (the toolbar's own font,
+   size, color, and highlight helpers all write spans), and
+   FONT is its pasted content twin, carrying face, size, and
+   color attributes and no structure. CENTER likewise. Any
+   OTHER inline element is unwrapped only when this pass's own
+   strip left it attributeless: it carried a style or a
+   presentational attribute into the pass and holds nothing
+   now, so what remains is a styled wrapper with the styling
+   gone. An inline element that arrived attributeless (a plain
+   <b> the user typed, say) is removeFormat's business inside
+   the selection, not this pass's. */
+const CLEAR_DEEP_UNWRAP_ALWAYS = { SPAN: 1, FONT: 1, CENTER: 1 };
+const CLEAR_DEEP_UNWRAP_IF_STRIPPED = { B: 1, I: 1, U: 1, EM: 1,
+  STRONG: 1, S: 1, STRIKE: 1, SUB: 1, SUP: 1, SMALL: 1, BIG: 1,
+  TT: 1, MARK: 1 };
+const CLEAR_PRESENTATIONAL_ATTRS = ["face", "size", "color",
+  "bgcolor", "align", "valign"];
+
+/* Clean ONE element, in place. Returns true when the element
+   was unwrapped (its children moved up into its parent and
+   the element itself removed). The guards, in order:
+     - anything inside an attachment block, or the block
+       itself, is skipped whole: an image figure's own style
+       is its saved width, its faces are runtime furniture,
+       and none of it is text formatting;
+     - INPUT elements are skipped entirely: a checklist
+       checkbox is function, not formatting;
+     - a span carrying the ss-tab class, or one of the link
+       view runtime classes (ss-link-face, ss-link-original),
+       keeps its element and its class: the tab character it
+       holds renders through that class, and the link spans
+       are faces the save funnel strips on its own. Their
+       style and presentational attributes still come off,
+       like everything else's.
+   What comes off: the whole style attribute, and the
+   presentational attributes in CLEAR_PRESENTATIONAL_ATTRS.
+   What never comes off: href, src, colspan, rowspan, every
+   data-* attribute (the note link and image state lives
+   there), and every class (app owned classes carry behavior,
+   and foreign pasted classes are inert in this app). */
+function clearDeepCleanElement(el) {
+  if (!el || el.nodeType !== 1) { return false; }
+  if (el.closest && el.closest(".ss-attachment")) { return false; }
+  if (el.tagName === "INPUT") { return false; }
+  let stripped = false;
+  if (el.hasAttribute("style")) {
+    el.removeAttribute("style");
+    stripped = true;
+  }
+  CLEAR_PRESENTATIONAL_ATTRS.forEach(function (attr) {
+    if (el.hasAttribute(attr)) {
+      el.removeAttribute(attr);
+      stripped = true;
+    }
+  });
+  const keepSpan = el.tagName === "SPAN" && el.classList &&
+    (el.classList.contains("ss-tab") ||
+      el.classList.contains("ss-link-face") ||
+      el.classList.contains("ss-link-original"));
+  if (keepSpan) { return false; }
+  const unwrap = CLEAR_DEEP_UNWRAP_ALWAYS[el.tagName] ||
+    (stripped && el.attributes.length === 0 &&
+      CLEAR_DEEP_UNWRAP_IF_STRIPPED[el.tagName]);
+  if (!unwrap || !el.parentNode) { return false; }
+  const parent = el.parentNode;
+  while (el.firstChild) { parent.insertBefore(el.firstChild, el); }
+  parent.removeChild(el);
+  return true;
+}
+
+/* The deep clean over a set of roots, plus every element a
+   range intersects. Each root contributes itself and all its
+   descendants. The range reach exists for content whose top
+   level block the conversion plan deliberately skips, above
+   all a table: the selection inside its cells intersects
+   the cell content directly, and the table itself contributes
+   its descendants as a touched root, so cell text clears
+   while the table, its rows, and its cells (and their
+   colspan and rowspan) stand. Elements are collected first
+   and cleaned in reverse document order, so unwrapping a
+   parent never disturbs the cleaning of the children it
+   held; they are cleaned first, while they still sit in it. */
+function clearDeepCleanRoots(roots, range) {
+  const bodyEl = document.getElementById("noteBody");
+  const seen = new Set();
+  const els = [];
+  function add(el) {
+    if (el && !seen.has(el)) { seen.add(el); els.push(el); }
+  }
+  (roots || []).forEach(function (root) {
+    if (!root || root.nodeType !== 1) { return; }
+    add(root);
+    root.querySelectorAll("*").forEach(add);
+  });
+  if (range && bodyEl) {
+    bodyEl.querySelectorAll("*").forEach(function (el) {
+      let hit = false;
+      try { hit = range.intersectsNode(el); } catch (e) { hit = false; }
+      if (hit) { add(el); }
+    });
+  }
+  for (let i = els.length - 1; i >= 0; i--) {
+    clearDeepCleanElement(els[i]);
+  }
+}
+
 /* ----- remove formatting (extended) ---------------------------------------
    Starts with the classic behavior (removeFormat plus formatBlock),
    then unwraps the spans our own font, size, color, and highlight
@@ -23613,7 +23778,20 @@ function clearHighlightSelection() {
    took its hard coded P. clearConversionPlan now plans one
    conversion per touched block, each with the target that
    block's own flow dictates, and the bare line is judged from
-   the flow around the caret. */
+   the flow around the caret.
+
+   v2.25: the operation also runs the deep clean above
+   (clearDeepCleanRoots) over the touched blocks and every
+   element the selection intersects, once before removeFormat
+   and once after the conversions. Through v2.24.9 the clear
+   reached spans and backgrounds only, so an inline style
+   riding on a pasted block itself, or on a link, a font
+   element, or content inside a table cell, survived whole:
+   the text Chris reported as impossible to unformat. The
+   second run matters for the same reason the second
+   background pass exists: an engine's formatBlock may rebuild
+   a block and carry its attributes onto the replacement, so
+   the final state is cleaned after the conversions settle. */
 function clearFormattingExtended() {
   const bodyEl = document.getElementById("noteBody");
   restoreFormatSelection();
@@ -23633,6 +23811,9 @@ function clearFormattingExtended() {
      engine's formatBlock may rebuild a block and carry its
      attributes onto the replacement. */
   cleanBackgroundsInRoots(touchedBefore);
+  /* v2.25: the first deep clean, over the touched blocks as
+     captured and everything the pre-command range reaches. */
+  clearDeepCleanRoots(touchedBefore, range0);
   document.execCommand("removeFormat", false, null);
   const sel = window.getSelection();
   if (sel && sel.rangeCount) {
@@ -23662,6 +23843,13 @@ function clearFormattingExtended() {
     ? selAfter.getRangeAt(0) : null;
   cleanBackgroundsInRoots(touchedBefore.concat(
     clearTouchedTopBlocks(bodyEl, rangeAfter)));
+  /* v2.25: the second deep clean, over the touched blocks
+     that survived, whatever blocks the conversions left the
+     selection in, and everything the post-command range
+     reaches, so no attribute a conversion carried onto a
+     rebuilt block survives either. */
+  clearDeepCleanRoots(touchedBefore.concat(
+    clearTouchedTopBlocks(bodyEl, rangeAfter)), rangeAfter);
   clearFormattingNormalize(bodyEl, touchedBefore);
 }
 
@@ -26723,6 +26911,87 @@ function moveAttachmentToPoint(el, x, y) {
   bodyEl.appendChild(el);
 }
 
+/* ----- v2.25: Free move drops ----------------------------------
+   A figure whose alignment is Free move can be dropped at any
+   caret point in the text flow, not only before or after whole
+   blocks. The figure always lands as a sibling of the block
+   the caret sits in: when that block is a splittable text
+   block (a paragraph, a div line, a heading, a blockquote, a
+   pre block), it splits at the caret into two blocks of the
+   same tag with the figure between them, and a half left
+   empty by the split is removed. When the caret sits in a
+   list item, the list splits around the figure the same way.
+   Points that cannot resolve to a split (inside an attachment
+   or a caption, inside a table, in the body's own gaps, or no
+   caret at all) fall back to the ordinary block move above,
+   byte for byte in effect; a drop back inside the dragged
+   figure itself is that move's own no-op. The moved figure
+   keeps its id, width, caption, and view mode, because the
+   very element moves; the drop handler's markDirty saves it. */
+function moveFreeAttachmentToPoint(el, x, y) {
+  const bodyEl = document.getElementById("noteBody");
+  const range = caretRangeFromPoint(x, y);
+  if (!range || !bodyEl.contains(range.startContainer)) {
+    moveAttachmentToPoint(el, x, y);
+    return;
+  }
+  if (attachmentHolderOf(range.startContainer)) {
+    moveAttachmentToPoint(el, x, y);
+    return;
+  }
+  let host = range.startContainer;
+  if (host.nodeType !== 1) { host = host.parentNode; }
+  const SPLITTABLE = { P: 1, DIV: 1, H1: 1, H2: 1, H3: 1, H4: 1,
+    H5: 1, H6: 1, BLOCKQUOTE: 1, PRE: 1, LI: 1 };
+  while (host && host !== bodyEl && !SPLITTABLE[host.tagName]) {
+    host = host.parentNode;
+  }
+  if (!host || host === bodyEl || host.closest("table")) {
+    moveAttachmentToPoint(el, x, y);
+    return;
+  }
+  /* The split: everything from the caret to the host's end
+     moves into a shallow clone of the host (same tag, same
+     classes), and the figure lands between the two halves. */
+  const afterRange = document.createRange();
+  afterRange.setStart(range.startContainer, range.startOffset);
+  afterRange.setEnd(host, host.childNodes.length);
+  const frag = afterRange.extractContents();
+  const host2 = host.cloneNode(false);
+  host2.removeAttribute("id");
+  host2.appendChild(frag);
+  if (host.tagName === "LI") {
+    /* A list item's halves stay list items, so the list
+       itself splits: the second list carries the second half
+       and every item that followed the first. */
+    const list = host.parentNode;
+    const parent = list.parentNode;
+    if (!parent) { moveAttachmentToPoint(el, x, y); return; }
+    const list2 = list.cloneNode(false);
+    list2.removeAttribute("id");
+    list2.appendChild(host2);
+    const movers = [];
+    let sib = host.nextSibling;
+    while (sib) { movers.push(sib); sib = sib.nextSibling; }
+    movers.forEach(function (n) { list2.appendChild(n); });
+    parent.insertBefore(el, list.nextSibling);
+    parent.insertBefore(list2, el.nextSibling);
+    if (clearBlockIsEmpty(host)) { host.remove(); }
+    if (!list.children.length) { list.remove(); }
+    if (clearBlockIsEmpty(host2)) { host2.remove(); }
+    if (!list2.children.length) { list2.remove(); }
+    deselectAttachment();
+    return;
+  }
+  const parent = host.parentNode;
+  if (!parent) { moveAttachmentToPoint(el, x, y); return; }
+  parent.insertBefore(el, host.nextSibling);
+  parent.insertBefore(host2, el.nextSibling);
+  if (clearBlockIsEmpty(host)) { host.remove(); }
+  if (clearBlockIsEmpty(host2)) { host2.remove(); }
+  deselectAttachment();
+}
+
 /* The placeholder currently being dragged, and the indicator
    bookkeeping shared by the drag handlers in wireEvents. */
 let attachmentDragEl = null;
@@ -26906,12 +27175,17 @@ function refreshAttMenuStates() {
 }
 
 /* ----- v2.11: the alignment submenu --------------------------------
-   A second fixed card beside the image menu, listing the six
+   A second fixed card beside the image menu, listing the
    alignments with a dot on the current one (read through
    imageAlignOf, so a figure with no saved alignment dots Left).
    Escape closes the submenu before the menu (see the keydown
    wiring), and choosing an alignment applies it, closes both
-   menus, and saves through the ordinary dirty path. */
+   menus, and saves through the ordinary dirty path.
+   v2.25: a seventh entry, Free move, joins the six placement
+   alignments. It is a saved data-ss-align value like the
+   others; what it changes is the figure's drag, which can
+   then drop at any caret point in the text flow (see
+   moveFreeAttachmentToPoint). */
 function attAlignMenuOpen() {
   const sub = document.getElementById("attAlignMenu");
   return !!sub && !sub.classList.contains("hidden");
@@ -26995,6 +27269,12 @@ function runAttAlignChoice(mode) {
   if (!el || IMAGE_ALIGN_VALUES.indexOf(mode) < 0) { return; }
   applyImageAlign(el, mode);
   markDirty();
+  /* v2.25: choosing Free move explains itself in one toast:
+     the figure stays in the text flow and can now be dragged
+     to any spot in it. */
+  if (mode === "free") {
+    toast("Free move is on: drag the image to any spot in the text.");
+  }
 }
 
 /* v1.7.2: the sanity ceiling for a grip drag, in pixels. Sizing is
@@ -28810,10 +29090,86 @@ function insertPlaceholderAtCaret(el) {
      the end of the note. An append (no usable caret) still clears
      the memory, and later files append in order behind it. */
   savedCaretRange = placed ? range.cloneRange() : null;
-  /* A following empty paragraph keeps the note easy to continue. */
-  const p = document.createElement("p");
-  p.appendChild(document.createElement("br"));
-  el.after(p);
+  /* v2.25: the trailing empty paragraph is no longer added
+     after every insertion. Through v2.24.9 each inserted block
+     left a fresh empty <p><br></p> behind it, so a run of
+     inserted images stacked image, empty line, image, empty
+     line (the big spaces Chris reported), and deleting one of
+     those empty lines took the image beside it with it (see
+     the empty line delete guard below). One trailing line is
+     still added, but only when the block lands as a direct
+     child of the body and is its last element, so a note that
+     ends in an image keeps somewhere to type. A following
+     sibling of any kind, an existing empty paragraph
+     included, is reused as it stands and never duplicated,
+     so sequential inserts land directly one after another;
+     and a block inserted inside a line of text adds nothing
+     at all. */
+  if (el.parentNode === bodyEl && !el.nextElementSibling) {
+    const p = document.createElement("p");
+    p.appendChild(document.createElement("br"));
+    el.after(p);
+  }
+}
+
+/* ----- v2.25: the empty line delete guard -------------------------
+   A caret sitting in an empty line next to an image, pressing
+   Backspace or Delete to clear the space the line holds, used
+   to delete the image instead: the empty block is a sibling
+   of a contenteditable=false figure, and the browser's own
+   merge across that boundary removes the figure. This guard
+   takes exactly that one case: a collapsed caret inside an
+   EMPTY top level text block (a P or DIV that is a direct
+   child of the body and holds nothing but whitespace or a
+   lone BR, the strict clearBlockIsEmpty test), with an
+   attachment block on the side the key reaches toward. The
+   keypress then removes ONLY the empty block, parks the caret
+   where the block stood, and counts as handled. Every other
+   case (real text in the block, a block inside a list, a
+   table, or an attachment, a neighbour that is not an
+   attachment, a selection that is not collapsed) returns
+   false and the key keeps its native behavior, including the
+   deliberate keyboard deletion of an image block itself,
+   which the body input watch still reconciles into the
+   undoable deletion engine exactly as before. */
+function emptyLineDeleteGuard(ev) {
+  if (!ev || (ev.key !== "Backspace" && ev.key !== "Delete")) {
+    return false;
+  }
+  if (ev.ctrlKey || ev.metaKey || ev.altKey) { return false; }
+  const note = currentNote();
+  if (!note || note.trashed || note.archived) { return false; }
+  const bodyEl = document.getElementById("noteBody");
+  if (!bodyEl) { return false; }
+  const sel = window.getSelection();
+  if (!sel || !sel.rangeCount) { return false; }
+  const range = sel.getRangeAt(0);
+  if (!range.collapsed) { return false; }
+  let block = range.startContainer;
+  if (!block || block === bodyEl) { return false; }
+  if (block.nodeType !== 1) { block = block.parentNode; }
+  while (block && block.parentNode && block.parentNode !== bodyEl) {
+    block = block.parentNode;
+  }
+  if (!block || block.parentNode !== bodyEl) { return false; }
+  if (block.tagName !== "P" && block.tagName !== "DIV") { return false; }
+  if (!clearBlockIsEmpty(block)) { return false; }
+  const neighbor = ev.key === "Backspace"
+    ? block.previousElementSibling : block.nextElementSibling;
+  if (!neighbor || !neighbor.classList ||
+      !neighbor.classList.contains("ss-attachment")) { return false; }
+  const prev = block.previousElementSibling;
+  const next = block.nextElementSibling;
+  block.remove();
+  const r = document.createRange();
+  if (next) { r.setStartBefore(next); }
+  else if (prev) { r.setStartAfter(prev); }
+  else { r.setStart(bodyEl, 0); }
+  r.collapse(true);
+  sel.removeAllRanges();
+  sel.addRange(r);
+  markDirty();
+  return true;
 }
 
 /* ----- attach entry point ------------------------------------------------
@@ -31295,7 +31651,14 @@ function wireEvents() {
     ev.preventDefault();
     ev.stopPropagation();
     const dragged = attachmentDragEl;
-    moveAttachmentToPoint(dragged, ev.clientX, ev.clientY);
+    /* v2.25: a Free move figure drops at any caret point in
+       the text flow; every other figure keeps the ordinary
+       block move. */
+    if (dragged.getAttribute("data-ss-align") === "free") {
+      moveFreeAttachmentToPoint(dragged, ev.clientX, ev.clientY);
+    } else {
+      moveAttachmentToPoint(dragged, ev.clientX, ev.clientY);
+    }
     clearAttachmentDrag();
     markDirty();
   });
@@ -31355,6 +31718,14 @@ function wireEvents() {
     if (ev.key === "Enter" && !ev.shiftKey) {
       if (handleChecklistEnter()) { ev.preventDefault(); }
     }
+  });
+
+  /* v2.25: Backspace or Delete in an empty line beside an
+     image removes only the empty line, never the image (see
+     emptyLineDeleteGuard in the attachments section). The
+     handler runs only when the guard takes the keypress. */
+  noteBodyEl.addEventListener("keydown", function (ev) {
+    if (emptyLineDeleteGuard(ev)) { ev.preventDefault(); }
   });
 
   /* v2.4: Tab and Shift+Tab belong to the note while the caret is
