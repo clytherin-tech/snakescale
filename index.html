@@ -40,10 +40,36 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-28-SSN-V2282
-  Version: 2.28.2
+  BUILD STAMP: 2026-10-28-SSN-V2283
+  Version: 2.28.3
 
   Revision history:
+    v2.28.3 2026-10-28 Note links inside a task
+                      description did nothing when
+                      clicked. The note body's click path
+                      has always resolved note links
+                      first, so any click in a note
+                      follows them at once, but the
+                      description editor had no click
+                      handling for anchors at all, and
+                      its note links were inert text. The
+                      description editor now carries the
+                      mirror branch: a click on a note
+                      link whose target is a live note
+                      saves the task through the editor's
+                      own save first, so nothing typed is
+                      thrown away, closes the editor, and
+                      opens the note; a click on a link
+                      whose target sits in Trash or
+                      Archive or is gone raises the same
+                      message a note raises and leaves
+                      the editor open with its edits
+                      unsaved; modifier keys make no
+                      difference, exactly as in a note,
+                      and a click on anything that is not
+                      a note link is untouched. The Tasks
+                      view preview's own link routing is
+                      unchanged.
     v2.28.2 2026-10-28 The "@" popup in a task
                       description could still not appear
                       from the Tasks view, and completed
@@ -6233,8 +6259,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-28-SSN-V2282";
-const APP_VERSION = "2.28.2";
+const APP_BUILD = "2026-10-28-SSN-V2283";
+const APP_VERSION = "2.28.3";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -31976,6 +32002,41 @@ function wireEvents() {
      caret moves in there). */
   document.getElementById("taskDescInput")
     .addEventListener("input", updateMentionPopup);
+  /* v2.28.3: a click on a note link in the description
+     follows it, exactly as a click in the note body does
+     (through v2.28.2 this editor had no click handling
+     for anchors at all, so its note links were inert
+     text: no click of any kind followed them, modifier
+     keys included). Modifier keys make no difference
+     here either, again as in the body, whose note link
+     branch runs ahead of its modified click branch. The
+     one addition the modal owes its unsaved edits: when
+     the target is a live note, the task is saved through
+     saveTaskEditor first (which closes the editor), and
+     only then does the link open the note, so following
+     a link never throws away what was typed. When the
+     target sits in Trash or Archive or is gone, nothing
+     is saved, the editor stays open, and followNoteLink
+     raises the same message it raises from a note. A
+     click on anything that is not a note link returns
+     untouched, caret and all. */
+  document.getElementById("taskDescInput")
+    .addEventListener("click", function (ev) {
+      const target = ev.target;
+      const anchor = (target && target.closest)
+        ? target.closest("a") : null;
+      if (!anchor) { return; }
+      const ssNoteId = noteLinkIdOf(anchor);
+      if (!ssNoteId) { return; }
+      ev.preventDefault();
+      /* Liveness is settled before any save: the same
+         first test followNoteLink makes. */
+      const live = state.notes.some(function (n) {
+        return n.id === ssNoteId;
+      });
+      if (live && taskEditorState) { saveTaskEditor(); }
+      followNoteLink(ssNoteId);
+    });
   document.getElementById("taskModal").addEventListener("keydown",
     function (ev) {
       if (ev.key === "Escape") { closeTaskEditor(); }
