@@ -40,10 +40,83 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-28-SSN-V2420
-  Version: 2.42.0
+  BUILD STAMP: 2026-10-28-SSN-V2430
+  Version: 2.43.0
 
   Revision history:
+    v2.43.0 2026-10-28 The Home upgrade, the second of the
+                      two post phase 3 releases Chris
+                      approved on 2026-10-28. Home gains
+                      the two widgets it shipped without
+                      in v2.33.0. The Calendar widget is
+                      this app's honest equivalent of
+                      Evernote's Home calendar widget:
+                      Evernote's renders a connected
+                      calendar account's events, and this
+                      app has no calendar account, so the
+                      widget is a calendar over the app's
+                      own dated items instead (it is not
+                      an events calendar and connects
+                      nothing): a compact month grid,
+                      Sunday first like the Tasks
+                      calendar, whose days carry a marker
+                      when they hold an item, with the
+                      selected day's agenda under it.
+                      Items are tasks with a due date
+                      (open and completed, entries built
+                      by the Tasks calendar's own entry
+                      builder, so a click opens the task
+                      editor and the checkbox completes
+                      through the one completion path)
+                      and live notes with an unfinished
+                      reminder (a bell entry in the note
+                      card's language, overdue in the
+                      danger tone; a done reminder and a
+                      trashed or archived note's reminder
+                      never appear). Both read the data
+                      already loaded (state.tasks and
+                      the note shells, whose catalog
+                      shape carries the reminder pair),
+                      so no note body is ever loaded for
+                      the widget; the month cursor and
+                      the selected day are session state
+                      only. The Shortcuts widget lists
+                      the stored shortcuts in their
+                      stored order (the order v2.42.0's
+                      drag now controls), each row under
+                      the sidebar rows' own rules: the
+                      kind icon, the target's current
+                      name read at render, a Trash or
+                      Archive note target listed muted
+                      and answering a click with the
+                      note links' message, a target that
+                      exists nowhere rendering no row,
+                      and a click performing the sidebar
+                      shortcut's own open action through
+                      followShortcut itself. Both widgets
+                      are ordinary citizens of the home
+                      layout: Customize shows, hides,
+                      moves, and (v2.42.0) drags them
+                      like the other seven. A layout
+                      stored before this release gains
+                      both appended at the end, visible,
+                      its own order untouched (the rule
+                      lives in sanitizeHome: a non empty
+                      stored layout carrying neither
+                      new type is a pre-upgrade layout;
+                      an explicitly empty layout stays
+                      empty, and a layout carrying
+                      either new type is a current one,
+                      left exactly as stored, so hiding
+                      one of the two sticks; hiding both
+                      and reloading reads as pre-upgrade
+                      and restores both, the one seam
+                      the field's unchanged shape
+                      leaves). A fresh layout places
+                      Shortcuts after Recent Notes and
+                      Calendar after Tasks. The home
+                      field's shape changes only by the
+                      two new widget ids.
     v2.42.0 2026-10-28 Drag reorder, the first of the two
                       post phase 3 releases Chris approved
                       on 2026-10-28, closing the no drag
@@ -3938,15 +4011,16 @@ body.dark .home-widget-action{color:var(--accent);}
 .home-widget[data-widget-type="notebooks"] .home-widget-body{
   max-height:264px;overflow-y:auto;
 }
-.home-note-row,.home-tag-row,.home-nb-row{
+.home-note-row,.home-tag-row,.home-nb-row,.home-shortcut-row{
   display:flex;align-items:center;gap:10px;width:100%;
   background:none;border:none;border-bottom:1px solid var(--border);
   padding:7px 4px;cursor:pointer;text-align:left;color:var(--text);font:inherit;
 }
-.home-note-row:last-child,.home-tag-row:last-child,.home-nb-row:last-child{
+.home-note-row:last-child,.home-tag-row:last-child,.home-nb-row:last-child,
+.home-shortcut-row:last-child{
   border-bottom:none;
 }
-.home-note-row-title,.home-tag-label,.home-nb-label{
+.home-note-row-title,.home-tag-label,.home-nb-label,.home-shortcut-label{
   flex:1;font-weight:600;white-space:nowrap;overflow:hidden;
   text-overflow:ellipsis;
 }
@@ -3986,6 +4060,99 @@ body.dark .home-widget-action{color:var(--accent);}
   padding:10px;border:1px solid var(--border);border-radius:8px;
   background:var(--bg);color:var(--text);resize:vertical;
 }
+/* v2.43: the Shortcuts widget's rows (the row shape above
+   is shared with the other list widgets). A dead target
+   (a note in Trash or the Archive) mutes the way the
+   sidebar's dead shortcut rows mute. */
+.home-shortcut-icon{flex:0 0 auto;display:flex;color:var(--muted);}
+.home-shortcut-row.dead .home-shortcut-label,
+.home-shortcut-row.dead .home-shortcut-icon{opacity:.55;}
+.home-shortcut-where{color:var(--muted);font-weight:400;}
+/* v2.43: the Calendar widget: a compact month grid in
+   the Tasks calendar's language (the accent disc for
+   today, the focus ring for the selected day, muted
+   neighbouring month days, every color a theme variable
+   so it themes in dark and light like the rest of Home),
+   with the selected day's agenda under it. */
+.home-cal-head{
+  display:flex;align-items:center;gap:8px;margin-bottom:8px;
+}
+.home-cal-title{
+  font-size:14.5px;font-weight:700;color:var(--primary);
+  padding:0 2px;
+}
+body.dark .home-cal-title{color:var(--accent);}
+.home-cal-today{margin-left:auto;}
+.home-cal-week,.home-cal-grid{
+  display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px;
+}
+.home-cal-wd{
+  font-size:11px;font-weight:700;letter-spacing:.05em;
+  text-transform:uppercase;color:var(--muted);
+  text-align:center;padding:2px 0 4px;
+}
+.home-cal-day{
+  background:var(--bg);border:1px solid var(--border);
+  border-radius:8px;min-height:36px;padding:3px 2px 4px;
+  cursor:pointer;display:flex;flex-direction:column;
+  align-items:center;min-width:0;
+}
+.home-cal-day:hover{border-color:var(--secondary);}
+.home-cal-day.selected{
+  border-color:var(--primary);
+  box-shadow:0 0 0 3px rgba(87,167,115,.22);
+}
+.home-cal-daynum{
+  font-size:12px;font-weight:700;color:var(--text);
+  width:20px;height:20px;display:flex;align-items:center;
+  justify-content:center;border-radius:999px;flex:none;
+}
+.home-cal-day.today .home-cal-daynum{
+  background:var(--accent);color:#0B3D2E;
+}
+.home-cal-day.outside{background:transparent;}
+.home-cal-day.outside .home-cal-daynum{
+  color:var(--muted);font-weight:400;
+}
+.home-cal-dot{
+  width:6px;height:6px;border-radius:999px;flex:none;
+  background:var(--primary);margin-top:2px;
+}
+body.dark .home-cal-dot{background:var(--accent);}
+.home-cal-agenda{
+  margin-top:10px;border-top:1px solid var(--border);
+  padding-top:8px;display:flex;flex-direction:column;gap:2px;
+}
+.home-cal-agenda-label{
+  font-weight:700;color:var(--text);font-size:13px;
+  margin-bottom:4px;
+}
+.home-cal-agenda-count{
+  font-weight:600;color:var(--muted);font-size:12px;
+  margin-left:8px;
+}
+.home-cal-note{
+  display:flex;align-items:flex-start;gap:5px;
+  background:var(--soft);border-radius:6px;
+  padding:3px 5px;cursor:pointer;min-width:0;
+}
+.home-cal-note:hover{box-shadow:inset 0 0 0 1px var(--secondary);}
+.home-cal-note.overdue{box-shadow:inset 3px 0 0 var(--danger);}
+.home-cal-note.overdue:hover{
+  box-shadow:inset 3px 0 0 var(--danger),
+    inset 0 0 0 1px var(--secondary);
+}
+.home-cal-note-bell{
+  flex:none;color:var(--primary);padding-top:1px;
+  display:flex;
+}
+body.dark .home-cal-note-bell{color:var(--accent);}
+.home-cal-note-main{
+  flex:1;min-width:0;font-size:12px;line-height:1.35;
+  color:var(--text);overflow-wrap:anywhere;
+}
+.home-cal-note-time{font-weight:700;color:var(--primary);}
+body.dark .home-cal-note-time{color:var(--accent);}
 /* v1.7.2: overflow-x is named explicitly so an image sized wider
    than the reading column scrolls horizontally inside this pane
    instead of breaking the layout or sliding under the sidebar;
@@ -8133,8 +8300,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-28-SSN-V2420";
-const APP_VERSION = "2.42.0";
+const APP_BUILD = "2026-10-28-SSN-V2430";
+const APP_VERSION = "2.43.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -8331,7 +8498,9 @@ const state = {
     widgets: [
       { type: "pinned" },
       { type: "recent" },
+      { type: "shortcuts" },
       { type: "tasks" },
+      { type: "calendar" },
       { type: "scratch" },
       { type: "filtered", searchId: null },
       { type: "tags" },
@@ -15521,29 +15690,42 @@ function confirmDeleteSavedSearch(entry) {
    full search), Tags (the tag tree's order, labels flat,
    counts exact, navigating like the sidebar rows), and
    Notebooks (the sidebar's Evernote order, navigating like
-   the sidebar rows). Evernote's Calendar widget is not
-   here: it renders a connected calendar account's events,
-   and this app has no calendar account to connect (phase 2
-   release 2 gives tasks a calendar view instead).
+   the sidebar rows). v2.43 adds the last two: Calendar
+   (the widget this section once said could not exist:
+   Evernote's renders a connected calendar account's
+   events and this app has no calendar account, so this
+   one is a calendar over the app's own dated items
+   instead, tasks with due dates and notes with
+   unfinished reminders, never presented as an events
+   calendar; see buildHomeCalendarWidget) and Shortcuts
+   (the sidebar's shortcut rows on Home, in stored order
+   and under the sidebar's rules; see
+   buildHomeShortcutsWidget).
    -------------------------------------------------------------------------- */
 
-const HOME_WIDGET_TYPES = ["pinned", "recent", "tasks",
-  "scratch", "filtered", "tags", "notebooks"];
+const HOME_WIDGET_TYPES = ["pinned", "recent", "shortcuts",
+  "tasks", "calendar", "scratch", "filtered", "tags",
+  "notebooks"];
 const HOME_WIDGET_LABELS = {
   pinned: "Pinned Note", recent: "Recent Notes",
-  tasks: "Tasks", scratch: "Scratch Pad",
+  shortcuts: "Shortcuts", tasks: "Tasks",
+  calendar: "Calendar", scratch: "Scratch Pad",
   filtered: "Filtered Notes", tags: "Tags",
   notebooks: "Notebooks"
 };
 
 /* The default layout: every widget, in the order a fresh
-   dashboard shows them. Built fresh on every call, so a
-   caller can hold the result without sharing it. */
+   dashboard shows them (v2.43: Shortcuts after Recent
+   Notes, Calendar after Tasks, the places the Home
+   upgrade's approval named). Built fresh on every call,
+   so a caller can hold the result without sharing it. */
 function defaultHomeWidgets() {
   return [
     { type: "pinned" },
     { type: "recent" },
+    { type: "shortcuts" },
     { type: "tasks" },
+    { type: "calendar" },
     { type: "scratch" },
     { type: "filtered", searchId: null },
     { type: "tags" },
@@ -15588,6 +15770,29 @@ function sanitizeHome(raw) {
         list.push({ type: e.type });
       }
     });
+    /* v2.43: a layout stored before the Calendar and
+       Shortcuts widgets existed gains both at the end,
+       visible, its own order untouched, so the upgrade
+       is discoverable without disturbing the arrangement
+       the user made. No build before v2.43 could store
+       either new type, so a non empty stored layout
+       carrying NEITHER is a pre-upgrade one; a layout
+       carrying either is a current one and is left
+       exactly as stored (which is what makes hiding one
+       of the two stick). The one seam: a layout whose
+       owner hid BOTH new widgets reads as pre-upgrade
+       and regains them on the next load; the field's
+       shape carries no marker to tell the two apart,
+       and the shape does not change. An explicitly
+       empty layout (the user hid every widget) is
+       honored as always and gains nothing. */
+    const hasNew = list.some(function (e) {
+      return e.type === "calendar" || e.type === "shortcuts";
+    });
+    if (!hasNew && list.length) {
+      list.push({ type: "calendar" });
+      list.push({ type: "shortcuts" });
+    }
     out.widgets = list;
   }
   return out;
@@ -16239,6 +16444,328 @@ function buildHomeNotebooksWidget() {
   return parts.widget;
 }
 
+/* ---------------- v2.43: the Calendar widget ----------
+   Evernote's Home calendar widget renders a connected
+   calendar account's events. This app has no calendar
+   account and connects none, so this widget is a calendar
+   over the app's own dated items, and is never presented
+   as an events calendar: tasks with a due date (open and
+   completed) and live notes with an unfinished reminder.
+   A compact month grid, Sunday first like the Tasks
+   calendar (v2.34), marks each day that holds an item;
+   under it, the selected day's agenda in the same entry
+   language the Tasks calendar speaks. The derivation is
+   shared where the code honestly allows: the day strings
+   and date math are the task system's (parseTaskDate,
+   formatTaskDateParts, taskTodayParts, TASK_CAL_WEEKDAYS),
+   a task's moment is taskDueMoment (its dueTime, else
+   09:00), a reminder's day and time come from
+   noteReminderInputParts (the reminder panel's own
+   derivation), and a task's agenda entry is the Tasks
+   calendar's own element (buildTaskCalEntryEl), so its
+   checkbox completes through the one completion path and
+   its click opens the task editor the same way. What is
+   NOT shared: the month cursor and the selected day are
+   this widget's session state, not the Tasks view's
+   (state.tasksView keeps its own), and the item pool is
+   every dated task and reminder note, not the Tasks
+   view's filtered list. Sources are the data already
+   loaded: state.tasks and the note shells in state.notes
+   (the catalog carries the reminder pair at shape 3), so
+   no note body is ever loaded for this widget. A done
+   reminder is not an item, and a trashed or archived
+   note's reminder is not either: state.notes holds live
+   notes only, which is the Reminders view's own pool. */
+
+let homeCalCursor = null;    /* {y, m} or null: the month
+                                the grid shows; null is the
+                                current month. Session only. */
+let homeCalSelected = null;  /* "YYYY-MM-DD" or null: the
+                                agenda's day; null is today.
+                                Session only. */
+
+/* The month the Home grid shows: its own cursor, or the
+   current month until the user navigates. Mirrors the
+   Tasks calendar's calendarCursorParts, over this
+   widget's own state. */
+function homeCalCursorParts() {
+  if (homeCalCursor && homeCalCursor.y && homeCalCursor.m) {
+    return { y: homeCalCursor.y, m: homeCalCursor.m };
+  }
+  const t = taskTodayParts();
+  return { y: t.y, m: t.m };
+}
+
+function homeCalSelectedStr() {
+  if (homeCalSelected && parseTaskDate(homeCalSelected)) {
+    return homeCalSelected;
+  }
+  const t = taskTodayParts();
+  return formatTaskDateParts(t.y, t.m, t.d);
+}
+
+function shiftHomeCalMonth(delta) {
+  const c = homeCalCursorParts();
+  let y = c.y, m = c.m + delta;
+  if (m < 1) { m = 12; y -= 1; }
+  if (m > 12) { m = 1; y += 1; }
+  homeCalCursor = { y: y, m: m };
+  renderHome();
+}
+
+/* The widget's items, grouped by day: {kind: "task",
+   task, moment} and {kind: "note", note, moment},
+   each day's list in agenda order (by moment; a task
+   before a note at the same moment; then by title). */
+function homeCalItemsByDay() {
+  const byDay = {};
+  function push(day, item) {
+    (byDay[day] = byDay[day] || []).push(item);
+  }
+  state.tasks.forEach(function (t) {
+    if (!t.dueDate) { return; }
+    push(t.dueDate, { kind: "task", task: t,
+      moment: taskDueMoment(t) });
+  });
+  state.notes.forEach(function (n) {
+    if (!n.reminderAt || n.reminderDoneAt) { return; }
+    const parts = noteReminderInputParts(n);
+    if (!parts.date) { return; }
+    push(parts.date, { kind: "note", note: n,
+      moment: new Date(n.reminderAt) });
+  });
+  Object.keys(byDay).forEach(function (day) {
+    byDay[day].sort(function (a, b) {
+      const am = a.moment ? a.moment.getTime() : 0;
+      const bm = b.moment ? b.moment.getTime() : 0;
+      if (am !== bm) { return am - bm; }
+      if (a.kind !== b.kind) {
+        return a.kind === "task" ? -1 : 1;
+      }
+      const at = a.kind === "task" ? a.task.title : a.note.title;
+      const bt = b.kind === "task" ? b.task.title : b.note.title;
+      return String(at || "").localeCompare(String(bt || ""));
+    });
+  });
+  return byDay;
+}
+
+/* One note reminder's agenda entry: the bell (the note
+   card's own glyph), the reminder's time in the task
+   system's time words, and the note's title, wearing
+   the danger bar while the reminder's moment has passed
+   (the card marker's overdue rule). A click opens the
+   note the way every Home surface opens one. */
+function buildHomeCalNoteEntryEl(note) {
+  const el = document.createElement("div");
+  el.className = "home-cal-note";
+  el.setAttribute("data-note-id", note.id);
+  el.title = note.title || "Untitled note";
+  if (new Date(note.reminderAt).getTime() <= Date.now()) {
+    el.classList.add("overdue");
+  }
+  const bell = document.createElement("span");
+  bell.className = "home-cal-note-bell";
+  bell.innerHTML = '<svg viewBox="0 0 20 20" width="13" height="13" aria-hidden="true" focusable="false"><path d="M10 2.5a5.5 5.5 0 0 0-5.5 5.5c0 4-1.2 5.2-2 6h14c-.8-.8-2-2-2-6A5.5 5.5 0 0 0 10 2.5zM8.4 16.8a1.8 1.8 0 0 0 3.2 0" fill="currentColor" stroke="none"/></svg>';
+  el.appendChild(bell);
+  const main = document.createElement("span");
+  main.className = "home-cal-note-main";
+  const parts = noteReminderInputParts(note);
+  if (parts.time) {
+    const time = document.createElement("span");
+    time.className = "home-cal-note-time";
+    time.textContent = taskTimeLabel(parts.time);
+    main.appendChild(time);
+    main.appendChild(document.createTextNode(" "));
+  }
+  const title = document.createElement("span");
+  title.className = "home-cal-note-title";
+  title.textContent = note.title || "Untitled note";
+  main.appendChild(title);
+  el.appendChild(main);
+  el.addEventListener("click", function () {
+    openNoteFromHome(note.id);
+  });
+  return el;
+}
+
+function buildHomeCalendarWidget() {
+  const parts = homeWidgetShell("calendar", "Calendar");
+  const cursor = homeCalCursorParts();
+  const y = cursor.y, m = cursor.m;
+  const today = taskTodayParts();
+  const todayStr = formatTaskDateParts(today.y, today.m, today.d);
+  const selectedStr = homeCalSelectedStr();
+  const byDay = homeCalItemsByDay();
+
+  const head = document.createElement("div");
+  head.className = "home-cal-head";
+  const prev = document.createElement("button");
+  prev.type = "button";
+  prev.className = "btn small";
+  prev.id = "homeCalPrev";
+  prev.textContent = "‹";
+  prev.setAttribute("aria-label", "Previous month");
+  prev.addEventListener("click", function () {
+    shiftHomeCalMonth(-1);
+  });
+  head.appendChild(prev);
+  const title = document.createElement("div");
+  title.className = "home-cal-title";
+  title.textContent = new Date(y, m - 1, 1).toLocaleDateString(
+    undefined, { month: "long", year: "numeric" });
+  head.appendChild(title);
+  const next = document.createElement("button");
+  next.type = "button";
+  next.className = "btn small";
+  next.id = "homeCalNext";
+  next.textContent = "›";
+  next.setAttribute("aria-label", "Next month");
+  next.addEventListener("click", function () {
+    shiftHomeCalMonth(1);
+  });
+  head.appendChild(next);
+  const todayBtn = document.createElement("button");
+  todayBtn.type = "button";
+  todayBtn.className = "btn small home-cal-today";
+  todayBtn.id = "homeCalToday";
+  todayBtn.textContent = "Today";
+  todayBtn.addEventListener("click", function () {
+    homeCalCursor = null;
+    homeCalSelected = todayStr;
+    renderHome();
+  });
+  head.appendChild(todayBtn);
+  parts.body.appendChild(head);
+
+  const week = document.createElement("div");
+  week.className = "home-cal-week";
+  TASK_CAL_WEEKDAYS.forEach(function (name) {
+    const wd = document.createElement("div");
+    wd.className = "home-cal-wd";
+    wd.textContent = name;
+    week.appendChild(wd);
+  });
+  parts.body.appendChild(week);
+
+  const grid = document.createElement("div");
+  grid.className = "home-cal-grid";
+  const firstDow = new Date(y, m - 1, 1).getDay();
+  const daysInMonth = new Date(y, m, 0).getDate();
+  const cellCount = Math.ceil((firstDow + daysInMonth) / 7) * 7;
+  for (let i = 0; i < cellCount; i++) {
+    const date = new Date(y, m - 1, 1 - firstDow + i);
+    const dateStr = formatTaskDateParts(date.getFullYear(),
+      date.getMonth() + 1, date.getDate());
+    const cellEl = document.createElement("div");
+    cellEl.className = "home-cal-day" +
+      (date.getMonth() !== m - 1 ? " outside" : "") +
+      (dateStr === todayStr ? " today" : "") +
+      (dateStr === selectedStr ? " selected" : "");
+    cellEl.setAttribute("data-date", dateStr);
+    const num = document.createElement("div");
+    num.className = "home-cal-daynum";
+    num.textContent = String(date.getDate());
+    cellEl.appendChild(num);
+    if ((byDay[dateStr] || []).length) {
+      const dot = document.createElement("span");
+      dot.className = "home-cal-dot";
+      cellEl.appendChild(dot);
+    }
+    cellEl.addEventListener("click", function () {
+      homeCalSelected = dateStr;
+      renderHome();
+    });
+    grid.appendChild(cellEl);
+  }
+  parts.body.appendChild(grid);
+
+  /* The selected day's agenda, under the grid, in the
+     Tasks calendar detail strip's shape: the day's full
+     date, its item count, and the items themselves.
+     Selecting a day in a neighbouring month (the muted
+     cells) shows that day's agenda here without moving
+     the grid, the Tasks calendar's own cell rule. */
+  const selParts = parseTaskDate(selectedStr);
+  if (selParts) {
+    const agenda = document.createElement("div");
+    agenda.className = "home-cal-agenda";
+    const label = document.createElement("div");
+    label.className = "home-cal-agenda-label";
+    label.textContent = new Date(selParts.y, selParts.m - 1,
+      selParts.d).toLocaleDateString(undefined,
+      { weekday: "long", month: "long", day: "numeric" });
+    const items = byDay[selectedStr] || [];
+    const count = document.createElement("span");
+    count.className = "home-cal-agenda-count";
+    count.textContent = items.length === 0 ? "No items"
+      : items.length + (items.length === 1 ? " item" : " items");
+    label.appendChild(count);
+    agenda.appendChild(label);
+    if (!items.length) {
+      agenda.appendChild(
+        homeHint("No tasks or reminders on this day."));
+    }
+    items.forEach(function (item) {
+      agenda.appendChild(item.kind === "task"
+        ? buildTaskCalEntryEl(item.task)
+        : buildHomeCalNoteEntryEl(item.note));
+    });
+    parts.body.appendChild(agenda);
+  }
+  return parts.widget;
+}
+
+/* The Shortcuts widget: the sidebar's Shortcuts section
+   on Home. Rows are built from the same facts the
+   sidebar rows are (shortcutTarget: the target's current
+   name read at render, a Trash or Archive note kept and
+   muted with the place named in its label, a target that
+   exists nowhere rendering no row), in the stored list's
+   order, and a click performs the sidebar shortcut's own
+   open action by calling followShortcut itself, so the
+   two surfaces can never drift apart. */
+function buildHomeShortcutsWidget() {
+  const parts = homeWidgetShell("shortcuts", "Shortcuts");
+  let shown = 0;
+  state.shortcuts.forEach(function (entry) {
+    const target = shortcutTarget(entry);
+    if (target.state === "missing") { return; }
+    shown += 1;
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = "home-shortcut-row" +
+      (target.state === "live" ? "" : " dead");
+    row.setAttribute("data-kind", entry.kind);
+    row.setAttribute("data-target", entry.id);
+    const icon = document.createElement("span");
+    icon.className = "home-shortcut-icon";
+    icon.innerHTML = SHORTCUT_ICONS[entry.kind] || "";
+    row.appendChild(icon);
+    const label = document.createElement("span");
+    label.className = "home-shortcut-label";
+    label.textContent = (entry.kind === "tag" ? "# " : "") +
+      target.label;
+    if (target.state === "trash" ||
+        target.state === "archive") {
+      const where = document.createElement("span");
+      where.className = "home-shortcut-where";
+      where.textContent = target.state === "trash"
+        ? " (in Trash)" : " (in Archive)";
+      label.appendChild(where);
+    }
+    row.appendChild(label);
+    row.addEventListener("click", function () {
+      followShortcut(entry);
+    });
+    parts.body.appendChild(row);
+  });
+  if (!shown) {
+    parts.body.appendChild(homeHint("No shortcuts yet."));
+  }
+  return parts.widget;
+}
+
 /* The Customize panel: one row per widget. A visible
    widget's row carries Move up, Move down, and Remove;
    a hidden widget's row carries Add. The rows are
@@ -16344,8 +16871,12 @@ function renderHome() {
       el = buildHomePinnedWidget();
     } else if (entry.type === "recent") {
       el = buildHomeRecentWidget();
+    } else if (entry.type === "shortcuts") {
+      el = buildHomeShortcutsWidget();
     } else if (entry.type === "tasks") {
       el = buildHomeTasksWidget();
+    } else if (entry.type === "calendar") {
+      el = buildHomeCalendarWidget();
     } else if (entry.type === "scratch") {
       el = buildHomeScratchWidget();
     } else if (entry.type === "filtered") {
