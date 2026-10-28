@@ -40,10 +40,63 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-28-SSN-V2380
-  Version: 2.38.0
+  BUILD STAMP: 2026-10-28-SSN-V2390
+  Version: 2.39.0
 
   Revision history:
+    v2.39.0 2026-10-28 Duplicate note and Merge notes, the
+                      fourth release of the Evernote parity
+                      program's phase 3, modeled on
+                      Evernote's own flows (its help article
+                      "Merge multiple notes into a single
+                      note" and the Evernote 10 release
+                      notes for Duplicate). The notes list
+                      menu gains a Duplicate note item and a
+                      Merge Selected item. Duplicate makes a
+                      fully independent copy in the same
+                      notebook: the title gains " copy" (and
+                      the copy number increments when that
+                      title is taken in the notebook, so a
+                      second duplicate is " copy 2"), the
+                      body, tags, and thumbnail carry over,
+                      and the copy opens in the editor.
+                      Merge runs on the checked notes of the
+                      live lists (the checkbox selection the
+                      Trash and Archive views have always
+                      had, extended to every live view for
+                      this): after a confirm that names the
+                      count and says the originals go to
+                      Trash, one new note is created in the
+                      first note's notebook under the first
+                      note's title (first in the list's
+                      current order), holding each source's
+                      content in that order under its own
+                      title heading with a divider line
+                      between sections, tags unioned, and
+                      the originals are then moved to Trash
+                      through the real trash path, where
+                      they can be restored with their own
+                      attachments intact. Both operations
+                      copy attachments as true copies: every
+                      attachment file a copied body
+                      references is downloaded and re-uploaded
+                      as a new file under a new record, and
+                      the copied body's placeholders are
+                      remapped to the new records, so no two
+                      notes ever share one attachment file
+                      and deleting either note's files can
+                      never break the other. A duplicate or
+                      merged note never inherits a reminder
+                      (the original keeps its own schedule;
+                      two notes on one reminder would fire
+                      twice for one obligation) and is never
+                      born pinned. Merge refuses fewer than
+                      two selected notes and refuses when
+                      any selected note is in Trash or the
+                      Archive; a source body that cannot
+                      load, or a file copy that fails, stops
+                      the operation before anything is
+                      created or moved and names what failed.
     v2.38.0 2026-10-28 Note templates, the third release
                       of the Evernote parity program's
                       phase 3, modeled on Evernote's
@@ -6554,6 +6607,14 @@ body.dark .version-date{color:var(--accent);}
                  follows the reminder item's show and
                  enable rule, set in renderListToolbar. -->
             <button type="button" class="list-menu-item" id="nbSaveTemplateBtn" role="menuitem">Save as Template</button>
+            <!-- v2.39: Duplicate note, Evernote's own route
+                 (a note's menu there; this menu is the
+                 app's note actions surface). It follows the
+                 template item's show and enable rule exactly,
+                 set in renderListToolbar: a copy is made
+                 from a live note, never from Trash or the
+                 Archive. -->
+            <button type="button" class="list-menu-item" id="nbDuplicateBtn" role="menuitem">Duplicate note</button>
             <!-- v1.8.1: the menu adapts to the view. These three items
                  belong to Trash and the Archive; renderListToolbar
                  shows and enables the ones for the current view and
@@ -6561,6 +6622,14 @@ body.dark .version-date{color:var(--accent);}
             <button type="button" class="list-menu-item danger hidden" id="nbEmptyTrashBtn" role="menuitem">Empty Trash</button>
             <button type="button" class="list-menu-item danger hidden" id="nbDeleteSelectedBtn" role="menuitem">Delete Selected</button>
             <button type="button" class="list-menu-item hidden" id="nbRestoreSelectedBtn" role="menuitem">Restore Selected</button>
+            <!-- v2.39: Merge Selected, the live views' bulk
+                 action, in the family of the Trash and
+                 Archive bulk items above. renderListToolbar
+                 shows it outside Trash and the Archive,
+                 enables it at two or more checked live
+                 notes, and counts the selection in its
+                 label, the Delete Selected pattern. -->
+            <button type="button" class="list-menu-item hidden" id="nbMergeSelectedBtn" role="menuitem">Merge Selected</button>
           </div>
           <!-- v2.29: the stack picker panel, built at open time
                by buildStackPanel: New stack... first, then one
@@ -7751,8 +7820,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-28-SSN-V2380";
-const APP_VERSION = "2.38.0";
+const APP_BUILD = "2026-10-28-SSN-V2390";
+const APP_VERSION = "2.39.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -8067,6 +8136,8 @@ const state = {
                             // Trash view, for Delete Selected
   archiveSelection: [],     // v1.8.1: ids of the notes checked in the
                             // Archive view, for Restore Selected
+  listSelection: [],        // v2.39: ids of the notes checked in a
+                            // live list view, for Merge Selected
   syncing: false,           // true while a sync or save is in flight
   online: navigator.onLine, // browser online flag, kept current by events
   cacheGeneration: 0,       // v1.4.1: invalidates an in-flight encrypted
@@ -16225,6 +16296,390 @@ async function createNoteInRepo(notebookSlug) {
   return note;
 }
 
+/* --------------------------------------------------------------------------
+   v2.39: Duplicate note and Merge notes (Evernote parity, phase 3
+   release 4), modeled on Evernote's own flows (its help article
+   "Merge multiple notes into a single note" and the Evernote 10
+   release notes for Duplicate):
+
+   - Duplicate, from the notes list menu's Duplicate note item,
+     makes a fully independent copy in the same notebook. The
+     title gains " copy" (Evernote 10's convention), and when
+     that title is already taken in the notebook the number
+     increments: " copy 2", " copy 3", and so on, the way
+     Evernote increments its copy numbers. The copy opens in
+     the editor, as a fresh duplicate does in Evernote.
+   - Merge, from the same menu's Merge Selected item, runs on
+     the live list's checked notes (the checkbox selection the
+     Trash and Archive views have always had, extended to the
+     live views for this): one new note titled after the FIRST
+     note in the list's current order, holding each source's
+     content in that order under its own title heading with a
+     divider line between sections (Evernote's merge offers
+     titles in the merged content and divider lines as its
+     advanced options; SnakeScale always applies both), tags
+     unioned, and the originals then moved to Trash, where
+     they can be restored, exactly as Evernote's merge leaves
+     them when its keep-a-copy option is off.
+
+   Both operations copy attachments as TRUE copies: every
+   attachment file a copied body references is downloaded and
+   re-uploaded as a brand new file under a brand new record,
+   and the copied body's placeholders are remapped to the new
+   records, so no two notes ever share one attachment file and
+   deleting either note's files can never break the other. A
+   copy operation that cannot complete (a body that will not
+   load, a file that will not download or upload) stops before
+   anything is created or moved and names what failed.
+
+   Two deliberate departures from a blind copy, both about
+   schedules rather than content: a duplicate or merged note
+   never inherits a reminder (the original keeps its own; two
+   notes on one reminder would fire twice for one obligation,
+   in the app and in the chat watcher alike), and it is never
+   born pinned (the pin is the original's place in the list,
+   not part of its content). Tags, the body, the attachments,
+   and a thumbnail whose image is among the copied records DO
+   carry over, the thumbnail remapped to the new record.
+   -------------------------------------------------------------------------- */
+
+/* Fold the editor's live content into note when note is the
+   one on screen, the guard the template save and the notebook
+   move both apply before acting on the open note: a copy made
+   from the note as the user sees it, unsaved words included. */
+function collectIfOpen(note) {
+  const editor = document.getElementById("noteBody");
+  const pane = document.getElementById("editorpane");
+  if (state.selectedId === note.id && editor && pane &&
+      !pane.classList.contains("hidden")) {
+    collectEditor(note);
+  }
+}
+
+/* The title a duplicate of source gets: Evernote 10 appends
+   " copy" and increments the copy number when the plain copy
+   title is taken. Taken is judged among the live notes of the
+   source's own notebook, the list the copy will land in. */
+function duplicateCopyTitle(source) {
+  const base = source.title || "Untitled note";
+  const taken = {};
+  state.notes.forEach(function (n) {
+    if (n.notebook === source.notebook) {
+      taken[n.title || "Untitled note"] = true;
+    }
+  });
+  let candidate = base + " copy";
+  let n = 2;
+  while (taken[candidate]) {
+    candidate = base + " copy " + n;
+    n++;
+  }
+  return candidate;
+}
+
+/* Copy every attachment a body references as a true copy: for
+   each record on source whose id appears among the body's
+   attachment placeholders, download its file and re-upload
+   the bytes as a new file under a new record, through the
+   same provider driver the original upload used. Records the
+   body does not reference are not copied: the save funnel's
+   reconciliation drops a record with no block on the note's
+   first save anyway, so copying one would only orphan its
+   new file.
+   Resolves to { records, idMap } (idMap: source record id to
+   new record id). Throws an Error naming the file when any
+   step cannot run (a provider that is unavailable or signed
+   out, offline, a failed download or upload); files already
+   uploaded for this copy are deleted again best effort, so a
+   stopped copy leaves behind nothing that it made. */
+async function copyAttachmentsForNewNote(source, bodyHtml) {
+  const referenced = {};
+  const holder = document.createElement("div");
+  holder.innerHTML = bodyHtml || "";
+  holder.querySelectorAll(".ss-attachment").forEach(function (el) {
+    const id = el.getAttribute("data-attachment-id");
+    if (id) { referenced[id] = true; }
+  });
+  const wanted = (source.attachments || []).filter(function (a) {
+    return referenced[a.id];
+  });
+  const records = [];
+  const idMap = {};
+  if (!wanted.length) { return { records: records, idMap: idMap }; }
+  const uploaded = [];   /* { driver, fileId }, for the cleanup below */
+  try {
+    for (const att of wanted) {
+      const providerName = att.provider || state.attach.defaultProvider;
+      const driver = providers[providerName];
+      if (!driver) {
+        throw new Error("the file \"" + att.name + "\" could not be " +
+          "copied because its storage provider is not available.");
+      }
+      if (!state.online) {
+        throw new Error("the file \"" + att.name + "\" could not be " +
+          "copied because you appear to be offline.");
+      }
+      const status = await driver.getStatus();
+      if (!status || !status.connected) {
+        throw new Error("the file \"" + att.name + "\" could not be " +
+          "copied because " + providerLabel(providerName) +
+          " is not signed in.");
+      }
+      /* The copy is fed from the downloaded BYTES, read
+         through the app's own blob reader, never from the
+         blob object itself: the upload then carries exactly
+         the bytes the download produced, in any browser (and
+         in the test harness, whose cross realm blobs a File
+         constructor would otherwise stringify). */
+      let bytes;
+      try {
+        const blob = await driver.download(att.fileId);
+        bytes = new Uint8Array(await readBlobArrayBuffer(blob));
+      } catch (e) {
+        throw new Error("the file \"" + att.name + "\" could not " +
+          "be copied: " + e.message);
+      }
+      const newId = newNoteId() + "a";
+      const storageName = newId + "__" + sanitizeFileName(att.name);
+      const file = new File([bytes], att.name,
+        { type: att.mime || "application/octet-stream" });
+      let result;
+      try {
+        result = await driver.upload(file, storageName,
+          function () { });
+      } catch (e) {
+        throw new Error("the file \"" + att.name + "\" could not " +
+          "be copied: " + e.message);
+      }
+      if (!result || !result.fileId) {
+        throw new Error("the file \"" + att.name +
+          "\" could not be copied.");
+      }
+      uploaded.push({ driver: driver, fileId: String(result.fileId) });
+      records.push({
+        id: newId,
+        provider: providerName,
+        fileId: String(result.fileId),
+        name: att.name,
+        storageName: storageName,
+        mime: att.mime || "application/octet-stream",
+        size: bytes.length,
+        created: new Date().toISOString()
+      });
+      idMap[att.id] = newId;
+    }
+  } catch (err) {
+    for (const up of uploaded) {
+      try {
+        await up.driver.delete(up.fileId);
+      } catch (e) { /* best effort, like every attachment cleanup */ }
+    }
+    throw err;
+  }
+  return { records: records, idMap: idMap };
+}
+
+/* Point a copied body's attachment placeholders at the new
+   records a copy made: each placeholder's data-attachment-id
+   is swapped through idMap. A placeholder whose record was
+   not copied keeps its id, and the save funnel's
+   reconciliation settles it like any orphan block. */
+function remapBodyAttachmentIds(bodyHtml, idMap) {
+  if (!bodyHtml) { return ""; }
+  if (!Object.keys(idMap).length) { return bodyHtml; }
+  const holder = document.createElement("div");
+  holder.innerHTML = bodyHtml;
+  holder.querySelectorAll(".ss-attachment").forEach(function (el) {
+    const oldId = el.getAttribute("data-attachment-id");
+    if (oldId && idMap[oldId]) {
+      el.setAttribute("data-attachment-id", idMap[oldId]);
+    }
+  });
+  return holder.innerHTML;
+}
+
+/* Duplicate the live note source in its own notebook (see the
+   section header for the full rule). The copy is built
+   detached and only joins state once its attachment copies
+   have all landed, so a stopped copy changes nothing; then
+   it is created through the same unshift, cache, render,
+   open, and background save flow as a brand new note (the
+   createNoteFromTemplate pattern), the copy's birth as an
+   ordinary note creation, never a shared twin. */
+async function duplicateNote(source) {
+  if (!source || state.notes.indexOf(source) < 0) { return null; }
+  if (source.bodyLoaded === false) {
+    await ensureNoteBodyLoaded(source);
+    if (source.bodyLoaded === false) {
+      toast("That note is not loaded on this device yet, so it " +
+        "could not be duplicated.", true);
+      return null;
+    }
+  }
+  collectIfOpen(source);
+  let copied;
+  try {
+    copied = await copyAttachmentsForNewNote(source, source.body || "");
+  } catch (err) {
+    toast("Duplicate stopped: " + err.message, true);
+    return null;
+  }
+  const copy = makeNote(source.notebook, duplicateCopyTitle(source), "");
+  copy.tags = (source.tags || []).slice();
+  copy.attachments = copied.records;
+  copy.body = canonicalizeAttachmentPlaceholders(
+    remapBodyAttachmentIds(source.body || "", copied.idMap));
+  if (source.thumbnail && copied.idMap[source.thumbnail]) {
+    copy.thumbnail = copied.idMap[source.thumbnail];
+  }
+  state.notes.unshift(copy);
+  saveCache();
+  renderAll();
+  openNote(copy.id);
+  saveNoteToRepo(copy, { skipConflictCheck: true, fresh: true })
+    .then(function () { saveCache(); })
+    .catch(function (err) {
+      toast("Note created locally; save failed: " + err.message, true);
+    });
+  toast("Duplicated as \"" + copy.title + "\".");
+  return copy;
+}
+
+/* Merge the live list's checked notes into one new note (see
+   the section header). Validation and every fallible step run
+   BEFORE anything in state changes: the selection resolves
+   and is checked live, every body loads, the open editor is
+   collected when a source is on screen, the user confirms,
+   and every attachment copy lands; only then is the merged
+   note created and the originals moved to Trash through the
+   real trash path. A refusal or a failure at any earlier step
+   names itself and leaves the notes, the trash, and the
+   selection exactly as they were. */
+async function mergeSelectedNotes() {
+  const ids = state.listSelection.slice();
+  if (ids.length < 2) {
+    toast("Select at least two notes to merge.", true);
+    return null;
+  }
+  const sources = [];
+  for (const id of ids) {
+    const live = state.notes.find(function (n) { return n.id === id; });
+    if (live) { sources.push(live); continue; }
+    const inTrash = state.trash.some(function (n) { return n.id === id; });
+    const inArchive = state.archive.some(function (n) {
+      return n.id === id;
+    });
+    toast("Merge stopped: one of the selected notes is " +
+      (inTrash ? "in the Trash" : inArchive ? "in the Archive"
+        : "no longer available") +
+      ", and merging works on live notes only. " +
+      "Nothing was changed.", true);
+    return null;
+  }
+  /* The merge order is the list's current order: what
+     visibleNotes shows, filtered to the selection. A selected
+     note the current filters hide keeps its place at the end,
+     in selection order, rather than dropping out of the merge
+     it was checked for. */
+  const chosen = visibleNotes().filter(function (n) {
+    return ids.indexOf(n.id) >= 0;
+  });
+  sources.forEach(function (n) {
+    if (chosen.indexOf(n) < 0) { chosen.push(n); }
+  });
+  for (const note of chosen) {
+    if (note.bodyLoaded === false) {
+      await ensureNoteBodyLoaded(note);
+      if (note.bodyLoaded === false) {
+        toast("Merge stopped: \"" + (note.title || "Untitled note") +
+          "\" could not be loaded on this device, so nothing was " +
+          "merged and no notes were moved.", true);
+        return null;
+      }
+    }
+  }
+  chosen.forEach(function (note) { collectIfOpen(note); });
+  const ok = confirm("Merge " + chosen.length + " notes into one " +
+    "new note? The merged note takes the first note's title (\"" +
+    (chosen[0].title || "Untitled note") + "\") and the original " +
+    "notes are moved to Trash, where they can be restored.");
+  if (!ok) { return null; }
+  /* One copy pass per source into one shared map, so every
+     placeholder in every section can be remapped below; the
+     same records list carries all of them. */
+  const records = [];
+  const idMap = {};
+  try {
+    for (const note of chosen) {
+      const copied = await copyAttachmentsForNewNote(note,
+        note.body || "");
+      copied.records.forEach(function (r) { records.push(r); });
+      Object.keys(copied.idMap).forEach(function (k) {
+        idMap[k] = copied.idMap[k];
+      });
+    }
+  } catch (err) {
+    toast("Merge stopped: " + err.message + " Nothing was changed.",
+      true);
+    return null;
+  }
+  /* Point of no return: the selection empties, the merged
+     note is created, and the originals move to Trash. */
+  state.listSelection = [];
+  const parts = [];
+  chosen.forEach(function (note, i) {
+    if (i > 0) { parts.push("<hr>"); }
+    parts.push("<h2>" + escapeHtml(note.title || "Untitled note") +
+      "</h2>");
+    parts.push(remapBodyAttachmentIds(note.body || "", idMap));
+  });
+  const tags = [];
+  chosen.forEach(function (note) {
+    (note.tags || []).forEach(function (t) {
+      const dupe = tags.some(function (x) {
+        return x.toLowerCase() === t.toLowerCase();
+      });
+      if (!dupe) { tags.push(t); }
+    });
+  });
+  const first = chosen[0];
+  const merged = makeNote(first.notebook,
+    first.title || "Untitled note", "");
+  merged.body = canonicalizeAttachmentPlaceholders(parts.join(""));
+  merged.tags = tags;
+  merged.attachments = records;
+  if (first.thumbnail && idMap[first.thumbnail]) {
+    merged.thumbnail = idMap[first.thumbnail];
+  }
+  state.notes.unshift(merged);
+  saveCache();
+  renderAll();
+  try {
+    await saveNoteToRepo(merged, { skipConflictCheck: true, fresh: true });
+  } catch (err) {
+    /* The merged note exists locally but is not stored, so the
+       originals stay exactly where they were rather than the
+       merge half landing: the user keeps every note, and the
+       unstored merged note can be deleted or retried like any
+       failed save. */
+    toast("The merged note was created locally, but its save " +
+      "failed: " + err.message + " The original notes were left " +
+      "where they were.", true);
+    openNote(merged.id);
+    return merged;
+  }
+  saveCache();
+  for (const note of chosen) {
+    await moveNoteToTrash(note, true);
+  }
+  saveCache();
+  openNote(merged.id);
+  toast("Merged " + chosen.length + " notes into \"" +
+    (merged.title || "Untitled note") +
+    "\". The originals are in Trash.");
+  return merged;
+}
+
 /* v2.20: the four placement operations whose implementations
    follow (trash, restore, archive, unarchive) capture the note's
    file text synchronously at action time, so a catalog shell,
@@ -18265,6 +18720,34 @@ function renderListToolbar() {
       state.notes.indexOf(selected) >= 0 ? selected : null;
     saveTemplateBtn.disabled = !liveSelected;
   }
+  /* v2.39: Duplicate note follows the template item's rule
+     exactly (hidden in Trash and Archive, enabled only for
+     a live selected note): a copy is made from a live note,
+     never from Trash or the Archive. */
+  const duplicateBtn = document.getElementById("nbDuplicateBtn");
+  if (duplicateBtn) {
+    duplicateBtn.classList.toggle("hidden",
+      kind === "trash" || kind === "archive");
+    const selected = currentNote();
+    const liveSelected = selected &&
+      state.notes.indexOf(selected) >= 0 ? selected : null;
+    duplicateBtn.disabled = !liveSelected;
+  }
+  /* v2.39: Merge Selected is the live views' bulk action,
+     the mirror of Delete Selected: hidden in Trash and the
+     Archive (whose own bulk items are above), enabled once
+     two or more live notes are checked, and counting the
+     selection in its label. */
+  const mergeSelectedBtn = document.getElementById("nbMergeSelectedBtn");
+  if (mergeSelectedBtn) {
+    mergeSelectedBtn.classList.toggle("hidden",
+      kind === "trash" || kind === "archive");
+    const count = state.listSelection.length;
+    mergeSelectedBtn.disabled = count < 2;
+    mergeSelectedBtn.textContent = count >= 2
+      ? "Merge Selected (" + count + ")"
+      : "Merge Selected";
+  }
   const emptyTrashBtn = document.getElementById("nbEmptyTrashBtn");
   if (emptyTrashBtn) {
     emptyTrashBtn.classList.toggle("hidden", kind !== "trash");
@@ -18402,13 +18885,18 @@ async function toggleSelectedNotePin() {
    the view changes (see renderNoteList) and at the start of the
    action they fed, so a set can never act twice or leak into
    another view.
+   v2.39: a third set joins the family, listSelection, filled by
+   the same row checkboxes now drawn in every live view too, and
+   feeding the one live bulk action, Merge Selected. It follows
+   the same clearing rules as the other two.
    -------------------------------------------------------------------------- */
 
-/* Empty both selection sets. Called on every view change and after
+/* Empty the selection sets. Called on every view change and after
    a bulk action runs. */
 function clearListSelections() {
   state.trashSelection = [];
   state.archiveSelection = [];
+  state.listSelection = [];
 }
 
 /* One row checkbox changed: record it in the current view's set,
@@ -18416,8 +18904,8 @@ function clearListSelections() {
    follow the selection at once. */
 function toggleListSelection(noteId, checked) {
   const set = state.view.kind === "trash" ? state.trashSelection
-    : state.view.kind === "archive" ? state.archiveSelection : null;
-  if (!set) { return; }
+    : state.view.kind === "archive" ? state.archiveSelection
+    : state.listSelection;
   const at = set.indexOf(noteId);
   if (checked && at < 0) { set.push(noteId); }
   if (!checked && at >= 0) { set.splice(at, 1); }
@@ -19355,10 +19843,15 @@ function renderNoteList() {
     listEl.appendChild(empty);
     return;
   }
-  /* v1.8.1: the multi select set this view's rows draw from, or
-     null outside Trash and the Archive. */
+  /* v1.8.1: the multi select set this view's rows draw from:
+     the Trash set in Trash, the Archive set in the Archive,
+     and (v2.39) the live set everywhere else, so notes can be
+     checked in any live list for Merge Selected. The Tasks
+     view returns above, before this point, and never draws
+     note rows. */
   const selectSet = state.view.kind === "trash" ? state.trashSelection
-    : state.view.kind === "archive" ? state.archiveSelection : null;
+    : state.view.kind === "archive" ? state.archiveSelection
+    : state.listSelection;
 
   /* v2.24.3: the tiles and the cards render as one merged
      sequence (see listItemsWithTiles): the tiles interleave
@@ -39131,6 +39624,29 @@ function wireEvents() {
   document.getElementById("nbSaveTemplateBtn").addEventListener("click", function () {
     closeListPanels();
     promptSaveNoteAsTemplate().catch(function (err) {
+      toast(err.message, true);
+    });
+  });
+  /* v2.39: the notes list menu's Duplicate note item: the
+     same close the panels, then act shape. The item's show
+     and enable rule in renderListToolbar already restricts
+     it to a live selected note; the guard here is the second
+     line of defense, mirroring the Trash items below. */
+  document.getElementById("nbDuplicateBtn").addEventListener("click", function () {
+    closeListPanels();
+    const note = currentNote();
+    if (note && state.notes.indexOf(note) >= 0) {
+      duplicateNote(note).catch(function (err) {
+        toast(err.message, true);
+      });
+    }
+  });
+  /* v2.39: the notes list menu's Merge Selected item, the
+     live views' bulk action; mergeSelectedNotes validates
+     the selection itself and names every refusal. */
+  document.getElementById("nbMergeSelectedBtn").addEventListener("click", function () {
+    closeListPanels();
+    mergeSelectedNotes().catch(function (err) {
       toast(err.message, true);
     });
   });
