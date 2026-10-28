@@ -40,10 +40,60 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-28-SSN-V2360
-  Version: 2.36.0
+  BUILD STAMP: 2026-10-28-SSN-V2370
+  Version: 2.37.0
 
   Revision history:
+    v2.37.0 2026-10-28 The table of contents block, the
+                      second release of the Evernote
+                      parity program's phase 3, modeled on
+                      Evernote's automatic table of
+                      contents: the Insert menu gains a
+                      Table of contents item that places a
+                      generated block at the caret, listing
+                      the note's own headings (H1, H2, and
+                      H3) as clickable entries nested by
+                      level, with an empty state line while
+                      the note has no headings. The block
+                      is contenteditable false as a whole,
+                      like an attachment block; its entries
+                      are a pure derivation of the headings
+                      and refresh when the note renders,
+                      when headings change while editing
+                      (debounced, through the body's input
+                      events), and inside the save funnel's
+                      canonical pass, which rebuilds the
+                      stored block from the stored headings
+                      the way it rebuilds attachment shells,
+                      so a stale stored snapshot self
+                      corrects on the next open or save.
+                      Headings the block references carry a
+                      persistent ss-h anchor id in the
+                      saved body, assigned only while a TOC
+                      block is present (a note without one
+                      serializes exactly as before), and
+                      clicking an entry scrolls its heading
+                      into view: no link machinery runs, the
+                      note is not dirtied, and the link bar
+                      never summons for an entry. Clear
+                      formatting skips the block the way it
+                      skips attachment blocks (deep clean,
+                      background clean, the nested block
+                      lift, and the conversion plan), so a
+                      selection spanning it cannot corrupt
+                      it; deleting the block is an ordinary
+                      block deletion, and its heading ids
+                      remain behind as harmless anchors.
+                      Named deviations from Evernote:
+                      insertion is through the Insert menu
+                      only (this editor has no slash command
+                      menu for it to also live in);
+                      Evernote's floating table of contents
+                      widget at the editor's edge and its
+                      Copy link to header affordance are
+                      not built; and the entries are a flat
+                      list stepped in by level classes
+                      rather than nested lists.
     v2.36.0 2026-10-28 Backlinks, the first release of the
                       Evernote parity program's phase 3.
                       A note other notes link to now shows
@@ -4539,6 +4589,21 @@ body.dark #conflictReloadBtn{background:#574512;color:#FFE1A8;border-color:#A887
   border-radius:5px;padding:0 4px;font-size:.92em;
 }
 #noteBody hr{border:none;border-top:2px solid var(--border);margin:14px 0;}
+/* v2.37.0: the table of contents block. A generated panel in
+   the body flow: bordered and softly surfaced like the
+   editor's other generated furniture, its entries plain
+   anchors stepped in by heading level. Theme variables only,
+   so dark and light read the same structure. */
+#noteBody .ss-toc{border:1px solid var(--border);border-radius:10px;background:var(--soft);padding:10px 14px 12px;margin:12px 0;}
+#noteBody .ss-toc-title{font-weight:700;font-size:.92em;color:var(--text);margin-bottom:6px;}
+#noteBody .ss-toc-list{list-style:none;margin:0;padding:0;}
+#noteBody .ss-toc-item{margin:2px 0;}
+#noteBody .ss-toc-l1{padding-left:0;}
+#noteBody .ss-toc-l2{padding-left:18px;}
+#noteBody .ss-toc-l3{padding-left:36px;}
+#noteBody a.ss-toc-link{color:var(--accent);text-decoration:none;cursor:pointer;}
+#noteBody a.ss-toc-link:hover{text-decoration:underline;}
+#noteBody .ss-toc-empty{color:var(--muted);font-size:.92em;}
 
 /* ---------- v1.2 attachments: upload progress panel ---------- */
 #uploadPanel{
@@ -6449,6 +6514,7 @@ body.dark .version-date{color:var(--accent);}
                   <button type="button" data-insert="divider">Divider</button>
                   <button type="button" data-insert="datetime">Date and time</button>
                   <button type="button" data-insert="table">Table</button>
+                  <button type="button" data-insert="toc">Table of contents</button>
                   <button type="button" data-insert="codeBlock">Code block</button>
                   <button type="button" data-insert="inlineCode">Inline code</button>
                 </div>
@@ -7504,8 +7570,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-28-SSN-V2360";
-const APP_VERSION = "2.36.0";
+const APP_BUILD = "2026-10-28-SSN-V2370";
+const APP_VERSION = "2.37.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -21202,6 +21268,12 @@ function renderEditor() {
     /* v2.28.0: task links take their labels from the
        tasks' current titles on the same render. */
     decorateTaskLinks(document.getElementById("noteBody"));
+    /* v2.37.0: a table of contents block re derives its
+       entries (and its headings' anchor ids) from the body
+       just filled, so a note reopened anywhere, including
+       one whose stored snapshot went stale, shows correct
+       entries before anything is touched. */
+    refreshTocBlocks(document.getElementById("noteBody"));
     setSaveState(note.trashed ? "In Trash" :
       (note.archived ? "Archived" : "Saved"));
     /* v1.2: fill the attachment placeholders from the providers. This is
@@ -22321,6 +22393,26 @@ function canonicalizeAttachmentPlaceholders(html) {
     el.classList.remove("ss-cell-selected");
     if (!el.classList.length) { el.removeAttribute("class"); }
   });
+  /* v2.37.0: a table of contents block canonicalizes the
+     same way an attachment does: the stored element is
+     rebuilt from scratch (class and contenteditable only)
+     and its entries are regenerated from the holder's own
+     headings, after the heading ids are ensured, so the
+     saved snapshot can never drift from the saved headings
+     and a stale one self corrects on the next save. Notes
+     without a TOC block skip the pass entirely, and their
+     headings keep no ids: byte identical to before. */
+  if (holder.querySelector(".ss-toc")) {
+    tocEnsureHeadingIds(holder);
+    const tocEntries = tocEntriesFrom(holder);
+    holder.querySelectorAll(".ss-toc").forEach(function (el) {
+      const clean = document.createElement("div");
+      clean.setAttribute("class", "ss-toc");
+      clean.setAttribute("contenteditable", "false");
+      tocRenderBlockContent(clean, tocEntries);
+      el.replaceWith(clean);
+    });
+  }
   /* v2.9: link view faces are runtime only presentation, exactly
      like the cell selection above: a Mention or Preview anchor in
      the live body holds a .ss-link-face node and its original
@@ -22594,6 +22686,10 @@ function linkBarAnchorFor(anchor) {
   const bodyEl = document.getElementById("noteBody");
   if (!bodyEl || !bodyEl.contains(anchor)) { return null; }
   if (anchor.closest && anchor.closest(".ss-attachment")) { return null; }
+  /* v2.37.0: table of contents entries get no bar either:
+     their click is a jump inside the note, handled by the
+     body's click route, never by the link machinery. */
+  if (anchor.closest && anchor.closest(".ss-toc")) { return null; }
   /* v2.28.0: task links get no bar, and through this
      same gate no Mention hover card either: their click
      opens the task, and that is their whole link UI. */
@@ -23765,6 +23861,10 @@ function decorateLinkViews(rootEl) {
   if (!rootEl || !rootEl.querySelectorAll) { return; }
   rootEl.querySelectorAll("a[href]").forEach(function (anchor) {
     if (anchor.closest && anchor.closest(".ss-attachment")) { return; }
+    /* v2.37.0: table of contents entries are plain anchors
+       by construction and stay that way: no view modes, no
+       faces, nothing the canonical rebuild would strip. */
+    if (anchor.closest && anchor.closest(".ss-toc")) { return; }
     decorateLinkView(anchor);
   });
 }
@@ -26773,6 +26873,228 @@ function insertInlineCode() {
   }
 }
 
+/* ----- v2.37.0: the table of contents block --------------------------------
+   Evernote parity (phase 3, release 2), modeled on Evernote's
+   automatic table of contents (its help page "How to create a
+   link to a section of a note and use a table of contents"):
+   the Insert menu's Table of contents item places a generated
+   block at the caret; the block lists the note's own headings
+   (H1, H2, and H3, the levels Evernote's TOC draws from and
+   the only levels this editor makes) as clickable entries,
+   nested by level, and it updates automatically as headings
+   are edited. Clicking an entry jumps to that heading inside
+   the same note.
+
+   The block is a div.ss-toc, contenteditable false as a whole
+   like an attachment block, so its contents are never typed
+   in; they are a pure derivation of the note's headings:
+     - tocEnsureHeadingIds gives every heading the block
+       needs a persistent anchor id (ss-h-<n>) in the saved
+       body, unique within the note. Ids are assigned only
+       while a TOC block is present in the body, so a note
+       without one serializes exactly as it always has.
+     - tocEntriesFrom reads the headings in document order.
+     - tocRenderBlockContent paints one block from entries.
+   Refresh runs where the body changes are already seen: at
+   render (renderEditor, beside the other decorations), on
+   the body's input events (debounced, like the attachment
+   body's check), and inside the save funnel's canonical
+   pass (canonicalizeAttachmentPlaceholders), so the STORED
+   snapshot is regenerated from the stored headings on every
+   save and a stale one self corrects on the next open or
+   save without the user touching anything. The live refresh
+   compares the freshly derived entries against the ones the
+   block already shows (kept in a WeakMap, never in the
+   saved markup) and leaves the DOM alone when they agree,
+   so steady typing never rebuilds the block under a reader
+   who is about to click it. */
+
+const TOC_HEADING_TAGS = { H1: 1, H2: 2, H3: 3 };
+
+/* The last entries each live TOC block was painted with,
+   keyed by the block element itself. Runtime only: the
+   canonical pass rebuilds blocks from scratch, so nothing
+   here can reach a saved file. */
+const tocBlockSignatures = new WeakMap();
+
+/* The headings a TOC draws from, under a root (the live
+   body or a detached canonical holder): H1 to H3 in
+   document order, never a heading inside a TOC block
+   itself (a generated block holds none, but a hand damaged
+   body is not trusted to agree). */
+function tocHeadingsUnder(rootEl) {
+  const out = [];
+  if (!rootEl || !rootEl.querySelectorAll) { return out; }
+  rootEl.querySelectorAll("h1, h2, h3").forEach(function (h) {
+    if (h.closest && h.closest(".ss-toc")) { return; }
+    out.push(h);
+  });
+  return out;
+}
+
+/* Give each of the root's TOC headings a persistent anchor
+   id, and return the headings. An existing id is kept
+   unless another element under the root already carries it
+   (the first carrier wins, so a pasted duplicate or an undo
+   tangle heals by reassigning the later one). Fresh ids are
+   ss-h-<n> with the smallest free n, skipping every id the
+   root already uses on any element, so a TOC id can never
+   collide with an id the user or another feature chose.
+   Only called while a TOC block is present in the body. */
+function tocEnsureHeadingIds(rootEl) {
+  const headings = tocHeadingsUnder(rootEl);
+  const used = new Set();
+  rootEl.querySelectorAll("[id]").forEach(function (el) {
+    used.add(el.getAttribute("id"));
+  });
+  const claimed = new Set();
+  let next = 1;
+  headings.forEach(function (h) {
+    const id = h.getAttribute("id");
+    if (id && !claimed.has(id)) {
+      claimed.add(id);
+      return;
+    }
+    while (used.has("ss-h-" + next) || claimed.has("ss-h-" + next)) {
+      next++;
+    }
+    const fresh = "ss-h-" + next;
+    h.setAttribute("id", fresh);
+    claimed.add(fresh);
+    used.add(fresh);
+  });
+  return headings;
+}
+
+/* The entries a TOC shows: one per heading, in document
+   order, carrying the heading's id, its level, and its
+   text exactly as written. Callers run tocEnsureHeadingIds
+   first, so every entry has an id to point at. */
+function tocEntriesFrom(rootEl) {
+  return tocHeadingsUnder(rootEl).map(function (h) {
+    return {
+      id: h.getAttribute("id") || "",
+      level: TOC_HEADING_TAGS[h.tagName] || 1,
+      text: h.textContent || ""
+    };
+  }).filter(function (e) { return !!e.id; });
+}
+
+/* Paint one TOC block from entries: the title line, then
+   either the entry list (one anchor per entry, the anchor
+   carrying its target id and level as data, its list item
+   carrying the level class the indentation hangs from) or,
+   with no headings to list, the empty state line. */
+function tocRenderBlockContent(blockEl, entries) {
+  blockEl.innerHTML = "";
+  const title = document.createElement("div");
+  title.setAttribute("class", "ss-toc-title");
+  title.textContent = "Table of Contents";
+  blockEl.appendChild(title);
+  if (!entries.length) {
+    const empty = document.createElement("div");
+    empty.setAttribute("class", "ss-toc-empty");
+    empty.textContent =
+      "No headings yet. Headings you add will appear here.";
+    blockEl.appendChild(empty);
+    return;
+  }
+  const list = document.createElement("ul");
+  list.setAttribute("class", "ss-toc-list");
+  entries.forEach(function (e) {
+    const li = document.createElement("li");
+    li.setAttribute("class", "ss-toc-item ss-toc-l" + e.level);
+    const a = document.createElement("a");
+    a.setAttribute("class", "ss-toc-link");
+    a.setAttribute("href", "#" + e.id);
+    a.setAttribute("data-ss-toc-target", e.id);
+    a.setAttribute("data-ss-toc-level", String(e.level));
+    a.textContent = e.text;
+    li.appendChild(a);
+    list.appendChild(li);
+  });
+  blockEl.appendChild(list);
+}
+
+/* Re-derive every TOC block under the body from the body's
+   current headings. Returns true when the body holds a TOC
+   block at all. A block whose entries already match is left
+   byte for byte alone (see the section header). */
+function refreshTocBlocks(bodyEl) {
+  if (!bodyEl || !bodyEl.querySelectorAll) { return false; }
+  const blocks = bodyEl.querySelectorAll(".ss-toc");
+  if (!blocks.length) { return false; }
+  tocEnsureHeadingIds(bodyEl);
+  const entries = tocEntriesFrom(bodyEl);
+  const sig = JSON.stringify(entries);
+  blocks.forEach(function (block) {
+    if (tocBlockSignatures.get(block) === sig) { return; }
+    tocRenderBlockContent(block, entries);
+    tocBlockSignatures.set(block, sig);
+  });
+  return true;
+}
+
+/* The debounced refresh the body's input events feed,
+   mirroring queueAttachmentBodyCheck: heading edits made by
+   typing, paste, the style dropdown, undo, or redo all
+   arrive as input events, and 150 ms after they settle the
+   blocks repaint if (and only if) the headings changed. */
+const queueTocRefresh = debounce(function () {
+  const bodyEl = document.getElementById("noteBody");
+  if (bodyEl) { refreshTocBlocks(bodyEl); }
+}, 150);
+
+/* Jump to the heading a TOC entry points at. The scroll is
+   the whole behavior: no link machinery runs, the note is
+   not dirtied, and the caret is not moved by the jump (the
+   press that clicked the non editable block settles the
+   caret beside the block, exactly as with an attachment
+   block). */
+function scrollToTocHeading(id) {
+  const bodyEl = document.getElementById("noteBody");
+  if (!bodyEl || !id) { return; }
+  const headings = bodyEl.querySelectorAll("h1, h2, h3");
+  for (let i = 0; i < headings.length; i++) {
+    if (headings[i].getAttribute("id") === id) {
+      headings[i].scrollIntoView({ block: "start" });
+      return;
+    }
+  }
+}
+
+/* Insert, Table of contents: a fresh generated block at the
+   caret, built by insertBlockAtCaret like the table and the
+   code block. insertBlockAtCaret lands the block INSIDE the
+   caret's paragraph when the caret sits in one (its insert
+   splits the text node, not the block), so a block that did
+   not land as a direct child of the body is hoisted out to
+   just after the top level block that held the caret, with
+   its following paragraph behind it: a TOC is always its
+   own top level block, never a paragraph's passenger. The
+   refresh then assigns the heading ids and paints the
+   entries, and the caret lands in the following paragraph. */
+function insertTocBlock() {
+  const bodyEl = document.getElementById("noteBody");
+  const block = document.createElement("div");
+  block.setAttribute("class", "ss-toc");
+  block.setAttribute("contenteditable", "false");
+  const follow = emptyFollowParagraph();
+  insertBlockAtCaret(block, follow);
+  if (block.parentNode !== bodyEl) {
+    let host = block;
+    while (host.parentNode && host.parentNode !== bodyEl) {
+      host = host.parentNode;
+    }
+    if (host.parentNode === bodyEl) {
+      host.after(block);
+      block.after(follow);
+    }
+  }
+  refreshTocBlocks(bodyEl);
+  placeCaretIn(follow, 0);
+}
+
 /* ----- v2.1.0: export the open note --------------------------------------
    Three formats from the Export menu in the editor footer. All three
    start from the note as it stands on screen: collectEditor folds the
@@ -29662,6 +29984,10 @@ function decorateLinkTooltips(rootEl) {
        decorateTaskLinks (it is the rename derivation
        record); the tooltip pass leaves it alone. */
     if (taskLinkIdOf(anchor)) { return; }
+    /* v2.37.0: a table of contents entry's tooltip would
+       be its own fragment address, which tells the reader
+       nothing; the pass leaves TOC anchors titleless. */
+    if (anchor.closest && anchor.closest(".ss-toc")) { return; }
     if (noteLinkIdOf(anchor)) { captureNoteLinkDerivation(anchor); }
     const tip = linkTooltipFor(anchor);
     if (tip) { anchor.setAttribute("title", tip); }
@@ -30468,9 +30794,14 @@ function cleanBackgroundsInRoots(roots) {
   (roots || []).forEach(function (root) {
     if (!root || root.nodeType !== 1) { return; }
     if (root.closest && root.closest(".ss-attachment")) { return; }
+    /* v2.37.0: a TOC block's subtree is skipped too, like
+       an attachment's (it carries no background styles of
+       its own; the skip keeps the rule uniform). */
+    if (root.closest && root.closest(".ss-toc")) { return; }
     cleanBackgroundFromElement(root);
     root.querySelectorAll("*").forEach(function (el) {
       if (el.closest && el.closest(".ss-attachment")) { return; }
+      if (el.closest && el.closest(".ss-toc")) { return; }
       cleanBackgroundFromElement(el);
     });
   });
@@ -30916,6 +31247,10 @@ const CLEAR_PRESENTATIONAL_ATTRS = ["face", "size", "color",
 function clearDeepCleanElement(el) {
   if (!el || el.nodeType !== 1) { return false; }
   if (el.closest && el.closest(".ss-attachment")) { return false; }
+  /* v2.37.0: a table of contents block is generated content,
+     not formatting: the deep clean never unwraps, strips, or
+     descends into it, exactly as with an attachment block. */
+  if (el.closest && el.closest(".ss-toc")) { return false; }
   if (el.tagName === "INPUT") { return false; }
   let stripped = false;
   if (el.hasAttribute("style")) {
@@ -31050,6 +31385,16 @@ function clearLiftNestedBlocks(bodyEl, host) {
     return null;
   }
   if (host.querySelector && host.querySelector(".ss-attachment")) {
+    return null;
+  }
+  /* v2.37.0: a host that IS a table of contents block, or
+     one holding one, is never lifted either: lifting would
+     promote the block's entry list out of the generated
+     block and destroy it. */
+  if (host.classList && host.classList.contains("ss-toc")) {
+    return null;
+  }
+  if (host.querySelector && host.querySelector(".ss-toc")) {
     return null;
   }
   let hasBlockChild = false;
@@ -31333,6 +31678,12 @@ function clearConversionPlan(bodyEl, range, touched) {
   (touched || []).forEach(function (block) {
     if (!block.isConnected || block.parentNode !== bodyEl) { return; }
     if (block.classList && block.classList.contains("ss-attachment")) {
+      return;
+    }
+    /* v2.37.0: a table of contents block is never planned
+       for conversion either: it is not a paragraph wearing
+       formatting, it is generated content. */
+    if (block.classList && block.classList.contains("ss-toc")) {
       return;
     }
     const tag = block.tagName;
@@ -31773,6 +32124,10 @@ function runInsertAction(kind) {
   }
   if (kind === "table") {
     insertStarterTable();
+  } else if (kind === "toc") {
+    /* v2.37.0: the generated table of contents block (its
+       own section below, beside the other block inserts). */
+    insertTocBlock();
   } else if (kind === "codeBlock") {
     insertCodeBlock();
   } else if (kind === "inlineCode") {
@@ -38618,6 +38973,14 @@ function wireEvents() {
   document.getElementById("noteBody").addEventListener("input", function () {
     queueAttachmentBodyCheck();
   });
+  /* v2.37.0: the same body input events feed the table of
+     contents refresh, through its own debounce, so heading
+     edits made by typing, paste, the style dropdown, undo,
+     or redo repaint the blocks once they settle. A separate
+     listener; the ones above are untouched. */
+  document.getElementById("noteBody").addEventListener("input", function () {
+    queueTocRefresh();
+  });
 
   /* v2.14: voice note wiring. The toolbar button starts a
      recording (the toolbar's mousedown backstop has already saved
@@ -38835,6 +39198,18 @@ function wireEvents() {
     const anchor = (target && target.closest) ? target.closest("a") : null;
     if (!anchor) {
       hideLinkBar();
+      return;
+    }
+    /* v2.37.0: a table of contents entry resolves here,
+       ahead of every other branch: its href is an in page
+       fragment, and anchor.href resolves it absolute, so
+       the generic branches would treat it as a web link
+       and open the app itself in a new tab. A TOC click is
+       only ever a jump to the heading inside this note. */
+    if (anchor.closest && anchor.closest(".ss-toc")) {
+      ev.preventDefault();
+      hideLinkBar();
+      scrollToTocHeading(anchor.getAttribute("data-ss-toc-target"));
       return;
     }
     const ssNoteId = noteLinkIdOf(anchor);
