@@ -2,7 +2,7 @@
   ==========================================================================
   SnakeScale Notes service worker
   ==========================================================================
-  BUILD STAMP: 2026-10-28-SSN-V2340
+  BUILD STAMP: 2026-10-28-SSN-V2350
   Version: 2.11.0
 
   This worker exists for exactly one job: making SnakeScale Notes
@@ -65,7 +65,7 @@
 
 "use strict";
 
-const CACHE_NAME = "snakescale-shell-2026-10-28-SSN-V2340";
+const CACHE_NAME = "snakescale-shell-2026-10-28-SSN-V2350";
 
 /* The shell, as paths relative to this worker's scope (the site
    root). "./" and "./index.html" are both listed: the first is the
@@ -187,7 +187,12 @@ self.addEventListener("fetch", function (event) {
    running, the app opens at its URL with the task id as a
    query parameter, which the page reads at boot for the same
    purpose. A notification without a task id simply focuses or
-   opens the app. */
+   opens the app.
+   v2.35: a note reminder notification rides the same handler
+   through its own data key: the running window is posted the
+   note id (type snakescale-open-note-reminder), and a cold
+   open lands on ?noteReminder= for the page's boot reader. A
+   notification carrying neither id behaves as before. */
 self.addEventListener("notificationclick", function (event) {
   if (event.notification && event.notification.close) {
     event.notification.close();
@@ -195,9 +200,14 @@ self.addEventListener("notificationclick", function (event) {
   const data = (event.notification && event.notification.data) || {};
   const taskId = typeof data.taskId === "string" && data.taskId
     ? data.taskId : null;
+  const noteReminderId =
+    typeof data.noteReminderId === "string" && data.noteReminderId
+    ? data.noteReminderId : null;
   const targetUrl = taskId
     ? "./?task=" + encodeURIComponent(taskId)
-    : "./";
+    : (noteReminderId
+      ? "./?noteReminder=" + encodeURIComponent(noteReminderId)
+      : "./");
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true })
       .then(function (windowClients) {
@@ -208,6 +218,12 @@ self.addEventListener("notificationclick", function (event) {
               client.postMessage({
                 type: "snakescale-open-task",
                 taskId: taskId
+              });
+            }
+            if (noteReminderId && "postMessage" in client) {
+              client.postMessage({
+                type: "snakescale-open-note-reminder",
+                noteReminderId: noteReminderId
               });
             }
             return client.focus();

@@ -40,10 +40,75 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-28-SSN-V2340
-  Version: 2.34.0
+  BUILD STAMP: 2026-10-28-SSN-V2350
+  Version: 2.35.0
 
   Revision history:
+    v2.35.0 2026-10-28 Note reminders, the third and
+                      final release of the Evernote
+                      parity program's phase 2 (Home,
+                      calendar, and reminders). A note
+                      now carries one reminder, set from
+                      the editor footer's Reminder
+                      button or the notes list menu's
+                      Reminder item, both opening the
+                      one reminder panel (quick choices
+                      Tomorrow and In a week, a date,
+                      and an optional time that
+                      defaults to 09:00). The reminder
+                      lives on the note itself, as two
+                      front matter lines written only
+                      when set (reminderAt, and
+                      reminderDoneAt when the reminder
+                      is marked done), so a note without
+                      one serializes byte identically to
+                      every earlier build, and every
+                      read, write, catalog, and conflict
+                      path carries the pair the way it
+                      carries the pin and the thumbnail.
+                      The catalog holds the pair at
+                      shape 3, so list cards show the
+                      reminder marker (the day and time
+                      in the app's date words, an
+                      overdue tone, a done state) before
+                      a note is ever opened. A sidebar
+                      Reminders view gathers every note
+                      with a reminder, sorted by moment
+                      with overdue first and done last,
+                      shown done. While the app is open,
+                      a due reminder fires once through
+                      the task reminders' own machinery
+                      (a service worker notification
+                      whose click opens the note), gated
+                      by its own Note reminders switch
+                      in Settings; the fired moment is
+                      stamped in this device's settings
+                      (a fired stamp is a delivery fact,
+                      not note content, so it never
+                      writes the note file), and a
+                      trashed note never fires. The
+                      search grammar gains the reminder
+                      operators Evernote defines:
+                      reminderTime: and reminderDoneTime:
+                      as date thresholds with a *
+                      presence form, and reminderOrder:*
+                      for any reminder at all, so the
+                      active reminders idiom
+                      (reminderTime:* -reminderDoneTime:*)
+                      works. Named deviations from
+                      Evernote: reminders require a date
+                      (Evernote also allows a dateless
+                      reminder that only pins the note
+                      in its reminders list); firing is
+                      while the app is open on a device,
+                      with a catch up on the next open,
+                      because there is no server to push
+                      with (the same deviation tasks
+                      carry); the manual drag ordering
+                      of Evernote's reminders list
+                      (reminderOrder) is not reproduced,
+                      the view sorts by moment; and
+                      there are no email alerts.
     v2.34.0 2026-10-28 Calendar view of tasks, the
                       second release of the Evernote
                       parity program (phase 2: Home,
@@ -3046,6 +3111,19 @@ body.dark .filter-group-title{color:var(--accent);}
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
 }
 .note-card .pin-mark{color:var(--secondary);font-size:12px;flex:none;}
+/* v2.35: the card's reminder line (renderNoteList adds it to
+   any card whose note carries a reminder): the bell glyph
+   and the moment in the app's date words, in the meta
+   line's voice. An overdue reminder wears the danger tone
+   the task rows use; a done one recedes to the muted tone
+   with its check. All colors are theme variables. */
+.note-card .card-reminder{
+  display:flex;align-items:center;gap:5px;margin-top:6px;
+  font-size:12px;color:var(--secondary);
+}
+.note-card .card-reminder svg{flex:none;}
+.note-card .card-reminder.overdue{color:var(--danger);}
+.note-card .card-reminder.done{color:var(--muted);}
 .note-card .card-snippet{
   font-size:13px;line-height:1.45;color:var(--muted);margin-top:4px;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
@@ -5345,6 +5423,18 @@ body.dark .task-progress-pill{color:var(--accent);}
    inputs so every control in it is themed in both themes, with
    labels padded above their controls like every other field. */
 .task-modal-card{max-width:560px;}
+/* v2.35: the note reminder panel, in the task dialog's
+   family: a narrower card, the quick choices as one row of
+   small buttons under the status line, and the Remove
+   button pushed to the foot's left edge the way the task
+   editor pushes its Delete. Every color is a theme
+   variable, so both themes are covered by construction. */
+.reminder-modal-card{max-width:460px;}
+.reminder-modal-foot #reminderRemoveBtn{margin-right:auto;}
+.reminder-status{
+  color:var(--muted);font-size:14px;margin:0 0 12px;min-height:20px;
+}
+.reminder-quick{display:flex;gap:8px;margin:0 0 14px;}
 .modal .field textarea{
   width:100%;padding:8px 10px;border:1px solid var(--border);
   border-radius:var(--radius-button);background:var(--surface);
@@ -5877,6 +5967,11 @@ body.dark .version-date{color:var(--accent);}
            Notes, with the open task count as its pill. -->
       <button class="nav-item" id="navTasks" type="button">Tasks <span class="count count-pill" id="countTasks"></span></button>
       <button class="nav-item" id="navPinned" type="button">Pinned <span class="count count-pill" id="countPinned"></span></button>
+      <!-- v2.35: the Reminders view's entry, under Pinned:
+           every note carrying a reminder, sorted by its
+           moment. The pill is the count of reminders not
+           yet marked done. -->
+      <button class="nav-item" id="navReminders" type="button">Reminders <span class="count count-pill" id="countReminders"></span></button>
       <!-- v2.5: Trash and Archive are drag and drop destinations
            too (data-drop-action is what the note drag hit test
            reads), beside the notebook rows' data-nb-slug. -->
@@ -6023,6 +6118,7 @@ body.dark .version-date{color:var(--accent);}
     <button class="rail-btn" id="railNewNoteBtn" type="button" title="New Note" aria-label="New Note"><svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true" focusable="false"><path d="M10 3v14M3 10h14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" fill="none"/></svg></button>
     <button class="rail-btn" id="railAllBtn" type="button" title="All Notes" aria-label="All Notes"><svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true" focusable="false"><path d="M3 5.5h14M3 10h14M3 14.5h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" fill="none"/></svg></button>
     <button class="rail-btn" id="railPinnedBtn" type="button" title="Pinned" aria-label="Pinned"><svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true" focusable="false"><rect x="7.2" y="2.2" width="8.6" height="8.6" rx="2.2" transform="rotate(45 11.5 6.5)" fill="currentColor" stroke="none"/><path d="M7.6 10.4L3 17" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" fill="none"/></svg></button>
+    <button class="rail-btn" id="railRemindersBtn" type="button" title="Reminders" aria-label="Reminders"><svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true" focusable="false"><path d="M10 2.5a5.5 5.5 0 0 0-5.5 5.5c0 4-1.2 5.2-2 6h14c-.8-.8-2-2-2-6A5.5 5.5 0 0 0 10 2.5zM8.4 16.8a1.8 1.8 0 0 0 3.2 0" fill="currentColor" stroke="none"/></svg></button>
     <button class="rail-btn" id="railNotebooksBtn" type="button" title="Notebooks" aria-label="Notebooks" aria-haspopup="true" aria-expanded="false"><svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true" focusable="false"><path d="M4 3.5C4 2.7 4.7 2 5.5 2H10v16H5.5C4.7 18 4 17.3 4 16.5zM16 3.5C16 2.7 15.3 2 14.5 2H10v16h4.5c.8 0 1.5-.7 1.5-1.5z" fill="currentColor" stroke="none"/></svg></button>
     <button class="rail-btn" id="railTrashBtn" type="button" title="Trash" aria-label="Trash" data-drop-action="trash"><svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true" focusable="false"><path d="M3 5h14M8 5V3.5A.5.5 0 0 1 8.5 3h3a.5.5 0 0 1 .5.5V5M5 5l.8 11a1.5 1.5 0 0 0 1.5 1.4h5.4A1.5 1.5 0 0 0 14.2 16L15 5M8.3 8.5v5M11.7 8.5v5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg></button>
     <button class="rail-btn" id="railArchiveBtn" type="button" title="Archive" aria-label="Archive" data-drop-action="archive"><svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true" focusable="false"><rect x="2.5" y="3" width="15" height="4" rx="1" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M4 7v8a1.5 1.5 0 0 0 1.5 1.5h9A1.5 1.5 0 0 0 16 15V7M8 10h4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" fill="none"/></svg></button>
@@ -6161,6 +6257,15 @@ body.dark .version-date{color:var(--accent);}
                  hides it in Trash and Archive, exactly
                  like the Pin note item above it. -->
             <button type="button" class="list-menu-item" id="nbHomePinBtn" role="menuitem">Pin to Home</button>
+            <!-- v2.35: the selected note's reminder item,
+                 beside the pin items it follows in every
+                 rule (hidden in Trash and Archive, enabled
+                 only for a live selected note). It opens
+                 the one reminder panel for the selected
+                 note; its label flips between Add reminder
+                 and Edit reminder with the note's state,
+                 set in renderListToolbar. -->
+            <button type="button" class="list-menu-item" id="nbReminderBtn" role="menuitem">Add reminder</button>
             <!-- v1.8.1: the menu adapts to the view. These three items
                  belong to Trash and the Archive; renderListToolbar
                  shows and enables the ones for the current view and
@@ -6784,6 +6889,16 @@ body.dark .version-date{color:var(--accent);}
           <div id="tagPicker" class="hidden" role="listbox" aria-label="Tags already in use"></div>
         </div>
         <div class="editor-actions">
+          <!-- v2.35: the note's reminder button, at the foot
+               of the note where Evernote keeps its own
+               reminder control. Its label is the state: a
+               plain "Reminder" when none is set, the day
+               and time when one is, and a done wording when
+               it is marked done (renderEditor keeps it
+               current); it opens the one reminder panel for
+               the open note and is disabled on locked notes,
+               with the other footer controls. -->
+          <button class="btn small" id="noteReminderBtn" type="button" title="Set a reminder on this note"><svg viewBox="0 0 20 20" width="14" height="14" aria-hidden="true" focusable="false" style="vertical-align:-2px;margin-right:5px;"><path d="M10 2.5a5.5 5.5 0 0 0-5.5 5.5c0 4-1.2 5.2-2 6h14c-.8-.8-2-2-2-6A5.5 5.5 0 0 0 10 2.5zM8.4 16.8a1.8 1.8 0 0 0 3.2 0" fill="currentColor" stroke="none"/></svg><span id="noteReminderBtnLabel">Reminder</span></button>
           <span class="tb-menu-wrap export-wrap">
             <button class="btn small" id="exportBtn" type="button" aria-haspopup="true">Export &#9662;</button>
             <div class="tb-menu up hidden" id="exportMenu" role="menu">
@@ -6974,6 +7089,7 @@ body.dark .version-date{color:var(--accent);}
     <section class="settings-section" aria-labelledby="settingsNotifTitle">
       <h3 id="settingsNotifTitle">Notifications</h3>
       <p>Tasks can carry a reminder. When one comes due, this device shows a notification, generated here in the app: nothing about your tasks is sent anywhere to deliver it. Reminders fire while the app is open on this device; a reminder whose time passed while the app was closed arrives when you next open it.</p>
+      <p>Notes can carry a reminder too, set from a note's own Reminder button. Note reminders follow the same rule: they fire on this device, while the app is open, and a missed one arrives when you next open it.</p>
       <div class="notif-status" id="settingsNotifStatus" data-state="default" aria-live="polite"></div>
       <button class="btn hidden" id="settingsNotifEnableBtn" type="button">Enable notifications</button>
       <div class="settings-autosync">
@@ -6982,6 +7098,16 @@ body.dark .version-date{color:var(--accent);}
           <span>Task reminders</span>
         </label>
         <div class="settings-help">When off, due tasks still show in your lists, but no notifications appear.</div>
+      </div>
+      <!-- v2.35: the note reminders switch, the task switch's
+           twin in the same section, with the same real
+           checkbox discipline. -->
+      <div class="settings-autosync">
+        <label class="settings-check" for="settingsNoteRemindersToggle">
+          <input type="checkbox" id="settingsNoteRemindersToggle">
+          <span>Note reminders</span>
+        </label>
+        <div class="settings-help">When off, notes with reminders still show in your lists and in the Reminders view, but no notifications appear.</div>
       </div>
     </section>
 
@@ -7137,6 +7263,44 @@ body.dark .version-date{color:var(--accent);}
 </div>
 
 <!-- ==========================================================================
+     v2.35: the note reminder panel.
+     The one panel both reminder surfaces open (the notes list
+     menu's Reminder item and the editor footer's Reminder
+     button), filled by openNoteReminderPanel for its note.
+     Quick choices fill the date and time fields (Tomorrow and
+     In a week, at 09:00, the hour an empty time means); the
+     fields themselves are the app's established date and time
+     inputs, themed like every other form control. Mark as
+     done and Remove reminder show only while a reminder
+     exists; the status line states the reminder as it stands.
+     ========================================================================== -->
+<div id="reminderModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="reminderModalTitle">
+  <div class="modal-card reminder-modal-card">
+    <h2 id="reminderModalTitle">Reminder</h2>
+    <p class="modal-sub" id="reminderModalNote"></p>
+    <p class="reminder-status" id="reminderModalStatus"></p>
+    <div class="reminder-quick">
+      <button class="btn small" id="reminderQuickTomorrow" type="button">Tomorrow</button>
+      <button class="btn small" id="reminderQuickWeek" type="button">In a week</button>
+    </div>
+    <div class="field">
+      <label for="reminderDateInput">Date</label>
+      <input id="reminderDateInput" type="date">
+    </div>
+    <div class="field">
+      <label for="reminderTimeInput">Time (optional)</label>
+      <input id="reminderTimeInput" type="time">
+    </div>
+    <div class="modal-foot reminder-modal-foot">
+      <button class="btn danger hidden" id="reminderRemoveBtn" type="button">Remove reminder</button>
+      <button class="btn hidden" id="reminderDoneBtn" type="button">Mark as done</button>
+      <button class="btn" id="reminderCloseBtn" type="button">Close</button>
+      <button class="btn primary" id="reminderSaveBtn" type="button">Save reminder</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==========================================================================
      v2.8: Note history
      Opened from the editor footer's History button. The script
      renders one row per stored version of the open note (newest
@@ -7248,8 +7412,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-28-SSN-V2340";
-const APP_VERSION = "2.34.0";
+const APP_BUILD = "2026-10-28-SSN-V2350";
+const APP_VERSION = "2.35.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -7508,6 +7672,19 @@ const state = {
                             // by the Settings Notifications
                             // switch. On unless a stored settings
                             // record explicitly says false.
+  noteReminders: true,      // v2.35: the same switch's twin
+                            // for NOTE reminders (the note
+                            // scheduler below), with the same
+                            // settings treatment.
+  noteReminderFired: {},    // v2.35: the note reminder fired
+                            // stamps, note id -> the reminder
+                            // moment ISO this device already
+                            // fired for. A delivery fact, not
+                            // note content: it lives in this
+                            // device's settings so firing never
+                            // writes a note file (and never
+                            // re-stamps a note's updated time
+                            // or enters its conflict paths).
   tasksView: {              // v2.24: the Tasks view's controls,
     grouping: "due",        // session only: "due", "notebook",
     filter: "all",          // or "priority"; and "all", "open",
@@ -8092,6 +8269,21 @@ function loadSettings() {
      only an explicitly stored false turns them off, exactly
      like autoSync above. */
   if (s.taskReminders === false) { state.taskReminders = false; }
+  /* v2.35: the note reminder switch, with the task switch's
+     treatment, and the fired stamps: only a plain object of
+     string to string entries is honored, so a damaged record
+     degrades to no stamps (a reminder could then fire once
+     more on this device, never more than once). */
+  if (s.noteReminders === false) { state.noteReminders = false; }
+  if (s.noteReminderFired && typeof s.noteReminderFired === "object" &&
+      !Array.isArray(s.noteReminderFired)) {
+    const fired = {};
+    Object.keys(s.noteReminderFired).forEach(function (id) {
+      const v = s.noteReminderFired[id];
+      if (typeof v === "string" && v) { fired[id] = v; }
+    });
+    state.noteReminderFired = fired;
+  }
   /* v2.33: the When opening choice. Home is the default, so
      only an explicitly stored "notes" moves the landing to
      the notes list; anything else (an absent field from an
@@ -8116,6 +8308,8 @@ function saveSettings() {
     customHighlightColor: state.customHighlightColor,   // v2.24.2: palette memory
     customTextColor: state.customTextColor,   // v2.24.2: palette memory
     taskReminders: state.taskReminders,   // v2.24: reminder notifications
+    noteReminders: state.noteReminders,   // v2.35: note reminder notifications
+    noteReminderFired: state.noteReminderFired,   // v2.35: the fired stamps
     startView: state.startView   // v2.33: the When opening choice
   }));
 }
@@ -8451,7 +8645,16 @@ function noteContentSnapshot(note) {
       .map(function (t) { return String(t); }),
     attachments: sanitizeAttachments(cloneVersionValue(note.attachments || [])),
     pinned: !!note.pinned,
-    thumbnail: note.thumbnail || null
+    thumbnail: note.thumbnail || null,
+    /* v2.35: the reminder pair rides the snapshot beside the
+       pin and the thumbnail, for the same reason: they are
+       stored note content that changes through its own path
+       (the reminder panel), so the save machinery's full
+       content questions need them too. Version entries keep
+       carrying only their named fields, so the pair never
+       reaches a stored version. */
+    reminderAt: note.reminderAt || null,
+    reminderDoneAt: note.reminderDoneAt || null
   };
 }
 
@@ -8541,6 +8744,13 @@ function noteContentEquivalent(a, b) {
     JSON.stringify(a.tags || []) === JSON.stringify(b.tags || []) &&
     !!a.pinned === !!b.pinned &&
     (a.thumbnail || null) === (b.thumbnail || null) &&
+    /* v2.35: the reminder pair is content for this question
+       too, so a save from a session holding a stale reminder
+       state can never silently agree with (and overwrite) a
+       version whose reminder differs; it takes the ordinary
+       divergence path instead, where nothing is lost. */
+    (a.reminderAt || null) === (b.reminderAt || null) &&
+    (a.reminderDoneAt || null) === (b.reminderDoneAt || null) &&
     String(a.notebook || "") === String(b.notebook || "") &&
     JSON.stringify(sanitizeAttachments(a.attachments || [])) ===
       JSON.stringify(sanitizeAttachments(b.attachments || []));
@@ -8560,7 +8770,12 @@ function noteMatchesLastSaved(note) {
   const snap = noteContentSnapshot(note);
   return versionContentEqual(snap, baseline) &&
     snap.pinned === baseline.pinned &&
-    snap.thumbnail === baseline.thumbnail;
+    snap.thumbnail === baseline.thumbnail &&
+    /* v2.35: a baseline written before reminders existed has
+       no pair on it; undefined reads as null here, so an old
+       baseline still matches a reminderless note exactly. */
+    snap.reminderAt === (baseline.reminderAt || null) &&
+    snap.reminderDoneAt === (baseline.reminderDoneAt || null);
 }
 
 function versionHistoryLoadError(message) {
@@ -9034,6 +9249,17 @@ function serializeNote(note) {
   if (note.thumbnail) {
     lines.push("thumbnail: " + note.thumbnail);
   }
+  /* v2.35: the note's reminder (Evernote parity): the moment
+     it fires at, and the moment it was marked done, as ISO
+     stamps. Written only when set, exactly like the thumbnail,
+     so a note without a reminder keeps byte identical front
+     matter to every earlier build. */
+  if (note.reminderAt) {
+    lines.push("reminderAt: " + note.reminderAt);
+  }
+  if (note.reminderDoneAt) {
+    lines.push("reminderDoneAt: " + note.reminderDoneAt);
+  }
   lines.push("---");
   lines.push("");
   lines.push(note.body || "");
@@ -9058,6 +9284,8 @@ function parseNoteFile(text, sha, fallbackId, trashed, archived) {
     previewText: null, /* v2.20: shells carry the catalog preview here */
     attachments: [],   /* v1.2: attachment metadata, see serializeNote */
     thumbnail: null,   /* v2.11: thumbnail attachment id, or null */
+    reminderAt: null,  /* v2.35: the reminder moment ISO, or null */
+    reminderDoneAt: null, /* v2.35: the done stamp ISO, or null */
     sha: sha || null,
     fileId: null,      /* v2.20: the Drive file id, when a load resolved it */
     trashed: !!trashed,
@@ -9089,6 +9317,18 @@ function parseNoteFile(text, sha, fallbackId, trashed, archived) {
     if (meta.archivedFrom) { note.archivedFrom = meta.archivedFrom; }
     /* v2.11: the thumbnail attachment id, one plain value. */
     if (meta.thumbnail) { note.thumbnail = meta.thumbnail; }
+    /* v2.35: the reminder pair. A value that does not parse
+       as a date is ignored rather than carried, so a hand
+       edited or damaged line degrades to no reminder, the
+       same degrade the attachments line uses. */
+    if (meta.reminderAt &&
+        !isNaN(new Date(meta.reminderAt).getTime())) {
+      note.reminderAt = meta.reminderAt;
+    }
+    if (meta.reminderDoneAt &&
+        !isNaN(new Date(meta.reminderDoneAt).getTime())) {
+      note.reminderDoneAt = meta.reminderDoneAt;
+    }
     /* v1.2: attachment metadata. A malformed line must never break the
        note: it is counted as a warning (surfaced once after load) and the
        note opens with no attachment metadata. */
@@ -9401,8 +9641,14 @@ const INCOMING_FILE = "incoming.json";
    advanced search operators todo: and resource: can judge
    a catalog shell exactly as they judge a loaded note. A
    shape 1 catalog is simply not read (the classic load
-   runs once and the catalog is rebuilt at shape 2). */
-const CATALOG_SHAPE_VERSION = 2;
+   runs once and the catalog is rebuilt at shape 2).
+   v2.35: shape 3 adds each note's reminder pair
+   (reminderAt, reminderDoneAt), so the list can show the
+   reminder marker, the Reminders view can gather its
+   notes, and the reminder search operators can judge a
+   shell, all before any note file is fetched. A shape 2
+   catalog is not read, by the same rule. */
+const CATALOG_SHAPE_VERSION = 3;
 const CATALOG_WRITE_DEBOUNCE_MS = 800;
 
 let catalogWriteTimer = null;      /* pending debounce timer, or null */
@@ -9447,6 +9693,12 @@ function buildCatalogEntry(note, collection) {
     preview: loaded ? htmlToText(note.body).slice(0, 140)
       : (note.previewText || ""),
     thumbnail: note.thumbnail || null,
+    /* v2.35: the reminder pair. It lives directly on the
+       note object for shells and loaded notes alike (a
+       shell's pair came from its own entry), so one read
+       serves both, no shell twin fields needed. */
+    reminderAt: note.reminderAt || null,
+    reminderDoneAt: note.reminderDoneAt || null,
     cardAttachment: cardAtt
       ? (sanitizeAttachments([cloneVersionValue(cardAtt)])[0] || null)
       : null,
@@ -10352,6 +10604,12 @@ function noteFromCatalogEntry(entry, collection) {
     previewText: entry.preview || "",
     attachments: [],
     thumbnail: entry.thumbnail || null,
+    /* v2.35: the entry's reminder pair rides onto the
+       shell itself (see buildCatalogEntry), so the card
+       marker, the Reminders view, and search all read the
+       note's own fields whichever shape the note is in. */
+    reminderAt: entry.reminderAt || null,
+    reminderDoneAt: entry.reminderDoneAt || null,
     shellCardAtt: entry.cardAttachment || null,
     attachmentCount: entry.attachmentCount || 0,
     /* v2.32: the entry's search facts ride onto the shell
@@ -10399,6 +10657,11 @@ function ensureNoteBodyLoaded(note) {
         note.body = parsed.body;
         note.attachments = parsed.attachments;
         note.thumbnail = parsed.thumbnail;
+        /* v2.35: the file's reminder pair replaces the
+           catalog facts the shell carried, the same swap
+           the thumbnail makes. */
+        note.reminderAt = parsed.reminderAt;
+        note.reminderDoneAt = parsed.reminderDoneAt;
         note.trashedFrom = parsed.trashedFrom;
         note.archivedFrom = parsed.archivedFrom;
         note.sha = file.token;
@@ -11198,6 +11461,13 @@ async function loadAllFromRepo() {
      reminder catch up, and any notification click waiting to
      open its task). */
   if (tasksLoad) { onTasksLoaded(prevTaskUpdatedById); }
+  /* v2.35: the note reminders' post load pass: the boot
+     catch up for moments missed while the app was closed,
+     and any notification click still waiting to open its
+     note. Unconditional (note reminders do not ride the
+     tasks read). */
+  checkNoteReminders();
+  maybeOpenPendingNoteReminder();
   /* v2.31: with the whole library in memory, shortcuts whose
      targets exist nowhere (a notebook deleted on another
      device, a note deleted forever, a tag that left every
@@ -11635,7 +11905,12 @@ function saveFactsContentEqualsBaseline(saveFacts) {
   if (!baseline || !candidate) { return false; }
   return versionContentEqual(candidate, baseline) &&
     candidate.pinned === baseline.pinned &&
-    candidate.thumbnail === baseline.thumbnail;
+    candidate.thumbnail === baseline.thumbnail &&
+    /* v2.35: the reminder pair joins the baseline verdict,
+       with the same old baseline guard as
+       noteMatchesLastSaved. */
+    candidate.reminderAt === (baseline.reminderAt || null) &&
+    candidate.reminderDoneAt === (baseline.reminderDoneAt || null);
 }
 
 /* v2.22: the ancestor test's reader: does a content snapshot
@@ -11767,6 +12042,10 @@ async function adoptStoredRevisionOnMismatch(note, path, saveFacts,
     cloneVersionValue(stored.attachments || []));
   note.pinned = stored.pinned;
   note.thumbnail = stored.thumbnail;
+  /* v2.35: the stored version's reminder pair is adopted
+     with its pin and thumbnail, the same stored fields. */
+  note.reminderAt = stored.reminderAt;
+  note.reminderDoneAt = stored.reminderDoneAt;
   note.updated = stored.updated;
   note.fileId = stored.fileId || note.fileId;
   note.bodyLoaded = true;
@@ -12290,6 +12569,11 @@ async function saveLocalOverStoredRevision(note, path, text,
        pre-v2.26 copies used, in the other direction. */
     attachments: sanitizeAttachments(stored.attachments),
     thumbnail: stored.thumbnail || null,
+    /* v2.35: the stored version's reminder pair carries
+       over with its thumbnail, so the preserved version
+       keeps the reminder it had. */
+    reminderAt: stored.reminderAt || null,
+    reminderDoneAt: stored.reminderDoneAt || null,
     sha: null,
     fileId: null,      /* v2.20: assigned by a later load */
     trashed: !!note.trashed,
@@ -12392,6 +12676,10 @@ async function saveConflictCopy(note, originalPath) {
     /* v2.11: the copy references the same attachment records, so a
        thumbnail choice carries over and still resolves. */
     thumbnail: note.thumbnail || null,
+    /* v2.35: the local version's reminder pair carries over
+       with its thumbnail, so the forked version loses nothing. */
+    reminderAt: note.reminderAt || null,
+    reminderDoneAt: note.reminderDoneAt || null,
     sha: null,
     trashed: false,
     trashedFrom: null,
@@ -12606,6 +12894,10 @@ async function flushQueue() {
             attachments: sanitizeAttachments(
               storedParsed.attachments),
             thumbnail: storedParsed.thumbnail || null,
+            /* v2.35: the stored version's reminder pair
+               carries over with its thumbnail. */
+            reminderAt: storedParsed.reminderAt || null,
+            reminderDoneAt: storedParsed.reminderDoneAt || null,
             sha: null,
             fileId: null,
             trashed: false,
@@ -14385,6 +14677,22 @@ function notesMatchingSearchText(rawQuery) {
   return list;
 }
 
+/* v2.35: the Reminders view's order: reminders still asking
+   for attention first (soonest moment first, so overdue
+   leads), done reminders after (also by moment). Ties fall
+   back to the title so the order is stable and readable. */
+function compareNotesByReminder(a, b) {
+  const aDone = a.reminderDoneAt ? 1 : 0;
+  const bDone = b.reminderDoneAt ? 1 : 0;
+  if (aDone !== bDone) { return aDone - bDone; }
+  const aT = new Date(a.reminderAt || "").getTime();
+  const bT = new Date(b.reminderAt || "").getTime();
+  const aMs = isNaN(aT) ? 0 : aT;
+  const bMs = isNaN(bT) ? 0 : bT;
+  if (aMs !== bMs) { return aMs - bMs; }
+  return String(a.title || "").localeCompare(String(b.title || ""));
+}
+
 /* One widget's shell: the card, its header (the title,
    plus whatever controls the builder adds), and its
    body. Every widget is built through here, so the
@@ -14930,6 +15238,8 @@ function makeNote(notebookSlug, title, body) {
     previewText: null, /* v2.20: only catalog shells use this field */
     attachments: [],   /* v1.2: new notes start with no attachments */
     thumbnail: null,   /* v2.11: no thumbnail until one is chosen */
+    reminderAt: null,  /* v2.35: no reminder until one is set */
+    reminderDoneAt: null,
     sha: null,
     fileId: null,      /* v2.20: assigned by the first store write or load */
     trashed: false,
@@ -16208,6 +16518,13 @@ function renderSidebar() {
     state.tasks.filter(function (t) { return t.status === "open"; }).length || "";
   document.getElementById("countPinned").textContent =
     state.notes.filter(function (n) { return n.pinned; }).length || "";
+  /* v2.35: the Reminders entry's pill is the count of
+     reminders not yet marked done (done reminders still
+     list in the view, they just do not ask for attention). */
+  document.getElementById("countReminders").textContent =
+    state.notes.filter(function (n) {
+      return n.reminderAt && !n.reminderDoneAt;
+    }).length || "";
   document.getElementById("countTrash").textContent = state.trash.length || "";
   document.getElementById("countArchive").textContent = state.archive.length || "";
 
@@ -16221,6 +16538,8 @@ function renderSidebar() {
     state.view.kind === "tasks");
   document.getElementById("navPinned").classList.toggle("active",
     state.view.kind === "pinned");
+  document.getElementById("navReminders").classList.toggle("active",
+    state.view.kind === "reminders");
   document.getElementById("navTrash").classList.toggle("active",
     state.view.kind === "trash");
   document.getElementById("navArchive").classList.toggle("active",
@@ -16362,6 +16681,8 @@ function renderRailChrome() {
   const marks = [
     ["railAllBtn", state.view.kind === "all"],
     ["railPinnedBtn", state.view.kind === "pinned"],
+    /* v2.35: the rail's Reminders button marks with its view. */
+    ["railRemindersBtn", state.view.kind === "reminders"],
     ["railTrashBtn", state.view.kind === "trash"],
     ["railArchiveBtn", state.view.kind === "archive"],
     ["railNotebooksBtn", state.view.kind === "notebook"]
@@ -16974,6 +17295,22 @@ function renderListToolbar() {
       ? "Unpin from Home"
       : "Pin to Home";
   }
+  /* v2.35: the Reminder item follows the same rules again:
+     hidden in Trash and Archive, enabled only for a live
+     selected note, and its label flips between Add reminder
+     and Edit reminder with the note's reminder state. */
+  const reminderBtn = document.getElementById("nbReminderBtn");
+  if (reminderBtn) {
+    reminderBtn.classList.toggle("hidden",
+      kind === "trash" || kind === "archive");
+    const selected = currentNote();
+    const liveSelected = selected &&
+      state.notes.indexOf(selected) >= 0 ? selected : null;
+    reminderBtn.disabled = !liveSelected;
+    reminderBtn.textContent = liveSelected && liveSelected.reminderAt
+      ? "Edit reminder"
+      : "Add reminder";
+  }
   const emptyTrashBtn = document.getElementById("nbEmptyTrashBtn");
   if (emptyTrashBtn) {
     emptyTrashBtn.classList.toggle("hidden", kind !== "trash");
@@ -17292,6 +17629,18 @@ async function restoreSelectedArchiveNotes() {
    operator query as it means alone, and a catalog shell
    (whose body is not on the device) is judged on the same
    text either way.
+
+   v2.35 addendum: the reminder operators, skipped above
+   while notes carried no reminder data, are wired now
+   that they do: reminderTime: and reminderDoneTime: take
+   the same date thresholds as created: and updated:,
+   plus the bare * presence form, and reminderOrder:* is
+   the presence of a reminder at all (any other
+   reminderOrder: value degrades to a plain word: no order
+   stamp exists to threshold against). The reminder pair
+   rides the catalog at shape 3, so shells judge exactly
+   as loaded notes do. Evernote's active reminders idiom
+   (reminderTime:* -reminderDoneTime:*) works as written.
    -------------------------------------------------------------------------- */
 
 /* The one text predicate every search path shares, extracted
@@ -17494,7 +17843,11 @@ function tokenizeSearchQuery(q) {
 }
 
 const SEARCH_OPERATOR_LABELS = ["notebook", "stack", "tag",
-  "intitle", "created", "updated", "todo", "resource"];
+  "intitle", "created", "updated", "todo", "resource",
+  /* v2.35: the reminder operators join the grammar now
+     that notes carry reminders (they were the skipped
+     family while the data did not exist). */
+  "remindertime", "reminderdonetime", "reminderorder"];
 
 /* Parse a query into the predicates that judge it, or
    return null when the query carries no syntax at all
@@ -17542,6 +17895,43 @@ function parseSearchQuery(rawQuery) {
           return;
         }
         pushTerm({ kind: t.label, value: ms, negated: t.negated });
+        return;
+      }
+      if (t.label === "remindertime" ||
+          t.label === "reminderdonetime") {
+        /* v2.35: the reminder date operators classify
+           exactly like created: and updated: (the same
+           threshold reader, the same degrade), plus the
+           bare * presence form Evernote's grammar gives
+           them: reminderTime:* is every note carrying a
+           reminder, reminderDoneTime:* every done one. */
+        if (v === "*") {
+          pushTerm({ kind: t.label, value: "*",
+            negated: t.negated });
+          return;
+        }
+        const ms = searchDateThresholdMs(v);
+        if (ms === null) {
+          pushText(t.label + ":" + v, t.negated);
+          return;
+        }
+        pushTerm({ kind: t.label, value: ms, negated: t.negated });
+        return;
+      }
+      if (t.label === "reminderorder") {
+        /* v2.35: reminderOrder is an operator only in its
+           presence form: the note has a reminder (done or
+           not), which is what the field means in Evernote's
+           model. This build stores no separate order stamp
+           to threshold against, so any other value degrades
+           to the plain word typed, the grammar's rule for
+           values it cannot judge. */
+        if (v === "*") {
+          pushTerm({ kind: "reminderorder", value: "*",
+            negated: t.negated });
+          return;
+        }
+        pushText("reminderorder:" + v, t.negated);
         return;
       }
       if (t.label === "todo") {
@@ -17664,6 +18054,26 @@ function searchTermMatches(note, pred) {
       ? note.created : note.updated).getTime();
     return !isNaN(t) && t >= pred.value;
   }
+  if (pred.kind === "remindertime" ||
+      pred.kind === "reminderdonetime") {
+    /* v2.35: the reminder fields ride on the note object
+       for loaded notes and catalog shells alike, so this
+       one read judges both. The * form is presence; a
+       date value is the created:/updated: threshold on
+       the field, and an unset field never matches. */
+    const raw = pred.kind === "remindertime"
+      ? note.reminderAt : note.reminderDoneAt;
+    if (!raw) { return false; }
+    if (pred.value === "*") { return true; }
+    const t = new Date(raw).getTime();
+    return !isNaN(t) && t >= pred.value;
+  }
+  if (pred.kind === "reminderorder") {
+    /* v2.35: presence of a reminder at all, done or not:
+       exactly the field's meaning in Evernote's model,
+       judged from the same two stamps. */
+    return !!(note.reminderAt || note.reminderDoneAt);
+  }
   if (pred.kind === "todo") {
     const f = noteTodoFacts(note);
     if (pred.value === "*") { return f.checked || f.unchecked; }
@@ -17755,6 +18165,14 @@ function visibleNotes() {
     list = state.notes.slice();
     if (state.view.kind === "pinned") {
       list = list.filter(function (n) { return n.pinned; });
+    } else if (state.view.kind === "reminders") {
+      /* v2.35: the Reminders view pools every live note
+         carrying a reminder, done ones included (Evernote's
+         reminders list shows completed reminders as
+         completed). Trashed and archived notes never pool
+         here: this branch reads state.notes only, like
+         every other live view. */
+      list = list.filter(function (n) { return !!n.reminderAt; });
     } else if (state.view.kind === "notebook") {
       list = list.filter(function (n) { return n.notebook === state.view.value; });
     } else if (state.view.kind === "tag") {
@@ -17781,10 +18199,20 @@ function visibleNotes() {
   if (listFiltersActive()) {
     list = list.filter(notePassesListFilters);
   }
-  list.sort(function (a, b) {
-    if (!!b.pinned !== !!a.pinned) { return b.pinned ? 1 : -1; }
-    return compareNotesByListSort(a, b);
-  });
+  if (state.view.kind === "reminders") {
+    /* v2.35: the Reminders view sorts by reminder moment,
+       not by the list sort or the pin rule: active
+       reminders first, soonest first (overdue naturally
+       leads), then done reminders by their moment. This is
+       Evernote's reminders list order minus its manual
+       drag ordering, which this build does not reproduce. */
+    list.sort(compareNotesByReminder);
+  } else {
+    list.sort(function (a, b) {
+      if (!!b.pinned !== !!a.pinned) { return b.pinned ? 1 : -1; }
+      return compareNotesByListSort(a, b);
+    });
+  }
   return list;
 }
 
@@ -17792,6 +18220,7 @@ function viewTitle() {
   if (state.view.kind === "home") { return "Home"; }
   if (state.view.kind === "tasks") { return "Tasks"; }
   if (state.view.kind === "pinned") { return "Pinned"; }
+  if (state.view.kind === "reminders") { return "Reminders"; }
   if (state.view.kind === "trash") { return "Trash"; }
   if (state.view.kind === "archive") { return "Archive"; }
   if (state.view.kind === "notebook") {
@@ -17958,6 +18387,8 @@ function renderNoteList() {
     empty.className = "empty-state";
     if (state.view.kind === "trash") {
       empty.innerHTML = "<div class=\"big\">Trash is empty</div>Notes you move to Trash will wait here until you restore them or delete them forever.";
+    } else if (state.view.kind === "reminders") {
+      empty.innerHTML = "<div class=\"big\">No reminders</div>Set a reminder on a note, from its editor's Reminder button or the list menu, and it will gather here.";
     } else if (state.view.kind === "archive") {
       empty.innerHTML = "<div class=\"big\">Archive is empty</div>Notes you archive will wait here until you unarchive them or move them to Trash.";
     } else if (listFiltersActive()) {
@@ -18074,6 +18505,26 @@ function renderNoteList() {
         row.appendChild(chip);
       });
       main.appendChild(row);
+    }
+    /* v2.35: the reminder line, under the tag row: the bell
+       glyph and the moment in the app's date words
+       (noteReminderLabel), wearing .overdue while an
+       unfinished reminder's moment has passed and .done
+       once it is marked done. The pair rides on the note
+       object for shells and loaded notes alike (the
+       catalog carries it at shape 3), so the line renders
+       before the note is ever opened. */
+    if (note.reminderAt) {
+      const rem = document.createElement("div");
+      rem.className = "card-reminder" +
+        (note.reminderDoneAt ? " done"
+          : (new Date(note.reminderAt).getTime() <= Date.now()
+            ? " overdue" : ""));
+      rem.innerHTML = '<svg viewBox="0 0 20 20" width="13" height="13" aria-hidden="true" focusable="false"><path d="M10 2.5a5.5 5.5 0 0 0-5.5 5.5c0 4-1.2 5.2-2 6h14c-.8-.8-2-2-2-6A5.5 5.5 0 0 0 10 2.5zM8.4 16.8a1.8 1.8 0 0 0 3.2 0" fill="currentColor" stroke="none"/></svg>';
+      const remText = document.createElement("span");
+      remText.textContent = noteReminderLabel(note);
+      rem.appendChild(remText);
+      main.appendChild(rem);
     }
 
     /* v2.18: the thumbnail box. The attachment it shows is the
@@ -19837,6 +20288,11 @@ function renderNotificationSettings() {
   const toggle =
     document.getElementById("settingsTaskRemindersToggle");
   if (toggle) { toggle.checked = state.taskReminders !== false; }
+  /* v2.35: the note switch shows its saved choice beside
+     the task switch. */
+  const noteToggle =
+    document.getElementById("settingsNoteRemindersToggle");
+  if (noteToggle) { noteToggle.checked = state.noteReminders !== false; }
   const status = document.getElementById("settingsNotifStatus");
   const enableBtn =
     document.getElementById("settingsNotifEnableBtn");
@@ -19882,6 +20338,9 @@ async function requestNotificationPermission() {
   renderNotificationSettings();
   if (taskEditorState) { syncTaskReminderControls(); }
   checkTaskReminders();
+  /* v2.35: a fresh grant can make a waiting note reminder
+     due too, so the note scheduler takes the same look. */
+  checkNoteReminders();
   return result;
 }
 
@@ -19895,6 +20354,19 @@ function applyTaskRemindersFromToggle() {
   state.taskReminders = !!toggle.checked;
   saveSettings();
   if (state.taskReminders) { checkTaskReminders(); }
+}
+
+/* The Settings note reminders switch, the task switch's
+   twin: off silences the note scheduler completely (the
+   reminders still show everywhere); on gives it an
+   immediate look. */
+function applyNoteRemindersFromToggle() {
+  const toggle =
+    document.getElementById("settingsNoteRemindersToggle");
+  if (!toggle) { return; }
+  state.noteReminders = !!toggle.checked;
+  saveSettings();
+  if (state.noteReminders) { checkNoteReminders(); }
 }
 
 let swRegistrationPromise = null;
@@ -19971,6 +20443,386 @@ function startTaskReminderScheduler() {
   if (taskReminderTimer !== null) { return; }
   taskReminderTimer = setInterval(checkTaskReminders,
     TASK_REMINDER_TICK_MS);
+}
+
+/* ==========================================================================
+   v2.35: NOTE REMINDERS (Evernote parity, phase 2 release 3).
+
+   Evernote's model, from its help pages: a note carries one
+   reminder (a date and time set from the note's own reminder
+   control or its menu, with quick choices beside a custom
+   date); the reminder shows on the note wherever it lists,
+   and every reminder gathers in a reminders list sorted by
+   its moment; when the moment arrives the app notifies; and
+   the reminder is then marked done (which records a done
+   stamp and leaves the note itself untouched) or cleared
+   entirely.
+
+   Here the reminder lives on the note as two ISO stamps,
+   reminderAt and reminderDoneAt, written into the note
+   file's front matter only while set (see serializeNote),
+   carried by the catalog at shape 3, and set through one
+   panel (openNoteReminderPanel) from both surfaces
+   Evernote offers: the note's own footer (the editor's
+   Reminder button, at the foot of the note where Evernote
+   keeps its reminder control) and the notes list menu's
+   Reminder item. The panel offers Evernote's quick choices
+   (Tomorrow, In a week) beside a date and an optional time;
+   an empty time means 09:00 local, the hour tasks use.
+
+   Firing mirrors the task machinery above it, with the
+   same named deviation tasks carry: there is no server to
+   push with, so a reminder fires while the app is open on
+   a device (and once on the next open for a moment missed
+   while it was closed). One deliberate difference from
+   tasks: the fired stamp is NOT written onto the note (a
+   task stamps its own record because tasks.json is a data
+   file; a note file write would re-stamp the note's
+   updated time, float it up every Updated-sorted list, and
+   add save and conflict surface to a timer path, all for
+   a delivery fact Evernote itself never writes into the
+   note: only the reader's own mark-done writes there). The
+   stamps live in this device's settings instead
+   (state.noteReminderFired: note id -> the reminderAt
+   fired for), which also matches how Evernote delivers,
+   once per device. Trashed and archived notes never fire:
+   the scheduler reads state.notes only, the task precedent
+   (a completed task never fires) applied to collections.
+   ========================================================================== */
+
+/* The reminder moment's date and time as the panel's two
+   input values (local), or empty strings when the note
+   carries no reminder. */
+function noteReminderInputParts(note) {
+  const d = new Date(note && note.reminderAt || "");
+  if (isNaN(d.getTime())) { return { date: "", time: "" }; }
+  function p2(n) { return (n < 10 ? "0" : "") + n; }
+  return {
+    date: d.getFullYear() + "-" + p2(d.getMonth() + 1) + "-" +
+      p2(d.getDate()),
+    time: p2(d.getHours()) + ":" + p2(d.getMinutes())
+  };
+}
+
+/* The reminder moment in the app's date words, the task due
+   phrase's shape: "today 10:30 AM", "tomorrow 9:00 AM",
+   "Oct 30, 9:00 AM". Empty for a reminderless note. */
+function noteReminderDuePhrase(note) {
+  if (!note || !note.reminderAt) { return ""; }
+  const parts = noteReminderInputParts(note);
+  if (!parts.date) { return ""; }
+  const diff = taskDayDiff({ dueDate: parts.date });
+  const time = taskTimeLabel(parts.time);
+  if (diff === 0) { return "today " + time; }
+  if (diff === 1) { return "tomorrow " + time; }
+  if (diff !== null && diff < 0) {
+    return taskDateLabel(parts.date) + ", " + time;
+  }
+  return taskDateLabel(parts.date) + ", " + time;
+}
+
+/* The reminder's one line of words, shared by the card
+   marker and the editor footer button: a set reminder reads
+   "Reminder · Tomorrow, 10:30 AM" (the day capitalized, the
+   way the card meta speaks), a done one "Reminder done ·
+   Oct 26". Empty for a reminderless note. */
+function noteReminderLabel(note) {
+  if (!note || !note.reminderAt) { return ""; }
+  if (note.reminderDoneAt) {
+    const doneParts = noteReminderInputParts(note);
+    return "Reminder done · " + taskDateLabel(doneParts.date);
+  }
+  const phrase = noteReminderDuePhrase(note);
+  const capped = phrase
+    ? phrase.charAt(0).toUpperCase() + phrase.slice(1) : "";
+  return "Reminder · " + capped;
+}
+
+/* The reminder panel's session state: the id of the note
+   the panel is editing, or null while it is closed. The
+   note is re-read from state at every action, so a sync
+   landing while the panel is open is honored. */
+let reminderPanelNoteId = null;
+
+function reminderPanelNote() {
+  if (!reminderPanelNoteId) { return null; }
+  return state.notes.find(function (n) {
+    return n.id === reminderPanelNoteId;
+  }) || null;
+}
+
+/* Open the reminder panel for a note: the list menu's
+   Reminder item and the editor footer's Reminder button
+   both land here. The fields start from the note's current
+   reminder (blank when none), the quick choices sit above
+   them, and Mark as done and Remove reminder show only
+   while a reminder exists to act on. */
+function openNoteReminderPanel(noteId) {
+  const note = state.notes.find(function (n) {
+    return n.id === noteId;
+  });
+  if (!note) { return; }
+  reminderPanelNoteId = note.id;
+  document.getElementById("reminderModalTitle").textContent =
+    note.reminderAt ? "Edit reminder" : "Add reminder";
+  document.getElementById("reminderModalNote").textContent =
+    note.title || "Untitled note";
+  const status = document.getElementById("reminderModalStatus");
+  if (note.reminderDoneAt) {
+    status.textContent = "This reminder was marked done. " +
+      "Saving a new date sets a fresh reminder.";
+  } else if (note.reminderAt) {
+    status.textContent = "Reminder set for " +
+      noteReminderDuePhrase(note) + ".";
+  } else {
+    status.textContent = "No reminder is set on this note.";
+  }
+  const parts = noteReminderInputParts(note);
+  document.getElementById("reminderDateInput").value = parts.date;
+  document.getElementById("reminderTimeInput").value = parts.time;
+  document.getElementById("reminderDoneBtn").classList.toggle(
+    "hidden", !(note.reminderAt && !note.reminderDoneAt));
+  document.getElementById("reminderRemoveBtn").classList.toggle(
+    "hidden", !note.reminderAt);
+  document.getElementById("reminderModal").classList.remove("hidden");
+}
+
+function closeNoteReminderPanel() {
+  reminderPanelNoteId = null;
+  document.getElementById("reminderModal").classList.add("hidden");
+}
+
+/* The quick choices (Tomorrow, In a week) fill the fields
+   at 09:00, the hour an empty time means, and leave the
+   save to the Save button, so a quick pick can still be
+   adjusted before it lands. */
+function fillReminderQuickChoice(daysAhead) {
+  const d = new Date();
+  d.setDate(d.getDate() + daysAhead);
+  function p2(n) { return (n < 10 ? "0" : "") + n; }
+  document.getElementById("reminderDateInput").value =
+    d.getFullYear() + "-" + p2(d.getMonth() + 1) + "-" +
+    p2(d.getDate());
+  document.getElementById("reminderTimeInput").value = "09:00";
+}
+
+/* Persist a reminder change through the ordinary save:
+   the reminder pair is note content (see
+   noteContentSnapshot), so the pin toggle's deliberate
+   save path is the right one, updated re-stamp and all.
+   The lists, the sidebar counts, and the editor (footer
+   button included) re-render from the mutated note. */
+function persistNoteReminder(note, toastText) {
+  saveNoteToRepo(note);
+  renderAll();
+  toast(toastText);
+}
+
+/* Save: the date is required (a dateless reminder is the
+   one Evernote shape this build does not carry; see the
+   revision entry). An empty time means 09:00 local. A
+   fresh save clears any done stamp and re-arms the fired
+   stamp, so a reminder set again for a new moment can
+   fire for it. */
+function saveNoteReminderFromPanel() {
+  const note = reminderPanelNote();
+  if (!note) { closeNoteReminderPanel(); return; }
+  const dateStr = document.getElementById("reminderDateInput").value;
+  const timeStr = document.getElementById("reminderTimeInput").value;
+  if (!dateStr) {
+    toast("Pick a date for the reminder.", true);
+    return;
+  }
+  const dp = parseTaskDate(dateStr);
+  if (!dp) {
+    toast("That date does not parse.", true);
+    return;
+  }
+  let hh = 9, mm = 0;
+  if (timeStr && /^\d{2}:\d{2}$/.test(timeStr)) {
+    hh = Number(timeStr.slice(0, 2));
+    mm = Number(timeStr.slice(3, 5));
+  }
+  note.reminderAt = new Date(dp.y, dp.m - 1, dp.d, hh, mm, 0, 0)
+    .toISOString();
+  note.reminderDoneAt = null;
+  delete state.noteReminderFired[note.id];
+  saveSettings();
+  closeNoteReminderPanel();
+  persistNoteReminder(note, "Reminder set for " +
+    noteReminderDuePhrase(note) + ".");
+}
+
+/* Mark as done: the done stamp lands, the moment stays
+   (the Reminders view and the card both show the reminder
+   as done, the way Evernote keeps a completed reminder
+   visible), and a done reminder never fires. */
+function markNoteReminderDoneFromPanel() {
+  const note = reminderPanelNote();
+  if (!note) { closeNoteReminderPanel(); return; }
+  note.reminderDoneAt = new Date().toISOString();
+  closeNoteReminderPanel();
+  persistNoteReminder(note, "Reminder marked done.");
+}
+
+/* Remove: both stamps clear, and the note's file returns
+   to the exact shape it had before any reminder existed. */
+function removeNoteReminderFromPanel() {
+  const note = reminderPanelNote();
+  if (!note) { closeNoteReminderPanel(); return; }
+  note.reminderAt = null;
+  note.reminderDoneAt = null;
+  delete state.noteReminderFired[note.id];
+  saveSettings();
+  closeNoteReminderPanel();
+  persistNoteReminder(note, "Reminder removed.");
+}
+
+/* v2.35: the note reminder scheduler, the task scheduler's
+   twin. Same cadence and gates (its own Settings switch,
+   the notification permission), plus the note conditions:
+   the note is live, carries a reminder, is not done, the
+   moment has arrived, and this device has not already
+   fired for this exact moment. */
+const NOTE_REMINDER_TICK_MS = 30000;
+let noteReminderTimer = null;
+/* The session's own fired set, the task set's twin: it
+   covers the moment between stamping and the stamp's
+   settings write landing, and a second check in the same
+   session can never double fire. */
+const noteReminderFiredKeys = new Set();
+
+function noteReminderFireKey(note) {
+  return String(note.id) + "|" + String(note.reminderAt || "");
+}
+
+function startNoteReminderScheduler() {
+  if (noteReminderTimer !== null) { return; }
+  noteReminderTimer = setInterval(checkNoteReminders,
+    NOTE_REMINDER_TICK_MS);
+}
+
+function checkNoteReminders() {
+  if (!state.noteReminders) { return; }
+  if (notificationPermission() !== "granted") { return; }
+  const now = Date.now();
+  /* Stale stamps are pruned as the check passes: a stamp
+     whose note is gone, whose reminder moved or cleared,
+     or whose reminder is done can never be consulted
+     again, and dropping it here keeps the settings record
+     the size of the live reminder set. */
+  let stampsChanged = false;
+  const liveById = {};
+  state.notes.forEach(function (n) { liveById[n.id] = n; });
+  Object.keys(state.noteReminderFired).forEach(function (id) {
+    const n = liveById[id];
+    if (!n || !n.reminderAt || n.reminderDoneAt ||
+        state.noteReminderFired[id] !== n.reminderAt) {
+      delete state.noteReminderFired[id];
+      stampsChanged = true;
+    }
+  });
+  state.notes.forEach(function (note) {
+    if (!note.reminderAt || note.reminderDoneAt) { return; }
+    const at = new Date(note.reminderAt).getTime();
+    if (isNaN(at) || at > now) { return; }
+    if (state.noteReminderFired[note.id] === note.reminderAt) {
+      return;
+    }
+    const key = noteReminderFireKey(note);
+    if (noteReminderFiredKeys.has(key)) { return; }
+    noteReminderFiredKeys.add(key);
+    state.noteReminderFired[note.id] = note.reminderAt;
+    stampsChanged = true;
+    deliverNoteReminderNotification(note);
+  });
+  /* The stamps ride one settings write per check that
+     changed any, the task stamp discipline's shape (there
+     the stamp lands inside the tasks write). */
+  if (stampsChanged) { saveSettings(); }
+}
+
+/* Deliver one note reminder notification, the task
+   delivery's twin: the service worker's showNotification
+   preferred (its click handler routes back through
+   sw.js), the Notification constructor as the fallback.
+   The title is the note's title; the body names its
+   notebook and the moment, in the task notification's
+   voice. */
+async function deliverNoteReminderNotification(note) {
+  const title = note.title || "Untitled note";
+  const nbName = notebookNameForSlug(note.notebook);
+  const body = (nbName ? nbName + " · " : "") + "Reminder " +
+    noteReminderDuePhrase(note);
+  try {
+    const reg = await getSwRegistration();
+    if (reg && typeof reg.showNotification === "function") {
+      await reg.showNotification(title, {
+        body: body,
+        icon: "icon-192.png",
+        tag: "note-reminder-" + note.id,
+        data: { noteReminderId: note.id }
+      });
+      return;
+    }
+  } catch (err) { /* fall through to the constructor */ }
+  try {
+    const n = new Notification(title, {
+      body: body, tag: "note-reminder-" + note.id });
+    n.onclick = function () {
+      try { window.focus(); } catch (e) { /* best effort */ }
+      queueNoteReminderOpen(note.id);
+    };
+  } catch (err) { /* no path left to try */ }
+}
+
+/* Notification clicks for note reminders, the task click
+   routing's twin: sw.js posts the click (or lands the page
+   on ?noteReminder=), the id waits here until the library
+   has loaded, and the note then opens from All Notes. A
+   target in Trash or the Archive answers with the message
+   note links give and never opens, and a gone target is
+   dropped quietly. */
+let pendingNoteReminderOpenId = null;
+
+function queueNoteReminderOpen(id) {
+  if (!id) { return; }
+  pendingNoteReminderOpenId = String(id);
+  maybeOpenPendingNoteReminder();
+}
+
+function maybeOpenPendingNoteReminder() {
+  if (!pendingNoteReminderOpenId) { return; }
+  if (!state.repoExists) { return; }
+  const id = pendingNoteReminderOpenId;
+  const note = state.notes.find(function (n) {
+    return n.id === id;
+  });
+  if (note) {
+    pendingNoteReminderOpenId = null;
+    state.view = { kind: "all", value: null };
+    renderAll();
+    openNote(id);
+    setMobileView("editor");
+    return;
+  }
+  if (state.trash.some(function (n) { return n.id === id; })) {
+    pendingNoteReminderOpenId = null;
+    toast("That note is in Trash.");
+    return;
+  }
+  if (state.archive.some(function (n) { return n.id === id; })) {
+    pendingNoteReminderOpenId = null;
+    toast("That note is in the Archive.");
+  }
+}
+
+function readNoteReminderParamFromUrl() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const id = params.get("noteReminder");
+    if (id) { pendingNoteReminderOpenId = id; }
+  } catch (err) { /* no parameter, no pending open */ }
 }
 
 function checkTaskReminders() {
@@ -20283,6 +21135,13 @@ function renderEditor() {
   document.getElementById("noteBody").contentEditable = locked ? "false" : "true";
   document.getElementById("noteTitle").disabled = locked;
   document.getElementById("noteTags").disabled = locked;
+  /* v2.35: the footer Reminder button locks with the other
+     editing controls, and its label carries the note's
+     reminder state (the moment in words, a done wording, or
+     the plain word when none is set). */
+  document.getElementById("noteReminderBtn").disabled = locked;
+  document.getElementById("noteReminderBtnLabel").textContent =
+    note.reminderAt ? noteReminderLabel(note) : "Reminder";
   /* v2.2: a locked note (Trash or Archive) never shows the floating
      Table button or menu; updateTableMenu would hide them on the
      next caret move anyway, but locking closes them immediately. */
@@ -36482,6 +37341,13 @@ function wireEvents() {
     renderAll();
     setMobileView("list");
   });
+  /* v2.35: the Reminders entry opens the Reminders view,
+     the same one line navigation as its neighbours. */
+  document.getElementById("navReminders").addEventListener("click", function () {
+    state.view = { kind: "reminders", value: null };
+    renderAll();
+    setMobileView("list");
+  });
   document.getElementById("navTrash").addEventListener("click", function () {
     state.view = { kind: "trash", value: null };
     renderAll();
@@ -36718,6 +37584,41 @@ function wireEvents() {
     closeListPanels();
     toggleSelectedNoteHomePin();
   });
+  /* v2.35: the same menu's Reminder item opens the one
+     reminder panel for the selected note, re-checking the
+     selection the way the pin items do. */
+  document.getElementById("nbReminderBtn").addEventListener("click", function () {
+    closeListPanels();
+    const note = currentNote();
+    if (!note || state.notes.indexOf(note) < 0) { return; }
+    openNoteReminderPanel(note.id);
+  });
+  /* v2.35: the editor footer's Reminder button opens the
+     same panel for the open note. */
+  document.getElementById("noteReminderBtn").addEventListener("click", function () {
+    if (!state.selectedId) { return; }
+    openNoteReminderPanel(state.selectedId);
+  });
+  /* v2.35: the reminder panel's own controls. The quick
+     choices only fill the fields; Save lands them. */
+  document.getElementById("reminderCloseBtn").addEventListener("click", function () {
+    closeNoteReminderPanel();
+  });
+  document.getElementById("reminderSaveBtn").addEventListener("click", function () {
+    saveNoteReminderFromPanel();
+  });
+  document.getElementById("reminderDoneBtn").addEventListener("click", function () {
+    markNoteReminderDoneFromPanel();
+  });
+  document.getElementById("reminderRemoveBtn").addEventListener("click", function () {
+    removeNoteReminderFromPanel();
+  });
+  document.getElementById("reminderQuickTomorrow").addEventListener("click", function () {
+    fillReminderQuickChoice(1);
+  });
+  document.getElementById("reminderQuickWeek").addEventListener("click", function () {
+    fillReminderQuickChoice(7);
+  });
   /* v1.8.1: the same menu's Trash and Archive items. renderListToolbar
      only shows them in their view (and disables them when they would
      have nothing to act on); the view guards stay as a second line
@@ -36942,6 +37843,9 @@ function wireEvents() {
     });
   document.getElementById("settingsTaskRemindersToggle")
     .addEventListener("change", applyTaskRemindersFromToggle);
+  /* v2.35: the note reminders switch's wiring, its twin. */
+  document.getElementById("settingsNoteRemindersToggle")
+    .addEventListener("change", applyNoteRemindersFromToggle);
   document.getElementById("taskSaveBtn")
     .addEventListener("click", saveTaskEditor);
   document.getElementById("taskCancelBtn")
@@ -37078,6 +37982,8 @@ function wireEvents() {
   document.addEventListener("visibilitychange", function () {
     if (document.visibilityState === "visible") {
       checkTaskReminders();
+      /* v2.35: the note scheduler takes the same look. */
+      checkNoteReminders();
     }
   });
   if ("serviceWorker" in navigator &&
@@ -37087,6 +37993,12 @@ function wireEvents() {
       function (ev) {
         if (ev.data && ev.data.type === "snakescale-open-task") {
           queueTaskOpen(ev.data.taskId);
+        }
+        /* v2.35: the note reminder click's message, the
+           task message's twin (see sw.js). */
+        if (ev.data &&
+            ev.data.type === "snakescale-open-note-reminder") {
+          queueNoteReminderOpen(ev.data.noteReminderId);
         }
       });
   }
@@ -37278,7 +38190,7 @@ function wireEvents() {
      runs setSidebarRail directly, the same single toggle the
      new footer collapse button runs. */
   [["railNewNoteBtn", "newNoteBtn"], ["railAllBtn", "navAll"],
-   ["railPinnedBtn", "navPinned"], ["railTrashBtn", "navTrash"],
+   ["railPinnedBtn", "navPinned"], ["railRemindersBtn", "navReminders"], ["railTrashBtn", "navTrash"],
    ["railArchiveBtn", "navArchive"], ["railLockBtn", "sidebarSignOutItem"]
    ].forEach(function (pair) {
     document.getElementById(pair[0]).addEventListener("click", function () {
@@ -38647,6 +39559,9 @@ async function boot() {
      its checks simply find no tasks until a store loads. */
   readTaskOpenParamFromUrl();
   startTaskReminderScheduler();
+  /* v2.35: the note reminder twins of the two calls above. */
+  readNoteReminderParamFromUrl();
+  startNoteReminderScheduler();
   /* Small diagnostic hook: the build stamp is searchable in the file,
      and also visible in the console for support. */
   console.log("SnakeScale Notes v" + APP_VERSION + " build " + APP_BUILD);
