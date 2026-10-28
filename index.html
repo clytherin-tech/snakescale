@@ -40,10 +40,41 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-28-SSN-V2281
-  Version: 2.28.1
+  BUILD STAMP: 2026-10-28-SSN-V2282
+  Version: 2.28.2
 
   Revision history:
+    v2.28.2 2026-10-28 The "@" popup in a task
+                      description could still not appear
+                      from the Tasks view, and completed
+                      tasks leave the "@" list. Two
+                      causes. First, the popup element
+                      itself lived inside #editorWrap,
+                      and renderEditor parks the hidden
+                      class (display none, marked
+                      important) on that wrapper whenever
+                      no note is open, a shell note is
+                      loading, or a Things to do page owns
+                      the pane, so from the Tasks view the
+                      popup opened inside a subtree that
+                      could never paint, whatever its own
+                      layer said; the v2.28.1 raised layer
+                      was real but could not be seen
+                      through a hidden ancestor. The popup
+                      is position fixed, so startup now
+                      moves the element to the top level
+                      of the page, and no pane state can
+                      hide it in either host; its
+                      placement, look, and behavior are
+                      unchanged. Second, on Chris's
+                      instruction the "@" candidate list
+                      no longer offers completed tasks,
+                      in the typed token and in the popup
+                      search box alike; task links already
+                      saved in notes still open their
+                      tasks. A new field test reproduces
+                      the Tasks view with no note open,
+                      which the earlier tests never did.
     v2.28.1 2026-10-28 The "@" popup in a task
                       description painted under the task
                       editor and could not be seen or
@@ -5519,9 +5550,13 @@ body.dark .version-date{color:var(--accent);}
                "@" token in the note body, this card floats under
                the caret with a Results list: a Create new note row
                carrying the typed text, then the matching notes.
-               The script fills and positions it; it is a sibling
-               of #noteBody like the link bar, so it can never be
-               saved into a note. Hidden by default. -->
+               The script fills and positions it. The element is
+               written here, beside #noteBody, but startup moves
+               it to the top level of the page (see wireEvents):
+               it is position fixed, and no pane state, a hidden
+               #editorWrap in the Tasks view above all, may be
+               able to hide it (v2.28.2). It can never be saved
+               into a note. Hidden by default. -->
           <div id="mentionPopup" class="hidden" role="listbox" aria-label="Link a note"></div>
           <!-- v2.23: the Paste options popup, modeled on the
                Word popup in Chris's screenshot. After a paste
@@ -5529,8 +5564,9 @@ body.dark .version-date{color:var(--accent);}
                of the pasted content: three mode rows that swap
                the paste's rendering in place, and a Set default
                paste row that opens Settings at the Default paste
-               select. A sibling of #noteBody like the mention
-               popup, so it can never be saved into a note. The
+               select. A sibling of #noteBody, where the mention
+               popup also starts out, so it can never be saved
+               into a note. The
                row for the mode the paste is wearing carries the
                current marker and the check. Hidden by default. -->
           <div id="pastePopup" class="hidden" role="menu" aria-label="Paste options">
@@ -6197,8 +6233,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-28-SSN-V2281";
-const APP_VERSION = "2.28.1";
+const APP_BUILD = "2026-10-28-SSN-V2282";
+const APP_VERSION = "2.28.2";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -18578,8 +18614,12 @@ function pickTag(tag) {
    closes when the pattern breaks: a space after the "@", the "@"
    deleted, or the caret moved out of the token.
 
-   The card itself is #mentionPopup, a sibling of #noteBody, so
-   nothing of it can ever be saved into a note. v2.17: a search
+   The card itself is #mentionPopup. It is written beside
+   #noteBody in the markup, but wireEvents moves it to the top
+   level of the page at startup, so no pane state (a hidden
+   #editorWrap in the Tasks view, above all) can hide it; it is
+   position fixed, and nothing of it can ever be saved into a
+   note. v2.17: a search
    box (#mentionSearch) sits pinned at the card's top: the typed
    query mirrors into it, and typing in the box filters the same
    list (the box then drives until a fresh "@" token takes over
@@ -18730,9 +18770,11 @@ function onMentionSearchInput() {
    results. Trashed notes never match; archived notes do, like the
    rest of the app treats them: present, but read only.
    v2.28.0: in the note host, up to eight matching tasks follow
-   the notes (the same title match, completed tasks included,
-   most recently updated first), and the renderer splits the two
-   kinds with group labels when both are present. The task
+   the notes (the same title match, most recently updated
+   first), and the renderer splits the two kinds with group
+   labels when both are present. v2.28.2: completed tasks are
+   excluded from those matches, on Chris's instruction; task
+   links already saved in notes are unaffected. The task
    description host never lists tasks: a description links to
    notes, and notes are where task links live. */
 function mentionCandidates(query) {
@@ -18750,6 +18792,12 @@ function mentionCandidates(query) {
   });
   if (mentionHost === "note") {
     const taskMatches = state.tasks.filter(function (task) {
+      /* v2.28.2: completed tasks are never offered, on
+         Chris's instruction: the list is for linking work
+         still in play. Links to a completed task already
+         saved in a note are untouched by this: they still
+         decorate, follow renames, and open the task. */
+      if (task.status === "completed") { return false; }
       return (task.title || "").toLowerCase().indexOf(needle) >= 0;
     }).slice().sort(function (a, b) {
       return String(b.updated || "").localeCompare(String(a.updated || ""));
@@ -31510,6 +31558,30 @@ function insertVoiceTranscript(anchorEl, segments) {
    12. Screen flow and event wiring
    -------------------------------------------------------------------------- */
 function wireEvents() {
+  /* v2.28.2: the "@" mention popup moves to the top level of
+     the page before anything can open it. In the markup it
+     sits inside #editorWrap (below, beside #noteBody), but
+     renderEditor parks the hidden class on #editorWrap
+     whenever no note is open, a catalog shell is loading,
+     or a Things to do page owns the pane, and hidden is
+     display none with important: in the Tasks view the
+     popup therefore opened inside a subtree that could
+     never paint, which is why @ in a task description
+     still did nothing on v2.28.1 even after its layer was
+     raised over the task modal. The card is position
+     fixed, so living directly under the body changes
+     nothing about where it paints or how it looks in
+     either host, and appendChild moves the element with
+     its listeners intact (the popup's own listeners are
+     wired further down this function, by id, after this
+     move; every other reference to the popup is by id or
+     through an event target's closest). */
+  const mentionPopupHome = document.getElementById("mentionPopup");
+  if (mentionPopupHome &&
+      mentionPopupHome.parentElement !== document.body) {
+    document.body.appendChild(mentionPopupHome);
+  }
+
   /* Setup form (v2.0): there is nothing to fill in. Submitting
      creates this device's local encryption key, saves the (Google
      only) settings shape, clears any legacy vault artifact left by
