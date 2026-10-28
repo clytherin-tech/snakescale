@@ -40,10 +40,62 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-28-SSN-V2290
-  Version: 2.29.0
+  BUILD STAMP: 2026-10-28-SSN-V2300
+  Version: 2.30.0
 
   Revision history:
+    v2.30.0 2026-10-28 Nested tags, the second release
+                      of the Evernote parity program
+                      (phase 1: organization). Tags form
+                      a hierarchy in the sidebar Tags
+                      list, the way Evernote nests them:
+                      a tag sits under at most one parent
+                      tag, shown indented under it with a
+                      chevron that folds the subtree, and
+                      notes keep their plain tag strings
+                      exactly as before, so no note file
+                      changes. The parent map (tag name to
+                      parent tag name) lives in index.json
+                      beside the notebooks, because
+                      settings live only in one device's
+                      local storage while index.json is
+                      the Drive synced store; the map
+                      rides every index write, load, cache,
+                      and folder rebuild path, and is
+                      sanitized on read (blank and self
+                      entries dropped, cycles broken). A
+                      tag on notes with no map entry is a
+                      top level tag. Each sidebar tag row
+                      gains a menu: Rename Tag (the tag
+                      string is renamed on every note in
+                      Notes, Trash, and Archive, and its
+                      sub-tags follow), Move Tag... (a
+                      panel of candidate parents; moving
+                      under itself or under one of its own
+                      sub-tags is refused with a message,
+                      and moving a parent moves its whole
+                      subtree), Move Tag to Top Level, and
+                      Delete Tag (the tag leaves its notes,
+                      the notes stay, and its sub-tags are
+                      promoted to the top level, never
+                      deleted). Fold state is remembered
+                      in settings like the stack folds.
+                      Counts and filtering are unchanged:
+                      a count is the notes carrying that
+                      exact tag, and clicking a tag lists
+                      exactly those notes. The editor's
+                      tag picker and the note list filter
+                      panel offer the tags in tree order,
+                      indented by depth. Named deviations
+                      from Evernote: no drag and drop
+                      nesting this release (the menu path
+                      is complete), no Create sub-tag
+                      menu item (a SnakeScale tag exists
+                      only by being on a note, so a
+                      sub-tag is made by tagging a note
+                      and moving the tag), and renaming
+                      onto an existing tag name is refused
+                      rather than merged.
     v2.29.0 2026-10-28 Notebook stacks, the first
                       release of the Evernote parity
                       program (phase 1: organization).
@@ -2293,6 +2345,59 @@ body.dark .gate-brand .wordmark{color:#EAF3EC;}
   display:flex;flex-direction:column;gap:2px;
 }
 #stackMenu.hidden{display:none;}
+/* v2.30 (Evernote parity, phase 1 release 2): nested tags.
+   A tag row is a flex wrapper: an optional chevron (only tags
+   with sub-tags earn one; the spacer keeps tag names aligned
+   either way), the tag button itself (the same .nav-item the
+   flat list always used, flexed to fill), and its three dot
+   menu button, the sidebar's management gesture since the
+   stack menu. Depth indents by margin on the wrapper, like
+   stack members, so a nested row's active treatment still
+   spans its own box. The section is the positioning context
+   for the tag menu and the parent panel, which borrow
+   #stackMenu's card treatment outright. */
+#tagSection{position:relative;}
+.nav-tag-row{display:flex;align-items:center;gap:2px;padding-right:2px;}
+.nav-tag-row .nav-item{flex:1;min-width:0;}
+.nav-tag-chevron{
+  flex:none;width:20px;height:24px;display:inline-flex;
+  align-items:center;justify-content:center;background:none;
+  border:none;color:#AFCDB7;cursor:pointer;padding:0;
+  transform:rotate(90deg);transition:transform var(--motion);
+}
+.nav-tag-row.collapsed .nav-tag-chevron{transform:rotate(0deg);}
+.nav-tag-chevron-spacer{flex:none;width:20px;}
+.nav-tag-menu-btn{
+  flex:none;width:24px;height:24px;display:inline-flex;
+  align-items:center;justify-content:center;background:none;
+  border:none;border-radius:var(--radius-button);color:#AFCDB7;
+  font-size:15px;line-height:1;cursor:pointer;
+  transition:background-color var(--motion),color var(--motion);
+}
+.nav-tag-menu-btn:hover{background:rgba(87,167,115,.25);color:#fff;}
+#tagMenu,#tagParentPanel{
+  position:absolute;left:10px;right:10px;z-index:60;min-width:180px;
+  padding:6px;background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius-card);box-shadow:0 10px 28px rgba(0,0,0,.32);
+  display:flex;flex-direction:column;gap:2px;
+}
+#tagMenu.hidden,#tagParentPanel.hidden{display:none;}
+#tagMenu button,#tagParentPanel button{
+  display:flex;align-items:center;gap:8px;width:100%;text-align:left;
+  background:none;border:none;color:var(--text-strong);cursor:pointer;
+  padding:8px 10px;border-radius:var(--radius-button);font-size:13.5px;
+  transition:background-color var(--motion);
+}
+#tagMenu button:hover,#tagParentPanel button:hover{
+  background:var(--accent-soft);
+}
+#tagMenu button:disabled{opacity:.55;cursor:default;}
+#tagMenu button:disabled:hover{background:none;}
+#tagMenu button.danger{color:#C0392B;}
+#tagParentPanel .tag-parent-head{
+  padding:6px 10px 4px;font-size:11.5px;font-weight:700;
+  letter-spacing:.6px;text-transform:uppercase;color:var(--text-muted);
+}
 /* v1.8: the sidebar notebook rows used to carry Rename and Delete
    hover links (.row-actions). Those actions moved to the notes list
    toolbar's notebook menu, so the hover link styles are gone. */
@@ -5141,9 +5246,28 @@ body.dark .version-date{color:var(--accent);}
       </div>
     </div>
 
-    <div class="nav-section">
+    <div class="nav-section" id="tagSection">
       <div class="nav-label">Tags</div>
       <div id="tagNav"></div>
+      <!-- v2.30 (Evernote parity, phase 1 release 2): the tag
+           menu, the card the tag rows' three dot buttons open,
+           positioned under the row it names by openTagMenu.
+           Rename Tag prompts for the new name; Move Tag opens
+           the parent panel below; Move Tag to Top Level shows
+           only for a nested tag; Delete Tag removes the tag
+           from its notes and promotes its sub-tags to the top
+           level. -->
+      <div id="tagMenu" class="hidden" role="menu" aria-label="Tag actions">
+        <button type="button" id="tagRenameBtn" role="menuitem">Rename Tag</button>
+        <button type="button" id="tagMoveBtn" role="menuitem">Move Tag...</button>
+        <button type="button" id="tagTopLevelBtn" role="menuitem">Move Tag to Top Level</button>
+        <button type="button" id="tagDeleteBtn" class="danger" role="menuitem">Delete Tag</button>
+      </div>
+      <!-- The parent panel for Move Tag: one button per
+           candidate parent (every tag except the tag itself
+           and its own sub-tags, which would close a cycle),
+           built by openTagParentPanel. -->
+      <div id="tagParentPanel" class="hidden" role="menu" aria-label="Choose a parent tag"></div>
     </div>
 
     <div class="sidebar-foot">
@@ -6384,8 +6508,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-28-SSN-V2290";
-const APP_VERSION = "2.29.0";
+const APP_BUILD = "2026-10-28-SSN-V2300";
+const APP_VERSION = "2.30.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -6506,6 +6630,26 @@ const state = {
                             // it is written, so a deleted or
                             // renamed stack leaves nothing
                             // behind.
+  collapsedTags: [],        // v2.30: the names of the tags whose
+                            // sidebar subtree is collapsed,
+                            // remembered in settings like the
+                            // stack folds. A tag not named here
+                            // is expanded; the list is pruned of
+                            // tags that no longer have sub-tags
+                            // whenever it is written.
+  tagParents: {},           // v2.30: the nested tag hierarchy as
+                            // a map from tag name to parent tag
+                            // name. Notes keep flat tag strings;
+                            // this map is organization only. It
+                            // lives in index.json (see
+                            // buildIndexObject), NOT in settings,
+                            // because settings are one device's
+                            // local storage while index.json is
+                            // the Drive synced store, and a
+                            // hierarchy only one device could
+                            // see would not be a hierarchy. A
+                            // tag with no entry here is a top
+                            // level tag.
   versionsLimit: 10,        // v2.8: how many past versions to keep
                             // per note (0 turns version history
                             // off), remembered in settings and
@@ -7078,6 +7222,15 @@ function loadSettings() {
       return typeof x === "string" && x !== "";
     });
   }
+  /* v2.30: the collapsed tag names, sanitized the same way:
+     only an array of non-empty strings is honored, so a bad
+     record can never hide a sub-tag behind a fold nobody
+     set. */
+  if (Array.isArray(s.collapsedTags)) {
+    state.collapsedTags = s.collapsedTags.filter(function (x) {
+      return typeof x === "string" && x !== "";
+    });
+  }
   /* v2.8: the versions per note limit. Only a finite stored number
      is honored, truncated to a whole number and clamped into the
      0 to 100 range the Settings input offers; anything else (an
@@ -7131,6 +7284,7 @@ function saveSettings() {
     listSort: state.listSort,   // v1.8: the remembered notes list sort
     sidebarRail: state.sidebarRail,   // v2.5: the icon rail choice
     collapsedStacks: state.collapsedStacks,   // v2.29: stack folds
+    collapsedTags: state.collapsedTags,   // v2.30: tag folds
     versionsLimit: state.versionsLimit,   // v2.8: versions kept per note
     onboardingSeen: state.onboardingSeen,   // v2.13: the walkthrough record
     autoSync: state.autoSync,   // v2.16: the idle auto-sync choice
@@ -7191,6 +7345,9 @@ function cleanupLegacyStorage() {
 function cacheSnapshot() {
   return {
     notebooks: state.notebooks,
+    /* v2.30: the tag parent map rides the snapshot too, so a
+       cache first paint shows the same tree the store does. */
+    tagParents: state.tagParents,
     notes: state.notes,
     trash: state.trash,
     archive: state.archive,
@@ -7201,6 +7358,10 @@ function cacheSnapshot() {
 
 function applyCacheSnapshot(c) {
   state.notebooks = c.notebooks || [];
+  /* v2.30: snapshots written before nested tags existed have
+     no map; they load as an all top level hierarchy, exactly
+     like an index.json written before v2.30 does. */
+  state.tagParents = sanitizeTagParents(c.tagParents);
   state.notes = c.notes || [];
   state.trash = c.trash || [];
   /* v1.5: caches written before archiving existed have no archive
@@ -8162,6 +8323,10 @@ function buildIndexObject() {
   return {
     version: 1,
     notebooks: state.notebooks,
+    /* v2.30: the nested tag parent map. It rides every index
+       write because buildIndexObject is the only writer's
+       shape, so no unrelated save can drop the hierarchy. */
+    tagParents: state.tagParents,
     updated: new Date().toISOString()
   };
 }
@@ -8270,7 +8435,12 @@ function buildIndexFromFolders(folderSlugs) {
       created: new Date().toISOString()
     };
   });
-  return { version: 1, notebooks: rebuilt, updated: new Date().toISOString() };
+  /* v2.30: a folder rebuild cannot see the tag hierarchy (it
+     lives only in index.json), so the current map is carried
+     across untouched; an absent index on a brand new store
+     starts from the in-memory map, which is empty until tags
+     are nested. */
+  return { version: 1, notebooks: rebuilt, tagParents: state.tagParents, updated: new Date().toISOString() };
 }
 
 /* --------------------------------------------------------------------------
@@ -9975,6 +10145,12 @@ async function loadAllFromRepo() {
     .map(function (e) { return e.name; });
 
   if (!index || !Array.isArray(index.notebooks)) {
+    /* v2.30: a parsed but unusable index can still carry the
+       tag hierarchy; adopt it before the rebuild so the map
+       is not lost with the notebooks list. */
+    if (index && index.tagParents) {
+      state.tagParents = sanitizeTagParents(index.tagParents);
+    }
     index = buildIndexFromFolders(folderSlugs);
     state.notebooks = index.notebooks;
     state.index = index;
@@ -9985,6 +10161,11 @@ async function loadAllFromRepo() {
     } catch (err) { /* best effort, see saveIndex */ }
   } else {
     state.notebooks = index.notebooks;
+    /* v2.30: the tag parent map loads with the index and is
+       sanitized on the way in; an index written before
+       nested tags existed has no field and loads as an all
+       top level hierarchy. */
+    state.tagParents = sanitizeTagParents(index.tagParents);
     state.index = index;
     /* A notebook folder with no index entry still gets listed, so notes
        are never hidden by a stale index. */
@@ -11853,6 +12034,415 @@ async function deleteStack(name) {
 }
 
 /* --------------------------------------------------------------------------
+   v2.30: nested tags (Evernote parity, phase 1 release 2)
+
+   Evernote's model, from its own help pages (the "Nested tags"
+   and "Tags overview" articles): notes carry plain tag names,
+   and separately a tag can sit under one parent tag, forming a
+   tree the sidebar Tags list renders with sub-tags indented
+   under their parent. The hierarchy is organization only; it
+   changes no note. SnakeScale keeps the same split: note files
+   keep their flat tag strings untouched, and the parent map
+   (tag name to parent tag name) lives in index.json, beside
+   the notebooks.
+
+   Why index.json and not settings: settings are written to one
+   device's local storage and never sync (see loadSettings),
+   while index.json is the Drive store's own index, read and
+   written by the app on every device. A hierarchy kept in
+   settings would exist on one device only. The map rides
+   every index write because buildIndexObject is the single
+   shape every index save serializes, it loads in both
+   loadAllFromRepo branches, and it rides the local cache
+   snapshot so a cache first paint shows the same tree.
+
+   A tag that exists on notes but has no map entry is a top
+   level tag. Evernote shapes the operations too: a tag is
+   nested from its menu (Move tag... and a chosen parent, or
+   Move tag to top level), renaming a tag renames it on every
+   note and its sub-tags follow, and deleting a tag removes it
+   from its notes while its sub-tags are promoted to the top
+   level, never deleted with it. Two named deviations: there
+   is no drag and drop nesting this release (the menu path is
+   complete), and no Create sub-tag menu item, because a
+   SnakeScale tag exists only by being on a note; a sub-tag is
+   made by tagging a note and moving the tag under its parent.
+   Counts stay the exact-tag counts the flat list always
+   showed, and clicking a tag filters to exactly its notes,
+   exactly as before.
+   -------------------------------------------------------------------------- */
+
+/* Read a stored parent map into a safe one: only string to
+   string entries with non-blank names survive, a tag is never
+   its own parent, and a cycle (reachable only through a hand
+   edited or damaged index.json) is broken by dropping the
+   entry the walk started from, so every stored map renders. */
+function sanitizeTagParents(raw) {
+  const out = {};
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return out;
+  }
+  Object.keys(raw).sort().forEach(function (k) {
+    const p = raw[k];
+    if (typeof k !== "string" || !k.trim()) { return; }
+    if (typeof p !== "string" || !p.trim()) { return; }
+    if (p === k) { return; }
+    out[k] = p;
+  });
+  Object.keys(out).forEach(function (k) {
+    const seen = {};
+    let cur = k;
+    while (cur && out[cur]) {
+      if (seen[cur]) { delete out[k]; return; }
+      seen[cur] = true;
+      cur = out[cur];
+    }
+  });
+  return out;
+}
+
+/* The parent of one tag, or null for a top level tag. A tag
+   absent from the map has no parent by definition. */
+function tagParentOf(tag) {
+  const p = state.tagParents ? state.tagParents[tag] : null;
+  return (typeof p === "string" && p && p !== tag) ? p : null;
+}
+
+/* Does this tag name exist anywhere the app can see: on a
+   note, or in the hierarchy as a child or a parent? */
+function tagExists(tag) {
+  if (typeof state.tagParents[tag] === "string") { return true; }
+  const keys = Object.keys(state.tagParents);
+  for (let i = 0; i < keys.length; i++) {
+    if (state.tagParents[keys[i]] === tag) { return true; }
+  }
+  return allTagsWithCounts().some(function (e) {
+    return e.tag === tag;
+  });
+}
+
+/* Every descendant of a tag in the stored map, breadth first,
+   cycle safe. The map is the input (not the rendered tree),
+   so a collapsed subtree still counts: a tag may not be
+   moved under anything inside its own subtree, folded or
+   not. */
+function tagDescendantsOf(tag) {
+  const out = [];
+  const seen = {};
+  seen[tag] = true;
+  let frontier = [tag];
+  while (frontier.length) {
+    const next = [];
+    Object.keys(state.tagParents).forEach(function (child) {
+      if (frontier.indexOf(state.tagParents[child]) >= 0 &&
+          !seen[child]) {
+        seen[child] = true;
+        out.push(child);
+        next.push(child);
+      }
+    });
+    frontier = next;
+  }
+  return out;
+}
+
+/* Flatten tag entries ([{tag, count}], in the caller's order)
+   into tree order: roots in entry order, each tag followed by
+   its sub-tags, depth recorded. With useCollapse, a collapsed
+   tag's subtree is omitted from the rows (its members are
+   still marked seen, so nothing renders twice). A tag whose
+   chain cannot reach a root (a cycle a damaged map smuggled
+   past the sanitizer) is appended at the top level rather
+   than vanishing from the list. */
+function tagTreeRows(entries, useCollapse) {
+  const inSet = {};
+  const counts = {};
+  entries.forEach(function (e) {
+    inSet[e.tag] = true;
+    counts[e.tag] = e.count;
+  });
+  const children = {};
+  entries.forEach(function (e) {
+    const p = tagParentOf(e.tag);
+    if (p && inSet[p]) {
+      if (!children[p]) { children[p] = []; }
+      children[p].push(e.tag);
+    }
+  });
+  const out = [];
+  const seen = {};
+  function markSubtree(tag) {
+    (children[tag] || []).forEach(function (k) {
+      if (!seen[k]) { seen[k] = true; markSubtree(k); }
+    });
+  }
+  function walk(tag, depth) {
+    seen[tag] = true;
+    const kids = children[tag] || [];
+    out.push({ tag: tag, count: counts[tag], depth: depth,
+      hasChildren: kids.length > 0 });
+    if (useCollapse && state.collapsedTags.indexOf(tag) >= 0) {
+      markSubtree(tag);
+      return;
+    }
+    kids.forEach(function (k) {
+      if (!seen[k]) { walk(k, depth + 1); }
+    });
+  }
+  entries.forEach(function (e) {
+    const p = tagParentOf(e.tag);
+    if (!(p && inSet[p]) && !seen[e.tag]) { walk(e.tag, 0); }
+  });
+  entries.forEach(function (e) {
+    if (!seen[e.tag]) {
+      out.push({ tag: e.tag, count: counts[e.tag], depth: 0,
+        hasChildren: (children[e.tag] || []).length > 0 });
+      seen[e.tag] = true;
+    }
+  });
+  return out;
+}
+
+/* The depth of one tag within a given name set (its ancestor
+   chain restricted to names in the set), cycle safe. Used by
+   choosers that list tags from a different source than the
+   sidebar counts (the editor's picker works from knownTags),
+   so each surface indents by the same hierarchy. */
+function tagDepthWithin(tag, nameSet) {
+  let depth = 0;
+  const seen = {};
+  seen[tag] = true;
+  let cur = tagParentOf(tag);
+  while (cur && nameSet[cur] && !seen[cur]) {
+    seen[cur] = true;
+    depth++;
+    cur = tagParentOf(cur);
+  }
+  return depth;
+}
+
+/* Drop fold records for tags that no longer have sub-tags,
+   so settings never accumulate folds for parents that are
+   parents no longer. Mirrors the stack fold pruning. */
+function pruneCollapsedTags() {
+  const withChildren = {};
+  Object.keys(state.tagParents).forEach(function (child) {
+    const p = state.tagParents[child];
+    if (p) { withChildren[p] = true; }
+  });
+  state.collapsedTags = state.collapsedTags.filter(function (n) {
+    return !!withChildren[n];
+  });
+}
+
+/* Set (or clear, with null) a tag's parent. Refusals are
+   plain and change nothing: under itself, under one of its
+   own sub-tags (which would close a cycle and orphan the
+   chain), or under a tag that no longer exists. Moving a
+   parent needs no entry changes for its sub-tags: they
+   point at the parent by name, so the whole subtree rides
+   along. Assigning a parent expands it, like assigning a
+   stack expands the group, so the moved tag is visible in
+   its new home. Returns true when the move was made. */
+async function setTagParent(tag, parentName) {
+  if (parentName) {
+    if (parentName === tag) {
+      toast("A tag cannot be moved under itself.", true);
+      return false;
+    }
+    if (tagDescendantsOf(tag).indexOf(parentName) >= 0) {
+      toast("\"" + tag + "\" cannot be moved under one of " +
+        "its own sub-tags.", true);
+      return false;
+    }
+    if (!tagExists(parentName)) {
+      toast("The tag \"" + parentName + "\" no longer exists.",
+        true);
+      return false;
+    }
+    state.tagParents[tag] = parentName;
+    const ci = state.collapsedTags.indexOf(parentName);
+    if (ci >= 0) { state.collapsedTags.splice(ci, 1); }
+  } else {
+    delete state.tagParents[tag];
+  }
+  pruneCollapsedTags();
+  saveSettings();
+  if (state.online && state.repoExists) { await saveIndex(); }
+  saveCache();
+  renderAll();
+  return true;
+}
+
+/* Fold or unfold one tag's subtree in the sidebar. The fold
+   is remembered in settings, like the stack folds, and only
+   re-renders the sidebar. */
+function toggleTagCollapsed(tag) {
+  const ci = state.collapsedTags.indexOf(tag);
+  if (ci >= 0) { state.collapsedTags.splice(ci, 1); }
+  else { state.collapsedTags.push(tag); }
+  saveSettings();
+  renderSidebar();
+}
+
+/* Rename a tag everywhere, the way Evernote's rename works:
+   the tag string is rewritten on every note that carries it
+   (Notes, Trash, and Archive, so a restored or unarchived
+   note never resurrects the old name), its sub-tags keep
+   pointing at it under the new name, its own parent entry
+   follows, and the fold record, the open tag view, and the
+   list filters follow. Renaming onto a name another tag
+   already carries is refused rather than merged, since a
+   silent merge would rewrite two tags' notes into one.
+   Each affected note saves through the per note operation
+   chain, which loads a catalog shell's body before writing,
+   so only the tag line of each file changes. */
+async function renameTag(oldName, newName) {
+  newName = String(newName == null ? "" : newName).trim();
+  if (!newName || newName === oldName) { return; }
+  if (tagExists(newName)) {
+    toast("A tag named \"" + newName + "\" already exists.",
+      true);
+    return;
+  }
+  const affected = [];
+  [state.notes, state.trash, state.archive].forEach(function (coll) {
+    coll.forEach(function (note) {
+      if (note.tags && note.tags.indexOf(oldName) >= 0) {
+        const next = [];
+        note.tags.forEach(function (t) {
+          const v = (t === oldName) ? newName : t;
+          if (next.indexOf(v) < 0) { next.push(v); }
+        });
+        note.tags = next;
+        affected.push(note);
+      }
+    });
+  });
+  if (state.tagParents[oldName]) {
+    state.tagParents[newName] = state.tagParents[oldName];
+    delete state.tagParents[oldName];
+  }
+  Object.keys(state.tagParents).forEach(function (child) {
+    if (state.tagParents[child] === oldName) {
+      state.tagParents[child] = newName;
+    }
+  });
+  const ci = state.collapsedTags.indexOf(oldName);
+  if (ci >= 0) {
+    state.collapsedTags[ci] = newName;
+    saveSettings();
+  }
+  if (state.view.kind === "tag" && state.view.value === oldName) {
+    state.view = { kind: "tag", value: newName };
+  }
+  state.listFilters.tags = state.listFilters.tags.map(function (t) {
+    return t === oldName ? newName : t;
+  });
+  let failed = 0;
+  for (let i = 0; i < affected.length; i++) {
+    try { await saveNoteToRepo(affected[i]); }
+    catch (err) { failed++; }
+  }
+  if (state.online && state.repoExists) { await saveIndex(); }
+  saveCache();
+  renderAll();
+  if (failed) {
+    toast("The tag was renamed, but " + failed +
+      " note(s) could not be saved.", true);
+  } else {
+    toast("Tag renamed to \"" + newName + "\".");
+  }
+}
+
+/* Delete a tag, Evernote's semantics: the tag is removed
+   from every note that carries it (Notes, Trash, and
+   Archive), the notes themselves are untouched, and its
+   sub-tags are promoted to the top level, never deleted
+   with it. The tag's own hierarchy entries and fold record
+   go with it, and a view or filter naming the tag is
+   cleared so nothing filters by a tag that is gone. */
+async function deleteTag(tag) {
+  const affected = [];
+  [state.notes, state.trash, state.archive].forEach(function (coll) {
+    coll.forEach(function (note) {
+      if (note.tags && note.tags.indexOf(tag) >= 0) {
+        note.tags = note.tags.filter(function (t) {
+          return t !== tag;
+        });
+        affected.push(note);
+      }
+    });
+  });
+  Object.keys(state.tagParents).forEach(function (child) {
+    if (state.tagParents[child] === tag) {
+      delete state.tagParents[child];
+    }
+  });
+  delete state.tagParents[tag];
+  const ci = state.collapsedTags.indexOf(tag);
+  if (ci >= 0) {
+    state.collapsedTags.splice(ci, 1);
+    saveSettings();
+  }
+  if (state.view.kind === "tag" && state.view.value === tag) {
+    state.view = { kind: "all", value: null };
+  }
+  state.listFilters.tags = state.listFilters.tags.filter(function (t) {
+    return t !== tag;
+  });
+  let failed = 0;
+  for (let i = 0; i < affected.length; i++) {
+    try { await saveNoteToRepo(affected[i]); }
+    catch (err) { failed++; }
+  }
+  if (state.online && state.repoExists) { await saveIndex(); }
+  saveCache();
+  renderAll();
+  if (failed) {
+    toast("The tag was deleted, but " + failed +
+      " note(s) could not be saved.", true);
+  } else {
+    toast("Tag \"" + tag + "\" deleted.");
+  }
+}
+
+/* The tag menu's Rename Tag: prompt for the new name (the
+   native prompt pairs with the stack rename's, as recorded
+   in the v2.29 deviations), then renameTag validates and
+   does the work. */
+function promptRenameTag(tag) {
+  const next = prompt("Rename tag", tag);
+  if (next === null) { return; }
+  const name = String(next).trim();
+  if (!name || name === tag) { return; }
+  renameTag(tag, name);
+}
+
+/* The tag menu's Delete Tag: the confirm states the two
+   promises the operation keeps, in Evernote's own terms:
+   the notes are not deleted, and sub-tags move to the top
+   level rather than being deleted. */
+function confirmDeleteTag(tag) {
+  const count = state.notes.filter(function (n) {
+    return n.tags && n.tags.indexOf(tag) >= 0;
+  }).length;
+  const kids = Object.keys(state.tagParents).filter(function (c) {
+    return state.tagParents[c] === tag;
+  }).length;
+  const msg = "Delete the tag \"" + tag + "\"?\n\n" +
+    "It will be removed from " + count + " note" +
+    (count === 1 ? "" : "s") + " in Notes, and from any copies " +
+    "in Trash and Archive. The notes themselves will NOT be " +
+    "deleted." +
+    (kids ? "\n\nIts " + kids + " sub-tag" +
+      (kids === 1 ? "" : "s") + " will move to the top level, " +
+      "not be deleted." : "");
+  if (!confirm(msg)) { return; }
+  deleteTag(tag);
+}
+
+/* --------------------------------------------------------------------------
    Note operations: create, trash, restore, delete forever, archive
    Moving a note between the notebooks tree, trash/, and archive/ is a
    write to the new path plus a delete of the old path. Offline, both
@@ -12879,6 +13469,169 @@ function closeStackMenu() {
   stackMenuFor = null;
 }
 
+/* One nested tag row in the sidebar Tags list: the row wrapper
+   carries the tag name and its depth for styling (and for any
+   future drag gesture), the fold chevron appears only on a tag
+   with sub-tags, the tag button is the same .nav-item the flat
+   list always rendered (clicking it filters to exactly the
+   notes carrying the tag, nesting or not), and the three dot
+   button opens the tag menu. */
+function buildTagNavRow(row) {
+  const wrap = document.createElement("div");
+  wrap.className = "nav-tag-row" +
+    (state.collapsedTags.indexOf(row.tag) >= 0 ? " collapsed" : "");
+  wrap.setAttribute("data-tag", row.tag);
+  wrap.setAttribute("data-depth", String(row.depth));
+  if (row.depth > 0) {
+    wrap.style.marginLeft = (row.depth * 14) + "px";
+  }
+  if (row.hasChildren) {
+    const collapsed = state.collapsedTags.indexOf(row.tag) >= 0;
+    const chev = document.createElement("button");
+    chev.type = "button";
+    chev.className = "nav-tag-chevron";
+    chev.setAttribute("aria-expanded", collapsed ? "false" : "true");
+    chev.setAttribute("aria-label",
+      (collapsed ? "Expand" : "Collapse") + " sub-tags of " + row.tag);
+    chev.title = collapsed ? "Expand" : "Collapse";
+    chev.innerHTML = STACK_CHEVRON_ICON;
+    chev.addEventListener("click", function () {
+      toggleTagCollapsed(row.tag);
+    });
+    wrap.appendChild(chev);
+  } else {
+    const spacer = document.createElement("span");
+    spacer.className = "nav-tag-chevron-spacer";
+    wrap.appendChild(spacer);
+  }
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "nav-item tag-chip-nav" +
+    ((state.view.kind === "tag" && state.view.value === row.tag)
+      ? " active" : "");
+  const label = document.createElement("span");
+  label.textContent = "# " + row.tag;
+  btn.appendChild(label);
+  const count = document.createElement("span");
+  count.className = "count count-pill";
+  count.textContent = row.count;
+  btn.appendChild(count);
+  btn.addEventListener("click", function () {
+    /* The flat list's click rule, unchanged: clicking the
+       active tag again clears the filter back to all notes. */
+    if (state.view.kind === "tag" && state.view.value === row.tag) {
+      state.view = { kind: "all", value: null };
+    } else {
+      state.view = { kind: "tag", value: row.tag };
+    }
+    renderAll();
+    setMobileView("list");
+  });
+  wrap.appendChild(btn);
+  const menuBtn = document.createElement("button");
+  menuBtn.type = "button";
+  menuBtn.className = "nav-tag-menu-btn";
+  menuBtn.setAttribute("aria-haspopup", "true");
+  menuBtn.setAttribute("aria-label", "Tag actions");
+  menuBtn.title = "Tag actions";
+  menuBtn.innerHTML = "&#8943;";
+  menuBtn.addEventListener("click", function () {
+    openTagMenu(row.tag, wrap);
+  });
+  wrap.appendChild(menuBtn);
+  return wrap;
+}
+
+/* The tag row menu (Rename Tag, Move Tag..., Move Tag to Top
+   Level, Delete Tag). One shared element parked in the Tags
+   section; tagMenuFor names the tag it was opened for.
+   Positioned under its row at open time from the row's own
+   offsets inside the section. Move Tag to Top Level is an
+   item only a nested tag has (the class hides it otherwise),
+   matching Evernote, where the action exists only when
+   there is a level to move out of. */
+let tagMenuFor = null;
+function openTagMenu(tag, rowEl) {
+  const menu = document.getElementById("tagMenu");
+  if (!menu) { return; }
+  if (tagMenuFor === tag && !menu.classList.contains("hidden")) {
+    closeTagMenu();
+    return;
+  }
+  closeTagParentPanel();
+  tagMenuFor = tag;
+  const topBtn = document.getElementById("tagTopLevelBtn");
+  if (topBtn) {
+    topBtn.classList.toggle("hidden", !tagParentOf(tag));
+  }
+  if (rowEl) {
+    menu.style.top = (rowEl.offsetTop + rowEl.offsetHeight + 2) + "px";
+  }
+  menu.classList.remove("hidden");
+}
+function closeTagMenu() {
+  const menu = document.getElementById("tagMenu");
+  if (menu) { menu.classList.add("hidden"); }
+  tagMenuFor = null;
+}
+
+/* The Move Tag panel: one button per candidate parent, which
+   is every tag except the tag itself and its own sub-tags
+   (moving under either would close a cycle). Entries are
+   listed in tree order with a depth marker, so a deep tag is
+   recognizable as a home. tagPanelFor names the tag being
+   moved; it outlives the menu, which closes when the panel
+   opens. */
+let tagPanelFor = null;
+function openTagParentPanel(tag) {
+  const panel = document.getElementById("tagParentPanel");
+  if (!panel) { return; }
+  tagPanelFor = tag;
+  closeTagMenu();
+  panel.innerHTML = "";
+  const head = document.createElement("div");
+  head.className = "tag-parent-head";
+  head.textContent = "Move \"" + tag + "\" under";
+  panel.appendChild(head);
+  const banned = tagDescendantsOf(tag);
+  banned.push(tag);
+  let offered = 0;
+  tagTreeRows(allTagsWithCounts(), false).forEach(function (row) {
+    if (banned.indexOf(row.tag) >= 0) { return; }
+    if (tagParentOf(tag) === row.tag) { return; }
+    const item = document.createElement("button");
+    item.type = "button";
+    item.setAttribute("data-parent-choice", row.tag);
+    if (row.depth > 0) {
+      item.style.paddingLeft = (10 + row.depth * 14) + "px";
+    }
+    item.textContent = "# " + row.tag;
+    item.addEventListener("click", function () {
+      const name = item.getAttribute("data-parent-choice");
+      const moving = tagPanelFor;
+      closeTagParentPanel();
+      if (moving) { setTagParent(moving, name); }
+    });
+    panel.appendChild(item);
+    offered++;
+  });
+  if (!offered) {
+    const none = document.createElement("button");
+    none.type = "button";
+    none.disabled = true;
+    none.textContent = "No other tags";
+    panel.appendChild(none);
+  }
+  const menu = document.getElementById("tagMenu");
+  panel.style.top = menu ? menu.style.top : "";
+  panel.classList.remove("hidden");
+}
+function closeTagParentPanel() {
+  const panel = document.getElementById("tagParentPanel");
+  if (panel) { panel.classList.add("hidden"); }
+  tagPanelFor = null;
+}
+
 function renderSidebar() {
   document.getElementById("countAll").textContent = state.notes.length || "";
   /* v2.24: the Tasks entry's pill is the open task count. */
@@ -12911,6 +13664,8 @@ function renderSidebar() {
      order inside the group, and ungrouped notebooks render exactly
      as before; grouping alone changes the shape, never the order. */
   closeStackMenu();
+  closeTagMenu();
+  closeTagParentPanel();
   const nav = document.getElementById("notebookNav");
   nav.innerHTML = "";
   if (!state.notebooks.length) {
@@ -12937,7 +13692,12 @@ function renderSidebar() {
     }
   });
 
-  /* Tag rows. Clicking toggles the tag filter. */
+  /* Tag rows. Clicking toggles the tag filter.
+     v2.30: the rows render as the nested tag tree: roots in
+     the flat list's alphabetical order, each tag followed by
+     its sub-tags indented under it, a collapsed tag's subtree
+     omitted. Counts are unchanged (the notes carrying that
+     exact tag), and the click rule is unchanged. */
   const tagNav = document.getElementById("tagNav");
   tagNav.innerHTML = "";
   const tags = allTagsWithCounts();
@@ -12948,28 +13708,8 @@ function renderSidebar() {
     empty.textContent = "No tags yet. Add tags in the editor.";
     tagNav.appendChild(empty);
   }
-  tags.forEach(function (entry) {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "nav-item tag-chip-nav" +
-      ((state.view.kind === "tag" && state.view.value === entry.tag) ? " active" : "");
-    const label = document.createElement("span");
-    label.textContent = "# " + entry.tag;
-    btn.appendChild(label);
-    const countSpan = document.createElement("span");
-    countSpan.className = "count count-pill";
-    countSpan.textContent = entry.count;
-    btn.appendChild(countSpan);
-    btn.addEventListener("click", function () {
-      if (state.view.kind === "tag" && state.view.value === entry.tag) {
-        state.view = { kind: "all", value: null };
-      } else {
-        state.view = { kind: "tag", value: entry.tag };
-      }
-      renderAll();
-      setMobileView("list");
-    });
-    tagNav.appendChild(btn);
+  tagTreeRows(tags, true).forEach(function (row) {
+    tagNav.appendChild(buildTagNavRow(row));
   });
 
   /* v2.1.0: the sidebar foot no longer prints the Google Drive
@@ -13412,9 +14152,14 @@ function buildFilterTagList() {
     box.appendChild(empty);
     return;
   }
-  tags.forEach(function (entry) {
+  /* v2.30: the rows follow the tag tree (no folding here:
+     every tag stays checkable), each indented by its depth. */
+  tagTreeRows(tags, false).forEach(function (entry) {
     const row = document.createElement("label");
     row.className = "filter-tag-row";
+    if (entry.depth > 0) {
+      row.style.paddingLeft = (entry.depth * 16) + "px";
+    }
     const cb = document.createElement("input");
     cb.type = "checkbox";
     cb.checked = state.listFilters.tags.indexOf(entry.tag) >= 0;
@@ -19093,8 +19838,32 @@ function renderTagPicker() {
   const input = document.getElementById("noteTags");
   if (!picker || !input) { return; }
   if (input.disabled) { closeTagPicker(); return; }
-  const suggestions = tagSuggestions();
+  let suggestions = tagSuggestions();
   if (!suggestions.length) { closeTagPicker(); return; }
+  /* v2.30: with an empty token the picker offers the tags in
+     tree order, each row indented by its depth, the way
+     Evernote's tag chooser shows the hierarchy it nests.
+     While a token is being typed the list stays the flat
+     filtered list it has always been: a partial name is a
+     search, not a browse. */
+  const showTree = !tagFieldParts().token;
+  const depthOf = {};
+  if (showTree) {
+    const known = knownTags();
+    const entries = known.map(function (t) {
+      return { tag: t, count: 1 };
+    });
+    const order = {};
+    tagTreeRows(entries, false).forEach(function (row, i) {
+      order[row.tag] = i;
+      depthOf[row.tag] = row.depth;
+    });
+    suggestions = suggestions.slice().sort(function (a, b) {
+      const oa = (a in order) ? order[a] : 9999;
+      const ob = (b in order) ? order[b] : 9999;
+      return oa - ob;
+    });
+  }
   picker.innerHTML = "";
   suggestions.forEach(function (tag) {
     const row = document.createElement("button");
@@ -19102,6 +19871,9 @@ function renderTagPicker() {
     row.className = "tag-picker-row";
     row.setAttribute("role", "option");
     row.setAttribute("data-tag", tag);
+    if (showTree) {
+      row.style.paddingLeft = (10 + (depthOf[tag] || 0) * 16) + "px";
+    }
     row.textContent = tag;
     picker.appendChild(row);
   });
@@ -32317,6 +33089,54 @@ function wireEvents() {
   });
   document.addEventListener("keydown", function (ev) {
     if (ev.key === "Escape") { closeStackMenu(); }
+  });
+  /* v2.30: the tag row menu's items act on the tag the menu
+     was opened for (tagMenuFor), captured before the menu
+     closes so the flow functions read a settled name. Move
+     Tag keeps the panel's own variable (tagPanelFor) when it
+     swaps the menu for the parent panel. */
+  document.getElementById("tagRenameBtn").addEventListener("click", function () {
+    const name = tagMenuFor;
+    closeTagMenu();
+    if (name) { promptRenameTag(name); }
+  });
+  document.getElementById("tagMoveBtn").addEventListener("click", function () {
+    const name = tagMenuFor;
+    if (name) { openTagParentPanel(name); }
+  });
+  document.getElementById("tagTopLevelBtn").addEventListener("click", function () {
+    const name = tagMenuFor;
+    closeTagMenu();
+    if (name) {
+      setTagParent(name, null).catch(function (err) {
+        toast("Move tag failed: " + err.message, true);
+      });
+    }
+  });
+  document.getElementById("tagDeleteBtn").addEventListener("click", function () {
+    const name = tagMenuFor;
+    closeTagMenu();
+    if (name) { confirmDeleteTag(name); }
+  });
+  /* The tag menu and parent panel closers, mirroring the
+     stack menu's: a click outside the menu, the panel, and a
+     tag's menu button closes both, and so does Escape. A
+     click on another tag row closes them too: the row's own
+     filter is the click's meaning, as with any outside
+     click. */
+  document.addEventListener("click", function (ev) {
+    if (tagMenuFor === null && tagPanelFor === null) { return; }
+    if (ev.target.closest("#tagMenu")) { return; }
+    if (ev.target.closest("#tagParentPanel")) { return; }
+    if (ev.target.closest(".nav-tag-menu-btn")) { return; }
+    closeTagMenu();
+    closeTagParentPanel();
+  });
+  document.addEventListener("keydown", function (ev) {
+    if (ev.key === "Escape") {
+      closeTagMenu();
+      closeTagParentPanel();
+    }
   });
   /* v2.2: the pin item. It belongs to the selected note, not to a
      view, so there is no view guard here: renderListToolbar hides
