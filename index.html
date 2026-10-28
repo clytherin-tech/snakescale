@@ -40,10 +40,97 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-28-SSN-V2310
-  Version: 2.31.0
+  BUILD STAMP: 2026-10-28-SSN-V2320
+  Version: 2.32.0
 
   Revision history:
+    v2.32.0 2026-10-28 Saved searches and advanced
+                      search syntax, the fourth release
+                      of the Evernote parity program
+                      (phase 1: organization), which
+                      completes phase 1. The search box
+                      now speaks Evernote's search
+                      grammar: terms are ANDed by
+                      default, any: unions them, a
+                      leading minus negates any term,
+                      quoted phrases match exactly,
+                      and the operators notebook: and
+                      stack: scope by name, tag: matches
+                      a full tag name (a trailing
+                      wildcard prefixes, tag:* is any
+                      tag at all), intitle: searches
+                      the title, created: and updated:
+                      take an absolute YYYYMMDD date
+                      (with an optional time) or a
+                      relative day, week, month, or
+                      year with an optional delta and
+                      mean on or after, todo: reads
+                      checkbox state (true is a checked
+                      box, false an unchecked one, *
+                      any box), and resource: matches
+                      attachment MIME types. A query
+                      carrying no syntax at all runs
+                      through the matcher the app has
+                      always used, unchanged, so plain
+                      searches return exactly what
+                      they returned before; a malformed
+                      operator value degrades to a
+                      plain word rather than failing.
+                      So the new operators can judge
+                      every note, the catalog now also
+                      carries each note's checklist
+                      state and attachment MIME types
+                      (catalog shape version 2), and
+                      catalog shells answer todo: and
+                      resource: exactly as loaded notes
+                      do. Searches can be saved: with a
+                      search typed, Save search at the
+                      top of the results names and
+                      stores the query text itself (it
+                      becomes Edit saved search while
+                      that search is active), clicking
+                      into the search bar surfaces the
+                      saved searches, and each entry's
+                      own menu renames it, deletes it
+                      (never touching a note), or adds
+                      it to Shortcuts, the fifth
+                      shortcut kind this release adds,
+                      closing the deviation v2.31.0
+                      recorded. Saved searches live in
+                      index.json beside the shortcuts,
+                      because settings live only in one
+                      device's local storage while
+                      index.json is the Drive synced
+                      store, and Evernote saved searches
+                      sync across devices; the list
+                      rides every index write, load,
+                      cache, and folder rebuild path,
+                      and is sanitized on read. Named
+                      deviations from Evernote: literal
+                      terms keep this app's substring
+                      matching rather than Evernote's
+                      whole word token matching, so a
+                      term inside an operator query can
+                      match inside a longer word;
+                      Evernote operators with nothing
+                      to read in this data (source:,
+                      sourceApplication:, author:,
+                      contains:, encryption:, the
+                      reminder operators, and the geo
+                      fields)
+                      are not implemented, and an
+                      unknown operator is treated as a
+                      plain word; the Boolean AND, OR,
+                      and NOT keywords and parentheses
+                      are not parsed, since the grammar
+                      above covers that ground with
+                      any: and the minus sign; and the
+                      save and rename steps use the
+                      app's prompt flow rather than
+                      Evernote's naming pop-up with its
+                      shortcuts checkbox, the toggle
+                      living on each saved search's own
+                      menu instead.
     v2.31.0 2026-10-28 Shortcuts, the third release
                       of the Evernote parity program
                       (phase 1: organization), and the
@@ -2333,7 +2420,9 @@ body.dark .gate-brand .wordmark{color:#EAF3EC;}
      width:100%. */
   width:auto;
 }
-.sidebar-search{padding:6px 16px 10px;}
+/* v2.32: the search wrap is also the positioning context for
+   the saved searches panel that opens under the box. */
+.sidebar-search{position:relative;padding:6px 16px 10px;}
 .sidebar-search input{
   width:100%;padding:9px 11px;border-radius:var(--radius-button);
   border:1px solid #2A5240;background:#0A2E21;color:#EAF3EC;
@@ -2490,6 +2579,70 @@ body.dark .gate-brand .wordmark{color:#EAF3EC;}
 .nav-shortcut-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .nav-shortcut-where{color:#9DB8A6;font-size:12px;}
 .nav-shortcut-row.dead .nav-item{opacity:.55;}
+/* v2.32 (Evernote parity, phase 1 release 4): saved searches.
+   The panel is the card the sidebar menus established (the
+   tag menu's surface, border, and shadow), hung under the
+   search box inside the search wrap. A row is a main button
+   (the search's name over its query, the query muted so the
+   name leads) plus a three dot menu button, the sidebar's
+   management shape; the entry menu is a second card inside
+   the panel, positioned under its row at open time. The
+   panel's text colors are the surface card's, not the
+   sidebar's, because the card is a light surface in both
+   themes like the other sidebar menus. */
+#savedSearchPanel{
+  position:absolute;left:16px;right:16px;top:calc(100% - 2px);z-index:60;
+  max-height:60vh;overflow-y:auto;
+  padding:6px;background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius-card);box-shadow:0 10px 28px rgba(0,0,0,.32);
+  display:flex;flex-direction:column;gap:2px;
+}
+#savedSearchPanel.hidden{display:none;}
+.saved-search-head{
+  padding:6px 10px 4px;font-size:11.5px;font-weight:700;
+  letter-spacing:.6px;text-transform:uppercase;color:var(--text-muted);
+}
+.saved-search-row{display:flex;align-items:center;gap:2px;}
+.saved-search-main{
+  flex:1;min-width:0;display:flex;flex-direction:column;gap:1px;
+  align-items:flex-start;text-align:left;background:none;border:none;
+  color:var(--text-strong);cursor:pointer;padding:7px 10px;
+  border-radius:var(--radius-button);
+  transition:background-color var(--motion);
+}
+.saved-search-main:hover{background:var(--accent-soft);}
+.saved-search-name{
+  font-size:13.5px;font-weight:600;max-width:100%;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.saved-search-query{
+  font-size:12px;color:var(--text-muted);max-width:100%;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.saved-search-menu-btn{
+  flex:none;width:24px;height:24px;display:inline-flex;
+  align-items:center;justify-content:center;background:none;
+  border:none;border-radius:var(--radius-button);color:var(--text-muted);
+  font-size:15px;line-height:1;cursor:pointer;
+  transition:background-color var(--motion),color var(--motion);
+}
+.saved-search-menu-btn:hover{background:var(--accent-soft);color:var(--text-strong);}
+.saved-search-empty{padding:6px 10px;font-size:12.5px;color:var(--text-muted);}
+#savedSearchMenu{
+  position:absolute;left:6px;right:6px;z-index:61;min-width:180px;
+  padding:6px;background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius-card);box-shadow:0 10px 28px rgba(0,0,0,.32);
+  display:flex;flex-direction:column;gap:2px;
+}
+#savedSearchMenu.hidden{display:none;}
+#savedSearchMenu button{
+  display:flex;align-items:center;gap:8px;width:100%;text-align:left;
+  background:none;border:none;color:var(--text-strong);cursor:pointer;
+  padding:8px 10px;border-radius:var(--radius-button);font-size:13.5px;
+  transition:background-color var(--motion);
+}
+#savedSearchMenu button:hover{background:var(--accent-soft);}
+#savedSearchMenu button.danger{color:#C0392B;}
 #tagMenu button:disabled{opacity:.55;cursor:default;}
 #tagMenu button:disabled:hover{background:none;}
 #tagMenu button.danger{color:#C0392B;}
@@ -2607,6 +2760,16 @@ body.dark .gate-brand .wordmark{color:#EAF3EC;}
 .list-head h2{margin:0 0 4px;font-size:18px;color:var(--primary);}
 body.dark .list-head h2{color:var(--accent);}
 .list-head .sub{font-size:12.5px;color:var(--muted);}
+/* v2.32: Save search sits at the top of the results under the
+   count line, a quiet text button in the brand color; it is
+   hidden unless a search is active (syncSaveSearchButton). */
+#saveSearchBtn{
+  margin-top:5px;padding:2px 0;background:none;border:none;cursor:pointer;
+  color:var(--primary);font-size:12.5px;font-weight:700;
+}
+body.dark #saveSearchBtn{color:var(--accent);}
+#saveSearchBtn:hover{text-decoration:underline;}
+#saveSearchBtn.hidden{display:none;}
 /* v1.8: the notes list toolbar, a right aligned row of icon buttons
    under the list title and count. The buttons follow the editor
    toolbar's look (same border, radius, and hover treatment); their
@@ -5313,9 +5476,24 @@ body.dark .version-date{color:var(--accent);}
     <button id="newNoteBtn" class="btn accent block" type="button">+ New Note</button>
 
     <!-- Search lives in the sidebar so it is in the same place on desktop
-         and mobile. It filters the note list locally (title, body, tags). -->
+         and mobile. It filters the note list locally (title, body, tags).
+         v2.32: the panel under the box is where the saved searches live,
+         surfaced by clicking into the box, the way Evernote surfaces its
+         saved searches from the search bar. Rows are built by
+         renderSavedSearchPanel; the shared menu is the entry menu the
+         rows open (rename, the Shortcuts toggle, delete), held in
+         savedSearchMenuFor like the tag menu's target. -->
     <div class="sidebar-search">
       <input id="searchInput" type="search" placeholder="Search notes..." aria-label="Search notes">
+      <div id="savedSearchPanel" class="hidden" role="menu" aria-label="Saved searches">
+        <div class="saved-search-head">Saved searches</div>
+        <div id="savedSearchList"></div>
+        <div id="savedSearchMenu" class="hidden" role="menu" aria-label="Saved search actions">
+          <button type="button" id="savedSearchRenameBtn" role="menuitem">Rename</button>
+          <button type="button" id="savedSearchShortcutBtn" role="menuitem">Add to Shortcuts</button>
+          <button type="button" id="savedSearchDeleteBtn" class="danger" role="menuitem">Delete</button>
+        </div>
+      </div>
     </div>
 
     <div class="nav-section">
@@ -5507,6 +5685,11 @@ body.dark .version-date{color:var(--accent);}
     <div class="list-head">
       <h2 id="listTitle">All Notes</h2>
       <div class="sub" id="listSub"></div>
+      <!-- v2.32: Save search, at the top of the search results,
+           where Evernote puts it. syncSaveSearchButton shows it
+           only while a search is active, and labels it Edit
+           saved search while the active search is a saved one. -->
+      <button type="button" id="saveSearchBtn" class="hidden">Save search</button>
       <!-- v1.8: the notes list toolbar. Five icon buttons, right
            aligned; their text lives in the title tooltips and the
            aria labels. The three panels (filters, sort, notebook
@@ -6643,8 +6826,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-28-SSN-V2310";
-const APP_VERSION = "2.31.0";
+const APP_BUILD = "2026-10-28-SSN-V2320";
+const APP_VERSION = "2.32.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -6788,9 +6971,11 @@ const state = {
   shortcuts: [],            // v2.31: the sidebar Shortcuts list,
                             // an ordered array of {kind, id}
                             // entries (kind: note, notebook,
-                            // stack, or tag; id: the note id,
+                            // stack, tag, or, since v2.32,
+                            // search; id: the note id,
                             // the notebook slug, the stack
-                            // name, or the tag name). It lives
+                            // name, the tag name, or the saved
+                            // search's id). It lives
                             // in index.json (see
                             // buildIndexObject), NOT in
                             // settings, for the same reason
@@ -6802,6 +6987,20 @@ const state = {
                             // were added in; labels are never
                             // stored, they are read from the
                             // target at render time.
+  savedSearches: [],        // v2.32: the saved searches, an
+                            // ordered array of {id, name,
+                            // query} entries; the query is
+                            // the search text itself, in
+                            // the grammar the search box
+                            // speaks. It lives in index.json
+                            // (see buildIndexObject), NOT in
+                            // settings, for the same reason
+                            // the shortcuts list does:
+                            // Evernote saved searches sync
+                            // across devices, and a list
+                            // only one device could see
+                            // would not be a saved search
+                            // list.
   versionsLimit: 10,        // v2.8: how many past versions to keep
                             // per note (0 turns version history
                             // off), remembered in settings and
@@ -7503,6 +7702,9 @@ function cacheSnapshot() {
     /* v2.31: the shortcuts list rides it as well, so a cache
        first paint shows the same Shortcuts section. */
     shortcuts: state.shortcuts,
+    /* v2.32: the saved searches ride it too, so a cache
+       first paint can surface the same list. */
+    savedSearches: state.savedSearches,
     notes: state.notes,
     trash: state.trash,
     archive: state.archive,
@@ -7521,6 +7723,11 @@ function applyCacheSnapshot(c) {
      no list; they load as an empty Shortcuts section,
      exactly like an index.json written before v2.31 does. */
   state.shortcuts = sanitizeShortcuts(c.shortcuts);
+  /* v2.32: snapshots written before saved searches existed
+     have no list; they load as an empty saved searches
+     list, exactly like an index.json written before v2.32
+     does. */
+  state.savedSearches = sanitizeSavedSearches(c.savedSearches);
   state.notes = c.notes || [];
   state.trash = c.trash || [];
   /* v1.5: caches written before archiving existed have no archive
@@ -8490,6 +8697,9 @@ function buildIndexObject() {
        rides every index write because this is the only
        writer's shape, so no unrelated save can drop it. */
     shortcuts: state.shortcuts,
+    /* v2.32: the saved searches, on the same reasoning
+       again: no unrelated save can drop them either. */
+    savedSearches: state.savedSearches,
     updated: new Date().toISOString()
   };
 }
@@ -8605,7 +8815,9 @@ function buildIndexFromFolders(folderSlugs) {
      are nested. */
   /* v2.31: the shortcuts list is carried across the same
      way, for the same reason. */
-  return { version: 1, notebooks: rebuilt, tagParents: state.tagParents, shortcuts: state.shortcuts, updated: new Date().toISOString() };
+  /* v2.32: the saved searches are carried across the same
+     way again, for the same reason. */
+  return { version: 1, notebooks: rebuilt, tagParents: state.tagParents, shortcuts: state.shortcuts, savedSearches: state.savedSearches, updated: new Date().toISOString() };
 }
 
 /* --------------------------------------------------------------------------
@@ -8697,7 +8909,13 @@ function buildIndexFromFolders(folderSlugs) {
    -------------------------------------------------------------------------- */
 const CATALOG_FILE = "catalog.json";
 const INCOMING_FILE = "incoming.json";
-const CATALOG_SHAPE_VERSION = 1;
+/* v2.32: shape 2 adds each note's checklist facts and
+   attachment MIME types (see buildCatalogEntry), so the
+   advanced search operators todo: and resource: can judge
+   a catalog shell exactly as they judge a loaded note. A
+   shape 1 catalog is simply not read (the classic load
+   runs once and the catalog is rebuilt at shape 2). */
+const CATALOG_SHAPE_VERSION = 2;
 const CATALOG_WRITE_DEBOUNCE_MS = 800;
 
 let catalogWriteTimer = null;      /* pending debounce timer, or null */
@@ -8720,6 +8938,14 @@ function buildCatalogEntry(note, collection) {
   const loaded = note.bodyLoaded !== false;
   const cardAtt = loaded ? cardThumbnailAttachment(note)
     : (note.shellCardAtt || null);
+  /* v2.32: the search facts. A loaded note derives them
+     from its body and its attachment records; a shell
+     contributes the facts its own entry carried, so a
+     catalog built over shells round trips them unchanged,
+     the shellCardAtt pattern. They exist so the advanced
+     search operators todo: and resource: can judge a
+     shell without fetching its file. */
+  const todoFacts = loaded ? checklistFactsFromHtml(note.body) : null;
   return {
     id: note.id,
     collection: collection,
@@ -8739,6 +8965,18 @@ function buildCatalogEntry(note, collection) {
       : null,
     attachmentCount: loaded ? (note.attachments || []).length
       : (note.attachmentCount || 0),
+    todoChecked: loaded ? todoFacts.checked
+      : !!note.shellTodoChecked,
+    todoUnchecked: loaded ? todoFacts.unchecked
+      : !!note.shellTodoUnchecked,
+    attachmentMimes: loaded
+      ? (note.attachments || []).map(function (a) {
+          return String((a && a.mime) || "").toLowerCase();
+        })
+      : (Array.isArray(note.shellAttachmentMimes)
+          ? note.shellAttachmentMimes.slice()
+          : (cardAtt && cardAtt.mime
+              ? [String(cardAtt.mime).toLowerCase()] : [])),
     fileId: note.fileId || driveCache.fileIds[notePath(note)] || null,
     token: note.sha || null
   };
@@ -9602,7 +9840,11 @@ function toggleTaskComplete(id) {
    needs, and no body. bodyLoaded false is the shell mark every
    body consumer checks; previewText, shellCardAtt, and
    attachmentCount carry the card's facts until the real file is
-   fetched and the full parse replaces them. */
+   fetched and the full parse replaces them. v2.32: the shell
+   also carries the entry's search facts (shellTodoChecked,
+   shellTodoUnchecked, shellAttachmentMimes), so the todo: and
+   resource: search operators judge it as they judge a loaded
+   note. */
 function noteFromCatalogEntry(entry, collection) {
   return {
     id: entry.id,
@@ -9619,6 +9861,13 @@ function noteFromCatalogEntry(entry, collection) {
     thumbnail: entry.thumbnail || null,
     shellCardAtt: entry.cardAttachment || null,
     attachmentCount: entry.attachmentCount || 0,
+    /* v2.32: the entry's search facts ride onto the shell
+       (see buildCatalogEntry): checklist state for todo:
+       and the attachment MIME types for resource:. */
+    shellTodoChecked: !!entry.todoChecked,
+    shellTodoUnchecked: !!entry.todoUnchecked,
+    shellAttachmentMimes: Array.isArray(entry.attachmentMimes)
+      ? entry.attachmentMimes.slice() : [],
     sha: entry.token || null,
     fileId: entry.fileId || null,
     trashed: collection === "trash",
@@ -10320,6 +10569,10 @@ async function loadAllFromRepo() {
     if (index && index.shortcuts) {
       state.shortcuts = sanitizeShortcuts(index.shortcuts);
     }
+    /* v2.32: the saved searches are salvaged the same way. */
+    if (index && index.savedSearches) {
+      state.savedSearches = sanitizeSavedSearches(index.savedSearches);
+    }
     index = buildIndexFromFolders(folderSlugs);
     state.notebooks = index.notebooks;
     state.index = index;
@@ -10340,6 +10593,11 @@ async function loadAllFromRepo() {
        shortcuts existed has no field and loads as an empty
        Shortcuts section. */
     state.shortcuts = sanitizeShortcuts(index.shortcuts);
+    /* v2.32: the saved searches load with the index too,
+       sanitized on the way in; an index written before
+       saved searches existed has no field and loads as an
+       empty list. */
+    state.savedSearches = sanitizeSavedSearches(index.savedSearches);
     state.index = index;
     /* A notebook folder with no index entry still gets listed, so notes
        are never hidden by a stale index. */
@@ -12662,6 +12920,16 @@ function confirmDeleteTag(tag) {
    phase 1 release 4 and do not exist yet, so search
    shortcuts arrive with them (a named deviation).
 
+   v2.32 addendum: saved searches arrived in phase 1
+   release 4, and with them the fifth shortcut kind,
+   "search", closing the deviation named above. A search
+   entry's label is the search's current name, read at
+   render time like every other kind, and following it
+   runs the search. Evernote offers the shortcut from the
+   save naming pop-up's checkbox; here each saved
+   search's own menu in the search panel carries the
+   toggle, the dialog deviation family again.
+
    The list lives in index.json as an ordered array of
    {kind, id} entries (see the state field for why index.json
    and not settings). An entry stores IDENTITY only, never a
@@ -12686,7 +12954,8 @@ function confirmDeleteTag(tag) {
    in-session deletes drop theirs at once.
    -------------------------------------------------------------------------- */
 
-const SHORTCUT_KINDS = ["note", "notebook", "stack", "tag"];
+const SHORTCUT_KINDS = ["note", "notebook", "stack", "tag",
+  "search"];
 
 /* Read a stored list into a safe one: only entries with a
    known kind and a non-blank string target survive, and a
@@ -12802,6 +13071,14 @@ function shortcutTarget(entry) {
       ? { state: "live", label: entry.id }
       : { state: "missing", label: "" };
   }
+  if (entry.kind === "search") {
+    /* v2.32: the search's current name is the label, so a
+       rename follows on its own, like every other kind. */
+    const found = savedSearchById(entry.id);
+    return found
+      ? { state: "live", label: found.name }
+      : { state: "missing", label: "" };
+  }
   return tagExists(entry.id)
     ? { state: "live", label: entry.id }
     : { state: "missing", label: "" };
@@ -12845,12 +13122,14 @@ function shortcutsDrop(kind, id) {
 
 /* One icon per kind, in the rail's stroke voice: a page
    for a note, the rail's own book for a notebook, stacked
-   layers for a stack, a luggage tag for a tag. */
+   layers for a stack, a luggage tag for a tag, and (v2.32)
+   a magnifier for a saved search. */
 const SHORTCUT_ICONS = {
   note: "<svg viewBox=\"0 0 20 20\" width=\"15\" height=\"15\" aria-hidden=\"true\" focusable=\"false\"><path d=\"M6 2.5h5.5L15 6v11a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-13A1 1 0 0 1 6 2.5zM11 2.5V6h4\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linejoin=\"round\" fill=\"none\"/></svg>",
   notebook: "<svg viewBox=\"0 0 20 20\" width=\"15\" height=\"15\" aria-hidden=\"true\" focusable=\"false\"><path d=\"M4 3.5C4 2.7 4.7 2 5.5 2H10v16H5.5C4.7 18 4 17.3 4 16.5zM16 3.5C16 2.7 15.3 2 14.5 2H10v16h4.5c.8 0 1.5-.7 1.5-1.5z\" fill=\"currentColor\" stroke=\"none\"/></svg>",
   stack: "<svg viewBox=\"0 0 20 20\" width=\"15\" height=\"15\" aria-hidden=\"true\" focusable=\"false\"><path d=\"M10 3l8 4-8 4-8-4zM3.5 12.5L10 16l6.5-3.5\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linejoin=\"round\" fill=\"none\"/></svg>",
-  tag: "<svg viewBox=\"0 0 20 20\" width=\"15\" height=\"15\" aria-hidden=\"true\" focusable=\"false\"><path d=\"M3.5 3.5H10L16.5 10 10 16.5 3.5 10z\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linejoin=\"round\" fill=\"none\"/><circle cx=\"7.2\" cy=\"7.2\" r=\"1.3\" fill=\"currentColor\" stroke=\"none\"/></svg>"
+  tag: "<svg viewBox=\"0 0 20 20\" width=\"15\" height=\"15\" aria-hidden=\"true\" focusable=\"false\"><path d=\"M3.5 3.5H10L16.5 10 10 16.5 3.5 10z\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linejoin=\"round\" fill=\"none\"/><circle cx=\"7.2\" cy=\"7.2\" r=\"1.3\" fill=\"currentColor\" stroke=\"none\"/></svg>",
+  search: "<svg viewBox=\"0 0 20 20\" width=\"15\" height=\"15\" aria-hidden=\"true\" focusable=\"false\"><circle cx=\"9\" cy=\"9\" r=\"5.5\" stroke=\"currentColor\" stroke-width=\"1.5\" fill=\"none\"/><path d=\"M13.5 13.5L17 17\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" fill=\"none\"/></svg>"
 };
 
 /* One shortcut row in the sidebar Shortcuts section: the
@@ -12881,6 +13160,13 @@ function buildShortcutRow(entry) {
   } else if (entry.kind === "tag") {
     active = state.view.kind === "tag" &&
       state.view.value === entry.id;
+  } else if (entry.kind === "search") {
+    /* v2.32: active while the running search is this
+       entry's stored query, both sides read the way the
+       search box normalizes (trimmed, lowercased). */
+    const se = savedSearchById(entry.id);
+    active = !!se && state.search ===
+      String(se.query || "").trim().toLowerCase();
   }
   btn.className = "nav-item nav-shortcut-main" + (active ? " active" : "");
   const icon = document.createElement("span");
@@ -12962,6 +13248,13 @@ function followShortcut(entry) {
     setMobileView("list");
     return;
   }
+  if (entry.kind === "search") {
+    /* v2.32: following a search shortcut runs the search,
+       exactly as clicking the saved search itself does. */
+    const se = savedSearchById(entry.id);
+    if (se) { runSavedSearch(se); }
+    return;
+  }
   const ci = state.collapsedStacks.indexOf(entry.id);
   if (ci >= 0) {
     state.collapsedStacks.splice(ci, 1);
@@ -12996,6 +13289,323 @@ function closeShortcutMenu() {
   const menu = document.getElementById("shortcutMenu");
   if (menu) { menu.classList.add("hidden"); }
   shortcutMenuFor = null;
+}
+
+/* --------------------------------------------------------------------------
+   v2.32: saved searches (Evernote parity, phase 1 release 4)
+
+   Evernote's model, from its own help pages: a saved search
+   stores the search itself, the query text in the search
+   grammar, under a name; it syncs across devices; running
+   one puts its query back in the search bar and re-runs
+   it; and it is managed where it was made, from the search
+   surface (in current Evernote, the search modal lists the
+   saved searches beside the recent ones, the save step is
+   "Save search" at the top of the results, and editing or
+   deleting happens by running the search and opening its
+   menu there). Closest equivalents here: Save search sits
+   at the top of the note list while a search is active and
+   becomes Edit saved search while the active search is a
+   saved one; the list lives in the panel that opens under
+   the search box on focus; each entry's own menu renames
+   it, deletes it (a delete never touches a note), or adds
+   it to Shortcuts (the toggle Evernote puts in its save
+   pop-up's checkbox; see the shortcuts section).
+
+   The list lives in index.json as an ordered array of
+   {id, name, query} entries (see the state field for why
+   index.json and not settings), plumbed through every
+   index write, load, cache, and folder rebuild path
+   exactly as the tag parent map (v2.30) and the shortcuts
+   list (v2.31) are, and sanitized on every read.
+   -------------------------------------------------------------------------- */
+
+/* Read a stored list into a safe one: only entries with a
+   non-blank id, name, and query survive, and an id appears
+   once (first occurrence wins), so a hand edited or
+   damaged index.json can never produce a dead row. */
+function sanitizeSavedSearches(raw) {
+  const out = [];
+  if (!Array.isArray(raw)) { return out; }
+  raw.forEach(function (e) {
+    if (!e || typeof e !== "object") { return; }
+    if (typeof e.id !== "string" || !e.id.trim()) { return; }
+    if (typeof e.name !== "string" || !e.name.trim()) { return; }
+    if (typeof e.query !== "string" || !e.query.trim()) { return; }
+    const dupe = out.some(function (x) { return x.id === e.id; });
+    if (dupe) { return; }
+    out.push({ id: e.id, name: e.name, query: e.query });
+  });
+  return out;
+}
+
+function savedSearchById(id) {
+  return state.savedSearches.find(function (e) {
+    return e.id === id;
+  }) || null;
+}
+
+/* Query text is compared the way the search box normalizes
+   what is typed (trimmed, lowercased): two queries that
+   differ only in case or edge spaces are the same search
+   for the Edit saved search label and the duplicate name
+   flows below. */
+function normalizeSearchText(q) {
+  return String(q || "").trim().toLowerCase();
+}
+
+function savedSearchForQuery(q) {
+  const nq = normalizeSearchText(q);
+  if (!nq) { return null; }
+  return state.savedSearches.find(function (e) {
+    return normalizeSearchText(e.query) === nq;
+  }) || null;
+}
+
+function savedSearchNameTaken(name, exceptId) {
+  const nn = String(name || "").trim().toLowerCase();
+  return state.savedSearches.some(function (e) {
+    return e.id !== exceptId &&
+      e.name.trim().toLowerCase() === nn;
+  });
+}
+
+/* The saved searches list is index data, so its saves take
+   the shape every other index fact takes (the persist
+   twins above): the index write behind the caller's back,
+   guarded to a live store, and the cache with it. */
+function persistSavedSearches() {
+  if (state.online && state.repoExists) { saveIndex(); }
+  saveCache();
+}
+
+/* Save a search under a name. A name already taken (in any
+   case) is refused with a message, the rule the stacks
+   and tags keep; a blank name or query saves nothing.
+   Returns the new entry, or null when refused. */
+function createSavedSearch(name, query) {
+  const nm = String(name || "").trim();
+  const q = String(query || "").trim();
+  if (!nm || !q) { return null; }
+  if (savedSearchNameTaken(nm, null)) {
+    toast("A saved search named \"" + nm + "\" already exists.", true);
+    return null;
+  }
+  const entry = { id: newNoteId(), name: nm, query: q };
+  state.savedSearches.push(entry);
+  persistSavedSearches();
+  renderAll();
+  return entry;
+}
+
+/* Rename a saved search. The entry keeps its id, so its
+   shortcut entries keep pointing at it and show the new
+   name by themselves. Returns false when refused. */
+function renameSavedSearch(id, name) {
+  const entry = savedSearchById(id);
+  const nm = String(name || "").trim();
+  if (!entry || !nm) { return false; }
+  if (nm === entry.name) { return true; }
+  if (savedSearchNameTaken(nm, id)) {
+    toast("A saved search named \"" + nm + "\" already exists.", true);
+    return false;
+  }
+  entry.name = nm;
+  persistSavedSearches();
+  renderAll();
+  return true;
+}
+
+/* Delete a saved search. Only the entry and its shortcut
+   entries go; no note is ever touched. */
+function deleteSavedSearch(id) {
+  const entry = savedSearchById(id);
+  if (!entry) { return false; }
+  state.savedSearches = state.savedSearches.filter(function (e) {
+    return e.id !== id;
+  });
+  shortcutsDrop("search", id);
+  persistSavedSearches();
+  renderAll();
+  return true;
+}
+
+/* Run a saved search: its query goes back into the search
+   box (the text Evernote restores) and the list re-runs,
+   in the current view, exactly as if it had been typed.
+   The stored query is the search grammar itself, so a
+   saved search using operators re-runs identically. */
+function runSavedSearch(entry) {
+  const input = document.getElementById("searchInput");
+  if (input) { input.value = entry.query; }
+  state.search = normalizeSearchText(entry.query);
+  closeSavedSearchPanel();
+  renderNoteList();
+  setMobileView("list");
+}
+
+/* The Save search button at the top of the results: shown
+   only while a search is active (Evernote offers the save
+   from the results), and labeled Edit saved search while
+   the active search is one of the saved ones, the state
+   Evernote's edit flow keys on. Called from renderNoteList
+   so the label always matches the list on screen. */
+function syncSaveSearchButton() {
+  const btn = document.getElementById("saveSearchBtn");
+  if (!btn) { return; }
+  if (!state.search) {
+    btn.classList.add("hidden");
+    return;
+  }
+  btn.classList.remove("hidden");
+  btn.textContent = savedSearchForQuery(state.search)
+    ? "Edit saved search" : "Save search";
+}
+
+/* The saved searches panel under the search box. It opens
+   on focus or click while at least one saved search
+   exists, and its rows filter by what is typed, matching
+   the name or the query; the entry menu is shared and
+   positioned under its row at open time, like the other
+   sidebar menus. */
+let savedSearchMenuFor = null;
+
+function renderSavedSearchPanel() {
+  const list = document.getElementById("savedSearchList");
+  if (!list) { return; }
+  const input = document.getElementById("searchInput");
+  const needle = normalizeSearchText(input ? input.value : "");
+  list.innerHTML = "";
+  const shown = state.savedSearches.filter(function (e) {
+    return !needle ||
+      e.name.toLowerCase().indexOf(needle) >= 0 ||
+      e.query.toLowerCase().indexOf(needle) >= 0;
+  });
+  if (!shown.length) {
+    const empty = document.createElement("div");
+    empty.className = "saved-search-empty";
+    empty.textContent = state.savedSearches.length
+      ? "No saved searches match."
+      : "No saved searches yet.";
+    list.appendChild(empty);
+    return;
+  }
+  shown.forEach(function (entry) {
+    const row = document.createElement("div");
+    row.className = "saved-search-row";
+    row.setAttribute("data-id", entry.id);
+    const main = document.createElement("button");
+    main.type = "button";
+    main.className = "saved-search-main";
+    const nm = document.createElement("span");
+    nm.className = "saved-search-name";
+    nm.textContent = entry.name;
+    main.appendChild(nm);
+    const q = document.createElement("span");
+    q.className = "saved-search-query";
+    q.textContent = entry.query;
+    main.appendChild(q);
+    main.addEventListener("click", function () {
+      runSavedSearch(entry);
+    });
+    row.appendChild(main);
+    const menuBtn = document.createElement("button");
+    menuBtn.type = "button";
+    menuBtn.className = "saved-search-menu-btn";
+    menuBtn.setAttribute("aria-haspopup", "true");
+    menuBtn.setAttribute("aria-label", "Saved search actions");
+    menuBtn.title = "Saved search actions";
+    menuBtn.innerHTML = "&#8943;";
+    menuBtn.addEventListener("click", function (ev) {
+      ev.stopPropagation();
+      openSavedSearchMenu(entry, row);
+    });
+    row.appendChild(menuBtn);
+    list.appendChild(row);
+  });
+}
+
+function openSavedSearchPanel() {
+  const panel = document.getElementById("savedSearchPanel");
+  if (!panel || !state.savedSearches.length) { return; }
+  renderSavedSearchPanel();
+  panel.classList.remove("hidden");
+}
+
+function closeSavedSearchPanel() {
+  closeSavedSearchMenu();
+  const panel = document.getElementById("savedSearchPanel");
+  if (panel) { panel.classList.add("hidden"); }
+}
+
+/* The saved search entry menu: Rename, the Shortcuts
+   toggle (its label is set at open time, the v2.30/2.31
+   toggle pattern), and Delete. savedSearchMenuFor holds
+   the entry's id (a string, so a render cannot change
+   what the menu names). */
+function openSavedSearchMenu(entry, rowEl) {
+  const menu = document.getElementById("savedSearchMenu");
+  if (!menu) { return; }
+  if (savedSearchMenuFor === entry.id &&
+      !menu.classList.contains("hidden")) {
+    closeSavedSearchMenu();
+    return;
+  }
+  savedSearchMenuFor = entry.id;
+  const scBtn = document.getElementById("savedSearchShortcutBtn");
+  if (scBtn) {
+    scBtn.textContent = hasShortcut("search", entry.id)
+      ? "Remove from Shortcuts" : "Add to Shortcuts";
+  }
+  if (rowEl) {
+    menu.style.top = (rowEl.offsetTop + rowEl.offsetHeight + 2) + "px";
+  }
+  menu.classList.remove("hidden");
+}
+
+function closeSavedSearchMenu() {
+  const menu = document.getElementById("savedSearchMenu");
+  if (menu) { menu.classList.add("hidden"); }
+  savedSearchMenuFor = null;
+}
+
+/* The Save search button's flow: with no saved search
+   matching the active query it prompts for a name (the
+   typed search is the offered default) and saves; with a
+   match it edits that search, Evernote's "Edit saved
+   search", renaming in place. The prompts are the app's
+   native prompt flow, the dialog deviation the stacks
+   and tags releases already carry. */
+function promptSaveSearch() {
+  const input = document.getElementById("searchInput");
+  const raw = input ? input.value.trim() : "";
+  if (!raw) { return; }
+  const existing = savedSearchForQuery(state.search);
+  if (existing) {
+    const next = prompt("Rename saved search", existing.name);
+    if (next === null) { return; }
+    renameSavedSearch(existing.id, next);
+    return;
+  }
+  const name = prompt("Name this search", raw);
+  if (name === null) { return; }
+  if (createSavedSearch(name, raw)) {
+    toast("Search \"" + String(name).trim() + "\" saved.");
+  }
+}
+
+function promptRenameSavedSearch(entry) {
+  const next = prompt("Rename saved search", entry.name);
+  if (next === null) { return; }
+  renameSavedSearch(entry.id, next);
+}
+
+function confirmDeleteSavedSearch(entry) {
+  const msg = "Delete the saved search \"" + entry.name + "\"?\n\n" +
+    "Only the saved search is deleted. Your notes are not touched.";
+  if (!confirm(msg)) { return; }
+  deleteSavedSearch(entry.id);
+  toast("Saved search \"" + entry.name + "\" deleted.");
 }
 
 /* --------------------------------------------------------------------------
@@ -14313,6 +14923,14 @@ function renderSidebar() {
   closeTagMenu();
   closeTagParentPanel();
   closeShortcutMenu();
+  /* v2.32: a re-render closes the saved search menu, like
+     the other sidebar menus, and refreshes the panel's rows
+     when it is open, so a rename or delete shows at once. */
+  closeSavedSearchMenu();
+  const ssPanel = document.getElementById("savedSearchPanel");
+  if (ssPanel && !ssPanel.classList.contains("hidden")) {
+    renderSavedSearchPanel();
+  }
   /* v2.31: the Shortcuts section, above the notebooks in the
      markup, where Evernote keeps it. Rows render in stored
      order, which is the order the shortcuts were added in.
@@ -15293,6 +15911,469 @@ async function restoreSelectedArchiveNotes() {
     (chosen.length === 1 ? "" : "s") + " from the Archive.");
 }
 
+/* --------------------------------------------------------------------------
+   v2.32: advanced search syntax (Evernote parity, phase 1 release 4)
+
+   The search box speaks Evernote's search grammar now, from
+   Evernote's own help pages and its developer search grammar
+   document. The model in brief: a query is a list of terms,
+   ANDed by default; any: unions the terms after it; a
+   leading minus negates any term; notebook: is a scope that
+   stands outside the union; tag: is a full tag name match
+   (a trailing wildcard prefixes the name, tag:* is any tag
+   at all, -tag:* is no tags); intitle: searches the title;
+   created: and updated: take an absolute YYYYMMDD date
+   (an optional THHmmss time, Z for UTC) or a relative day,
+   week, month, or year with an optional signed delta, and
+   mean on or after that moment (negated: before it);
+   todo: reads checkbox state (true is a checked box, false
+   an unchecked one, * any box); resource: matches
+   attachment MIME types, exactly or by a trailing wildcard;
+   stack: scopes to the notebooks in a named stack, the
+   operator Evernote's current help table lists and the one
+   this app's stacks (v2.29) give data to.
+
+   Two compatibility rules guard the change. First, a query
+   carrying NO syntax at all (no operator, no quote, no
+   negation, no wildcard) never reaches the parser:
+   parseSearchQuery returns null for it and visibleNotes
+   runs the matcher the app has always used, so plain
+   searches return exactly what they returned before this
+   release. Second, nothing in here can throw: an operator
+   with a malformed value (a bad date, a bad todo value)
+   degrades to a plain word carrying the whole token, and
+   an unknown operator is a plain word from the start
+   (Evernote leaves unknown labels undefined; degrading
+   keeps the query useful and the behavior explainable).
+
+   One named deviation lives here by design: literal terms
+   (bare words and quoted phrases) match through
+   searchTextMatches, this app's substring matcher over
+   title, body text, attachment names, and tags, rather
+   than Evernote's whole word token matching. The operator
+   grammar is Evernote's; the word predicate stays the
+   app's own, so a word means the same thing inside an
+   operator query as it means alone, and a catalog shell
+   (whose body is not on the device) is judged on the same
+   text either way.
+   -------------------------------------------------------------------------- */
+
+/* The one text predicate every search path shares, extracted
+   verbatim from the filter visibleNotes has always run: the
+   needle (already lowercased by the caller, or lowercased
+   here) as a substring of the title, the list text, an
+   attachment name, or a tag. */
+function searchTextMatches(note, needle) {
+  const q = String(needle || "").toLowerCase();
+  if (!q) { return false; }
+  return note.title.toLowerCase().indexOf(q) >= 0 ||
+    /* v2.20: a shell searches its catalog preview (its full
+       body is not on this device); a loaded note searches
+       its body, as always. */
+    noteListText(note).toLowerCase().indexOf(q) >= 0 ||
+    /* v1.2: attachment file names are searchable. Placeholder markup
+       itself contributes no text, so snippets stay clean. */
+    (note.attachments || []).some(function (a) {
+      return (a.name || "").toLowerCase().indexOf(q) >= 0;
+    }) ||
+    note.tags.some(function (t) { return t.toLowerCase().indexOf(q) >= 0; });
+}
+
+/* The notebook record for a slug, or null. notebook: and
+   stack: read names from the record, never from the slug. */
+function notebookForSlug(slug) {
+  return state.notebooks.find(function (nb) {
+    return nb.slug === slug;
+  }) || null;
+}
+
+/* One note body's checklist state: does it hold a checked
+   box, an unchecked box, or neither? The body is parsed
+   (never trusted as text: a note can mention checkboxes
+   without having one). A box counts as checked when its
+   input is checked or when its list item carries the done
+   class the editor keeps in step with the attribute, so
+   bodies saved by any build answer the same. */
+function checklistFactsFromHtml(html) {
+  const facts = { checked: false, unchecked: false };
+  if (!html || html.indexOf("checkbox") < 0) { return facts; }
+  const div = document.createElement("div");
+  div.innerHTML = html;
+  const boxes = div.querySelectorAll("input[type=\"checkbox\"]");
+  for (let i = 0; i < boxes.length; i++) {
+    const li = boxes[i].closest ? boxes[i].closest("li") : null;
+    if (boxes[i].checked ||
+        (li && li.classList.contains("done"))) {
+      facts.checked = true;
+    } else {
+      facts.unchecked = true;
+    }
+    if (facts.checked && facts.unchecked) { break; }
+  }
+  return facts;
+}
+
+/* The checklist state todo: judges for one note: derived
+   from the body for a loaded note, read from the catalog
+   facts (v2.32) for a shell, so both answer alike. */
+function noteTodoFacts(note) {
+  if (note.bodyLoaded === false) {
+    return { checked: !!note.shellTodoChecked,
+      unchecked: !!note.shellTodoUnchecked };
+  }
+  return checklistFactsFromHtml(note.body);
+}
+
+/* The attachment MIME types resource: judges for one note:
+   the records' own types for a loaded note, the catalog
+   facts for a shell. */
+function noteAttachmentMimes(note) {
+  if (note.bodyLoaded === false) {
+    if (Array.isArray(note.shellAttachmentMimes)) {
+      return note.shellAttachmentMimes;
+    }
+    return note.shellCardAtt && note.shellCardAtt.mime
+      ? [String(note.shellCardAtt.mime).toLowerCase()] : [];
+  }
+  return (note.attachments || []).map(function (a) {
+    return String((a && a.mime) || "").toLowerCase();
+  });
+}
+
+/* One created:/updated: value as the millisecond threshold
+   it names, or null when the value is not a date the
+   grammar knows. Absolute forms: YYYYMMDD, optionally with
+   THHmmss, optionally Z for UTC; without Z the moment is
+   local, the client's timezone, as Evernote evaluates it.
+   Impossible dates (a February 30th) are null, not rolled
+   over. Relative forms: day, week, month, or year, with an
+   optional signed delta, naming the START of that unit:
+   day is today at midnight, week is this week's Sunday,
+   month is the first, year is January first, and the delta
+   moves whole units (day-1 is yesterday, week-2 is the
+   Sunday two weeks back, day+7 is a week from today). */
+function searchDateThresholdMs(rawValue) {
+  const v = String(rawValue || "").trim().toLowerCase();
+  let m = /^(\d{4})(\d{2})(\d{2})(?:t(\d{2})(\d{2})(\d{2})(z)?)?$/.exec(v);
+  if (m) {
+    const y = +m[1], mo = +m[2], d = +m[3];
+    if (mo < 1 || mo > 12 || d < 1 || d > 31) { return null; }
+    if (m[4] === undefined) {
+      const dt = new Date(y, mo - 1, d);
+      if (dt.getFullYear() !== y || dt.getMonth() !== mo - 1 ||
+          dt.getDate() !== d) { return null; }
+      return dt.getTime();
+    }
+    const hh = +m[4], mi = +m[5], ss = +m[6];
+    if (hh > 23 || mi > 59 || ss > 59) { return null; }
+    if (m[7]) {
+      const dt = new Date(Date.UTC(y, mo - 1, d, hh, mi, ss));
+      if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== mo - 1 ||
+          dt.getUTCDate() !== d) { return null; }
+      return dt.getTime();
+    }
+    const dt = new Date(y, mo - 1, d, hh, mi, ss);
+    if (dt.getFullYear() !== y || dt.getMonth() !== mo - 1 ||
+        dt.getDate() !== d) { return null; }
+    return dt.getTime();
+  }
+  m = /^(day|week|month|year)([+-]\d+)?$/.exec(v);
+  if (m) {
+    const delta = m[2] ? parseInt(m[2], 10) : 0;
+    const now = new Date();
+    if (m[1] === "day") {
+      return new Date(now.getFullYear(), now.getMonth(),
+        now.getDate() + delta).getTime();
+    }
+    if (m[1] === "week") {
+      const sunday = new Date(now.getFullYear(), now.getMonth(),
+        now.getDate());
+      sunday.setDate(sunday.getDate() - sunday.getDay() + delta * 7);
+      return sunday.getTime();
+    }
+    if (m[1] === "month") {
+      return new Date(now.getFullYear(), now.getMonth() + delta,
+        1).getTime();
+    }
+    return new Date(now.getFullYear() + delta, 0, 1).getTime();
+  }
+  return null;
+}
+
+/* Split a query into raw terms. A term is whitespace
+   delimited except inside quotes; it may open with a minus
+   (negation), carry a label (letters and digits, then a
+   colon), and its value may be quoted, with a backslash
+   escaping a quote inside the quotes, per the grammar.
+   The output is raw: classification lives in
+   parseSearchQuery. */
+function tokenizeSearchQuery(q) {
+  const terms = [];
+  const n = q.length;
+  let i = 0;
+  function readQuoted() {
+    i++;   /* the opening quote */
+    let out = "";
+    while (i < n) {
+      const c = q.charAt(i);
+      if (c === "\\" && i + 1 < n && q.charAt(i + 1) === "\"") {
+        out += "\"";
+        i += 2;
+        continue;
+      }
+      if (c === "\"") { i++; break; }
+      out += c;
+      i++;
+    }
+    return out;
+  }
+  while (i < n) {
+    while (i < n && /\s/.test(q.charAt(i))) { i++; }
+    if (i >= n) { break; }
+    let negated = false;
+    if (q.charAt(i) === "-" && i + 1 < n &&
+        !/\s/.test(q.charAt(i + 1))) {
+      negated = true;
+      i++;
+    }
+    let label = null;
+    const lm = /^[A-Za-z][A-Za-z0-9]*:/.exec(q.slice(i));
+    if (lm) {
+      label = lm[0].slice(0, -1).toLowerCase();
+      i += lm[0].length;
+    }
+    let value = "", quoted = false;
+    if (i < n && q.charAt(i) === "\"") {
+      value = readQuoted();
+      quoted = true;
+    } else {
+      const start = i;
+      while (i < n && !/\s/.test(q.charAt(i))) { i++; }
+      value = q.slice(start, i);
+    }
+    terms.push({ negated: negated, label: label,
+      value: value, quoted: quoted });
+  }
+  return terms;
+}
+
+const SEARCH_OPERATOR_LABELS = ["notebook", "stack", "tag",
+  "intitle", "created", "updated", "todo", "resource"];
+
+/* Parse a query into the predicates that judge it, or
+   return null when the query carries no syntax at all
+   (the caller then runs the plain matcher, unchanged).
+   A predicate is {kind, value, wildcard, negated}; its
+   value is prepared for its kind (lowercased text, a
+   tag stem, a millisecond threshold). notebook: terms are
+   scopes, kept apart from the positive terms because
+   Evernote's grammar holds the notebook outside the any:
+   union; every other positive term joins the AND (or the
+   union, under any:), and negated terms always exclude. */
+function parseSearchQuery(rawQuery) {
+  const terms = tokenizeSearchQuery(String(rawQuery || ""));
+  let syntax = false;
+  let anyMode = false;
+  const scopes = [], positives = [], negatives = [];
+  function pushTerm(pred) {
+    if (pred.kind === "notebook") { scopes.push(pred); return; }
+    if (pred.negated) { negatives.push(pred); }
+    else { positives.push(pred); }
+  }
+  function pushText(value, negated) {
+    if (!value) { return; }
+    pushTerm({ kind: "text", value: String(value).toLowerCase(),
+      negated: negated });
+  }
+  terms.forEach(function (t) {
+    if (t.label === "any") {
+      syntax = true;
+      anyMode = true;
+      if (t.value) { pushText(t.value, false); }
+      return;
+    }
+    if (t.negated || t.quoted) { syntax = true; }
+    if (t.label &&
+        SEARCH_OPERATOR_LABELS.indexOf(t.label) >= 0) {
+      syntax = true;
+      const v = t.value;
+      if (t.label === "created" || t.label === "updated") {
+        const ms = searchDateThresholdMs(v);
+        if (ms === null) {
+          /* A malformed date degrades to the plain word
+             the user typed, never to an error. */
+          pushText(t.label + ":" + v, t.negated);
+          return;
+        }
+        pushTerm({ kind: t.label, value: ms, negated: t.negated });
+        return;
+      }
+      if (t.label === "todo") {
+        const tv = v.toLowerCase();
+        if (tv !== "true" && tv !== "false" && tv !== "*") {
+          pushText("todo:" + v, t.negated);
+          return;
+        }
+        pushTerm({ kind: "todo", value: tv, negated: t.negated });
+        return;
+      }
+      if (!v) {
+        pushText(t.label + ":", t.negated);
+        return;
+      }
+      if (t.label === "tag") {
+        if (v === "*") {
+          pushTerm({ kind: "tag", value: "*", negated: t.negated });
+          return;
+        }
+        let tagStem = v, tagWild = false;
+        if (tagStem.length > 1 &&
+            tagStem.charAt(tagStem.length - 1) === "*") {
+          tagWild = true;
+          tagStem = tagStem.slice(0, -1);
+        }
+        pushTerm({ kind: "tag", value: tagStem.toLowerCase(),
+          wildcard: tagWild, negated: t.negated });
+        return;
+      }
+      if (t.label === "resource") {
+        const rv = v.toLowerCase();
+        if (rv === "*" || rv === "*/*") {
+          pushTerm({ kind: "resource", value: "*",
+            negated: t.negated });
+          return;
+        }
+        let resStem = rv, resWild = false;
+        if (resStem.charAt(resStem.length - 1) === "*") {
+          resWild = true;
+          resStem = resStem.slice(0, -1);
+        }
+        pushTerm({ kind: "resource", value: resStem,
+          wildcard: resWild, negated: t.negated });
+        return;
+      }
+      /* notebook:, stack:, intitle:: a name or title
+         match; the first two take a trailing wildcard as
+         a prefix, like the grammar's string matching. */
+      let stem = v, wild = false;
+      if (t.label !== "intitle" && stem.length > 1 &&
+          stem.charAt(stem.length - 1) === "*") {
+        wild = true;
+        stem = stem.slice(0, -1);
+      }
+      pushTerm({ kind: t.label, value: stem.toLowerCase(),
+        wildcard: wild, negated: t.negated });
+      return;
+    }
+    if (t.label) {
+      /* An unknown label is not an operator at all: the
+         whole token is a plain word. */
+      pushText(t.label + ":" + t.value, t.negated);
+      return;
+    }
+    let word = t.value;
+    if (word.length > 1 && word.charAt(word.length - 1) === "*") {
+      /* A trailing wildcard is syntax (Evernote: match
+         the start of a word); under this app's substring
+         predicate the bare stem already covers it. */
+      syntax = true;
+      word = word.slice(0, -1);
+    }
+    pushText(word, t.negated);
+  });
+  if (!syntax) { return null; }
+  return { anyMode: anyMode, scopes: scopes,
+    positives: positives, negatives: negatives };
+}
+
+/* One parsed predicate against one note. */
+function searchTermMatches(note, pred) {
+  if (pred.kind === "text") {
+    return searchTextMatches(note, pred.value);
+  }
+  if (pred.kind === "intitle") {
+    return String(note.title || "").toLowerCase()
+      .indexOf(pred.value) >= 0;
+  }
+  if (pred.kind === "tag") {
+    const tags = note.tags || [];
+    if (pred.value === "*") { return tags.length > 0; }
+    for (let i = 0; i < tags.length; i++) {
+      const t = String(tags[i]).toLowerCase();
+      if (pred.wildcard ? t.indexOf(pred.value) === 0
+          : t === pred.value) {
+        return true;
+      }
+    }
+    return false;
+  }
+  if (pred.kind === "notebook") {
+    const nb = notebookForSlug(note.notebook);
+    if (!nb) { return false; }
+    const name = String(nb.name || "").toLowerCase();
+    return pred.wildcard ? name.indexOf(pred.value) === 0
+      : name === pred.value;
+  }
+  if (pred.kind === "stack") {
+    const nb = notebookForSlug(note.notebook);
+    if (!nb || typeof nb.stack !== "string" || !nb.stack) {
+      return false;
+    }
+    const s = nb.stack.toLowerCase();
+    return pred.wildcard ? s.indexOf(pred.value) === 0
+      : s === pred.value;
+  }
+  if (pred.kind === "created" || pred.kind === "updated") {
+    const t = new Date(pred.kind === "created"
+      ? note.created : note.updated).getTime();
+    return !isNaN(t) && t >= pred.value;
+  }
+  if (pred.kind === "todo") {
+    const f = noteTodoFacts(note);
+    if (pred.value === "*") { return f.checked || f.unchecked; }
+    return pred.value === "true" ? f.checked : f.unchecked;
+  }
+  if (pred.kind === "resource") {
+    const mimes = noteAttachmentMimes(note);
+    if (pred.value === "*") { return mimes.length > 0; }
+    for (let i = 0; i < mimes.length; i++) {
+      if (pred.wildcard ? mimes[i].indexOf(pred.value) === 0
+          : mimes[i] === pred.value) {
+        return true;
+      }
+    }
+    return false;
+  }
+  return false;
+}
+
+/* One note against a parsed query: every scope must hold
+   (a negated scope must not), no negated term may match,
+   and the positive terms must all match, or any one of
+   them under any:. */
+function noteMatchesParsedSearch(note, parsed) {
+  for (let i = 0; i < parsed.scopes.length; i++) {
+    const s = parsed.scopes[i];
+    if (searchTermMatches(note, s) === !!s.negated) {
+      return false;
+    }
+  }
+  for (let i = 0; i < parsed.negatives.length; i++) {
+    if (searchTermMatches(note, parsed.negatives[i])) {
+      return false;
+    }
+  }
+  if (!parsed.positives.length) { return true; }
+  if (parsed.anyMode) {
+    return parsed.positives.some(function (p) {
+      return searchTermMatches(note, p);
+    });
+  }
+  return parsed.positives.every(function (p) {
+    return searchTermMatches(note, p);
+  });
+}
+
 /* The filtered, sorted note set for the middle pane.
    Pipeline: the current view selects the pool, the search text
    narrows it, then the v1.8 list filters narrow it further (all three
@@ -15300,7 +16381,10 @@ async function restoreSelectedArchiveNotes() {
    list sort (compareNotesByListSort); the default sort, updated
    newest first, reproduces the pre-v1.8 order exactly. In Trash and
    in the Archive there is no pinning, so it is just the sort. Search
-   matches title, body text, and tags, all locally against the cache. */
+   matches title, body text, and tags, all locally against the cache.
+   v2.32: a query carrying search syntax is judged by the
+   Evernote grammar above; a plain query runs the matcher the
+   app has always used, unchanged. */
 function visibleNotes() {
   let list;
   if (state.view.kind === "trash") {
@@ -15322,20 +16406,31 @@ function visibleNotes() {
     }
   }
   if (state.search) {
-    const q = state.search;
-    list = list.filter(function (n) {
-      return n.title.toLowerCase().indexOf(q) >= 0 ||
-        /* v2.20: a shell searches its catalog preview (its full
-           body is not on this device); a loaded note searches
-           its body, as always. */
-        noteListText(n).toLowerCase().indexOf(q) >= 0 ||
-        /* v1.2: attachment file names are searchable. Placeholder markup
-           itself contributes no text, so snippets stay clean. */
-        (n.attachments || []).some(function (a) {
-          return (a.name || "").toLowerCase().indexOf(q) >= 0;
-        }) ||
-        n.tags.some(function (t) { return t.toLowerCase().indexOf(q) >= 0; });
-    });
+    /* v2.32: the grammar path judges a query carrying
+       syntax; parseSearchQuery returns null for a plain
+       query, and the plain path below is the filter this
+       list has always run, byte for byte. */
+    const parsed = parseSearchQuery(state.search);
+    if (parsed) {
+      list = list.filter(function (n) {
+        return noteMatchesParsedSearch(n, parsed);
+      });
+    } else {
+      const q = state.search;
+      list = list.filter(function (n) {
+        return n.title.toLowerCase().indexOf(q) >= 0 ||
+          /* v2.20: a shell searches its catalog preview (its full
+             body is not on this device); a loaded note searches
+             its body, as always. */
+          noteListText(n).toLowerCase().indexOf(q) >= 0 ||
+          /* v1.2: attachment file names are searchable. Placeholder markup
+             itself contributes no text, so snippets stay clean. */
+          (n.attachments || []).some(function (a) {
+            return (a.name || "").toLowerCase().indexOf(q) >= 0;
+          }) ||
+          n.tags.some(function (t) { return t.toLowerCase().indexOf(q) >= 0; });
+      });
+    }
   }
   if (listFiltersActive()) {
     list = list.filter(notePassesListFilters);
@@ -15488,6 +16583,9 @@ function renderNoteList() {
   document.getElementById("listSub").textContent =
     list.length + (list.length === 1 ? " note" : " notes") +
     (state.search ? " matching \"" + state.search + "\"" : "");
+  /* v2.32: the Save search button's visibility and label
+     follow the search this list is showing. */
+  syncSaveSearchButton();
   renderListToolbar();
   listEl.innerHTML = "";
 
@@ -33930,6 +35028,63 @@ function wireEvents() {
       state.search = ev.target.value.trim().toLowerCase();
       renderNoteList();
     }, 150));
+  /* v2.32: clicking into the search box surfaces the saved
+     searches (Evernote surfaces its saved searches from the
+     search bar), and typing re-filters the panel's rows at
+     once, undebounced, since the rows are local. */
+  document.getElementById("searchInput").addEventListener("focus",
+    function () {
+      openSavedSearchPanel();
+    });
+  document.getElementById("searchInput").addEventListener("click",
+    function () {
+      openSavedSearchPanel();
+    });
+  document.getElementById("searchInput").addEventListener("input",
+    function () {
+      const panel = document.getElementById("savedSearchPanel");
+      if (panel && !panel.classList.contains("hidden")) {
+        renderSavedSearchPanel();
+      }
+    });
+  /* v2.32: the panel and its menu close on a click outside
+     the search wrap, and on Escape, the closers the other
+     sidebar menus keep. */
+  document.addEventListener("click", function (ev) {
+    if (!ev.target.closest(".sidebar-search")) {
+      closeSavedSearchPanel();
+    }
+  });
+  document.addEventListener("keydown", function (ev) {
+    if (ev.key === "Escape") { closeSavedSearchPanel(); }
+  });
+  /* v2.32: Save search (and Edit saved search) at the top
+     of the results. */
+  document.getElementById("saveSearchBtn").addEventListener("click",
+    function () {
+      promptSaveSearch();
+    });
+  /* v2.32: the saved search entry menu's items act on the
+     entry the menu was opened for (savedSearchMenuFor),
+     captured before the menu closes. */
+  document.getElementById("savedSearchRenameBtn").addEventListener("click", function () {
+    const id = savedSearchMenuFor;
+    closeSavedSearchMenu();
+    const entry = id ? savedSearchById(id) : null;
+    if (entry) { promptRenameSavedSearch(entry); }
+  });
+  document.getElementById("savedSearchShortcutBtn").addEventListener("click", function () {
+    const id = savedSearchMenuFor;
+    closeSavedSearchMenu();
+    const entry = id ? savedSearchById(id) : null;
+    if (entry) { toggleShortcut("search", entry.id); }
+  });
+  document.getElementById("savedSearchDeleteBtn").addEventListener("click", function () {
+    const id = savedSearchMenuFor;
+    closeSavedSearchMenu();
+    const entry = id ? savedSearchById(id) : null;
+    if (entry) { confirmDeleteSavedSearch(entry); }
+  });
 
   /* Sidebar footer: v2.7 moved the footer's buttons into the
      three dot menu beside the Synced pill (see the v2.7 block at
