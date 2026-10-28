@@ -40,10 +40,24 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-26-SSN-V2260
-  Version: 2.26.0
+  BUILD STAMP: 2026-10-28-SSN-V2270
+  Version: 2.27.0
 
   Revision history:
+    v2.27.0 2026-10-28 Tasks view: a description preview
+                      under the task title. A task that has
+                      a description now shows a preview of
+                      it directly under its title in the
+                      Tasks view, clamped to three lines.
+                      The full text stays on the task and
+                      opens in the task editor as before,
+                      and hovering the preview shows the
+                      whole description. Line breaks in the
+                      description are kept in the preview.
+                      Tasks without a description show
+                      nothing extra, so their rows stay as
+                      compact as before. The Things to do
+                      page's rows are unchanged.
     v2.26.0 2026-10-26 Conflict handling inverted. A save
                       that finds its note changed elsewhere
                       (the v2.19 / v2.22 decision chain
@@ -4059,6 +4073,21 @@ body.dark .task-group-title{color:var(--accent);}
   text-decoration:line-through;color:var(--muted);
 }
 .task-row-meta{font-size:12.5px;color:var(--muted);margin-top:1px;}
+/* v2.27.0: the Tasks view's description preview, under the
+   title in the column form of the row: quieter than the
+   title, themed through the muted variable so it follows
+   both themes, its typed line breaks kept (white-space:
+   pre-line), and clamped to three lines by the clamp
+   alone; the text itself is never shortened, and a
+   completed row strikes only its title, never this
+   preview. */
+.task-row-desc{
+  font-size:13px;color:var(--muted);margin-top:3px;
+  line-height:1.45;overflow:hidden;overflow-wrap:anywhere;
+  white-space:pre-line;display:-webkit-box;
+  -webkit-box-orient:vertical;-webkit-line-clamp:3;
+  line-clamp:3;
+}
 .task-chips{
   margin-left:auto;display:flex;gap:6px;align-items:center;
   flex:none;padding-top:1px;
@@ -6014,8 +6043,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-26-SSN-V2260";
-const APP_VERSION = "2.26.0";
+const APP_BUILD = "2026-10-28-SSN-V2270";
+const APP_VERSION = "2.27.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -13712,6 +13741,25 @@ function buildTaskRowEl(task, opts) {
     colTitle.className = "task-row-title";
     colTitle.textContent = task.title;
     colMain.appendChild(colTitle);
+    /* v2.27.0: the description preview under the title,
+       in this Tasks view column form only (the card form
+       below is untouched). The FULL description goes in
+       as the text, trimmed of its outer whitespace for
+       display, and the same full text is the preview's
+       title attribute, so a hover can show what the
+       three line clamp (the .task-row-desc rule) cuts
+       off; the text itself is never shortened here. A
+       task with no description, or only whitespace,
+       gets no preview element at all. */
+    const colDescText = typeof task.description === "string"
+      ? task.description.trim() : "";
+    if (colDescText) {
+      const colDesc = document.createElement("div");
+      colDesc.className = "task-row-desc";
+      colDesc.textContent = colDescText;
+      colDesc.title = colDescText;
+      colMain.appendChild(colDesc);
+    }
     titleCell.appendChild(colMain);
     const markers = document.createElement("div");
     markers.className = "task-chips";
