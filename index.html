@@ -40,10 +40,37 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-28-SSN-V2280
-  Version: 2.28.0
+  BUILD STAMP: 2026-10-28-SSN-V2281
+  Version: 2.28.1
 
   Revision history:
+    v2.28.1 2026-10-28 The "@" popup in a task
+                      description painted under the task
+                      editor and could not be seen or
+                      clicked. The popup card is a fixed
+                      element at z-index 63, and the task
+                      editor is a modal layer at z-index
+                      80 with a full screen dim; no
+                      ancestor of the card creates a
+                      stacking context, so in the
+                      description host the popup opened
+                      underneath the modal (the v2.28.0
+                      tests proved it opens and lists
+                      notes, but they run without
+                      painting, so the layering was
+                      invisible to them; the field report
+                      is what caught it). While the
+                      popup serves the description editor
+                      it now wears a host class that
+                      raises it to z-index 90, above the
+                      modal and below the image lightbox;
+                      the class is removed on close and
+                      is never applied in a note, where
+                      the popup keeps its base layer and
+                      its behavior is unchanged. A new
+                      stacking test reads the
+                      stylesheet's own z-index values and
+                      pins the contract.
     v2.28.0 2026-10-28 Rich task descriptions and two
                       way @ links. A task's description is
                       now written in a compact rich text
@@ -2938,6 +2965,14 @@ body.dark .modal:hover::-webkit-scrollbar-thumb{
   border-radius:var(--radius-card);box-shadow:0 10px 28px rgba(6,32,22,.28);
 }
 #mentionPopup.hidden{display:none;}
+/* v2.28.1: while the popup serves the task description
+   editor it wears this class and paints above the task
+   modal (.modal is z-index 80): the base card sits at
+   63, which in that host put it under the modal's dim
+   layer, invisible and unclickable (typing "@" in a
+   description did nothing). The class is applied only
+   in the task host; the note host keeps the base 63. */
+#mentionPopup.mention-in-task{z-index:90;}
 .mention-head{
   font-size:11px;font-weight:700;letter-spacing:.08em;
   color:var(--muted);padding:5px 10px 3px;
@@ -6162,8 +6197,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-28-SSN-V2280";
-const APP_VERSION = "2.28.0";
+const APP_BUILD = "2026-10-28-SSN-V2281";
+const APP_VERSION = "2.28.1";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -18610,7 +18645,13 @@ function mentionPopupOpen() {
 
 function closeMentionPopup() {
   const popup = document.getElementById("mentionPopup");
-  if (popup) { popup.classList.add("hidden"); }
+  if (popup) {
+    popup.classList.add("hidden");
+    /* v2.28.1: the task host's raised dress comes off
+       with the close, so a later note host open can
+       never inherit it. */
+    popup.classList.remove("mention-in-task");
+  }
   mentionTrigger = null;
   mentionRows = [];
   mentionHighlight = 0;
@@ -18902,6 +18943,13 @@ function renderMentionPopup(range) {
     btn.appendChild(texts);
     list.appendChild(btn);
   });
+  /* v2.28.1: in the task description host the card must
+     paint above the task modal (see the stylesheet's
+     mention-in-task rule); in the note host it keeps
+     its base layer. The toggle runs on every render,
+     so the dress always matches the serving host. */
+  popup.classList.toggle("mention-in-task",
+    mentionHost === "task");
   popup.classList.remove("hidden");
   setMentionHighlight(mentionHighlight);
   positionMentionPopup(range || mentionLastRange);
