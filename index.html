@@ -40,10 +40,91 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-28-SSN-V2300
-  Version: 2.30.0
+  BUILD STAMP: 2026-10-28-SSN-V2310
+  Version: 2.31.0
 
   Revision history:
+    v2.31.0 2026-10-28 Shortcuts, the third release
+                      of the Evernote parity program
+                      (phase 1: organization), and the
+                      Evernote notebook order. A new
+                      Shortcuts section sits in the
+                      sidebar above Notebooks, where
+                      Evernote keeps it, holding quick
+                      links to notes, notebooks,
+                      notebook stacks, and tags: an item
+                      is added from its own menu (Add
+                      Note to Shortcuts and Add Notebook
+                      to Shortcuts in the notes list
+                      toolbar menu beside Pin note, Add
+                      to Shortcuts in a tag row's menu),
+                      the section keeps the order the
+                      shortcuts were added in, a click
+                      jumps straight to the target (a
+                      notebook's list, a tag's filter,
+                      the note itself), and a shortcut
+                      comes off the list from its own
+                      row's menu without touching the
+                      target. Labels are read from the
+                      target at every render, so renames
+                      show up on their own; the stored
+                      entry follows the renames that
+                      change identity (a notebook's
+                      slug, a tag's string, a stack's
+                      name). The list lives in index.json
+                      beside the notebooks and the tag
+                      parent map, because settings live
+                      only in one device's local storage
+                      while index.json is the Drive
+                      synced store, and Evernote
+                      shortcuts sync across devices;
+                      it rides every index write, load,
+                      cache, and folder rebuild path,
+                      and is sanitized on read (unknown
+                      kinds, blank targets, and
+                      duplicates dropped). A shortcut
+                      whose target exists nowhere (a
+                      notebook deleted, a stack emptied,
+                      a tag removed from every note, a
+                      note deleted forever) is dropped
+                      at load; a shortcut to a note in
+                      Trash or Archive stays, rendered
+                      muted, and a click answers with
+                      the message the note links give
+                      rather than opening it. The second
+                      half is the order change Chris
+                      authorized (reorganize the UI to
+                      match Evernote): the sidebar
+                      notebook list renders in
+                      Evernote's order, stack names and
+                      unstacked notebook names sorted
+                      together alphabetically (case
+                      insensitive), members alphabetical
+                      inside a stack. It is a render
+                      order only: index.json storage
+                      order and notebook identity are
+                      untouched, and the icon rail
+                      flyout, the editor's notebook
+                      menu, the task notebook pickers,
+                      and the drag target list follow
+                      the same order. Named deviations
+                      from Evernote: saved searches can
+                      be shortcuts in Evernote but do
+                      not exist here yet (they are
+                      phase 1 release 4, and search
+                      shortcuts arrive with them); no
+                      drag to reorder shortcuts and no
+                      drag onto the section to add one
+                      (the menu path is complete), the
+                      drag deviation the stacks and
+                      tags releases already carry;
+                      clicking a stack shortcut unfolds
+                      the stack group in the sidebar
+                      rather than opening a stack view,
+                      because SnakeScale has no stack
+                      view for it to open; and the icon
+                      rail has no Shortcuts flyout this
+                      release.
     v2.30.0 2026-10-28 Nested tags, the second release
                       of the Evernote parity program
                       (phase 1: organization). Tags form
@@ -2367,30 +2448,48 @@ body.dark .gate-brand .wordmark{color:#EAF3EC;}
 }
 .nav-tag-row.collapsed .nav-tag-chevron{transform:rotate(0deg);}
 .nav-tag-chevron-spacer{flex:none;width:20px;}
-.nav-tag-menu-btn{
+.nav-tag-menu-btn,.nav-shortcut-menu-btn{
   flex:none;width:24px;height:24px;display:inline-flex;
   align-items:center;justify-content:center;background:none;
   border:none;border-radius:var(--radius-button);color:#AFCDB7;
   font-size:15px;line-height:1;cursor:pointer;
   transition:background-color var(--motion),color var(--motion);
 }
-.nav-tag-menu-btn:hover{background:rgba(87,167,115,.25);color:#fff;}
-#tagMenu,#tagParentPanel{
+.nav-tag-menu-btn:hover,.nav-shortcut-menu-btn:hover{background:rgba(87,167,115,.25);color:#fff;}
+#tagMenu,#tagParentPanel,#shortcutMenu{
   position:absolute;left:10px;right:10px;z-index:60;min-width:180px;
   padding:6px;background:var(--surface);border:1px solid var(--border);
   border-radius:var(--radius-card);box-shadow:0 10px 28px rgba(0,0,0,.32);
   display:flex;flex-direction:column;gap:2px;
 }
-#tagMenu.hidden,#tagParentPanel.hidden{display:none;}
-#tagMenu button,#tagParentPanel button{
+#tagMenu.hidden,#tagParentPanel.hidden,#shortcutMenu.hidden{display:none;}
+#tagMenu button,#tagParentPanel button,#shortcutMenu button{
   display:flex;align-items:center;gap:8px;width:100%;text-align:left;
   background:none;border:none;color:var(--text-strong);cursor:pointer;
   padding:8px 10px;border-radius:var(--radius-button);font-size:13.5px;
   transition:background-color var(--motion);
 }
-#tagMenu button:hover,#tagParentPanel button:hover{
+#tagMenu button:hover,#tagParentPanel button:hover,#shortcutMenu button:hover{
   background:var(--accent-soft);
 }
+/* v2.31 (Evernote parity, phase 1 release 3): shortcuts.
+   A shortcut row is the tag row's flex shape: the main
+   button is a .nav-item carrying a kind icon and the
+   target's current label (read from the target at render
+   time, never stored), and the three dot button opens the
+   shared shortcut menu above. The section is the menu's
+   positioning context, like the tag section is for its
+   menu. A dead row (its note sits in Trash or Archive)
+   renders muted; its label gains a quiet "(in Trash)" or
+   "(in Archive)" suffix so the state is readable before
+   the click that answers with the note links' message. */
+#shortcutSection{position:relative;}
+.nav-shortcut-row{display:flex;align-items:center;gap:2px;padding-right:2px;}
+.nav-shortcut-row .nav-item{flex:1;min-width:0;}
+.nav-shortcut-icon{flex:none;display:inline-flex;color:#AFCDB7;}
+.nav-shortcut-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.nav-shortcut-where{color:#9DB8A6;font-size:12px;}
+.nav-shortcut-row.dead .nav-item{opacity:.55;}
 #tagMenu button:disabled{opacity:.55;cursor:default;}
 #tagMenu button:disabled:hover{background:none;}
 #tagMenu button.danger{color:#C0392B;}
@@ -5232,6 +5331,21 @@ body.dark .version-date{color:var(--accent);}
       <button class="nav-item" id="navArchive" type="button" data-drop-action="archive">Archive <span class="count count-pill" id="countArchive"></span></button>
     </div>
 
+    <!-- v2.31 (Evernote parity, phase 1 release 3): the
+         Shortcuts section, above Notebooks, where Evernote
+         keeps it. Rows are built by renderSidebar from
+         state.shortcuts (buildShortcutRow). The shared menu
+         is the row menu the tag rows established: it removes
+         the shortcut it was opened for (shortcutMenuFor) and
+         nothing else; the target is never touched. -->
+    <div class="nav-section" id="shortcutSection">
+      <div class="nav-label">Shortcuts</div>
+      <div id="shortcutNav"></div>
+      <div id="shortcutMenu" class="hidden" role="menu" aria-label="Shortcut actions">
+        <button type="button" id="shortcutRemoveBtn" role="menuitem">Remove from Shortcuts</button>
+      </div>
+    </div>
+
     <div class="nav-section" id="notebookSection">
       <div class="nav-label">Notebooks <button id="addNotebookBtn" type="button" title="Add notebook">+</button></div>
       <div id="notebookNav"></div>
@@ -5259,6 +5373,11 @@ body.dark .version-date{color:var(--accent);}
            level. -->
       <div id="tagMenu" class="hidden" role="menu" aria-label="Tag actions">
         <button type="button" id="tagRenameBtn" role="menuitem">Rename Tag</button>
+        <!-- v2.31: the tag's shortcut toggle, Evernote's own
+             item name; openTagMenu sets the label (Add to
+             Shortcuts or Remove from Shortcuts) from the
+             tag's current state. -->
+        <button type="button" id="tagShortcutBtn" role="menuitem">Add to Shortcuts</button>
         <button type="button" id="tagMoveBtn" role="menuitem">Move Tag...</button>
         <button type="button" id="tagTopLevelBtn" role="menuitem">Move Tag to Top Level</button>
         <button type="button" id="tagDeleteBtn" class="danger" role="menuitem">Delete Tag</button>
@@ -5453,6 +5572,14 @@ body.dark .version-date{color:var(--accent);}
                  hidden state is set in renderListToolbar). -->
             <button type="button" class="list-menu-item" id="nbAddToStackBtn" role="menuitem">Add to Stack...</button>
             <button type="button" class="list-menu-item hidden" id="nbRemoveFromStackBtn" role="menuitem">Remove from Stack</button>
+            <!-- v2.31: the open notebook's shortcut toggle.
+                 It sits with the notebook items and is labelled
+                 for its target, because this menu mixes
+                 notebook items and note items; renderListToolbar
+                 sets the label (Add Notebook to Shortcuts or
+                 Remove Notebook from Shortcuts) and enables it
+                 exactly like Rename. -->
+            <button type="button" class="list-menu-item" id="nbShortcutNbBtn" role="menuitem">Add Notebook to Shortcuts</button>
             <button type="button" class="list-menu-item danger" id="nbDeleteBtn" role="menuitem">Delete Notebook</button>
             <!-- v2.2: pinning moved here from the editor's meta row.
                  renderListToolbar sets this item's label (Pin note or
@@ -5460,6 +5587,14 @@ body.dark .version-date{color:var(--accent);}
                  when a live note is selected, and hides it entirely
                  in Trash and Archive views. -->
             <button type="button" class="list-menu-item" id="nbPinBtn" role="menuitem">Pin note</button>
+            <!-- v2.31: the selected note's shortcut toggle,
+                 beside Pin note, this menu's other note item.
+                 renderListToolbar sets the label (Add Note to
+                 Shortcuts or Remove Note from Shortcuts),
+                 enables it only when a live note is selected,
+                 and hides it in Trash and Archive, exactly
+                 like the pin item. -->
+            <button type="button" class="list-menu-item" id="nbShortcutNoteBtn" role="menuitem">Add Note to Shortcuts</button>
             <!-- v1.8.1: the menu adapts to the view. These three items
                  belong to Trash and the Archive; renderListToolbar
                  shows and enables the ones for the current view and
@@ -6508,8 +6643,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-28-SSN-V2300";
-const APP_VERSION = "2.30.0";
+const APP_BUILD = "2026-10-28-SSN-V2310";
+const APP_VERSION = "2.31.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -6650,6 +6785,23 @@ const state = {
                             // see would not be a hierarchy. A
                             // tag with no entry here is a top
                             // level tag.
+  shortcuts: [],            // v2.31: the sidebar Shortcuts list,
+                            // an ordered array of {kind, id}
+                            // entries (kind: note, notebook,
+                            // stack, or tag; id: the note id,
+                            // the notebook slug, the stack
+                            // name, or the tag name). It lives
+                            // in index.json (see
+                            // buildIndexObject), NOT in
+                            // settings, for the same reason
+                            // the tag parent map does: Evernote
+                            // shortcuts sync across devices,
+                            // and a list only one device could
+                            // see would not be a shortcut list.
+                            // Order is the order shortcuts
+                            // were added in; labels are never
+                            // stored, they are read from the
+                            // target at render time.
   versionsLimit: 10,        // v2.8: how many past versions to keep
                             // per note (0 turns version history
                             // off), remembered in settings and
@@ -7348,6 +7500,9 @@ function cacheSnapshot() {
     /* v2.30: the tag parent map rides the snapshot too, so a
        cache first paint shows the same tree the store does. */
     tagParents: state.tagParents,
+    /* v2.31: the shortcuts list rides it as well, so a cache
+       first paint shows the same Shortcuts section. */
+    shortcuts: state.shortcuts,
     notes: state.notes,
     trash: state.trash,
     archive: state.archive,
@@ -7362,6 +7517,10 @@ function applyCacheSnapshot(c) {
      no map; they load as an all top level hierarchy, exactly
      like an index.json written before v2.30 does. */
   state.tagParents = sanitizeTagParents(c.tagParents);
+  /* v2.31: snapshots written before shortcuts existed have
+     no list; they load as an empty Shortcuts section,
+     exactly like an index.json written before v2.31 does. */
+  state.shortcuts = sanitizeShortcuts(c.shortcuts);
   state.notes = c.notes || [];
   state.trash = c.trash || [];
   /* v1.5: caches written before archiving existed have no archive
@@ -8327,6 +8486,10 @@ function buildIndexObject() {
        write because buildIndexObject is the only writer's
        shape, so no unrelated save can drop the hierarchy. */
     tagParents: state.tagParents,
+    /* v2.31: the shortcuts list, on the same reasoning: it
+       rides every index write because this is the only
+       writer's shape, so no unrelated save can drop it. */
+    shortcuts: state.shortcuts,
     updated: new Date().toISOString()
   };
 }
@@ -8440,7 +8603,9 @@ function buildIndexFromFolders(folderSlugs) {
      across untouched; an absent index on a brand new store
      starts from the in-memory map, which is empty until tags
      are nested. */
-  return { version: 1, notebooks: rebuilt, tagParents: state.tagParents, updated: new Date().toISOString() };
+  /* v2.31: the shortcuts list is carried across the same
+     way, for the same reason. */
+  return { version: 1, notebooks: rebuilt, tagParents: state.tagParents, shortcuts: state.shortcuts, updated: new Date().toISOString() };
 }
 
 /* --------------------------------------------------------------------------
@@ -10151,6 +10316,10 @@ async function loadAllFromRepo() {
     if (index && index.tagParents) {
       state.tagParents = sanitizeTagParents(index.tagParents);
     }
+    /* v2.31: the shortcuts list is salvaged the same way. */
+    if (index && index.shortcuts) {
+      state.shortcuts = sanitizeShortcuts(index.shortcuts);
+    }
     index = buildIndexFromFolders(folderSlugs);
     state.notebooks = index.notebooks;
     state.index = index;
@@ -10166,6 +10335,11 @@ async function loadAllFromRepo() {
        nested tags existed has no field and loads as an all
        top level hierarchy. */
     state.tagParents = sanitizeTagParents(index.tagParents);
+    /* v2.31: the shortcuts list loads with the index too,
+       sanitized on the way in; an index written before
+       shortcuts existed has no field and loads as an empty
+       Shortcuts section. */
+    state.shortcuts = sanitizeShortcuts(index.shortcuts);
     state.index = index;
     /* A notebook folder with no index entry still gets listed, so notes
        are never hidden by a stale index. */
@@ -10264,6 +10438,14 @@ async function loadAllFromRepo() {
      reminder catch up, and any notification click waiting to
      open its task). */
   if (tasksLoad) { onTasksLoaded(prevTaskUpdatedById); }
+  /* v2.31: with the whole library in memory, shortcuts whose
+     targets exist nowhere (a notebook deleted on another
+     device, a note deleted forever, a tag that left every
+     note) are dropped from the stored list, so the section
+     never accumulates ghosts. Entries pointing into Trash
+     or Archive are NOT dropped: those notes still exist,
+     and their shortcuts render as unavailable instead. */
+  pruneShortcuts();
   saveCache();
   /* v1.2: one readable warning if any note file carried attachment
      metadata that could not be parsed. Those notes still loaded; they
@@ -11868,6 +12050,10 @@ async function renameNotebook(slug, newName) {
     queueOp({ kind: "delete", path: "notebooks/" + slug + "/.gitkeep", noteId: null });
   }
   nb.slug = newSlug;
+  /* v2.31: a notebook shortcut names its notebook by slug,
+     so it follows the rename to the new slug here, before
+     the save below writes the index that carries both. */
+  shortcutsFollowRename("notebook", slug, newSlug);
   if (state.view.kind === "notebook" && state.view.value === slug) {
     state.view.value = newSlug;
   }
@@ -11882,6 +12068,11 @@ async function deleteNotebook(slug) {
     await moveNoteToTrash(note, true);
   }
   state.notebooks = state.notebooks.filter(function (n) { return n.slug !== slug; });
+  /* v2.31: the deleted notebook's shortcut goes with it
+     (its notes' shortcuts stay: those notes are in Trash
+     now, where a shortcut renders as unavailable). The
+     drop rides this flow's own index save below. */
+  shortcutsDrop("notebook", slug);
   if (state.online && state.repoExists) {
     try {
       const keep = await storeGetFile("notebooks/" + slug + "/.gitkeep");
@@ -12004,6 +12195,9 @@ async function renameStack(oldName, newName) {
   state.notebooks.forEach(function (nb) {
     if (notebookStackOf(nb) === oldName) { nb.stack = newName; }
   });
+  /* v2.31: a stack shortcut names the stack, so it follows
+     the rename like the members do. */
+  shortcutsFollowRename("stack", oldName, newName);
   const ci = state.collapsedStacks.indexOf(oldName);
   if (ci >= 0) {
     state.collapsedStacks[ci] = newName;
@@ -12023,6 +12217,9 @@ async function deleteStack(name) {
   state.notebooks.forEach(function (nb) {
     if (notebookStackOf(nb) === name) { delete nb.stack; }
   });
+  /* v2.31: the stack's shortcut goes with the grouping;
+     the notebooks it pointed at keep theirs. */
+  shortcutsDrop("stack", name);
   const ci = state.collapsedStacks.indexOf(name);
   if (ci >= 0) {
     state.collapsedStacks.splice(ci, 1);
@@ -12323,6 +12520,9 @@ async function renameTag(oldName, newName) {
     state.tagParents[newName] = state.tagParents[oldName];
     delete state.tagParents[oldName];
   }
+  /* v2.31: a tag shortcut names the tag, so it follows the
+     rename like the hierarchy entries do. */
+  shortcutsFollowRename("tag", oldName, newName);
   Object.keys(state.tagParents).forEach(function (child) {
     if (state.tagParents[child] === oldName) {
       state.tagParents[child] = newName;
@@ -12380,6 +12580,10 @@ async function deleteTag(tag) {
     }
   });
   delete state.tagParents[tag];
+  /* v2.31: the deleted tag's shortcut goes with it; the
+     tag no longer exists anywhere once it leaves its
+     notes. */
+  shortcutsDrop("tag", tag);
   const ci = state.collapsedTags.indexOf(tag);
   if (ci >= 0) {
     state.collapsedTags.splice(ci, 1);
@@ -12440,6 +12644,358 @@ function confirmDeleteTag(tag) {
       "not be deleted." : "");
   if (!confirm(msg)) { return; }
   deleteTag(tag);
+}
+
+/* --------------------------------------------------------------------------
+   v2.31: shortcuts (Evernote parity, phase 1 release 3)
+
+   Evernote's model, from its own help pages and guides:
+   Shortcuts is a section in the sidebar holding quick links
+   to the things a person goes back to: notes, notebooks,
+   notebook stacks, tags, and saved searches. An item is
+   added from its own menu ("Add to Shortcuts"), the list
+   keeps the order the items were added in, a click jumps
+   straight to the target, and a shortcut is removed from
+   the shortcut's own menu, never touching the target.
+   Shortcuts sync across devices. SnakeScale covers notes,
+   notebooks, stacks, and tags here; saved searches are
+   phase 1 release 4 and do not exist yet, so search
+   shortcuts arrive with them (a named deviation).
+
+   The list lives in index.json as an ordered array of
+   {kind, id} entries (see the state field for why index.json
+   and not settings). An entry stores IDENTITY only, never a
+   label: a note by its id, a notebook by its slug, a stack
+   or a tag by its name. Labels are read from the target at
+   render time, so a renamed note or notebook shows its new
+   name on its shortcut by itself; the renames that change
+   identity itself (renameNotebook moves the slug,
+   renameTag rewrites the string, renameStack renames the
+   grouping) rewrite the entries through
+   shortcutsFollowRename, and the deletes that end a
+   target's existence drop the entry through shortcutsDrop
+   or the load time prune below.
+
+   Dead entries: a shortcut whose note sits in Trash or
+   Archive is kept, rendered muted with the place named in
+   its label, and a click answers with the message the note
+   links give ("That note is in Trash." and its Archive
+   twin), never opening the note. A shortcut whose target
+   exists nowhere renders no row at all, and pruneShortcuts
+   drops it from the stored list at the next load; the
+   in-session deletes drop theirs at once.
+   -------------------------------------------------------------------------- */
+
+const SHORTCUT_KINDS = ["note", "notebook", "stack", "tag"];
+
+/* Read a stored list into a safe one: only entries with a
+   known kind and a non-blank string target survive, and a
+   target appears once (first occurrence wins), so a hand
+   edited or damaged index.json can never duplicate a row
+   or point one at nothing the model knows. */
+function sanitizeShortcuts(raw) {
+  const out = [];
+  if (!Array.isArray(raw)) { return out; }
+  raw.forEach(function (e) {
+    if (!e || typeof e !== "object") { return; }
+    if (SHORTCUT_KINDS.indexOf(e.kind) < 0) { return; }
+    if (typeof e.id !== "string" || !e.id.trim()) { return; }
+    const dupe = out.some(function (x) {
+      return x.kind === e.kind && x.id === e.id;
+    });
+    if (dupe) { return; }
+    out.push({ kind: e.kind, id: e.id });
+  });
+  return out;
+}
+
+function hasShortcut(kind, id) {
+  return state.shortcuts.some(function (sc) {
+    return sc.kind === kind && sc.id === id;
+  });
+}
+
+/* The shortcuts list is index data, so its saves take the
+   shape every other index fact takes: the index write
+   behind the caller's back (guarded to a live store), and
+   the cache with it. */
+function persistShortcuts() {
+  if (state.online && state.repoExists) { saveIndex(); }
+  saveCache();
+}
+
+/* Add a shortcut, appended at the end of the list, the
+   place Evernote puts a new one. Adding what is already
+   there is refused with a quiet message and changes
+   nothing. Returns true when the entry was added. */
+function addShortcut(kind, id) {
+  if (SHORTCUT_KINDS.indexOf(kind) < 0 ||
+      typeof id !== "string" || !id) {
+    return false;
+  }
+  if (hasShortcut(kind, id)) {
+    toast("That is already in Shortcuts.");
+    return false;
+  }
+  state.shortcuts.push({ kind: kind, id: id });
+  persistShortcuts();
+  renderAll();
+  return true;
+}
+
+/* Remove a shortcut. Only the entry goes; the target is
+   never touched, which is the whole of the operation.
+   Returns true when an entry was removed. */
+function removeShortcut(kind, id) {
+  if (!hasShortcut(kind, id)) { return false; }
+  state.shortcuts = state.shortcuts.filter(function (sc) {
+    return !(sc.kind === kind && sc.id === id);
+  });
+  persistShortcuts();
+  renderAll();
+  return true;
+}
+
+function toggleShortcut(kind, id) {
+  if (hasShortcut(kind, id)) { return removeShortcut(kind, id); }
+  return addShortcut(kind, id);
+}
+
+/* Where one entry's target stands: "live" (present and
+   openable), "trash" or "archive" (a note parked in one of
+   the two collections), or "missing" (exists nowhere).
+   The label is the target's CURRENT name, read here at
+   render time; a missing target has no label because it
+   renders no row. */
+function shortcutTarget(entry) {
+  if (entry.kind === "note") {
+    const live = state.notes.find(function (n) {
+      return n.id === entry.id;
+    });
+    if (live) {
+      return { state: "live", label: live.title || "Untitled note", note: live };
+    }
+    const trashed = state.trash.find(function (n) {
+      return n.id === entry.id;
+    });
+    if (trashed) {
+      return { state: "trash", label: trashed.title || "Untitled note", note: trashed };
+    }
+    const archived = state.archive.find(function (n) {
+      return n.id === entry.id;
+    });
+    if (archived) {
+      return { state: "archive", label: archived.title || "Untitled note", note: archived };
+    }
+    return { state: "missing", label: "" };
+  }
+  if (entry.kind === "notebook") {
+    const nb = state.notebooks.find(function (n) {
+      return n.slug === entry.id;
+    });
+    return nb
+      ? { state: "live", label: nb.name, notebook: nb }
+      : { state: "missing", label: "" };
+  }
+  if (entry.kind === "stack") {
+    return stackNames().indexOf(entry.id) >= 0
+      ? { state: "live", label: entry.id }
+      : { state: "missing", label: "" };
+  }
+  return tagExists(entry.id)
+    ? { state: "live", label: entry.id }
+    : { state: "missing", label: "" };
+}
+
+/* Drop stored entries whose targets exist nowhere. Runs at
+   the end of every store load, when the whole library is
+   in memory to judge against; Trash and Archive entries
+   are kept, since those notes exist. A changed list is
+   written back through the ordinary index save. */
+function pruneShortcuts() {
+  if (!state.shortcuts.length) { return; }
+  const kept = state.shortcuts.filter(function (entry) {
+    return shortcutTarget(entry).state !== "missing";
+  });
+  if (kept.length === state.shortcuts.length) { return; }
+  state.shortcuts = kept;
+  persistShortcuts();
+}
+
+/* Rename plumbing: the renames that change an identity
+   (a notebook's slug, a tag's string, a stack's name)
+   rewrite their entries here, before the rename's own
+   index save writes the list back out. */
+function shortcutsFollowRename(kind, oldId, newId) {
+  state.shortcuts.forEach(function (sc) {
+    if (sc.kind === kind && sc.id === oldId) { sc.id = newId; }
+  });
+}
+
+/* Delete plumbing: drop every entry naming one target.
+   Returns true when the list changed, so a caller whose
+   own flow writes no index can persist the drop itself. */
+function shortcutsDrop(kind, id) {
+  const before = state.shortcuts.length;
+  state.shortcuts = state.shortcuts.filter(function (sc) {
+    return !(sc.kind === kind && sc.id === id);
+  });
+  return state.shortcuts.length !== before;
+}
+
+/* One icon per kind, in the rail's stroke voice: a page
+   for a note, the rail's own book for a notebook, stacked
+   layers for a stack, a luggage tag for a tag. */
+const SHORTCUT_ICONS = {
+  note: "<svg viewBox=\"0 0 20 20\" width=\"15\" height=\"15\" aria-hidden=\"true\" focusable=\"false\"><path d=\"M6 2.5h5.5L15 6v11a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-13A1 1 0 0 1 6 2.5zM11 2.5V6h4\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linejoin=\"round\" fill=\"none\"/></svg>",
+  notebook: "<svg viewBox=\"0 0 20 20\" width=\"15\" height=\"15\" aria-hidden=\"true\" focusable=\"false\"><path d=\"M4 3.5C4 2.7 4.7 2 5.5 2H10v16H5.5C4.7 18 4 17.3 4 16.5zM16 3.5C16 2.7 15.3 2 14.5 2H10v16h4.5c.8 0 1.5-.7 1.5-1.5z\" fill=\"currentColor\" stroke=\"none\"/></svg>",
+  stack: "<svg viewBox=\"0 0 20 20\" width=\"15\" height=\"15\" aria-hidden=\"true\" focusable=\"false\"><path d=\"M10 3l8 4-8 4-8-4zM3.5 12.5L10 16l6.5-3.5\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linejoin=\"round\" fill=\"none\"/></svg>",
+  tag: "<svg viewBox=\"0 0 20 20\" width=\"15\" height=\"15\" aria-hidden=\"true\" focusable=\"false\"><path d=\"M3.5 3.5H10L16.5 10 10 16.5 3.5 10z\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linejoin=\"round\" fill=\"none\"/><circle cx=\"7.2\" cy=\"7.2\" r=\"1.3\" fill=\"currentColor\" stroke=\"none\"/></svg>"
+};
+
+/* One shortcut row in the sidebar Shortcuts section: the
+   main button (kind icon plus the target's current label)
+   and the three dot button that opens the row's menu,
+   the tag row's shape. The row carries the entry's kind
+   and target in data attributes. A missing target builds
+   no row (null); a Trash or Archive note builds a muted
+   row whose label names the place. The active treatment
+   follows the same facts the real rows use: the open
+   note, the open notebook view, the active tag filter. */
+function buildShortcutRow(entry) {
+  const target = shortcutTarget(entry);
+  if (target.state === "missing") { return null; }
+  const wrap = document.createElement("div");
+  wrap.className = "nav-shortcut-row" +
+    (target.state === "live" ? "" : " dead");
+  wrap.setAttribute("data-kind", entry.kind);
+  wrap.setAttribute("data-target", entry.id);
+  const btn = document.createElement("button");
+  btn.type = "button";
+  let active = false;
+  if (entry.kind === "note") {
+    active = target.state === "live" && state.selectedId === entry.id;
+  } else if (entry.kind === "notebook") {
+    active = state.view.kind === "notebook" &&
+      state.view.value === entry.id;
+  } else if (entry.kind === "tag") {
+    active = state.view.kind === "tag" &&
+      state.view.value === entry.id;
+  }
+  btn.className = "nav-item nav-shortcut-main" + (active ? " active" : "");
+  const icon = document.createElement("span");
+  icon.className = "nav-shortcut-icon";
+  icon.innerHTML = SHORTCUT_ICONS[entry.kind] || "";
+  btn.appendChild(icon);
+  const label = document.createElement("span");
+  label.className = "nav-shortcut-label";
+  label.textContent = (entry.kind === "tag" ? "# " : "") + target.label;
+  if (target.state === "trash" || target.state === "archive") {
+    const where = document.createElement("span");
+    where.className = "nav-shortcut-where";
+    where.textContent = target.state === "trash"
+      ? " (in Trash)" : " (in Archive)";
+    label.appendChild(where);
+  }
+  btn.appendChild(label);
+  btn.addEventListener("click", function () {
+    followShortcut(entry);
+  });
+  wrap.appendChild(btn);
+  const menuBtn = document.createElement("button");
+  menuBtn.type = "button";
+  menuBtn.className = "nav-shortcut-menu-btn";
+  menuBtn.setAttribute("aria-haspopup", "true");
+  menuBtn.setAttribute("aria-label", "Shortcut actions");
+  menuBtn.title = "Shortcut actions";
+  menuBtn.innerHTML = "&#8943;";
+  menuBtn.addEventListener("click", function () {
+    openShortcutMenu(entry, wrap);
+  });
+  wrap.appendChild(menuBtn);
+  return wrap;
+}
+
+/* Jump to one shortcut's target, the way clicking the real
+   item jumps: a notebook opens its note list, a tag applies
+   its filter (with the tag rows' click again to clear
+   rule), a note opens in the editor (through the note
+   links' own rule, switching to All Notes first when the
+   current list does not hold it). A note in Trash or
+   Archive answers with the note links' message instead.
+   A stack has no view of its own to open, so its click
+   unfolds the stack group in the sidebar: the notebooks
+   behind the shortcut become visible where they live (a
+   named deviation from Evernote, whose stack shortcut
+   opens the stack). */
+function followShortcut(entry) {
+  const target = shortcutTarget(entry);
+  if (target.state === "missing") { return; }
+  if (entry.kind === "note") {
+    if (target.state === "trash") {
+      toast("That note is in Trash.");
+      return;
+    }
+    if (target.state === "archive") {
+      toast("That note is in the Archive.");
+      return;
+    }
+    if (!listViewContainsNote(target.note)) {
+      state.view = { kind: "all", value: null };
+    }
+    openNote(entry.id);
+    return;
+  }
+  if (entry.kind === "notebook") {
+    state.view = { kind: "notebook", value: entry.id };
+    renderAll();
+    setMobileView("list");
+    return;
+  }
+  if (entry.kind === "tag") {
+    if (state.view.kind === "tag" && state.view.value === entry.id) {
+      state.view = { kind: "all", value: null };
+    } else {
+      state.view = { kind: "tag", value: entry.id };
+    }
+    renderAll();
+    setMobileView("list");
+    return;
+  }
+  const ci = state.collapsedStacks.indexOf(entry.id);
+  if (ci >= 0) {
+    state.collapsedStacks.splice(ci, 1);
+    saveSettings();
+    renderSidebar();
+  }
+}
+
+/* The shortcut row menu (Remove from Shortcuts). One
+   shared element parked in the Shortcuts section;
+   shortcutMenuFor holds the entry it was opened for (a
+   copy, so a render cannot change what it names).
+   Positioned under its row at open time from the row's
+   own offsets inside the section, like the tag menu. */
+let shortcutMenuFor = null;
+function openShortcutMenu(entry, rowEl) {
+  const menu = document.getElementById("shortcutMenu");
+  if (!menu) { return; }
+  if (shortcutMenuFor && shortcutMenuFor.kind === entry.kind &&
+      shortcutMenuFor.id === entry.id &&
+      !menu.classList.contains("hidden")) {
+    closeShortcutMenu();
+    return;
+  }
+  shortcutMenuFor = { kind: entry.kind, id: entry.id };
+  if (rowEl) {
+    menu.style.top = (rowEl.offsetTop + rowEl.offsetHeight + 2) + "px";
+  }
+  menu.classList.remove("hidden");
+}
+function closeShortcutMenu() {
+  const menu = document.getElementById("shortcutMenu");
+  if (menu) { menu.classList.add("hidden"); }
+  shortcutMenuFor = null;
 }
 
 /* --------------------------------------------------------------------------
@@ -12697,6 +13253,13 @@ function deleteNoteForever(note) {
   const online = state.online && state.repoExists;
   state.trash = state.trash.filter(function (n) { return n.id !== note.id; });
   if (state.selectedId === note.id) { state.selectedId = null; }
+  /* v2.31: the note's shortcut goes with it (trashing kept
+     it, rendered unavailable; forever is forever). This
+     flow writes no index of its own, so a changed list is
+     persisted through the ordinary index save. */
+  if (shortcutsDrop("note", note.id) && state.online && state.repoExists) {
+    saveIndex();
+  }
   /* v2.17.1: the note is gone for good; its divergence mark,
      and the banner if it pointed here, go with it. */
   clearNoteDivergence(note.id);
@@ -13359,6 +13922,82 @@ function allTagsWithCounts() {
   return Object.keys(map).sort().map(function (t) { return { tag: t, count: map[t] }; });
 }
 
+/* --------------------------------------------------------------------------
+   v2.31: the Evernote notebook order.
+
+   Evernote sorts its notebook tree alphabetically, by design:
+   the stacks and the notebooks inside them are in alphabetical
+   order, and the main tree is one alphabetical sort in which
+   stack names and unstacked notebook names are considered
+   together (its own forums state the rule, and a notebook
+   leaving a stack slots into the main tree by its name). The
+   sidebar through v2.30 never sorted: the list rendered in
+   notebook storage order, and v2.29's groups took the position
+   of their first member. Chris authorized reorganizing the UI
+   to match Evernote on 2026-10-28, so the render order is
+   Evernote's now. This is a RENDER order only: state.notebooks
+   (and with it index.json) keeps its storage order, and every
+   consumer below works from the plan, never by sorting the
+   stored list itself.
+
+   The comparison is case insensitive, matching the app's own
+   case folded name comparison in the mention candidates; names
+   that differ only by case fall back to the raw strings, so
+   the order is total and stable.
+   -------------------------------------------------------------------------- */
+function compareSidebarNames(a, b) {
+  const la = String(a).toLowerCase();
+  const lb = String(b).toLowerCase();
+  if (la !== lb) { return la.localeCompare(lb); }
+  const sa = String(a), sb = String(b);
+  return sa < sb ? -1 : sa > sb ? 1 : 0;
+}
+
+/* The sidebar notebook arrangement as a plan: one entry per
+   top level row group, {stack: null, nb} for an unstacked
+   notebook and {stack: name, members} for a stack, the
+   entries sorted by their display name (the stack's name or
+   the notebook's) and each stack's members sorted by name. */
+function sidebarNotebookPlan() {
+  const entries = [];
+  const seenStacks = {};
+  state.notebooks.forEach(function (nb) {
+    const stack = notebookStackOf(nb);
+    if (!stack) {
+      entries.push({ key: nb.name, stack: null, nb: nb, members: null });
+      return;
+    }
+    if (seenStacks[stack]) { return; }
+    seenStacks[stack] = true;
+    const members = stackMembers(stack).slice().sort(function (x, y) {
+      return compareSidebarNames(x.name, y.name);
+    });
+    entries.push({ key: stack, stack: stack, nb: null, members: members });
+  });
+  entries.sort(function (x, y) {
+    return compareSidebarNames(x.key, y.key);
+  });
+  return entries;
+}
+
+/* Every notebook in the sidebar's arrangement, flattened:
+   a stack's members sit together at the stack's place in
+   the order. The flat surfaces that list notebooks for
+   choosing (the icon rail flyout, the editor's notebook
+   menu, the task notebook pickers, the drag target list)
+   present this order, the same one the sidebar shows. */
+function notebooksInSidebarOrder() {
+  const out = [];
+  sidebarNotebookPlan().forEach(function (entry) {
+    if (entry.stack) {
+      entry.members.forEach(function (nb) { out.push(nb); });
+    } else {
+      out.push(entry.nb);
+    }
+  });
+  return out;
+}
+
 /* v2.29: one sidebar notebook row, shared by the ungrouped list
    and by stack groups so a notebook looks and behaves the same in
    both. inStack only adds the indent class. */
@@ -13560,6 +14199,13 @@ function openTagMenu(tag, rowEl) {
   }
   closeTagParentPanel();
   tagMenuFor = tag;
+  /* v2.31: the shortcut item's label follows the tag's
+     presence in the Shortcuts list, Evernote's toggle. */
+  const tagScBtn = document.getElementById("tagShortcutBtn");
+  if (tagScBtn) {
+    tagScBtn.textContent = hasShortcut("tag", tag)
+      ? "Remove from Shortcuts" : "Add to Shortcuts";
+  }
   const topBtn = document.getElementById("tagTopLevelBtn");
   if (topBtn) {
     topBtn.classList.toggle("hidden", !tagParentOf(tag));
@@ -13658,14 +14304,30 @@ function renderSidebar() {
      both into the notes list toolbar's notebook menu, which runs the
      same prompt and confirm flows against the open notebook.
      v2.29: notebooks in a stack render under that stack's header,
-     through the same row builder. Ordering: the app has never
-     sorted this list, so a stack header takes the sidebar position
-     of its first member in the existing order, members keep that
-     order inside the group, and ungrouped notebooks render exactly
-     as before; grouping alone changes the shape, never the order. */
+     through the same row builder. v2.31: the arrangement is the
+     Evernote order now (see sidebarNotebookPlan): stack names and
+     unstacked notebook names sort together alphabetically, members
+     sort inside their stack, and only the render order changed;
+     the stored notebook list keeps its order underneath. */
   closeStackMenu();
   closeTagMenu();
   closeTagParentPanel();
+  closeShortcutMenu();
+  /* v2.31: the Shortcuts section, above the notebooks in the
+     markup, where Evernote keeps it. Rows render in stored
+     order, which is the order the shortcuts were added in.
+     An entry whose target exists nowhere renders no row
+     here (buildShortcutRow returns null) and is dropped
+     from the stored list at the next load by
+     pruneShortcuts, so the section never shows a ghost. */
+  const scNav = document.getElementById("shortcutNav");
+  if (scNav) {
+    scNav.innerHTML = "";
+    state.shortcuts.forEach(function (entry) {
+      const row = buildShortcutRow(entry);
+      if (row) { scNav.appendChild(row); }
+    });
+  }
   const nav = document.getElementById("notebookNav");
   nav.innerHTML = "";
   if (!state.notebooks.length) {
@@ -13675,18 +14337,14 @@ function renderSidebar() {
     empty.textContent = "No notebooks yet. Use + to add one.";
     nav.appendChild(empty);
   }
-  const drawnStacks = {};
-  state.notebooks.forEach(function (nb) {
-    const stack = notebookStackOf(nb);
-    if (!stack) {
-      nav.appendChild(buildNotebookNavRow(nb, false));
+  sidebarNotebookPlan().forEach(function (entry) {
+    if (!entry.stack) {
+      nav.appendChild(buildNotebookNavRow(entry.nb, false));
       return;
     }
-    if (drawnStacks[stack]) { return; }
-    drawnStacks[stack] = true;
-    nav.appendChild(buildStackNavHead(stack));
-    if (state.collapsedStacks.indexOf(stack) < 0) {
-      stackMembers(stack).forEach(function (member) {
+    nav.appendChild(buildStackNavHead(entry.stack));
+    if (state.collapsedStacks.indexOf(entry.stack) < 0) {
+      entry.members.forEach(function (member) {
         nav.appendChild(buildNotebookNavRow(member, true));
       });
     }
@@ -13796,7 +14454,10 @@ function renderRailFlyoutList() {
     empty.textContent = "No notebooks yet. Use + New Notebook to add one.";
     list.appendChild(empty);
   }
-  state.notebooks.forEach(function (nb) {
+  /* v2.31: the flyout stays a flat list (the v2.29 shape),
+     but its rows follow the sidebar's Evernote order,
+     flattened from the same plan. */
+  notebooksInSidebarOrder().forEach(function (nb) {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "rail-fly-row" +
@@ -14120,7 +14781,9 @@ function buildStackPanel() {
     promptAddNotebookToNewStack(slug);
   });
   panel.appendChild(newItem);
-  stackNames().forEach(function (name) {
+  /* v2.31: the existing stacks list alphabetically, the
+     order the sidebar itself now shows them in. */
+  stackNames().slice().sort(compareSidebarNames).forEach(function (name) {
     const item = document.createElement("button");
     item.type = "button";
     item.className = "list-menu-item";
@@ -14307,6 +14970,22 @@ function renderListToolbar() {
       ? "Remove from Stack (" + openStack + ")"
       : "Remove from Stack";
   }
+  /* v2.31: the notebook shortcut item sits with the notebook
+     items and follows their rules exactly (shown and enabled
+     like Rename). Its label names its target, because this
+     menu mixes notebook items with note items, and it flips
+     with the open notebook's presence in the Shortcuts
+     list. */
+  const nbShortcutBtn = document.getElementById("nbShortcutNbBtn");
+  if (nbShortcutBtn) {
+    nbShortcutBtn.classList.toggle("hidden",
+      kind === "trash" || kind === "archive");
+    nbShortcutBtn.disabled = !inNotebook;
+    nbShortcutBtn.textContent = inNotebook &&
+      hasShortcut("notebook", state.view.value)
+      ? "Remove Notebook from Shortcuts"
+      : "Add Notebook to Shortcuts";
+  }
   /* v2.2: the pin item sits with the notebook items. It is part of
      the menu in All Notes, Pinned, tag, and notebook views, and not
      part of it at all in Trash and Archive, where the menu carries
@@ -14322,6 +15001,24 @@ function renderListToolbar() {
     pinBtn.disabled = !liveSelected;
     pinBtn.textContent = liveSelected && liveSelected.pinned
       ? "Unpin note" : "Pin note";
+  }
+  /* v2.31: the note shortcut item sits beside the pin item
+     and follows its rules exactly: hidden in Trash and
+     Archive, enabled only for a live selected note, and its
+     label flips with the note's presence in the Shortcuts
+     list. */
+  const noteShortcutBtn = document.getElementById("nbShortcutNoteBtn");
+  if (noteShortcutBtn) {
+    noteShortcutBtn.classList.toggle("hidden",
+      kind === "trash" || kind === "archive");
+    const selected = currentNote();
+    const liveSelected = selected &&
+      state.notes.indexOf(selected) >= 0 ? selected : null;
+    noteShortcutBtn.disabled = !liveSelected;
+    noteShortcutBtn.textContent = liveSelected &&
+      hasShortcut("note", liveSelected.id)
+      ? "Remove Note from Shortcuts"
+      : "Add Note to Shortcuts";
   }
   const emptyTrashBtn = document.getElementById("nbEmptyTrashBtn");
   if (emptyTrashBtn) {
@@ -15731,7 +16428,9 @@ function renderTasksView() {
   const select = document.createElement("select");
   select.id = "taskQuickNotebook";
   select.setAttribute("aria-label", "Notebook for the new task");
-  state.notebooks.forEach(function (nb) {
+  /* v2.31: the picker lists notebooks in the sidebar's
+     Evernote order, like the other notebook pickers. */
+  notebooksInSidebarOrder().forEach(function (nb) {
     const opt = document.createElement("option");
     opt.value = nb.slug;
     opt.textContent = nb.name;
@@ -16053,7 +16752,9 @@ function fillTaskNotebookSelect(selected) {
   const select = document.getElementById("taskNotebookSelect");
   if (!select) { return; }
   select.innerHTML = "";
-  state.notebooks.forEach(function (nb) {
+  /* v2.31: the picker lists notebooks in the sidebar's
+     Evernote order, like the other notebook pickers. */
+  notebooksInSidebarOrder().forEach(function (nb) {
     const opt = document.createElement("option");
     opt.value = nb.slug;
     opt.textContent = nb.name;
@@ -16862,7 +17563,9 @@ function openNotebookMenu() {
   const link = document.getElementById("notebookLink");
   if (!note || !menu || !link || link.disabled) { return; }
   menu.innerHTML = "";
-  state.notebooks.forEach(function (nb) {
+  /* v2.31: the move menu lists notebooks in the sidebar's
+     Evernote order, like the other notebook pickers. */
+  notebooksInSidebarOrder().forEach(function (nb) {
     const item = document.createElement("button");
     item.type = "button";
     item.setAttribute("role", "menuitem");
@@ -24164,7 +24867,9 @@ function showNbDropOverlay(dragNote) {
   const list = document.getElementById("nbDropList");
   if (!overlay || !list) { return; }
   list.innerHTML = "";
-  state.notebooks.forEach(function (nb) {
+  /* v2.31: the drop targets list in the sidebar's Evernote
+     order, like the other notebook pickers. */
+  notebooksInSidebarOrder().forEach(function (nb) {
     const row = document.createElement("button");
     row.type = "button";
     row.className = "nb-drop-row" +
@@ -33118,6 +33823,33 @@ function wireEvents() {
     closeTagMenu();
     if (name) { confirmDeleteTag(name); }
   });
+  /* v2.31: the tag menu's shortcut item acts on the tag the
+     menu was opened for, captured before the menu closes. */
+  document.getElementById("tagShortcutBtn").addEventListener("click", function () {
+    const name = tagMenuFor;
+    closeTagMenu();
+    if (name) { toggleShortcut("tag", name); }
+  });
+  /* v2.31: the shortcut row menu's one item removes the
+     shortcut the menu was opened for. The target is never
+     touched; removeShortcut only drops the entry. */
+  document.getElementById("shortcutRemoveBtn").addEventListener("click", function () {
+    const entry = shortcutMenuFor;
+    closeShortcutMenu();
+    if (entry) { removeShortcut(entry.kind, entry.id); }
+  });
+  /* The shortcut menu's closers, mirroring the tag menu's:
+     a click outside the menu and its rows' menu buttons
+     closes it, and so does Escape. */
+  document.addEventListener("click", function (ev) {
+    if (shortcutMenuFor === null) { return; }
+    if (ev.target.closest("#shortcutMenu")) { return; }
+    if (ev.target.closest(".nav-shortcut-menu-btn")) { return; }
+    closeShortcutMenu();
+  });
+  document.addEventListener("keydown", function (ev) {
+    if (ev.key === "Escape") { closeShortcutMenu(); }
+  });
   /* The tag menu and parent panel closers, mirroring the
      stack menu's: a click outside the menu, the panel, and a
      tag's menu button closes both, and so does Escape. A
@@ -33145,6 +33877,22 @@ function wireEvents() {
   document.getElementById("nbPinBtn").addEventListener("click", function () {
     closeListPanels();
     toggleSelectedNotePin().catch(function (err) { toast(err.message, true); });
+  });
+  /* v2.31: the same menu's shortcut items. The notebook
+     item acts on the notebook of the current view, like
+     the rename and stack items above it; the note item
+     belongs to the selected note, like the pin item, and
+     re-checks that the selection is a live note. */
+  document.getElementById("nbShortcutNbBtn").addEventListener("click", function () {
+    if (state.view.kind !== "notebook") { return; }
+    closeListPanels();
+    toggleShortcut("notebook", state.view.value);
+  });
+  document.getElementById("nbShortcutNoteBtn").addEventListener("click", function () {
+    closeListPanels();
+    const note = currentNote();
+    if (!note || state.notes.indexOf(note) < 0) { return; }
+    toggleShortcut("note", note.id);
   });
   /* v1.8.1: the same menu's Trash and Archive items. renderListToolbar
      only shows them in their view (and disables them when they would
