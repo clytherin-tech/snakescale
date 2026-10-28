@@ -40,10 +40,79 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-28-SSN-V2330
-  Version: 2.33.0
+  BUILD STAMP: 2026-10-28-SSN-V2340
+  Version: 2.34.0
 
   Revision history:
+    v2.34.0 2026-10-28 Calendar view of tasks, the
+                      second release of the Evernote
+                      parity program (phase 2: Home,
+                      calendar, and reminders). The Tasks
+                      view gains a List / Calendar toggle
+                      beside the grouping control, the
+                      grouping control's segmented twin;
+                      the list stays the default and
+                      renders exactly as it always has.
+                      Calendar mode renders a month grid,
+                      Sunday first: previous and next
+                      month buttons and a Today button in
+                      the head with the month and year,
+                      today marked with the accent disc,
+                      the neighbouring months' days shown
+                      muted to complete the weeks. Every
+                      task with a due date sits on its day
+                      as a compact entry: the time when
+                      the task carries one, the completion
+                      checkbox running the rows' own
+                      toggleTaskComplete (so a recurring
+                      task rolls to its next date through
+                      the one real path), the flag and the
+                      High priority pill in the rows' form,
+                      completed struck, an open task past
+                      its day wearing an overdue bar. A
+                      day with more than three tasks folds
+                      the rest behind a +N more expander
+                      that opens the day in place and
+                      folds back. An entry opens the real
+                      task editor; a day click selects the
+                      day and adds a strip under the grid
+                      with the day's full date, its due
+                      count, and an Add a task button that
+                      opens the editor in create mode in
+                      the quick add's notebook with the
+                      due date input preset to the day,
+                      Evernote's create from a date in
+                      this app's furniture. The grid reads
+                      the same task state as the list,
+                      narrowed by the view's own filter
+                      and Find tasks text, ordered within
+                      a day the list's way, and re-renders
+                      through renderTasksView, the route
+                      every task change already takes
+                      (editor saves, Home widget
+                      completions, sync reloads), so it is
+                      never stale. Nothing is stored: the
+                      month, the selected day, and the
+                      expanded day are session state. A
+                      task with no due date has no day to
+                      sit on and stays list only, which
+                      the line under the grid says.
+                      Deviations from Evernote, named:
+                      Evernote shows due tasks on a
+                      calendar in its Calendar section and
+                      Home calendar widget, fed by a
+                      connected calendar account;
+                      SnakeScale has no calendar account
+                      and no events layer, so this calendar
+                      is tasks only and lives inside the
+                      Tasks view; the overflow expands in
+                      place rather than opening a separate
+                      day page; a recurring task shows its
+                      one current due occurrence, with no
+                      projected future occurrences; and
+                      the grouping control has no effect in
+                      calendar mode (it applies in the
+                      list).
     v2.33.0 2026-10-28 Home, the dashboard, the first
                       release of the Evernote parity
                       program (phase 2: Home, calendar,
@@ -5028,6 +5097,111 @@ body.dark .tasks-head h2{color:var(--accent);}
     max-width:100%;overflow:hidden;text-overflow:ellipsis;
   }
 }
+/* v2.34: the Tasks view's calendar mode. A month grid in
+   the same pane: the head carries the month and year with
+   the previous, next, and Today buttons; the weekday row
+   runs Sunday first; each day is a bordered surface cell
+   whose number sits over its task entries. The entries
+   borrow the rows' language at a smaller size: the soft
+   fill, the completion checkbox (accent colored, like the
+   rows'), the flag in danger red, the High priority pill,
+   and the completed strike. Today wears the accent disc
+   the due chips use; the selected day takes the focus
+   ring the inputs use; days outside the displayed month
+   are muted. Every color is a theme variable, so the grid
+   themes in dark and light like the rest of the pane. */
+.task-cal-head{
+  display:flex;align-items:center;gap:8px;margin-bottom:10px;
+}
+.task-cal-title{
+  font-size:17px;font-weight:700;color:var(--primary);
+  padding:0 4px;
+}
+body.dark .task-cal-title{color:var(--accent);}
+.task-cal-today{margin-left:auto;}
+.task-cal-week,.task-cal-grid{
+  display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;
+}
+.task-cal-wd{
+  font-size:12px;font-weight:700;letter-spacing:.05em;
+  text-transform:uppercase;color:var(--muted);
+  padding:2px 6px 6px;
+}
+.task-cal-day{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius-card);min-height:94px;
+  padding:5px 5px 6px;cursor:pointer;display:flex;
+  flex-direction:column;gap:3px;min-width:0;
+}
+.task-cal-day:hover{border-color:var(--secondary);}
+.task-cal-day.outside{background:var(--bg);}
+.task-cal-day.outside .task-cal-daynum{color:var(--muted);}
+.task-cal-day.selected{
+  border-color:var(--primary);
+  box-shadow:0 0 0 3px rgba(87,167,115,.22);
+}
+.task-cal-daynum{
+  font-size:12.5px;font-weight:700;color:var(--text);
+  width:22px;height:22px;display:flex;align-items:center;
+  justify-content:center;border-radius:999px;flex:none;
+}
+.task-cal-day.today .task-cal-daynum{
+  background:var(--accent);color:#0B3D2E;
+}
+.task-cal-entry{
+  display:flex;align-items:flex-start;gap:4px;
+  background:var(--soft);border-radius:6px;
+  padding:3px 5px;cursor:pointer;min-width:0;
+}
+.task-cal-entry:hover{box-shadow:inset 0 0 0 1px var(--secondary);}
+.task-cal-entry.overdue{box-shadow:inset 3px 0 0 var(--danger);}
+.task-cal-entry.overdue:hover{
+  box-shadow:inset 3px 0 0 var(--danger),inset 0 0 0 1px var(--secondary);
+}
+.task-cal-entry .task-check{
+  display:flex;padding:1px;cursor:pointer;flex:none;
+}
+.task-cal-entry .task-check input{
+  width:14px;height:14px;margin:0;cursor:pointer;
+  accent-color:var(--primary);
+}
+.task-cal-entry-main{
+  flex:1;min-width:0;font-size:12px;line-height:1.35;
+  color:var(--text);overflow-wrap:anywhere;
+}
+.task-cal-entry-time{font-weight:700;color:var(--primary);}
+body.dark .task-cal-entry-time{color:var(--accent);}
+.task-cal-entry.completed .task-cal-entry-title{
+  text-decoration:line-through;color:var(--muted);
+}
+.task-cal-entry .task-flag{flex:none;padding-top:1px;}
+.task-cal-entry .priority-pill{
+  flex:none;font-size:10px;padding:1px 5px;
+}
+.task-cal-more{
+  align-self:flex-start;background:none;border:none;
+  padding:2px 4px;font:inherit;font-size:12px;font-weight:700;
+  color:var(--primary);cursor:pointer;
+}
+body.dark .task-cal-more{color:var(--accent);}
+.task-cal-detail{
+  display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+  margin-top:12px;padding:10px 12px;background:var(--surface);
+  border:1px solid var(--border);border-radius:var(--radius-card);
+}
+.task-cal-detail-label{font-weight:700;color:var(--text);}
+.task-cal-detail-count{
+  font-weight:600;color:var(--muted);font-size:13px;
+  margin-left:8px;
+}
+.task-cal-detail .btn{margin-left:auto;}
+.task-cal-foot{
+  margin-top:10px;font-size:12.5px;color:var(--muted);
+}
+@media (max-width:700px){
+  .task-cal-day{min-height:64px;padding:4px 3px 5px;}
+  .task-cal-entry-main{font-size:11px;}
+}
 /* v2.24.4: phone form for the Tasks pane rows. The three
    column table cannot carry its own Title cell at phone
    widths: the fixed Due date and Notebook tracks leave the
@@ -7074,8 +7248,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-28-SSN-V2330";
-const APP_VERSION = "2.33.0";
+const APP_BUILD = "2026-10-28-SSN-V2340";
+const APP_VERSION = "2.34.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -7338,9 +7512,14 @@ const state = {
     grouping: "due",        // session only: "due", "notebook",
     filter: "all",          // or "priority"; and "all", "open",
     query: "",              // "flagged", or "completed". v2.24.1:
-    collapsed: {}           // the Find tasks text and the set of
-  },                        // collapsed group keys join them,
-                            // still session only, never saved.
+    collapsed: {},          // the Find tasks text and the set of
+    mode: "list",           // collapsed group keys join them,
+    calCursor: null,        // still session only, never saved.
+    calSelected: null,      // v2.34: the mode ("list" or
+    calExpanded: null       // "calendar"; the list stays the
+  },                        // default) and the calendar's month
+                            // cursor, selected day, and expanded
+                            // day join them, session only as well.
   thingsNotebook: null,     // v2.24.3: the slug of the notebook
                             // whose Things to do page is open in
                             // the editor pane, or null. Session
@@ -18734,6 +18913,32 @@ function renderTasksView() {
 
   const controls = document.createElement("div");
   controls.className = "tasks-controls-row";
+  /* v2.34: the List / Calendar mode toggle, the grouping
+     control's segmented twin (the pressed side filled, so
+     the active mode is obvious). The list is the default
+     and renders exactly as it always has; the calendar
+     swaps the body below for the month grid, and the
+     grouping control simply has nothing to group there
+     (it takes effect again in the list). Session only. */
+  const modeSeg = document.createElement("div");
+  modeSeg.className = "theme-segmented";
+  modeSeg.id = "tasksModeSeg";
+  modeSeg.setAttribute("role", "group");
+  modeSeg.setAttribute("aria-label", "Tasks view mode");
+  [["list", "List"], ["calendar", "Calendar"]].forEach(function (pair) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = pair[1];
+    b.setAttribute("data-taskmode", pair[0]);
+    b.setAttribute("aria-pressed",
+      state.tasksView.mode === pair[0] ? "true" : "false");
+    b.addEventListener("click", function () {
+      state.tasksView.mode = pair[0];
+      renderNoteList();
+    });
+    modeSeg.appendChild(b);
+  });
+  controls.appendChild(modeSeg);
   const seg = document.createElement("div");
   seg.className = "theme-segmented";
   seg.setAttribute("role", "group");
@@ -18807,6 +19012,15 @@ function fillTasksBody() {
   const body = document.getElementById("tasksBody");
   if (!body) { return; }
   body.innerHTML = "";
+  /* v2.34: in calendar mode the body is the month grid
+     instead of the groups. The Find tasks input calls
+     this same function on every keystroke, so the grid
+     narrows with the search text and the filter exactly
+     as the list does. */
+  if (state.tasksView.mode === "calendar") {
+    fillTasksCalendar(body);
+    return;
+  }
   const groups = taskGroupsForView();
   if (!groups.length) {
     const empty = document.createElement("div");
@@ -18853,6 +19067,305 @@ function fillTasksBody() {
     }
     body.appendChild(group);
   });
+}
+
+/* ---------------- v2.34: the calendar view of tasks -----
+   Evernote puts tasks on a calendar in its Calendar
+   section and in Home's calendar widget: a task appears
+   on the day it is due, it can be checked off right
+   there, and a new task can be created from a date.
+   SnakeScale has no connected calendar account and no
+   events layer, so the calendar lives here, in the Tasks
+   view beside the list it complements: a month grid
+   (Sunday first, like the search grammar's week) of the
+   same task state the list reads, filtered by the view's
+   own filter and Find tasks text (tasksMatchingFilter),
+   ordered within each day the list's way
+   (sortTasksForList). Nothing is stored: the displayed
+   month, the selected day, and the expanded day are
+   session state on state.tasksView, and every task
+   change re-renders through renderTasksView, the same
+   route the list takes (afterTasksChanged, the editor,
+   the Home widget, and sync reloads all land there), so
+   the grid is never stale. A task with no due date has
+   no day to sit on and stays list only, which the line
+   under the grid says. A recurring task shows its one
+   current due occurrence, exactly as the list shows it;
+   checking it off rolls that occurrence forward through
+   toggleTaskComplete, the rows' own completion path. */
+
+const TASK_CAL_VISIBLE = 3;   /* entries a day shows before
+                                 the "+N more" expander */
+const TASK_CAL_WEEKDAYS = ["Sun", "Mon", "Tue", "Wed",
+  "Thu", "Fri", "Sat"];
+
+/* The month the grid shows: the stored cursor, or the
+   current month until the user navigates. m is 1 based,
+   the parseTaskDate convention. */
+function calendarCursorParts() {
+  const c = state.tasksView.calCursor;
+  if (c && c.y && c.m) { return { y: c.y, m: c.m }; }
+  const t = taskTodayParts();
+  return { y: t.y, m: t.m };
+}
+
+function shiftCalendarMonth(delta) {
+  const c = calendarCursorParts();
+  let y = c.y, m = c.m + delta;
+  if (m < 1) { m = 12; y -= 1; }
+  if (m > 12) { m = 1; y += 1; }
+  state.tasksView.calCursor = { y: y, m: m };
+  fillTasksBody();
+}
+
+/* One task's calendar entry: the completion checkbox
+   (the rows' own picker, so a check runs the rows' own
+   toggleTaskComplete and can never fall through to the
+   entry's editor opening click), the time when the task
+   carries one, the title, and the list's own markers,
+   the flag and the High priority pill (the compact
+   calendar form of the chips the column rows wear). A
+   completed task strikes and checks, the rows' form; an
+   open task whose day has passed wears the overdue bar. */
+function buildTaskCalEntryEl(task) {
+  const el = document.createElement("div");
+  el.className = "task-cal-entry" +
+    (task.status === "completed" ? " completed" : "");
+  el.setAttribute("data-task-id", task.id);
+  el.title = task.title;
+  const diff = taskDayDiff(task);
+  if (task.status === "open" && diff !== null && diff < 0) {
+    el.classList.add("overdue");
+  }
+  const picker = document.createElement("label");
+  picker.className = "task-check";
+  picker.title = task.status === "completed"
+    ? "Reopen task" : "Complete task";
+  const box = document.createElement("input");
+  box.type = "checkbox";
+  box.checked = task.status === "completed";
+  box.setAttribute("aria-label",
+    (task.status === "completed" ? "Reopen task: " : "Complete task: ") +
+    task.title);
+  picker.addEventListener("click", function (ev) {
+    ev.stopPropagation();
+  });
+  box.addEventListener("change", function () {
+    toggleTaskComplete(task.id);
+  });
+  picker.appendChild(box);
+  el.appendChild(picker);
+
+  const main = document.createElement("span");
+  main.className = "task-cal-entry-main";
+  if (task.dueTime) {
+    const time = document.createElement("span");
+    time.className = "task-cal-entry-time";
+    time.textContent = taskTimeLabel(task.dueTime);
+    main.appendChild(time);
+    main.appendChild(document.createTextNode(" "));
+  }
+  const title = document.createElement("span");
+  title.className = "task-cal-entry-title";
+  title.textContent = task.title;
+  main.appendChild(title);
+  el.appendChild(main);
+
+  if (task.flagged) {
+    const flag = document.createElement("span");
+    flag.className = "task-flag";
+    flag.title = "Flagged";
+    flag.innerHTML = TASK_FLAG_SVG;
+    el.appendChild(flag);
+  }
+  if (task.priority === "high") {
+    const pill = document.createElement("span");
+    pill.className = "priority-pill high";
+    pill.textContent = "High";
+    el.appendChild(pill);
+  }
+  el.addEventListener("click", function () {
+    openTaskEditor(task.id);
+  });
+  return el;
+}
+
+/* The month grid itself, rendered into #tasksBody in
+   calendar mode: the head (previous, the month and year,
+   next, and Today at the right), the weekday row, the
+   weeks (the days of the neighbouring months complete
+   the first and last weeks, muted), the selected day's
+   strip, and the no due date note. Selecting a day keeps
+   the grid and adds the strip under it: the day's full
+   date, its due count, and an Add a task button that
+   opens the editor in create mode (the New Task button's
+   own call, in the quick add's chosen notebook) with
+   the due date input preset to the day, Evernote's
+   create from a date in this app's furniture. */
+function fillTasksCalendar(body) {
+  const cursor = calendarCursorParts();
+  const y = cursor.y, m = cursor.m;
+  const today = taskTodayParts();
+  const todayStr = formatTaskDateParts(today.y, today.m, today.d);
+
+  const byDay = {};
+  tasksMatchingFilter().forEach(function (t) {
+    if (!t.dueDate) { return; }
+    (byDay[t.dueDate] = byDay[t.dueDate] || []).push(t);
+  });
+  Object.keys(byDay).forEach(function (key) {
+    byDay[key] = sortTasksForList(byDay[key]);
+  });
+
+  const wrap = document.createElement("div");
+  wrap.id = "taskCal";
+  wrap.className = "task-cal";
+
+  const head = document.createElement("div");
+  head.className = "task-cal-head";
+  const prev = document.createElement("button");
+  prev.type = "button";
+  prev.className = "btn small";
+  prev.id = "taskCalPrev";
+  prev.textContent = "‹";
+  prev.setAttribute("aria-label", "Previous month");
+  prev.addEventListener("click", function () {
+    shiftCalendarMonth(-1);
+  });
+  head.appendChild(prev);
+  const title = document.createElement("div");
+  title.className = "task-cal-title";
+  title.id = "taskCalTitle";
+  title.textContent = new Date(y, m - 1, 1).toLocaleDateString(
+    undefined, { month: "long", year: "numeric" });
+  head.appendChild(title);
+  const next = document.createElement("button");
+  next.type = "button";
+  next.className = "btn small";
+  next.id = "taskCalNext";
+  next.textContent = "›";
+  next.setAttribute("aria-label", "Next month");
+  next.addEventListener("click", function () {
+    shiftCalendarMonth(1);
+  });
+  head.appendChild(next);
+  const todayBtn = document.createElement("button");
+  todayBtn.type = "button";
+  todayBtn.className = "btn small task-cal-today";
+  todayBtn.id = "taskCalToday";
+  todayBtn.textContent = "Today";
+  todayBtn.addEventListener("click", function () {
+    state.tasksView.calCursor = null;
+    state.tasksView.calSelected = todayStr;
+    fillTasksBody();
+  });
+  head.appendChild(todayBtn);
+  wrap.appendChild(head);
+
+  const week = document.createElement("div");
+  week.className = "task-cal-week";
+  TASK_CAL_WEEKDAYS.forEach(function (name) {
+    const wd = document.createElement("div");
+    wd.className = "task-cal-wd";
+    wd.textContent = name;
+    week.appendChild(wd);
+  });
+  wrap.appendChild(week);
+
+  const grid = document.createElement("div");
+  grid.className = "task-cal-grid";
+  const firstDow = new Date(y, m - 1, 1).getDay();
+  const daysInMonth = new Date(y, m, 0).getDate();
+  const cellCount = Math.ceil((firstDow + daysInMonth) / 7) * 7;
+  for (let i = 0; i < cellCount; i++) {
+    const date = new Date(y, m - 1, 1 - firstDow + i);
+    const dateStr = formatTaskDateParts(date.getFullYear(),
+      date.getMonth() + 1, date.getDate());
+    const cellEl = document.createElement("div");
+    cellEl.className = "task-cal-day" +
+      (date.getMonth() !== m - 1 ? " outside" : "") +
+      (dateStr === todayStr ? " today" : "") +
+      (state.tasksView.calSelected === dateStr ? " selected" : "");
+    cellEl.setAttribute("data-date", dateStr);
+    const num = document.createElement("div");
+    num.className = "task-cal-daynum";
+    num.textContent = String(date.getDate());
+    cellEl.appendChild(num);
+    const dayTasks = byDay[dateStr] || [];
+    const expanded = state.tasksView.calExpanded === dateStr;
+    const shown = expanded
+      ? dayTasks : dayTasks.slice(0, TASK_CAL_VISIBLE);
+    shown.forEach(function (task) {
+      cellEl.appendChild(buildTaskCalEntryEl(task));
+    });
+    if (dayTasks.length > TASK_CAL_VISIBLE) {
+      const more = document.createElement("button");
+      more.type = "button";
+      more.className = "task-cal-more";
+      more.textContent = expanded ? "Show less"
+        : "+" + (dayTasks.length - TASK_CAL_VISIBLE) + " more";
+      more.addEventListener("click", function (ev) {
+        ev.stopPropagation();
+        state.tasksView.calExpanded = expanded ? null : dateStr;
+        fillTasksBody();
+      });
+      cellEl.appendChild(more);
+    }
+    cellEl.addEventListener("click", function () {
+      state.tasksView.calSelected = dateStr;
+      fillTasksBody();
+    });
+    grid.appendChild(cellEl);
+  }
+  wrap.appendChild(grid);
+
+  const selParts = parseTaskDate(state.tasksView.calSelected);
+  if (selParts) {
+    const strip = document.createElement("div");
+    strip.className = "task-cal-detail";
+    strip.id = "taskCalDetail";
+    const label = document.createElement("div");
+    label.className = "task-cal-detail-label";
+    label.textContent = new Date(selParts.y, selParts.m - 1,
+      selParts.d).toLocaleDateString(undefined,
+      { weekday: "long", month: "long", day: "numeric" });
+    const selTasks = byDay[state.tasksView.calSelected] || [];
+    const count = document.createElement("span");
+    count.className = "task-cal-detail-count";
+    count.textContent = selTasks.length === 0
+      ? "No tasks due"
+      : selTasks.length +
+        (selTasks.length === 1 ? " task due" : " tasks due");
+    label.appendChild(count);
+    strip.appendChild(label);
+    const add = document.createElement("button");
+    add.type = "button";
+    add.className = "btn accent small";
+    add.id = "taskCalAddBtn";
+    add.textContent = "Add a task";
+    add.addEventListener("click", function () {
+      const dateStr = state.tasksView.calSelected;
+      const quickSel = document.getElementById("taskQuickNotebook");
+      openTaskEditor(null,
+        (quickSel && quickSel.value) || defaultTaskNotebook());
+      const dateInput = document.getElementById("taskDueDateInput");
+      if (dateInput && dateStr) {
+        dateInput.value = dateStr;
+        syncTaskReminderControls();
+        markTaskEditorDirty();
+      }
+    });
+    strip.appendChild(add);
+    wrap.appendChild(strip);
+  }
+
+  const foot = document.createElement("div");
+  foot.className = "task-cal-foot";
+  foot.textContent =
+    "Tasks without a due date appear in the list only.";
+  wrap.appendChild(foot);
+
+  body.appendChild(wrap);
 }
 
 /* ---------------- v2.24.3: the Things to do page ----------
