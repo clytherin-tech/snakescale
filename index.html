@@ -40,10 +40,59 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-28-SSN-V2283
-  Version: 2.28.3
+  BUILD STAMP: 2026-10-28-SSN-V2290
+  Version: 2.29.0
 
   Revision history:
+    v2.29.0 2026-10-28 Notebook stacks, the first
+                      release of the Evernote parity
+                      program (phase 1: organization).
+                      Notebooks can be grouped into
+                      named stacks in the sidebar, the
+                      way Evernote groups them: a
+                      notebook belongs to at most one
+                      stack, stacks do not nest, and a
+                      stack is only a grouping, never a
+                      container. The grouping lives
+                      entirely in index.json, as an
+                      optional stack name on each
+                      notebook entry, so no note file
+                      changes and the field rides the
+                      existing index save, load, cache,
+                      and folder rebuild paths untouched.
+                      In the sidebar, a stack renders as
+                      a collapsible header with its
+                      member notebooks under it, at the
+                      position of its first member
+                      (SnakeScale has never sorted the
+                      notebook list, and grouping does
+                      not start now); the fold state is
+                      remembered in settings. The open
+                      notebook's toolbar menu, this app's
+                      notebook management surface, gains
+                      Add to Stack, which opens a panel
+                      listing New stack... plus the
+                      existing stacks, and Remove from
+                      Stack when the notebook is in one;
+                      creating a stack with a name that
+                      is already taken is refused with a
+                      message. Each stack header carries
+                      its own menu with Rename Stack
+                      (renames the grouping for every
+                      member; the notebooks themselves
+                      are untouched) and Delete Stack,
+                      whose confirm says plainly that
+                      the notebooks are NOT deleted and
+                      return to the ungrouped list,
+                      matching Evernote. Renaming a
+                      notebook never disturbs its stack.
+                      Dragging a notebook onto another
+                      notebook or onto a stack, Evernote's
+                      other assignment path, is not in
+                      this release; the menu path covers
+                      every stack operation. The icon
+                      rail's Notebooks flyout still lists
+                      notebooks flat.
     v2.28.3 2026-10-28 Note links inside a task
                       description did nothing when
                       clicked. The note body's click path
@@ -2191,6 +2240,59 @@ body.dark .gate-brand .wordmark{color:#EAF3EC;}
 }
 .nav-item .count-pill:empty{display:none;}
 .nav-item.active .count-pill{background:var(--accent);color:#0B3D2E;}
+/* v2.29: notebook stacks. The header is a row of the same height
+   family as a notebook row, in the section label's voice (small,
+   bold, letterspaced) rather than a note name's, because it names
+   a group, not a thing with notes of its own. The chevron points
+   down while the group is open and right once it folds, the
+   standard disclosure cue. Member rows indent under their header
+   by margin, so a member's active treatment (background and inset
+   bar) still spans its own box, just shifted as a block. The
+   section is the positioning context for the stack menu card,
+   which borrows #sidebarMenu's card treatment outright. */
+#notebookSection{position:relative;}
+.nav-item.in-stack{margin-left:16px;}
+.nav-stack-head{
+  display:flex;align-items:center;gap:2px;padding-right:2px;
+}
+.nav-stack-toggle{
+  flex:1;display:flex;align-items:center;gap:7px;min-width:0;
+  text-align:left;background:none;border:none;color:#AFCDB7;
+  padding:8px 6px 8px 10px;border-radius:var(--radius-button);
+  font-size:12px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;
+  transition:background-color var(--motion),color var(--motion);
+}
+.nav-stack-toggle:hover{background:rgba(87,167,115,.16);color:#fff;}
+.nav-stack-chevron{
+  display:inline-flex;flex:none;color:#AFCDB7;
+  transform:rotate(90deg);transition:transform var(--motion);
+}
+.nav-stack-head.collapsed .nav-stack-chevron{transform:rotate(0deg);}
+.nav-stack-name{
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.nav-stack-toggle .count-pill{
+  margin-left:auto;min-width:24px;padding:2px 7px;
+  border-radius:var(--radius-pill);background:rgba(220,232,220,.16);
+  color:#DDEEE1;text-align:center;font-size:11px;font-weight:700;
+  line-height:1.35;
+}
+.nav-stack-toggle .count-pill:empty{display:none;}
+.nav-stack-menu-btn{
+  flex:none;width:24px;height:24px;display:inline-flex;
+  align-items:center;justify-content:center;background:none;
+  border:none;border-radius:var(--radius-button);color:#AFCDB7;
+  font-size:15px;line-height:1;cursor:pointer;
+  transition:background-color var(--motion),color var(--motion);
+}
+.nav-stack-menu-btn:hover{background:rgba(87,167,115,.25);color:#fff;}
+#stackMenu{
+  position:absolute;left:10px;right:10px;z-index:60;min-width:180px;
+  padding:6px;background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius-card);box-shadow:0 10px 28px rgba(0,0,0,.32);
+  display:flex;flex-direction:column;gap:2px;
+}
+#stackMenu.hidden{display:none;}
 /* v1.8: the sidebar notebook rows used to carry Rename and Delete
    hover links (.row-actions). Those actions moved to the notes list
    toolbar's notebook menu, so the hover link styles are gone. */
@@ -5025,9 +5127,18 @@ body.dark .version-date{color:var(--accent);}
       <button class="nav-item" id="navArchive" type="button" data-drop-action="archive">Archive <span class="count count-pill" id="countArchive"></span></button>
     </div>
 
-    <div class="nav-section">
+    <div class="nav-section" id="notebookSection">
       <div class="nav-label">Notebooks <button id="addNotebookBtn" type="button" title="Add notebook">+</button></div>
       <div id="notebookNav"></div>
+      <!-- v2.29: the stack header menu, one shared element the
+           sidebar positions under the header it was opened from
+           (openStackMenu). Rename and Delete act on the stack
+           named by stackMenuFor; Delete never deletes the
+           notebooks in the stack. -->
+      <div id="stackMenu" class="hidden" role="menu" aria-label="Stack actions">
+        <button type="button" class="att-menu-item" id="stackRenameBtn" role="menuitem">Rename Stack</button>
+        <button type="button" class="att-menu-item danger" id="stackDeleteBtn" role="menuitem">Delete Stack</button>
+      </div>
     </div>
 
     <div class="nav-section">
@@ -5211,6 +5322,13 @@ body.dark .version-date{color:var(--accent);}
           <button type="button" class="list-tb-btn" id="listNbMenuBtn" title="Notebook options" aria-label="Notebook options" aria-haspopup="true"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="8" cy="3" r="1.5" fill="currentColor" stroke="none"/><circle cx="8" cy="8" r="1.5" fill="currentColor" stroke="none"/><circle cx="8" cy="13" r="1.5" fill="currentColor" stroke="none"/></svg></button>
           <div id="nbActionMenu" class="list-panel hidden" role="menu" aria-label="Notebook options">
             <button type="button" class="list-menu-item" id="nbRenameBtn" role="menuitem">Rename Notebook</button>
+            <!-- v2.29: stack assignment, Evernote's notebook menu
+                 choices surfaced on this app's notebook surface.
+                 Add opens the stack panel below; Remove shows
+                 only while the open notebook is in a stack (its
+                 hidden state is set in renderListToolbar). -->
+            <button type="button" class="list-menu-item" id="nbAddToStackBtn" role="menuitem">Add to Stack...</button>
+            <button type="button" class="list-menu-item hidden" id="nbRemoveFromStackBtn" role="menuitem">Remove from Stack</button>
             <button type="button" class="list-menu-item danger" id="nbDeleteBtn" role="menuitem">Delete Notebook</button>
             <!-- v2.2: pinning moved here from the editor's meta row.
                  renderListToolbar sets this item's label (Pin note or
@@ -5226,6 +5344,13 @@ body.dark .version-date{color:var(--accent);}
             <button type="button" class="list-menu-item danger hidden" id="nbDeleteSelectedBtn" role="menuitem">Delete Selected</button>
             <button type="button" class="list-menu-item hidden" id="nbRestoreSelectedBtn" role="menuitem">Restore Selected</button>
           </div>
+          <!-- v2.29: the stack picker panel, built at open time
+               by buildStackPanel: New stack... first, then one
+               item per existing stack with the current one
+               marked. It belongs to the shared list panel family
+               (LIST_PANEL_IDS), so it opens, closes, and
+               dismisses with the rest. -->
+          <div id="nbStackPanel" class="list-panel hidden" role="menu" aria-label="Add to stack"></div>
         </div>
       </div>
     </div>
@@ -6259,8 +6384,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-28-SSN-V2283";
-const APP_VERSION = "2.28.3";
+const APP_BUILD = "2026-10-28-SSN-V2290";
+const APP_VERSION = "2.29.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -6345,7 +6470,11 @@ const state = {
                             // has run on this device profile
   },
   repoExists: false,        // true after the Drive store is ready
-  notebooks: [],            // [{slug, name, created}]
+  notebooks: [],            // [{slug, name, created, stack?}]
+                            // v2.29: the optional stack is the
+                            // NAME of the notebook's stack, or
+                            // absent when ungrouped; it lives
+                            // only in index.json.
   notes: [],                // note objects, see parseNoteFile for the shape
   trash: [],                // note objects with trashed = true
   archive: [],              // v1.5: note objects with archived = true
@@ -6368,6 +6497,15 @@ const state = {
                             // remembered in settings, default full.
                             // Applied as body.rail; at widths of
                             // 900px and under it has no effect.
+  collapsedStacks: [],      // v2.29: the names of the notebook
+                            // stacks whose sidebar group is
+                            // collapsed, remembered in settings.
+                            // A stack that is not named here is
+                            // expanded; the list is pruned of
+                            // names no stack carries whenever
+                            // it is written, so a deleted or
+                            // renamed stack leaves nothing
+                            // behind.
   versionsLimit: 10,        // v2.8: how many past versions to keep
                             // per note (0 turns version history
                             // off), remembered in settings and
@@ -6930,6 +7068,16 @@ function loadSettings() {
     state.sidebarRail = true;
     document.body.classList.add("rail");
   }
+  /* v2.29: the collapsed stack names. Only an array of
+     strings is honored; anything else (an absent field from
+     an older build, a damaged value) leaves every stack
+     expanded, so a bad record can never hide a notebook
+     behind a fold nobody set. */
+  if (Array.isArray(s.collapsedStacks)) {
+    state.collapsedStacks = s.collapsedStacks.filter(function (x) {
+      return typeof x === "string" && x !== "";
+    });
+  }
   /* v2.8: the versions per note limit. Only a finite stored number
      is honored, truncated to a whole number and clamped into the
      0 to 100 range the Settings input offers; anything else (an
@@ -6982,6 +7130,7 @@ function saveSettings() {
     attach: state.attach,
     listSort: state.listSort,   // v1.8: the remembered notes list sort
     sidebarRail: state.sidebarRail,   // v2.5: the icon rail choice
+    collapsedStacks: state.collapsedStacks,   // v2.29: stack folds
     versionsLimit: state.versionsLimit,   // v2.8: versions kept per note
     onboardingSeen: state.onboardingSeen,   // v2.13: the walkthrough record
     autoSync: state.autoSync,   // v2.16: the idle auto-sync choice
@@ -11573,6 +11722,137 @@ async function deleteNotebook(slug) {
 }
 
 /* --------------------------------------------------------------------------
+   v2.29: notebook stacks (Evernote parity phase 1)
+
+   A stack is a named group of notebooks, Evernote's one level of
+   hierarchy above notebooks: a notebook belongs to at most one
+   stack, stacks do not nest, and a stack is only a grouping, never
+   a container (deleting one deletes nothing but the grouping).
+   The grouping lives entirely in index.json: each notebook entry
+   gains an optional "stack" field holding the stack's NAME, absent
+   for an ungrouped notebook. No note file changes.
+
+   Plumbing, verified rather than assumed: buildIndexObject writes
+   state.notebooks wholesale and loadAllFromRepo reads index.json's
+   notebooks wholesale (there is no per notebook sanitize step to
+   extend), the local cache snapshot carries the same objects, and
+   buildIndexFromFolders returns known notebook objects whole, so
+   the field survives save, load, cache, and folder rebuild paths
+   untouched. renameNotebook mutates the notebook object in place,
+   so membership rides a rename without any work here. A hand
+   edited index.json is still safe: notebookStackOf treats a
+   non string or blank stack as no stack at all.
+   -------------------------------------------------------------------------- */
+
+/* The stack a notebook belongs to, or null. The one read of the
+   raw field, so every consumer gets the normalized answer. */
+function notebookStackOf(nb) {
+  if (!nb || typeof nb.stack !== "string") { return null; }
+  return nb.stack.trim() ? nb.stack : null;
+}
+
+/* The names of every stack that exists, in the order the stacks
+   first appear in the notebook list. A stack exists exactly while
+   at least one notebook carries its name (Evernote: a stack
+   disappears when its last notebook leaves). */
+function stackNames() {
+  const names = [];
+  state.notebooks.forEach(function (nb) {
+    const s = notebookStackOf(nb);
+    if (s && names.indexOf(s) < 0) { names.push(s); }
+  });
+  return names;
+}
+
+/* Whether a stack name is taken, compared the way a person means
+   it (case insensitively; "Work" and "work" are one grouping).
+   exceptName names the stack being renamed, which may keep or
+   re-case its own name. */
+function stackNameTaken(name, exceptName) {
+  const wanted = String(name || "").toLowerCase();
+  return stackNames().some(function (s) {
+    return s.toLowerCase() === wanted && s !== exceptName;
+  });
+}
+
+/* The member notebooks of a stack, in notebook list order. */
+function stackMembers(name) {
+  return state.notebooks.filter(function (nb) {
+    return notebookStackOf(nb) === name;
+  });
+}
+
+/* Drop stack fold records for stacks that no longer exist, so a
+   rename or delete leaves settings clean. Called before every
+   settings write of the fold list from this section. */
+function pruneCollapsedStacks() {
+  const live = stackNames();
+  state.collapsedStacks = state.collapsedStacks.filter(function (n) {
+    return live.indexOf(n) >= 0;
+  });
+}
+
+/* Put a notebook into a stack (a name), or take it out (null).
+   State first and re-render at once, with the index write behind
+   it, exactly the shape createNotebook established. Assigning
+   also expands the target stack: the notebook the user just
+   filed must be visible where it landed. */
+async function setNotebookStack(slug, stackName) {
+  const nb = state.notebooks.find(function (n) { return n.slug === slug; });
+  if (!nb) { return; }
+  if (stackName) {
+    nb.stack = stackName;
+    const ci = state.collapsedStacks.indexOf(stackName);
+    if (ci >= 0) { state.collapsedStacks.splice(ci, 1); }
+  } else {
+    delete nb.stack;
+  }
+  pruneCollapsedStacks();
+  saveSettings();
+  if (state.online && state.repoExists) { await saveIndex(); }
+  saveCache();
+  renderAll();
+}
+
+/* Rename a stack: the field on every member notebook changes,
+   nothing else about any notebook does. The fold record follows
+   the name. Callers validate the new name first (see
+   promptRenameStack). */
+async function renameStack(oldName, newName) {
+  if (oldName === newName) { return; }
+  state.notebooks.forEach(function (nb) {
+    if (notebookStackOf(nb) === oldName) { nb.stack = newName; }
+  });
+  const ci = state.collapsedStacks.indexOf(oldName);
+  if (ci >= 0) {
+    state.collapsedStacks[ci] = newName;
+    saveSettings();
+  }
+  if (state.online && state.repoExists) { await saveIndex(); }
+  saveCache();
+  renderAll();
+}
+
+/* Delete a stack: the grouping only. Every member notebook keeps
+   its notes and returns to the ungrouped list, which is the whole
+   of the operation (there is nothing stored anywhere else to
+   remove, and the stack ceases to exist the moment no notebook
+   carries its name). */
+async function deleteStack(name) {
+  state.notebooks.forEach(function (nb) {
+    if (notebookStackOf(nb) === name) { delete nb.stack; }
+  });
+  const ci = state.collapsedStacks.indexOf(name);
+  if (ci >= 0) {
+    state.collapsedStacks.splice(ci, 1);
+    saveSettings();
+  }
+  if (state.online && state.repoExists) { await saveIndex(); }
+  saveCache();
+  renderAll();
+}
+
+/* --------------------------------------------------------------------------
    Note operations: create, trash, restore, delete forever, archive
    Moving a note between the notebooks tree, trash/, and archive/ is a
    write to the new path plus a delete of the old path. Offline, both
@@ -12489,6 +12769,116 @@ function allTagsWithCounts() {
   return Object.keys(map).sort().map(function (t) { return { tag: t, count: map[t] }; });
 }
 
+/* v2.29: one sidebar notebook row, shared by the ungrouped list
+   and by stack groups so a notebook looks and behaves the same in
+   both. inStack only adds the indent class. */
+function buildNotebookNavRow(nb, inStack) {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "nav-item" + (inStack ? " in-stack" : "") +
+    ((state.view.kind === "notebook" && state.view.value === nb.slug) ? " active" : "");
+  const nameSpan = document.createElement("span");
+  nameSpan.textContent = nb.name;
+  btn.appendChild(nameSpan);
+  const countSpan = document.createElement("span");
+  countSpan.className = "count count-pill";
+  countSpan.textContent = notebookCount(nb.slug) || "";
+  btn.appendChild(countSpan);
+  /* v2.4: the slug rides on the row so the drag and drop hit
+     test can name the notebook under the pointer. */
+  btn.setAttribute("data-nb-slug", nb.slug);
+  btn.addEventListener("click", function () {
+    state.view = { kind: "notebook", value: nb.slug };
+    renderAll();
+    setMobileView("list");
+  });
+  return btn;
+}
+
+const STACK_CHEVRON_ICON =
+  "<svg viewBox=\"0 0 16 16\" width=\"12\" height=\"12\" aria-hidden=\"true\">" +
+  "<path d=\"M6 3l5 5-5 5\" stroke=\"currentColor\" stroke-width=\"1.8\" " +
+  "stroke-linecap=\"round\" stroke-linejoin=\"round\" fill=\"none\"/></svg>";
+
+/* One stack header row: the fold toggle (chevron and name) and
+   the stack's own menu button. The header carries the stack name
+   in a data attribute; the menu machinery below reads it back. */
+function buildStackNavHead(name) {
+  const collapsed = state.collapsedStacks.indexOf(name) >= 0;
+  const head = document.createElement("div");
+  head.className = "nav-stack-head" + (collapsed ? " collapsed" : "");
+  head.setAttribute("data-stack", name);
+  const toggle = document.createElement("button");
+  toggle.type = "button";
+  toggle.className = "nav-stack-toggle";
+  toggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
+  const chev = document.createElement("span");
+  chev.className = "nav-stack-chevron";
+  chev.innerHTML = STACK_CHEVRON_ICON;
+  toggle.appendChild(chev);
+  const nameSpan = document.createElement("span");
+  nameSpan.className = "nav-stack-name";
+  nameSpan.textContent = name;
+  toggle.appendChild(nameSpan);
+  const total = stackMembers(name).reduce(function (sum, nb) {
+    return sum + notebookCount(nb.slug);
+  }, 0);
+  const countSpan = document.createElement("span");
+  countSpan.className = "count count-pill";
+  countSpan.textContent = total || "";
+  toggle.appendChild(countSpan);
+  toggle.addEventListener("click", function () {
+    toggleStackCollapsed(name);
+  });
+  head.appendChild(toggle);
+  const menuBtn = document.createElement("button");
+  menuBtn.type = "button";
+  menuBtn.className = "nav-stack-menu-btn";
+  menuBtn.setAttribute("aria-haspopup", "true");
+  menuBtn.setAttribute("aria-label", "Stack actions");
+  menuBtn.title = "Stack actions";
+  menuBtn.innerHTML = "&#8943;";
+  menuBtn.addEventListener("click", function () {
+    openStackMenu(name, head);
+  });
+  head.appendChild(menuBtn);
+  return head;
+}
+
+/* Fold or unfold one stack group in the sidebar. The fold is
+   remembered in settings, like the icon rail choice. */
+function toggleStackCollapsed(name) {
+  const i = state.collapsedStacks.indexOf(name);
+  if (i >= 0) { state.collapsedStacks.splice(i, 1); }
+  else { state.collapsedStacks.push(name); }
+  saveSettings();
+  renderSidebar();
+}
+
+/* The stack header menu (Rename Stack, Delete Stack). One shared
+   element parked in the notebooks section; stackMenuFor names the
+   stack it was opened for. Positioned under its header at open
+   time from the header's own offsets inside the section. */
+let stackMenuFor = null;
+function openStackMenu(name, headEl) {
+  const menu = document.getElementById("stackMenu");
+  if (!menu) { return; }
+  if (stackMenuFor === name && !menu.classList.contains("hidden")) {
+    closeStackMenu();
+    return;
+  }
+  stackMenuFor = name;
+  if (headEl) {
+    menu.style.top = (headEl.offsetTop + headEl.offsetHeight + 2) + "px";
+  }
+  menu.classList.remove("hidden");
+}
+function closeStackMenu() {
+  const menu = document.getElementById("stackMenu");
+  if (menu) { menu.classList.add("hidden"); }
+  stackMenuFor = null;
+}
+
 function renderSidebar() {
   document.getElementById("countAll").textContent = state.notes.length || "";
   /* v2.24: the Tasks entry's pill is the open task count. */
@@ -12513,7 +12903,14 @@ function renderSidebar() {
   /* Notebook rows: click to open, with a count pill. Rename and
      delete used to ride along as hover links on each row; v1.8 moved
      both into the notes list toolbar's notebook menu, which runs the
-     same prompt and confirm flows against the open notebook. */
+     same prompt and confirm flows against the open notebook.
+     v2.29: notebooks in a stack render under that stack's header,
+     through the same row builder. Ordering: the app has never
+     sorted this list, so a stack header takes the sidebar position
+     of its first member in the existing order, members keep that
+     order inside the group, and ungrouped notebooks render exactly
+     as before; grouping alone changes the shape, never the order. */
+  closeStackMenu();
   const nav = document.getElementById("notebookNav");
   nav.innerHTML = "";
   if (!state.notebooks.length) {
@@ -12523,27 +12920,21 @@ function renderSidebar() {
     empty.textContent = "No notebooks yet. Use + to add one.";
     nav.appendChild(empty);
   }
+  const drawnStacks = {};
   state.notebooks.forEach(function (nb) {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "nav-item" +
-      ((state.view.kind === "notebook" && state.view.value === nb.slug) ? " active" : "");
-    const nameSpan = document.createElement("span");
-    nameSpan.textContent = nb.name;
-    btn.appendChild(nameSpan);
-    const countSpan = document.createElement("span");
-    countSpan.className = "count count-pill";
-    countSpan.textContent = notebookCount(nb.slug) || "";
-    btn.appendChild(countSpan);
-    /* v2.4: the slug rides on the row so the drag and drop hit
-       test can name the notebook under the pointer. */
-    btn.setAttribute("data-nb-slug", nb.slug);
-    btn.addEventListener("click", function () {
-      state.view = { kind: "notebook", value: nb.slug };
-      renderAll();
-      setMobileView("list");
-    });
-    nav.appendChild(btn);
+    const stack = notebookStackOf(nb);
+    if (!stack) {
+      nav.appendChild(buildNotebookNavRow(nb, false));
+      return;
+    }
+    if (drawnStacks[stack]) { return; }
+    drawnStacks[stack] = true;
+    nav.appendChild(buildStackNavHead(stack));
+    if (state.collapsedStacks.indexOf(stack) < 0) {
+      stackMembers(stack).forEach(function (member) {
+        nav.appendChild(buildNotebookNavRow(member, true));
+      });
+    }
   });
 
   /* Tag rows. Clicking toggles the tag filter. */
@@ -12928,7 +13319,7 @@ function compareNotesByListSort(a, b) {
    renderNoteList closes all of them when the view changes. The
    document level outside click and Escape closers are wired with the
    rest of the toolbar events. */
-const LIST_PANEL_IDS = ["filterPanel", "sortMenu", "nbActionMenu"];
+const LIST_PANEL_IDS = ["filterPanel", "sortMenu", "nbActionMenu", "nbStackPanel"];
 function closeListPanels() {
   LIST_PANEL_IDS.forEach(function (id) {
     const panel = document.getElementById(id);
@@ -12953,8 +13344,57 @@ function toggleListPanel(panelId) {
        follow the view and the current multi select sets, so refresh
        them at open time as well as on every list render. */
     if (panelId === "nbActionMenu") { renderListToolbar(); }
+    /* v2.29: the stack panel's items depend on which stacks
+       exist right now and which one the open notebook is in, so
+       the panel is rebuilt at every open, like the filter tag
+       list above. */
+    if (panelId === "nbStackPanel") { buildStackPanel(); }
     panel.classList.remove("hidden");
   }
+}
+
+/* v2.29: build the Add to Stack panel for the open notebook:
+   "New stack..." first (Evernote's order), then one item per
+   existing stack in sidebar order, the notebook's current stack
+   marked with a check so re-picking it is a visible no-op rather
+   than a mystery. Picking an item runs the assignment and the
+   shared panel closer dismisses the panel, the same dismissal
+   the other panels get from their item handlers. */
+function buildStackPanel() {
+  const panel = document.getElementById("nbStackPanel");
+  if (!panel) { return; }
+  panel.innerHTML = "";
+  if (state.view.kind !== "notebook") { return; }
+  const slug = state.view.value;
+  const nb = state.notebooks.find(function (n) { return n.slug === slug; });
+  if (!nb) { return; }
+  const current = notebookStackOf(nb);
+  const newItem = document.createElement("button");
+  newItem.type = "button";
+  newItem.className = "list-menu-item";
+  newItem.setAttribute("role", "menuitem");
+  newItem.setAttribute("data-stack-choice", "new");
+  newItem.textContent = "New stack...";
+  newItem.addEventListener("click", function () {
+    closeListPanels();
+    promptAddNotebookToNewStack(slug);
+  });
+  panel.appendChild(newItem);
+  stackNames().forEach(function (name) {
+    const item = document.createElement("button");
+    item.type = "button";
+    item.className = "list-menu-item";
+    item.setAttribute("role", "menuitem");
+    item.setAttribute("data-stack-name", name);
+    item.textContent = name + (name === current ? " (current)" : "");
+    item.addEventListener("click", function () {
+      closeListPanels();
+      setNotebookStack(slug, name).catch(function (err) {
+        toast("Add to stack failed: " + err.message, true);
+      });
+    });
+    panel.appendChild(item);
+  });
 }
 
 /* The filter panel's tag checkbox list, derived from the same source
@@ -13099,6 +13539,29 @@ function renderListToolbar() {
     deleteBtn.classList.toggle("hidden", kind === "trash" || kind === "archive");
     deleteBtn.disabled = !inNotebook;
   }
+  /* v2.29: the stack items follow the notebook items' rules.
+     Add to Stack shows and enables exactly like Rename; Remove
+     from Stack shows only in a notebook view whose notebook is
+     actually in a stack (there is nothing to remove otherwise),
+     and its label names the stack it would leave, Evernote's
+     clarity about what the click does. */
+  const addStackBtn = document.getElementById("nbAddToStackBtn");
+  if (addStackBtn) {
+    addStackBtn.classList.toggle("hidden", kind === "trash" || kind === "archive");
+    addStackBtn.disabled = !inNotebook;
+  }
+  const removeStackBtn = document.getElementById("nbRemoveFromStackBtn");
+  if (removeStackBtn) {
+    const openNb = inNotebook ? state.notebooks.find(function (n) {
+      return n.slug === state.view.value;
+    }) : null;
+    const openStack = openNb ? notebookStackOf(openNb) : null;
+    removeStackBtn.classList.toggle("hidden", !openStack);
+    removeStackBtn.disabled = !openStack;
+    removeStackBtn.textContent = openStack
+      ? "Remove from Stack (" + openStack + ")"
+      : "Remove from Stack";
+  }
   /* v2.2: the pin item sits with the notebook items. It is part of
      the menu in All Notes, Pinned, tag, and notebook views, and not
      part of it at all in Trash and Archive, where the menu carries
@@ -13170,6 +13633,54 @@ function confirmDeleteNotebook(slug) {
     count + " note(s) will be moved to Trash, not deleted.");
   if (ok) {
     deleteNotebook(nb.slug).catch(function (err) {
+      toast("Delete failed: " + err.message, true);
+    });
+  }
+}
+
+/* v2.29: the stack flows, in the same prompt and confirm shapes
+   as the notebook flows above (this app's established pattern;
+   Evernote offers the same choices from menus). Creating a stack
+   whose name is taken is refused with a message, the way Evernote
+   treats stack names as one grouping per name. */
+function promptAddNotebookToNewStack(slug) {
+  const nb = state.notebooks.find(function (n) { return n.slug === slug; });
+  if (!nb) { return; }
+  const name = prompt("New stack name", "");
+  if (name === null) { return; }
+  const trimmed = name.trim();
+  if (!trimmed) {
+    toast("A stack needs a name.", true);
+    return;
+  }
+  if (stackNameTaken(trimmed, null)) {
+    toast("A stack named \"" + trimmed + "\" already exists.", true);
+    return;
+  }
+  setNotebookStack(slug, trimmed).catch(function (err) {
+    toast("Add to stack failed: " + err.message, true);
+  });
+}
+function promptRenameStack(oldName) {
+  const name = prompt("Rename stack", oldName);
+  if (name === null) { return; }
+  const trimmed = name.trim();
+  if (!trimmed || trimmed === oldName) { return; }
+  if (stackNameTaken(trimmed, oldName)) {
+    toast("A stack named \"" + trimmed + "\" already exists.", true);
+    return;
+  }
+  renameStack(oldName, trimmed).catch(function (err) {
+    toast("Rename failed: " + err.message, true);
+  });
+}
+function confirmDeleteStack(name) {
+  const count = stackMembers(name).length;
+  const ok = confirm("Delete the stack \"" + name + "\"? The " +
+    count + " notebook(s) in it will NOT be deleted; they will " +
+    "return to the ungrouped notebook list, with all their notes.");
+  if (ok) {
+    deleteStack(name).catch(function (err) {
       toast("Delete failed: " + err.message, true);
     });
   }
@@ -31764,6 +32275,48 @@ function wireEvents() {
     if (state.view.kind !== "notebook") { return; }
     closeListPanels();
     confirmDeleteNotebook(state.view.value);
+  });
+  /* v2.29: the stack items on the same menu. Add opens the stack
+     panel (the shared toggle closes the action menu as it opens
+     the panel); Remove acts at once, like Evernote's, with no
+     confirm, because nothing is deleted and re-adding is one
+     menu away. */
+  document.getElementById("nbAddToStackBtn").addEventListener("click", function () {
+    if (state.view.kind !== "notebook") { return; }
+    toggleListPanel("nbStackPanel");
+  });
+  document.getElementById("nbRemoveFromStackBtn").addEventListener("click", function () {
+    if (state.view.kind !== "notebook") { return; }
+    closeListPanels();
+    setNotebookStack(state.view.value, null).catch(function (err) {
+      toast("Remove from stack failed: " + err.message, true);
+    });
+  });
+  /* v2.29: the stack header menu's items act on the stack the
+     menu was opened for (stackMenuFor), captured before the menu
+     closes so the flow functions read a settled name. */
+  document.getElementById("stackRenameBtn").addEventListener("click", function () {
+    const name = stackMenuFor;
+    closeStackMenu();
+    if (name) { promptRenameStack(name); }
+  });
+  document.getElementById("stackDeleteBtn").addEventListener("click", function () {
+    const name = stackMenuFor;
+    closeStackMenu();
+    if (name) { confirmDeleteStack(name); }
+  });
+  /* The stack menu's closers: a click outside the notebooks
+     section (and not on a stack's menu button, whose own handler
+     toggles) closes it, and so does Escape. */
+  document.addEventListener("click", function (ev) {
+    if (stackMenuFor === null) { return; }
+    if (ev.target.closest("#stackMenu")) { return; }
+    if (ev.target.closest(".nav-stack-menu-btn")) { return; }
+    if (ev.target.closest("#notebookNav")) { return; }
+    closeStackMenu();
+  });
+  document.addEventListener("keydown", function (ev) {
+    if (ev.key === "Escape") { closeStackMenu(); }
   });
   /* v2.2: the pin item. It belongs to the selected note, not to a
      view, so there is no view guard here: renderListToolbar hides
