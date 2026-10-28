@@ -40,10 +40,44 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-28-SSN-V2270
-  Version: 2.27.0
+  BUILD STAMP: 2026-10-28-SSN-V2280
+  Version: 2.28.0
 
   Revision history:
+    v2.28.0 2026-10-28 Rich task descriptions and two
+                      way @ links. A task's description is
+                      now written in a compact rich text
+                      editor (bold, italic, underline,
+                      strikethrough, bullet and numbered
+                      lists, clear formatting) instead of
+                      a plain text box. Each task carries
+                      a descriptionFormat marker: an
+                      existing description stays plain
+                      text, exact, until the task is
+                      saved from the new editor, and a
+                      rich description is stored as a
+                      strictly sanitized HTML fragment
+                      (semantic formatting and note links
+                      only; scripts, unsafe links, and
+                      raw styles never survive a save, a
+                      load, a paste, or the preview,
+                      and styled spans pasted in become
+                      real formatting). The Tasks view
+                      preview renders a rich description
+                      formatted, its hover text the plain
+                      words, and its note links open
+                      their notes. The @ popup serves
+                      the description editor as a second
+                      host (notes only; its Create row
+                      files the new note in the task's
+                      chosen notebook), and in a note it
+                      now lists tasks as well as notes:
+                      picking a task inserts a task link
+                      (sstask:) that opens the task
+                      editor when clicked, follows renames
+                      on the next render, and never takes
+                      a link face, a link bar, or a
+                      metadata fetch.
     v2.27.0 2026-10-28 Tasks view: a description preview
                       under the task title. A task that has
                       a description now shows a preview of
@@ -2838,6 +2872,21 @@ body.dark .modal:hover::-webkit-scrollbar-thumb{
    read as internal links: accent color and an underline. The accent
    variable exists in both themes, so this holds in dark mode too. */
 #noteBody a.ss-note-link{color:var(--accent);text-decoration:underline;}
+/* v2.28.0: links to tasks inside a note (href
+   "sstask:<id>", class ss-task-link): the internal link
+   look of a note link, led by a small checkbox square
+   drawn in the link's own color so a task reads as a
+   task at a glance. A link whose task is gone (the
+   ss-task-link-missing class decorateTaskLinks sets)
+   goes muted. Both rules ride the theme variables, so
+   they hold in dark and light alike. */
+#noteBody a.ss-task-link{color:var(--accent);text-decoration:underline;}
+#noteBody a.ss-task-link::before{
+  content:"";display:inline-block;width:9px;height:9px;
+  border:1.6px solid currentColor;border-radius:2px;
+  margin-right:5px;vertical-align:-1px;
+}
+#noteBody a.ss-task-link-missing{color:var(--muted);}
 /* v2.4: an inserted Tab character lives in a span.ss-tab, whose own
    white-space preservation renders the character as a true tab
    stop gap (tab-size 4), including at the start of a line, where a
@@ -2892,6 +2941,13 @@ body.dark .modal:hover::-webkit-scrollbar-thumb{
 .mention-head{
   font-size:11px;font-weight:700;letter-spacing:.08em;
   color:var(--muted);padding:5px 10px 3px;
+}
+/* v2.28.0: the @ popup's group labels (Notes, Tasks) in
+   the note host: the Results header's voice, quieter,
+   and never a row: no data-mi, no highlight, no click. */
+.mention-group-label{
+  font-size:11px;font-weight:700;letter-spacing:.08em;
+  color:var(--muted);padding:5px 10px 1px;
 }
 /* v2.17: the mention popup's search box, pinned at the card's
    top. Typing after "@" mirrors into it; typing in it filters
@@ -4088,6 +4144,14 @@ body.dark .task-group-title{color:var(--accent);}
   -webkit-box-orient:vertical;-webkit-line-clamp:3;
   line-clamp:3;
 }
+/* v2.28.0: a rich description's fragment inside the
+   preview: its paragraphs and lists sit tight (the
+   clamp counts lines, not margins), and its note links
+   read as links in the accent both themes carry. */
+.task-row-desc p{margin:0;}
+.task-row-desc ul,.task-row-desc ol{margin:0;padding-left:18px;}
+.task-row-desc a{color:var(--accent);text-decoration:underline;
+  cursor:pointer;}
 .task-chips{
   margin-left:auto;display:flex;gap:6px;align-items:center;
   flex:none;padding-top:1px;
@@ -4359,6 +4423,44 @@ body.dark .task-progress-pill{color:var(--accent);}
   color:var(--text);font:inherit;resize:vertical;min-height:64px;
   box-sizing:border-box;
 }
+/* v2.28.0: the task description's rich editor and its
+   toolbar: the textarea's themed box turned editable,
+   its buttons the note toolbar's button styling (the
+   .toolbar button values) in a compact row of its own.
+   Every color comes from the theme variables, so the
+   field and its controls are themed in dark and light
+   alike, and its scroll area is the surface's own. */
+.task-desc-toolbar{display:flex;gap:4px;flex-wrap:wrap;
+  margin-bottom:6px;}
+.task-desc-toolbar button{
+  position:relative;background:var(--bg);
+  border:1px solid var(--border);
+  border-radius:var(--radius-button);min-width:28px;
+  min-height:28px;padding:2px 6px;font-size:13.5px;
+  font-weight:600;color:var(--text);cursor:pointer;
+}
+.task-desc-toolbar button:hover{border-color:var(--secondary);
+  background:var(--soft);}
+.task-desc-toolbar button svg{display:block;margin:0 auto;}
+.task-desc-editor{
+  width:100%;padding:8px 10px;border:1px solid var(--border);
+  border-radius:var(--radius-button);background:var(--surface);
+  color:var(--text);font:inherit;min-height:64px;
+  max-height:220px;overflow-y:auto;box-sizing:border-box;
+  outline:none;
+}
+.task-desc-editor:focus{border-color:var(--secondary);
+  box-shadow:0 0 0 3px rgba(87,167,115,.22);}
+.task-desc-editor:empty::before{
+  content:"Details, links, anything the task needs";
+  color:var(--muted);
+}
+.task-desc-editor p{margin:0 0 6px;}
+.task-desc-editor ul,.task-desc-editor ol{
+  margin:0 0 6px;padding-left:22px;
+}
+.task-desc-editor a{color:var(--accent);
+  text-decoration:underline;}
 .modal .field input[type="text"],.modal .field input[type="date"],
 .modal .field input[type="time"]{
   width:100%;padding:8px 10px;border:1px solid var(--border);
@@ -5867,7 +5969,24 @@ body.dark .version-date{color:var(--accent);}
     </div>
     <div class="field">
       <label for="taskDescInput">Description</label>
-      <textarea id="taskDescInput" placeholder="Details, links, anything the task needs"></textarea>
+      <!-- v2.28.0: the description is a compact rich text
+           editor (contenteditable) with a small toolbar of
+           its own: bold, italic, underline, strikethrough,
+           the two lists, and clear formatting. No headings,
+           colors, tables, images, or checklists live here.
+           Everything the editor holds passes through the
+           one sanitizer (sanitizeTaskDescriptionHtml) on
+           the way in and on the way out. -->
+      <div class="task-desc-toolbar" role="toolbar" aria-label="Description formatting">
+        <button type="button" data-task-desc-cmd="bold" title="Bold"><b>B</b></button>
+        <button type="button" data-task-desc-cmd="italic" title="Italic"><i>I</i></button>
+        <button type="button" data-task-desc-cmd="underline" title="Underline"><u>U</u></button>
+        <button type="button" data-task-desc-cmd="strike" title="Strikethrough"><s>S</s></button>
+        <button type="button" data-task-desc-cmd="ul" title="Bullet list" aria-label="Bullet list"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="3" cy="3.5" r="1.4" fill="currentColor" stroke="none"/><circle cx="3" cy="8" r="1.4" fill="currentColor" stroke="none"/><circle cx="3" cy="12.5" r="1.4" fill="currentColor" stroke="none"/><path d="M6.5 3.5h7M6.5 8h7M6.5 12.5h7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" fill="none"/></svg></button>
+        <button type="button" data-task-desc-cmd="ol" title="Numbered list" aria-label="Numbered list"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false"><text x="2.6" y="5.2" text-anchor="middle" font-size="5" font-weight="700" fill="currentColor" stroke="none">1</text><text x="2.6" y="9.7" text-anchor="middle" font-size="5" font-weight="700" fill="currentColor" stroke="none">2</text><text x="2.6" y="14.2" text-anchor="middle" font-size="5" font-weight="700" fill="currentColor" stroke="none">3</text><path d="M6.5 3.5h7M6.5 8h7M6.5 12.5h7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" fill="none"/></svg></button>
+        <button type="button" data-task-desc-cmd="clear" title="Clear formatting" aria-label="Clear formatting"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false"><path d="M4.5 12.5L8.2 3.8l3.7 8.7M5.8 9.4h4.8" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M2.6 13.6L13.4 2.4" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></button>
+      </div>
+      <div id="taskDescInput" class="task-desc-editor" contenteditable="true" aria-label="Description"></div>
     </div>
     <div class="field">
       <label for="taskNotebookSelect">Notebook</label>
@@ -6043,8 +6162,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-28-SSN-V2270";
-const APP_VERSION = "2.27.0";
+const APP_BUILD = "2026-10-28-SSN-V2280";
+const APP_VERSION = "2.28.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -8166,6 +8285,15 @@ function flushCatalogWrites() {
        id:              string,   minted like a note id
        title:           string,
        description:     string,
+       descriptionFormat: (v2.28) "text" or "html": a
+                        text description is the plain
+                        words themselves; an html one is
+                        a sanitized rich fragment (see
+                        sanitizeTaskDescriptionHtml).
+                        Missing or invalid reads "text",
+                        so every pre v2.28 task is a text
+                        task and stays exact until it is
+                        saved from the rich editor.
        notebook:        string,   notebook slug
        dueDate:         "YYYY-MM-DD" or null,
        dueTime:         "HH:MM" or null,
@@ -8230,6 +8358,8 @@ function sanitizeTask(raw) {
       ? raw.title : "Untitled task",
     description: typeof raw.description === "string"
       ? raw.description : "",
+    descriptionFormat: raw.descriptionFormat === "html"
+      ? "html" : "text",
     notebook: typeof raw.notebook === "string" ? raw.notebook : "",
     dueDate: dueDate,
     dueTime: dueDate ? dueTime : null,
@@ -8259,6 +8389,8 @@ function serializeTask(task) {
     id: task.id,
     title: task.title,
     description: task.description,
+    descriptionFormat: task.descriptionFormat === "html"
+      ? "html" : "text",
     notebook: task.notebook,
     dueDate: task.dueDate,
     dueTime: task.dueTime,
@@ -8280,6 +8412,197 @@ function buildTasksObject() {
     updated: new Date().toISOString(),
     tasks: state.tasks.map(serializeTask)
   };
+}
+
+/* ----- v2.28.0: rich task descriptions -------------------
+   A task description is plain text until the task is saved
+   from the description editor; that save stores a rich
+   fragment under descriptionFormat "html". The fragment
+   vocabulary is small on purpose: paragraphs, line breaks,
+   the four inline marks (strong, emphasis, underline,
+   strike), the two lists, and note links. Everything a
+   rich description holds passes through the one sanitizer
+   below: on save, on load into the editor, on paste, and
+   on preview render, so nothing hostile, and nothing
+   merely out of vocabulary, can persist in tasks.json or
+   reach a row.
+   The allowlist: P, DIV, BR, STRONG, B, EM, I, U, S,
+   STRIKE, UL, OL, LI, A. An anchor survives only as a
+   note link (its raw href passes the noteLinkIdOf test),
+   keeping its class and its data-ss-link-view; every
+   other anchor unwraps to its text. SCRIPT, STYLE,
+   IFRAME, OBJECT, and EMBED are removed with their
+   contents; every other element unwraps, keeping its
+   cleaned children. All attributes are stripped, so no
+   event handler, no style, and no class beyond the note
+   link's own can ride along.
+   Styled spans: the note editor runs with styleWithCSS
+   on, so pasted or foreign rich text often carries its
+   bold, italic, underline, and strike as span (or font)
+   style attributes instead of elements. Those convert to
+   the semantic wrappers before the element unwraps, so
+   the formatting survives as real formatting: never as a
+   raw style attribute, and never as lost plain text. */
+const TASK_DESC_ALLOWED_TAGS = {
+  P: 1, DIV: 1, BR: 1, STRONG: 1, B: 1, EM: 1, I: 1, U: 1,
+  S: 1, STRIKE: 1, UL: 1, OL: 1, LI: 1, A: 1
+};
+const TASK_DESC_DROP_TAGS = {
+  SCRIPT: 1, STYLE: 1, IFRAME: 1, OBJECT: 1, EMBED: 1
+};
+
+/* The semantic wrappers a styled span or font element
+   stands for, read from its raw style attribute (the raw
+   string, so the answer never depends on the CSSOM):
+   a font-weight of bold or 700 and up reads STRONG, a
+   font-style of italic EM, and a text-decoration naming
+   underline or line-through U or S. Outermost first. */
+function taskDescStyleWrappers(el) {
+  const style = (el.getAttribute &&
+    el.getAttribute("style")) || "";
+  const wraps = [];
+  if (/font-weight\s*:\s*(bold|[7-9]00)/i.test(style)) {
+    wraps.push("STRONG");
+  }
+  if (/font-style\s*:\s*italic/i.test(style)) {
+    wraps.push("EM");
+  }
+  const deco = /text-decoration(?:-line)?\s*:\s*([^;]+)/i
+    .exec(style);
+  if (deco) {
+    if (/underline/i.test(deco[1])) { wraps.push("U"); }
+    if (/line-through/i.test(deco[1])) { wraps.push("S"); }
+  }
+  return wraps;
+}
+
+/* Move an element's children out in its place, then drop
+   the element itself: the unwrap every element outside
+   the vocabulary gets. */
+function unwrapTaskDescElement(el) {
+  const parent = el.parentNode;
+  if (!parent) { return; }
+  while (el.firstChild) { parent.insertBefore(el.firstChild, el); }
+  el.remove();
+}
+
+function cleanTaskDescChildren(parent) {
+  Array.prototype.slice.call(parent.childNodes)
+    .forEach(function (node) {
+      if (node.nodeType === 3) { return; }
+      if (node.nodeType !== 1) { node.remove(); return; }
+      const tag = node.tagName;
+      if (TASK_DESC_DROP_TAGS[tag]) { node.remove(); return; }
+      if (tag === "SPAN" || tag === "FONT") {
+        const wraps = taskDescStyleWrappers(node);
+        cleanTaskDescChildren(node);
+        if (wraps.length) {
+          /* The wrapper chain goes around the children:
+             wraps[0] outermost, the children landing in
+             the deepest wrapper. */
+          let chain = null, deepest = null;
+          wraps.forEach(function (wtag) {
+            const wEl = document.createElement(wtag);
+            if (!chain) { chain = wEl; }
+            else { deepest.appendChild(wEl); }
+            deepest = wEl;
+          });
+          while (node.firstChild) {
+            deepest.appendChild(node.firstChild);
+          }
+          node.parentNode.insertBefore(chain, node);
+          node.remove();
+        } else {
+          unwrapTaskDescElement(node);
+        }
+        return;
+      }
+      if (tag === "A") {
+        cleanTaskDescChildren(node);
+        if (!noteLinkIdOf(node)) {
+          unwrapTaskDescElement(node);
+          return;
+        }
+        /* A note link keeps its address, its class, and
+           its view mode; every other attribute goes. */
+        const href = node.getAttribute("href");
+        const view = node.getAttribute("data-ss-link-view");
+        Array.prototype.slice.call(node.attributes)
+          .forEach(function (attr) {
+            node.removeAttribute(attr.name);
+          });
+        node.setAttribute("href", href);
+        node.setAttribute("class", "ss-note-link");
+        if (view) { node.setAttribute("data-ss-link-view", view); }
+        return;
+      }
+      if (TASK_DESC_ALLOWED_TAGS[tag]) {
+        Array.prototype.slice.call(node.attributes)
+          .forEach(function (attr) {
+            node.removeAttribute(attr.name);
+          });
+        cleanTaskDescChildren(node);
+        return;
+      }
+      cleanTaskDescChildren(node);
+      unwrapTaskDescElement(node);
+    });
+}
+
+/* The one sanitizer: a fragment string in, the fragment
+   the vocabulary above allows out. */
+function sanitizeTaskDescriptionHtml(html) {
+  const holder = document.createElement("div");
+  holder.innerHTML = String(html == null ? "" : html);
+  cleanTaskDescChildren(holder);
+  return holder.innerHTML;
+}
+
+/* The plain words of a rich fragment: what the preview's
+   hover names, and what the emptied test reads. */
+function taskDescriptionTextOfHtml(html) {
+  const holder = document.createElement("div");
+  holder.innerHTML = String(html == null ? "" : html);
+  return holder.textContent || "";
+}
+
+/* Read the description editor for a save: sanitize what
+   it holds, and collapse a fragment carrying no words
+   and no note link back to the empty plain text form, so
+   an emptied rich description is just an empty one. */
+function readTaskDescriptionEditor() {
+  const el = document.getElementById("taskDescInput");
+  const clean = sanitizeTaskDescriptionHtml(
+    el ? el.innerHTML : "");
+  const words = taskDescriptionTextOfHtml(clean);
+  if (!words.trim() && clean.indexOf("ssnote:") < 0) {
+    return { description: "", descriptionFormat: "text" };
+  }
+  return { description: clean, descriptionFormat: "html" };
+}
+
+/* Fill the description editor from a task: a rich
+   description goes in through the sanitizer (the load
+   side of the one funnel); a plain text description goes
+   in as literal text, one paragraph per line, its words
+   and its line breaks exact. */
+function writeTaskDescriptionEditor(task) {
+  const el = document.getElementById("taskDescInput");
+  if (!el) { return; }
+  el.innerHTML = "";
+  const desc = task && typeof task.description === "string"
+    ? task.description : "";
+  if (!desc) { return; }
+  if (task.descriptionFormat === "html") {
+    el.innerHTML = sanitizeTaskDescriptionHtml(desc);
+    return;
+  }
+  desc.split("\n").forEach(function (line) {
+    const p = document.createElement("p");
+    if (line) { p.textContent = line; }
+    else { p.appendChild(document.createElement("br")); }
+    el.appendChild(p);
+  });
 }
 
 /* Schedule a tasks write from current state. Only mutation
@@ -8616,6 +8939,7 @@ function createTask(fields) {
     id: newNoteId(),
     title: fields.title || "Untitled task",
     description: fields.description || "",
+    descriptionFormat: fields.descriptionFormat || "text",
     notebook: fields.notebook || defaultTaskNotebook(),
     dueDate: fields.dueDate || null,
     dueTime: fields.dueTime || null,
@@ -8639,7 +8963,8 @@ function createTask(fields) {
 function updateTask(id, patch) {
   const task = findTaskById(id);
   if (!task) { return null; }
-  ["title", "description", "notebook", "dueDate", "dueTime",
+  ["title", "description", "descriptionFormat", "notebook",
+   "dueDate", "dueTime",
    "flagged", "priority", "recurrence", "reminderOffsetMin"]
     .forEach(function (key) {
       if (patch[key] !== undefined) { task[key] = patch[key]; }
@@ -13751,14 +14076,46 @@ function buildTaskRowEl(task, opts) {
        off; the text itself is never shortened here. A
        task with no description, or only whitespace,
        gets no preview element at all. */
-    const colDescText = typeof task.description === "string"
-      ? task.description.trim() : "";
-    if (colDescText) {
-      const colDesc = document.createElement("div");
-      colDesc.className = "task-row-desc";
-      colDesc.textContent = colDescText;
-      colDesc.title = colDescText;
-      colMain.appendChild(colDesc);
+    if (task.descriptionFormat === "html") {
+      /* v2.28.0: a rich description previews as its
+         fragment, through the sanitizer (the render
+         side of the one funnel), with the extracted
+         plain words as the hover text; a fragment
+         with no words shows nothing. Its note links
+         navigate from here, the click claimed on the
+         preview itself so the row's editor opening
+         never also fires. */
+      const colClean = sanitizeTaskDescriptionHtml(
+        task.description || "");
+      const colPlain = taskDescriptionTextOfHtml(colClean)
+        .trim();
+      if (colPlain) {
+        const colDesc = document.createElement("div");
+        colDesc.className = "task-row-desc";
+        colDesc.innerHTML = colClean;
+        colDesc.title = colPlain;
+        colDesc.addEventListener("click", function (ev) {
+          const t = ev.target;
+          const anchor = (t && t.closest)
+            ? t.closest("a") : null;
+          const nid = anchor ? noteLinkIdOf(anchor) : null;
+          if (!nid) { return; }
+          ev.preventDefault();
+          ev.stopPropagation();
+          followNoteLink(nid);
+        });
+        colMain.appendChild(colDesc);
+      }
+    } else {
+      const colDescText = typeof task.description === "string"
+        ? task.description.trim() : "";
+      if (colDescText) {
+        const colDesc = document.createElement("div");
+        colDesc.className = "task-row-desc";
+        colDesc.textContent = colDescText;
+        colDesc.title = colDescText;
+        colMain.appendChild(colDesc);
+      }
     }
     titleCell.appendChild(colMain);
     const markers = document.createElement("div");
@@ -14357,6 +14714,9 @@ function openTaskEditor(taskId, presetNotebook) {
   if (!modal) { return; }
   const task = taskId ? findTaskById(taskId) : null;
   taskEditorState = { id: task ? task.id : null, dirty: false };
+  /* v2.28.0: a fresh editor starts with the @ popup
+     closed, whichever host it was serving. */
+  closeMentionPopup();
   document.getElementById("taskModalTitle").textContent =
     task ? "Edit task" : "New task";
   fillTaskNotebookSelect(task ? task.notebook
@@ -14365,7 +14725,7 @@ function openTaskEditor(taskId, presetNotebook) {
     fillTaskEditor(task);
   } else {
     document.getElementById("taskTitleInput").value = "";
-    document.getElementById("taskDescInput").value = "";
+    document.getElementById("taskDescInput").innerHTML = "";
     document.getElementById("taskDueDateInput").value = "";
     document.getElementById("taskDueTimeInput").value = "";
     document.getElementById("taskRecurrenceSelect").value = "none";
@@ -14377,6 +14737,15 @@ function openTaskEditor(taskId, presetNotebook) {
       .classList.add("hidden");
     syncTaskReminderControls();
   }
+  /* v2.28.0: while the task modal is open, the editing
+     commands run with styleWithCSS off, so the
+     description editor's bold, italic, and underline
+     land as semantic elements rather than styled spans
+     (the sanitizer converts spans too, for pastes and
+     foreign content). closeTaskEditor restores the app
+     wide on setting the note editor relies on. */
+  try { document.execCommand("styleWithCSS", false, false); }
+  catch (err) { /* an engine without the command */ }
   modal.classList.remove("hidden");
   const titleInput = document.getElementById("taskTitleInput");
   if (titleInput) { titleInput.focus(); }
@@ -14388,8 +14757,7 @@ function openTaskEditor(taskId, presetNotebook) {
    editor (see onTasksLoaded). */
 function fillTaskEditor(task) {
   document.getElementById("taskTitleInput").value = task.title || "";
-  document.getElementById("taskDescInput").value =
-    task.description || "";
+  writeTaskDescriptionEditor(task);
   fillTaskNotebookSelect(task.notebook);
   document.getElementById("taskDueDateInput").value =
     task.dueDate || "";
@@ -14465,10 +14833,15 @@ function saveTaskEditor() {
   if (!taskEditorState) { return; }
   const reminderRaw =
     document.getElementById("taskReminderSelect").value;
+  /* v2.28.0: the description is read out of the rich
+     editor through its sanitizer; an emptied fragment
+     collapses back to the plain empty form. */
+  const descRead = readTaskDescriptionEditor();
   const fields = {
     title: document.getElementById("taskTitleInput").value.trim()
       || "Untitled task",
-    description: document.getElementById("taskDescInput").value,
+    description: descRead.description,
+    descriptionFormat: descRead.descriptionFormat,
     notebook: document.getElementById("taskNotebookSelect").value
       || defaultTaskNotebook(),
     dueDate: document.getElementById("taskDueDateInput").value
@@ -14513,6 +14886,95 @@ function closeTaskEditor() {
   const modal = document.getElementById("taskModal");
   if (modal) { modal.classList.add("hidden"); }
   taskEditorState = null;
+  /* v2.28.0: the @ popup's second host dies with the
+     modal, and the note editor's styleWithCSS setting
+     (on, app wide) is restored. */
+  closeMentionPopup();
+  try { document.execCommand("styleWithCSS", false, true); }
+  catch (err) { /* an engine without the command */ }
+}
+
+/* v2.28.0: run one description toolbar command. The
+   marks and lists are the browser's own editing
+   commands, aimed at the description editor's live
+   selection (with styleWithCSS off while the modal is
+   open, they land as semantic elements). Clear
+   formatting runs removeFormat and then unwraps the
+   inline formatting elements some engines leave
+   standing, inside the description editor only. */
+function runTaskDescCommand(cmd) {
+  const el = document.getElementById("taskDescInput");
+  if (!el) { return; }
+  el.focus();
+  const map = {
+    bold: "bold", italic: "italic", underline: "underline",
+    strike: "strikeThrough",
+    ul: "insertUnorderedList", ol: "insertOrderedList"
+  };
+  try {
+    if (cmd === "clear") {
+      document.execCommand("removeFormat", false, null);
+      ["strong", "b", "em", "i", "u", "s", "strike",
+       "span", "font"].forEach(function (tag) {
+        Array.prototype.slice.call(
+          el.querySelectorAll(tag))
+          .forEach(unwrapTaskDescElement);
+      });
+    } else if (map[cmd]) {
+      document.execCommand(map[cmd], false, null);
+    }
+  } catch (err) { /* an engine without the command */ }
+  markTaskEditorDirty();
+}
+
+/* Insert a fragment at the caret inside rootEl, as
+   nodes rather than as an execCommand string, so the
+   paste path behaves the same in every engine.
+   Returns false when there is no usable caret inside
+   rootEl, leaving the caller to its fallback. */
+function insertHtmlFragmentAtCaret(rootEl, html) {
+  const sel = window.getSelection();
+  if (!sel || !sel.rangeCount) { return false; }
+  const range = sel.getRangeAt(0);
+  if (!rootEl.contains(range.commonAncestorContainer)) {
+    return false;
+  }
+  const holder = document.createElement("div");
+  holder.innerHTML = html;
+  const frag = document.createDocumentFragment();
+  let last = null;
+  while (holder.firstChild) {
+    last = frag.appendChild(holder.firstChild);
+  }
+  range.deleteContents();
+  range.insertNode(frag);
+  if (last) {
+    range.setStartAfter(last);
+    range.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
+  return true;
+}
+
+/* The plain text twin of the fragment inserter, the
+   paste path's fallback when the clipboard carries no
+   HTML. */
+function insertTextAtCaret(rootEl, text) {
+  const sel = window.getSelection();
+  if (!sel || !sel.rangeCount) { return false; }
+  const range = sel.getRangeAt(0);
+  if (!rootEl.contains(range.commonAncestorContainer)) {
+    return false;
+  }
+  const node = document.createTextNode(text);
+  range.deleteContents();
+  range.insertNode(node);
+  range.setStartAfter(node);
+  range.collapse(true);
+  sel.removeAllRanges();
+  sel.addRange(range);
+  return true;
 }
 
 /* ---------------- reminder notifications ----------------
@@ -14948,6 +15410,9 @@ function renderEditor() {
        rebuilt beside the tooltips, from the mode and Microlink
        info attributes the saved body carries. */
     decorateLinkViews(document.getElementById("noteBody"));
+    /* v2.28.0: task links take their labels from the
+       tasks' current titles on the same render. */
+    decorateTaskLinks(document.getElementById("noteBody"));
     setSaveState(note.trashed ? "In Trash" :
       (note.archived ? "Archived" : "Saved"));
     /* v1.2: fill the attachment placeholders from the providers. This is
@@ -16300,6 +16765,10 @@ function linkBarAnchorFor(anchor) {
   const bodyEl = document.getElementById("noteBody");
   if (!bodyEl || !bodyEl.contains(anchor)) { return null; }
   if (anchor.closest && anchor.closest(".ss-attachment")) { return null; }
+  /* v2.28.0: task links get no bar, and through this
+     same gate no Mention hover card either: their click
+     opens the task, and that is their whole link UI. */
+  if (taskLinkIdOf(anchor)) { return null; }
   const note = currentNote();
   if (!note || note.trashed || note.archived) { return null; }
   if (noteLinkIdOf(anchor)) { return anchor; }
@@ -17423,6 +17892,10 @@ function decorateNoteLinkView(anchor, noteId) {
    switch never stacks faces. */
 function decorateLinkView(anchor) {
   if (!anchor || !anchor.getAttribute) { return; }
+  /* v2.28.0: task links are never faced (and never
+     fetched): they stay the plain anchor they were
+     saved as, in every mode. */
+  if (taskLinkIdOf(anchor)) { return; }
   const oldFace = anchor.querySelector(":scope > .ss-link-face");
   if (oldFace) { oldFace.remove(); }
   const noteId = noteLinkIdOf(anchor);
@@ -17873,6 +18346,69 @@ function followNoteLink(noteId) {
   toast("That note no longer exists.", true);
 }
 
+/* ----- v2.28.0: task links (sstask:) ------------------------------
+   A task link is an ordinary anchor whose href is
+   "sstask:<taskId>" and whose class is ss-task-link. It is
+   inserted by the note host's "@" popup (insertMentionTaskLink)
+   and by hand in any imported body. It is decoration free by
+   design: no link face, no link bar, no hover card, and no
+   Microlink fetch ever (see the guards in decorateLinkViews'
+   companion pass, decorateLinkTooltips, and linkBarAnchorFor);
+   its whole link UI is its click, which opens the task's
+   editor over the note. This pass, run beside the link
+   decoration passes on every render, keeps its label honest:
+   the title attribute always names the task's current title,
+   and anchor text that merely repeats the title it was saved
+   with (a title derived label, judged the way the note link
+   faces judge theirs) follows a rename; words the user chose
+   stay theirs. A link whose task is gone is retitled and
+   muted by the ss-task-link-missing class. */
+const SSTASK_HREF_PREFIX = "sstask:";
+
+/* The task id a task link points at, or null when the anchor
+   is not a task link. Reads the RAW href attribute, like
+   noteLinkIdOf, for the same reason. */
+function taskLinkIdOf(anchor) {
+  if (!anchor || !anchor.getAttribute) { return null; }
+  const href = anchor.getAttribute("href") || "";
+  if (href.indexOf(SSTASK_HREF_PREFIX) !== 0) { return null; }
+  const id = href.slice(SSTASK_HREF_PREFIX.length).trim();
+  return id ? id : null;
+}
+
+/* Follow a task link: the task's editor opens over the note
+   in front of the user. The view and the open note are
+   untouched, so closing the editor returns to both; a task
+   that no longer exists says so plainly. */
+function followTaskLink(taskId) {
+  const task = findTaskById(taskId);
+  if (!task) {
+    toast("That task no longer exists.", true);
+    return;
+  }
+  openTaskEditor(task.id);
+}
+
+function decorateTaskLinks(rootEl) {
+  if (!rootEl || !rootEl.querySelectorAll) { return; }
+  rootEl.querySelectorAll("a[href^=\"sstask:\"]")
+    .forEach(function (anchor) {
+      const task = findTaskById(taskLinkIdOf(anchor) || "");
+      if (!task) {
+        anchor.setAttribute("title", "Task no longer exists");
+        anchor.classList.add("ss-task-link-missing");
+        return;
+      }
+      anchor.classList.remove("ss-task-link-missing");
+      const current = task.title || "Untitled task";
+      const saved = anchor.getAttribute("title");
+      if (saved !== null && anchor.textContent === saved) {
+        anchor.textContent = current;
+      }
+      anchor.setAttribute("title", current);
+    });
+}
+
 /* ----- v2.17: the Tags field picker ---------------------------------
    Focusing (or clicking into) the editor footer's Tags field
    opens a dropdown of the tags already in use across the live
@@ -18035,6 +18571,12 @@ let mentionLastNode = null;
 let mentionBoxQuery = null;
 let mentionListEl = null;
 let mentionLastRange = null;
+/* v2.28.0: the popup's host: "note" (the note body) or
+   "task" (the task editor's description field). The
+   tracker sets it from the editor the caret is in on
+   every run; the trigger also records it, so a pick
+   lands in the editor the user was typing in. */
+let mentionHost = "note";
 
 const MENTION_NOTE_ICON =
   "<svg viewBox=\"0 0 24 24\" width=\"16\" height=\"16\" fill=\"none\" " +
@@ -18052,6 +18594,14 @@ const MENTION_ENTER_ICON =
   "stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" " +
   "stroke-linejoin=\"round\"><path d=\"M9 10l-5 5 5 5\"/>" +
   "<path d=\"M4 15h11a5 5 0 0 0 5-5V4\"/></svg>";
+/* v2.28.0: a task row's icon in the popup: the checkbox
+   square, drawn the way the task link's own ::before
+   square reads in the note body. */
+const MENTION_TASK_ICON =
+  "<svg viewBox=\"0 0 24 24\" width=\"16\" height=\"16\" fill=\"none\" " +
+  "stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" " +
+  "stroke-linejoin=\"round\"><rect x=\"4\" y=\"4\" width=\"16\" " +
+  "height=\"16\" rx=\"3\"/><path d=\"M8.5 12.5l2.5 2.5 4.5-5.5\"/></svg>";
 
 function mentionPopupOpen() {
   const popup = document.getElementById("mentionPopup");
@@ -18137,7 +18687,13 @@ function onMentionSearchInput() {
    only the empty query, so untitled notes surface only while
    nothing has been typed past the "@" and never flood filtered
    results. Trashed notes never match; archived notes do, like the
-   rest of the app treats them: present, but read only. */
+   rest of the app treats them: present, but read only.
+   v2.28.0: in the note host, up to eight matching tasks follow
+   the notes (the same title match, completed tasks included,
+   most recently updated first), and the renderer splits the two
+   kinds with group labels when both are present. The task
+   description host never lists tasks: a description links to
+   notes, and notes are where task links live. */
 function mentionCandidates(query) {
   const needle = String(query || "").toLowerCase();
   const matches = state.notes.concat(state.archive).filter(function (note) {
@@ -18151,6 +18707,16 @@ function mentionCandidates(query) {
   matches.forEach(function (note) {
     rows.push({ kind: "note", note: note });
   });
+  if (mentionHost === "note") {
+    const taskMatches = state.tasks.filter(function (task) {
+      return (task.title || "").toLowerCase().indexOf(needle) >= 0;
+    }).slice().sort(function (a, b) {
+      return String(b.updated || "").localeCompare(String(a.updated || ""));
+    }).slice(0, 8);
+    taskMatches.forEach(function (task) {
+      rows.push({ kind: "task", task: task });
+    });
+  }
   return rows;
 }
 
@@ -18170,19 +18736,37 @@ function updateMentionPopup() {
   if (mentionPopupOpen() && searchEl && document.activeElement === searchEl) {
     return;
   }
-  const note = currentNote();
   const bodyEl = document.getElementById("noteBody");
-  if (!note || note.trashed || note.archived || !bodyEl ||
-      bodyEl.contentEditable === "false") {
-    closeMentionPopup();
-    return;
-  }
   const sel = window.getSelection();
   if (!sel || !sel.rangeCount) { closeMentionPopup(); return; }
   const range = sel.getRangeAt(0);
   const node = range.startContainer;
+  /* v2.28.0: the host is the editor the caret is actually
+     in. The task description host is live only while its
+     modal is open (and the popup can never outlive the
+     modal: closeTaskEditor closes it too); the note host
+     keeps every guard it has always had, a live unlocked
+     note and the caret inside its body. */
+  const descEl = document.getElementById("taskDescInput");
+  const taskModalEl = document.getElementById("taskModal");
+  let hostEl = null;
+  if (descEl && taskModalEl && taskEditorState &&
+      !taskModalEl.classList.contains("hidden") &&
+      node && descEl.contains(node)) {
+    mentionHost = "task";
+    hostEl = descEl;
+  } else {
+    const note = currentNote();
+    if (!note || note.trashed || note.archived || !bodyEl ||
+        bodyEl.contentEditable === "false") {
+      closeMentionPopup();
+      return;
+    }
+    mentionHost = "note";
+    hostEl = bodyEl;
+  }
   if (!range.collapsed || !node || node.nodeType !== 3 ||
-      !bodyEl.contains(node)) {
+      !hostEl.contains(node)) {
     closeMentionPopup();
     return;
   }
@@ -18202,7 +18786,8 @@ function updateMentionPopup() {
   const query = before.slice(at + 1);
   if (/\s/.test(query)) { closeMentionPopup(); return; }
   mentionTrigger = {
-    node: node, atOffset: at, caretOffset: range.startOffset, query: query
+    node: node, atOffset: at, caretOffset: range.startOffset,
+    query: query, host: mentionHost
   };
   mentionRows = mentionCandidates(query);
   if (!mentionRows.length) { closeMentionPopup(); return; }
@@ -18238,7 +18823,42 @@ function renderMentionPopup(range) {
   }
   const list = mentionListEl;
   list.innerHTML = "";
+  /* v2.28.0: the search box names what this host finds:
+     notes alone in the description editor, notes and
+     tasks in a note. */
+  if (searchEl) {
+    searchEl.placeholder = mentionHost === "task"
+      ? "Search notes" : "Search notes and tasks";
+    searchEl.setAttribute("aria-label", searchEl.placeholder);
+  }
+  /* v2.28.0: when the rows carry both kinds, a quiet group
+     label splits them. Labels are not rows (no data-mi),
+     so the highlight, the keyboard walk, and the click
+     routing only ever see selectable rows. */
+  const hasNotes = mentionRows.some(function (r) {
+    return r.kind === "note";
+  });
+  const hasTasks = mentionRows.some(function (r) {
+    return r.kind === "task";
+  });
+  let noteLabelShown = false, taskLabelShown = false;
+  function groupLabel(txt) {
+    const el = document.createElement("div");
+    el.className = "mention-group-label";
+    el.textContent = txt;
+    list.appendChild(el);
+  }
   mentionRows.forEach(function (row, i) {
+    if (hasNotes && hasTasks && row.kind === "note" &&
+        !noteLabelShown) {
+      groupLabel("Notes");
+      noteLabelShown = true;
+    }
+    if (hasNotes && hasTasks && row.kind === "task" &&
+        !taskLabelShown) {
+      groupLabel("Tasks");
+      taskLabelShown = true;
+    }
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "mention-row" +
@@ -18248,7 +18868,8 @@ function renderMentionPopup(range) {
     const icon = document.createElement("span");
     icon.setAttribute("aria-hidden", "true");
     icon.innerHTML = row.kind === "create" ?
-      MENTION_CREATE_ICON : MENTION_NOTE_ICON;
+      MENTION_CREATE_ICON : row.kind === "task" ?
+      MENTION_TASK_ICON : MENTION_NOTE_ICON;
     btn.appendChild(icon);
     const texts = document.createElement("span");
     texts.className = "mention-texts";
@@ -18259,6 +18880,18 @@ function renderMentionPopup(range) {
       line1.textContent = mentionEffectiveQuery();
       line2.className = "mention-create-sub";
       line2.textContent = "Create new note";
+    } else if (row.kind === "task") {
+      line1.textContent = row.task.title || "Untitled task";
+      line2.className = "mention-nb";
+      let sub = "Task · " +
+        notebookNameForSlug(row.task.notebook);
+      if (row.task.status === "completed") {
+        sub += " · Completed";
+      } else {
+        const chip = taskDueChip(row.task);
+        if (chip) { sub += " · " + chip.text; }
+      }
+      line2.textContent = sub;
     } else {
       line1.textContent = row.note.title || "Untitled note";
       line2.className = "mention-nb";
@@ -18326,7 +18959,12 @@ function setMentionHighlight(i) {
    face shows at once rather than on the next open. */
 function insertMentionNoteLink(target) {
   const trig = mentionTrigger;
-  const bodyEl = document.getElementById("noteBody");
+  /* v2.28.0: the anchor lands in the host the token was
+     tracked in: the note body, or the task description
+     editor while its modal is open. */
+  const bodyEl = trig && trig.host === "task"
+    ? document.getElementById("taskDescInput")
+    : document.getElementById("noteBody");
   closeMentionPopup();
   if (!trig || !bodyEl || !bodyEl.contains(trig.node)) { return; }
   const anchor = document.createElement("a");
@@ -18348,9 +18986,16 @@ function insertMentionNoteLink(target) {
   const space = document.createTextNode(" ");
   anchor.after(space);
   placeCaretIn(space, 1);
-  decorateLinkTooltips(bodyEl);
-  decorateLinkViews(bodyEl);
-  markDirty();
+  if (trig.host === "task") {
+    /* The description editor holds its anchors plain
+       (no link faces live in a task), and the task
+       editor's own dirty flag is the one that moved. */
+    markTaskEditorDirty();
+  } else {
+    decorateLinkTooltips(bodyEl);
+    decorateLinkViews(bodyEl);
+    markDirty();
+  }
 }
 
 /* Create the note the Create row promises: the query as its title,
@@ -18360,10 +19005,54 @@ function insertMentionNoteLink(target) {
    in state and cache at once, the list re-renders, and the
    storage write runs in the background with the same failure
    wording. The note being edited stays open throughout. */
+/* v2.28.0: replace the tracked "@query" with a task link
+   to the target, the note host's second kind of pick.
+   The anchor is born plain (class ss-task-link, its text
+   and its title the task's current title), and
+   decorateTaskLinks runs over the body at once so the
+   link shows in its final form rather than on the next
+   open. */
+function insertMentionTaskLink(target) {
+  const trig = mentionTrigger;
+  const bodyEl = document.getElementById("noteBody");
+  closeMentionPopup();
+  if (!trig || !bodyEl || !bodyEl.contains(trig.node)) { return; }
+  const anchor = document.createElement("a");
+  anchor.setAttribute("href", SSTASK_HREF_PREFIX + target.id);
+  anchor.setAttribute("class", "ss-task-link");
+  anchor.setAttribute("title", target.title || "Untitled task");
+  anchor.textContent = target.title || "Untitled task";
+  const end = Math.min(trig.caretOffset,
+    trig.node.nodeValue ? trig.node.nodeValue.length : 0);
+  const range = document.createRange();
+  range.setStart(trig.node, trig.atOffset);
+  range.setEnd(trig.node, end);
+  const sel = window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(range);
+  range.deleteContents();
+  range.insertNode(anchor);
+  const space = document.createTextNode(" ");
+  anchor.after(space);
+  placeCaretIn(space, 1);
+  decorateTaskLinks(bodyEl);
+  markDirty();
+}
+
 function createMentionTargetNote(title) {
   if (!state.notebooks.length) { createNotebook("Personal"); }
-  const host = currentNote();
-  let slug = host ? host.notebook : null;
+  /* v2.28.0: in the description host, the new note files
+     into the notebook the task editor has selected; in
+     the note host, it files beside the note being
+     edited, as it always has. */
+  let slug = null;
+  if (mentionTrigger && mentionTrigger.host === "task") {
+    const nbSel = document.getElementById("taskNotebookSelect");
+    slug = nbSel ? nbSel.value : null;
+  } else {
+    const host = currentNote();
+    slug = host ? host.notebook : null;
+  }
   const known = state.notebooks.some(function (b) {
     return b.slug === slug;
   });
@@ -18385,6 +19074,10 @@ function pickMentionRow(i) {
   if (!row) { return; }
   if (row.kind === "note") {
     insertMentionNoteLink(row.note);
+    return;
+  }
+  if (row.kind === "task") {
+    insertMentionTaskLink(row.task);
     return;
   }
   let created = null;
@@ -18409,12 +19102,19 @@ function onMentionPopupKeydown(ev) {
   if (ev.key === "Escape") {
     const trig = mentionTrigger;
     closeMentionPopup();
+    /* (the focus hand back below reads the trigger's
+       host, v2.28.0) */
     /* v2.17: Escape hands focus and the caret back to the editor,
        which is what makes closing from the popup's search box
        land the user where they were typing. With the caret
        already in the editor this simply re-places it on the same
        spot. */
-    const bodyEl0 = document.getElementById("noteBody");
+    /* v2.28.0: the editor handed back to is the
+       trigger's host: the note body, or the task
+       description editor while its modal is open. */
+    const bodyEl0 = trig && trig.host === "task"
+      ? document.getElementById("taskDescInput")
+      : document.getElementById("noteBody");
     if (trig && bodyEl0 && bodyEl0.contains(trig.node)) {
       bodyEl0.focus();
       placeCaretIn(trig.node, Math.min(trig.caretOffset,
@@ -18429,12 +19129,18 @@ function onMentionPopupKeydown(ev) {
   const bodyEl = document.getElementById("noteBody");
   /* v2.17: the arrows and Enter also work from the popup's search
      box (Tab stays the editor's alone there, so keyboard users
-     can still tab away from the box). */
+     can still tab away from the box). v2.28.0: the
+     keys belong to the popup while the description
+     editor holds the caret too, the trigger's second
+     host. */
+  const descElK = document.getElementById("taskDescInput");
   const searchEl = mentionSearchEl();
   const fromSearch = !!searchEl && ev.target === searchEl;
   if (fromSearch && ev.key === "Tab") { return; }
   if (!bodyEl || !ev.target ||
-      (!bodyEl.contains(ev.target) && !fromSearch)) { return; }
+      (!bodyEl.contains(ev.target) &&
+       !(descElK && descElK.contains(ev.target)) &&
+       !fromSearch)) { return; }
   ev.preventDefault();
   ev.stopPropagation();
   if (ev.key === "ArrowDown") {
@@ -22796,6 +23502,10 @@ function decorateLinkTooltips(rootEl) {
        BEFORE the setAttribute below overwrites the saved title
        attribute with the live one; see captureNoteLinkDerivation
        in the link faces block. */
+    /* v2.28.0: a task link's title attribute belongs to
+       decorateTaskLinks (it is the rename derivation
+       record); the tooltip pass leaves it alone. */
+    if (taskLinkIdOf(anchor)) { return; }
     if (noteLinkIdOf(anchor)) { captureNoteLinkDerivation(anchor); }
     const tip = linkTooltipFor(anchor);
     if (tip) { anchor.setAttribute("title", tip); }
@@ -31087,6 +31797,65 @@ function wireEvents() {
     function (ev) {
       if (ev.target === ev.currentTarget) { closeTaskEditor(); }
     });
+  /* v2.28.0: the description toolbar. A mousedown on a
+     button is swallowed so the description editor's
+     selection survives to the click; the click runs the
+     matching command inside the description editor
+     alone (runTaskDescCommand). */
+  document.querySelectorAll("[data-task-desc-cmd]")
+    .forEach(function (btn) {
+      btn.addEventListener("mousedown", function (ev) {
+        ev.preventDefault();
+      });
+      btn.addEventListener("click", function () {
+        runTaskDescCommand(
+          btn.getAttribute("data-task-desc-cmd"));
+      });
+    });
+  /* v2.28.0: a paste into the description editor lands
+     sanitized, never as raw clipboard HTML: the
+     fragment passes the one sanitizer (styled spans
+     becoming semantic marks on the way) and is inserted
+     at the caret as nodes, with an append as the no
+     caret fallback; plain text is the fallback when the
+     clipboard carries no HTML at all. */
+  document.getElementById("taskDescInput")
+    .addEventListener("paste", function (ev) {
+      ev.preventDefault();
+      const el = document.getElementById("taskDescInput");
+      const data = ev.clipboardData || window.clipboardData;
+      if (!data || !data.getData) { return; }
+      const frag = sanitizeTaskDescriptionHtml(
+        data.getData("text/html") || "");
+      let handled = false;
+      if (frag) {
+        handled = insertHtmlFragmentAtCaret(el, frag);
+        if (!handled) {
+          const holder = document.createElement("div");
+          holder.innerHTML = frag;
+          while (holder.firstChild) {
+            el.appendChild(holder.firstChild);
+          }
+          handled = true;
+        }
+      } else {
+        const plain = data.getData("text/plain") || "";
+        if (plain) {
+          handled = insertTextAtCaret(el, plain);
+          if (!handled) {
+            el.appendChild(document.createTextNode(plain));
+            handled = true;
+          }
+        }
+      }
+      if (handled) { markTaskEditorDirty(); }
+    });
+  /* v2.28.0: typing in the description editor re-runs
+     the @ token tracker, the popup's second host (the
+     document selectionchange listener already covers
+     caret moves in there). */
+  document.getElementById("taskDescInput")
+    .addEventListener("input", updateMentionPopup);
   document.getElementById("taskModal").addEventListener("keydown",
     function (ev) {
       if (ev.key === "Escape") { closeTaskEditor(); }
@@ -31417,7 +32186,8 @@ function wireEvents() {
     const target = ev.target;
     if (!target || !target.closest) { return; }
     if (target.closest("#mentionPopup") ||
-        target.closest("#noteBody")) { return; }
+        target.closest("#noteBody") ||
+        target.closest("#taskDescInput")) { return; }
     closeMentionPopup();
   });
   const mentionPopupEl = document.getElementById("mentionPopup");
@@ -31571,6 +32341,17 @@ function wireEvents() {
       ev.preventDefault();
       hideLinkBar();
       followNoteLink(ssNoteId);
+      return;
+    }
+    /* v2.28.0: task links resolve here too, beside the
+       note links and ahead of every generic branch: any
+       click opens the task's editor over the note, and
+       the web link bar never appears for them. */
+    const ssTaskId = taskLinkIdOf(anchor);
+    if (ssTaskId) {
+      ev.preventDefault();
+      hideLinkBar();
+      followTaskLink(ssTaskId);
       return;
     }
     if (ev.ctrlKey || ev.metaKey) {
