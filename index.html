@@ -40,10 +40,65 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-28-SSN-V2410
-  Version: 2.41.0
+  BUILD STAMP: 2026-10-28-SSN-V2420
+  Version: 2.42.0
 
   Revision history:
+    v2.42.0 2026-10-28 Drag reorder, the first of the two
+                      post phase 3 releases Chris approved
+                      on 2026-10-28, closing the no drag
+                      reorder deviations the Shortcuts
+                      release (v2.31.0) and the merge
+                      release (v2.39.0) named. One shared
+                      pointer drag helper (Pointer Events
+                      only, so mouse and touch run one
+                      path; a press on a drag handle arms
+                      it, movement engages it, the item
+                      moves live among its siblings, and
+                      the row it will land beside carries
+                      an accent drop indicator) serves the
+                      three approved surfaces, each order
+                      written through its existing owner
+                      and no new synced field introduced.
+                      Sidebar Shortcuts rows gain a drag
+                      handle: a drop rewrites the list's
+                      order through the shortcuts index
+                      save, so it syncs and survives
+                      reload; the main button's click and
+                      the row menu's Remove work exactly
+                      as before, and entries whose targets
+                      exist nowhere (which render no row)
+                      keep their stored slots through a
+                      drag. Home widgets gain a handle on
+                      the widget itself while Customize is
+                      open, and only then: dragging a
+                      widget reorders the page, writing
+                      the same home layout field the Move
+                      up and Move down buttons write, so
+                      the two always agree; outside
+                      Customize nothing on Home is
+                      draggable. Merge Selected now opens
+                      a merge order dialog in place of the
+                      plain confirm: the selected notes
+                      listed in list order, each row
+                      draggable by a handle, a result line
+                      naming the title the merged note
+                      will take (the first row's, updated
+                      as the order changes), and Merge
+                      running the existing merge machinery
+                      in the chosen order; Cancel, the
+                      backdrop, and Escape change nothing.
+                      Drag handles are real buttons with
+                      plain labels, themed in both themes
+                      with the drop indicators, and a drag
+                      that ends where it started writes
+                      nothing. Still out, by the approval's
+                      own scope: sidebar drag for stacks
+                      and tag nesting, the merge Advanced
+                      options (the dialog carries order
+                      only), drag ordering of the Reminders
+                      list, and widget resizing or free
+                      placement on Home.
     v2.41.0 2026-10-28 Create Table of Contents Note, the
                       closing extra of the Evernote parity
                       program's phase 3, modeled on
@@ -3127,6 +3182,38 @@ body.dark .gate-brand .wordmark{color:#EAF3EC;}
 .nav-shortcut-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .nav-shortcut-where{color:#9DB8A6;font-size:12px;}
 .nav-shortcut-row.dead .nav-item{opacity:.55;}
+/* v2.42 (post phase 3 release 1): drag reorder. One shared
+   pointer drag helper (attachReorderDrag in the script)
+   serves the three reorder surfaces: the sidebar
+   Shortcuts rows, the Home widgets in Customize, and the
+   merge order dialog's rows. The handle is a real button
+   on each row, in the sidebar's own button voice here;
+   the dragged item dims under an accent outline, and the
+   row it will land beside carries the drop indicator, an
+   accent bar on the landing edge. Every color is the
+   sidebar's or a themed variable, so the furniture reads
+   the same in both themes. The helper sets touch-action
+   none on the handle, so a touch drag on the handle
+   never becomes a scroll. */
+.ss-drag-handle{
+  flex:none;display:inline-flex;align-items:center;
+  justify-content:center;background:none;border:none;
+  border-radius:var(--radius-button);cursor:grab;
+  touch-action:none;padding:0;
+  transition:background-color var(--motion),color var(--motion);
+}
+.ss-drag-handle:active{cursor:grabbing;}
+.ss-drag-item{opacity:.55;outline:2px solid var(--accent);outline-offset:-2px;}
+.ss-drop-before{box-shadow:inset 0 3px 0 var(--accent);}
+.ss-drop-after{box-shadow:inset 0 -3px 0 var(--accent);}
+body.ss-reorder-dragging{cursor:grabbing;user-select:none;}
+.nav-shortcut-drag{
+  width:20px;height:24px;color:#AFCDB7;
+}
+.nav-shortcut-drag:hover{background:rgba(87,167,115,.25);color:#fff;}
+.nav-shortcut-drag:focus-visible{
+  outline:2px solid var(--accent);outline-offset:1px;color:#fff;
+}
 /* v2.32 (Evernote parity, phase 1 release 4): saved searches.
    The panel is the card the sidebar menus established (the
    tag menu's surface, border, and shadow), hung under the
@@ -3251,6 +3338,45 @@ body.dark .gate-brand .wordmark{color:#EAF3EC;}
 }
 #templateMenu button:hover{background:var(--accent-soft);}
 #templateMenu button.danger{color:#C0392B;}
+/* v2.42: the merge order dialog, in the modal family's
+   shapes: a result line naming the title the merged
+   note will take, and the selected notes as rows (drag
+   handle, title over its notebook) in a list that
+   scrolls inside the card when the selection is long.
+   Every color is a themed variable, and the modal shell
+   already sets the per theme color scheme, so the list's
+   scrollbar themes with the app in both themes. */
+.merge-order-card{max-width:520px;}
+.merge-order-result{
+  padding:10px 12px;margin-bottom:10px;
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius-button);color:var(--text);
+  font-size:13.5px;
+}
+.merge-order-result strong{color:var(--text-strong);}
+.merge-order-list{
+  display:flex;flex-direction:column;gap:6px;
+  max-height:46vh;overflow-y:auto;padding:2px;
+}
+.merge-order-row{
+  display:flex;align-items:center;gap:8px;
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius-button);padding:8px 10px;
+}
+.merge-order-drag{
+  width:26px;height:30px;color:var(--muted);
+}
+.merge-order-drag:hover{background:var(--soft);color:var(--primary);}
+body.dark .merge-order-drag:hover{color:var(--accent);}
+.merge-order-drag:focus-visible{
+  outline:2px solid var(--accent);outline-offset:1px;
+}
+.merge-order-text{display:flex;flex-direction:column;min-width:0;}
+.merge-order-title{
+  font-weight:600;color:var(--text-strong);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.merge-order-nb{font-size:12px;color:var(--muted);}
 #tagMenu button:disabled{opacity:.55;cursor:default;}
 #tagMenu button:disabled:hover{background:none;}
 #tagMenu button.danger{color:#C0392B;}
@@ -3772,6 +3898,21 @@ body.dark .home-cust-head{color:var(--accent);}
   border-top:1px solid var(--border);
 }
 .home-cust-label{flex:1;font-weight:600;color:var(--text);}
+/* v2.42: the Home widget drag handle, present on a
+   widget's header only while Customize is open (the
+   script adds and removes it with the mode), in the
+   widget header's own voice. */
+.home-widget-drag{
+  width:26px;height:26px;color:var(--muted);margin-left:-4px;
+}
+.home-widget-drag:hover{background:var(--soft);color:var(--primary);}
+body.dark .home-widget-drag:hover{color:var(--accent);}
+.home-widget-drag:focus-visible{
+  outline:2px solid var(--accent);outline-offset:1px;
+}
+.home-cust-hint{
+  color:var(--muted);font-size:12.5px;padding:2px 0 6px;
+}
 .home-grid{
   display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));
   gap:16px;align-items:start;
@@ -7855,6 +7996,32 @@ body.dark .version-date{color:var(--accent);}
 </div>
 
 <!-- ==========================================================================
+     v2.42: the merge order dialog
+     Opened by mergeSelectedNotes once the selection has
+     validated and every source body has loaded, in place
+     of the plain confirm the merge ran behind through
+     v2.41. The script fills mergeOrderList with one row
+     per selected note (drag handle, title, notebook) in
+     the list's current order; dragging a row reorders
+     the merge, and mergeOrderResultTitle names the title
+     the merged note will take (the first row's). Merge
+     runs the merge in the chosen order; Cancel, the
+     backdrop, and Escape close it and change nothing.
+     ========================================================================== -->
+<div id="mergeOrderModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="mergeOrderTitle">
+  <div class="modal-card merge-order-card">
+    <h2 id="mergeOrderTitle">Merge notes</h2>
+    <p class="modal-sub">Drag the notes into the order to merge them in. The original notes are moved to Trash, where they can be restored.</p>
+    <div class="merge-order-result">The merged note will be titled <strong id="mergeOrderResultTitle"></strong></div>
+    <div id="mergeOrderList" class="merge-order-list"></div>
+    <div class="modal-foot">
+      <button class="btn" id="mergeOrderCancelBtn" type="button">Cancel</button>
+      <button class="btn primary" id="mergeOrderConfirmBtn" type="button">Merge notes</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==========================================================================
      v2.8: Note history
      Opened from the editor footer's History button. The script
      renders one row per stored version of the open note (newest
@@ -7966,8 +8133,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-28-SSN-V2410";
-const APP_VERSION = "2.41.0";
+const APP_BUILD = "2026-10-28-SSN-V2420";
+const APP_VERSION = "2.42.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -14302,6 +14469,285 @@ function confirmDeleteTag(tag) {
 }
 
 /* --------------------------------------------------------------------------
+   v2.42: drag reorder (post phase 3 release 1, approved by
+   Chris on 2026-10-28). One shared pointer drag helper
+   serves the three surfaces Chris approved: the sidebar
+   Shortcuts list, the Home widgets (dragged by a handle
+   on the widget itself while Customize is open), and the
+   merge order dialog's rows. Sidebar drag for stacks and
+   tag nesting stays out, deliberately, as does drag
+   ordering of the Reminders list and any widget resizing
+   or free placement.
+
+   The helper's shape follows the app's own drag
+   precedents (the note list drag of v2.4 and the editor's
+   block grip): Pointer Events only, never HTML5 drag and
+   drop, so mouse and touch run the one path. A press on a
+   surface's drag handle arms a candidate; movement past
+   a small threshold engages it. While engaged the item
+   itself moves among its siblings in the DOM, the row it
+   will land beside carries the drop indicator (an accent
+   bar on the landing edge), and the dragged item dims
+   under an accent outline. A drop commits the DOM's new
+   key order through the surface's own order owner (the
+   shortcuts index save, the home layout save, the merge
+   dialog's input order); a drag that ends where it
+   started commits nothing and writes nothing; Escape
+   and pointercancel restore the original DOM order and
+   commit nothing. The non-drag paths remain complete
+   alternatives everywhere: a shortcut can still be
+   removed and re-added, Home keeps its Move up and Move
+   down buttons, and the merge dialog opens in list
+   order, which Merge simply accepts.
+   -------------------------------------------------------------------------- */
+
+/* The grip every drag handle wears: six dots in two
+   columns, drawn in the handle's own color. */
+const SS_DRAG_GRIP_ICON = "<svg viewBox=\"0 0 12 20\" " +
+  "width=\"12\" height=\"18\" aria-hidden=\"true\" " +
+  "focusable=\"false\"><circle cx=\"3.5\" cy=\"4\" r=\"1.6\" " +
+  "fill=\"currentColor\"/><circle cx=\"8.5\" cy=\"4\" " +
+  "r=\"1.6\" fill=\"currentColor\"/><circle cx=\"3.5\" " +
+  "cy=\"10\" r=\"1.6\" fill=\"currentColor\"/><circle " +
+  "cx=\"8.5\" cy=\"10\" r=\"1.6\" fill=\"currentColor\"/>" +
+  "<circle cx=\"3.5\" cy=\"16\" r=\"1.6\" " +
+  "fill=\"currentColor\"/><circle cx=\"8.5\" cy=\"16\" " +
+  "r=\"1.6\" fill=\"currentColor\"/></svg>";
+
+const SS_REORDER_DRAG_PX = 4;
+let ssReorderDrag = null;   /* the armed or engaged drag */
+
+function ssReorderItems(container, selector) {
+  return Array.prototype.slice.call(
+    container.querySelectorAll(selector));
+}
+
+/* Arm one item's drag handle. options: itemSelector (the
+   siblings the item reorders among, inside its parent),
+   keyOf(el) (the item's order key), onCommit(keys) (the
+   surface's order owner, called only when the order
+   changed), axis ("list" or "grid"), and scrollEl (the
+   scrolling ancestor to edge scroll, or a function
+   returning it). Binding is once per handle element, so
+   a re-render that reuses an element never double arms
+   it. */
+function attachReorderDrag(handle, item, options) {
+  if (!handle || !item) { return; }
+  if (handle.getAttribute("data-ss-drag-bound") === "1") {
+    return;
+  }
+  handle.setAttribute("data-ss-drag-bound", "1");
+  handle.addEventListener("pointerdown", function (ev) {
+    startReorderDrag(ev, handle, item, options);
+  });
+}
+
+function startReorderDrag(ev, handle, item, options) {
+  if (ssReorderDrag) { return; }
+  if (ev.pointerType === "mouse" && ev.button !== 0) {
+    return;
+  }
+  const container = item.parentElement;
+  if (!container) { return; }
+  const items = ssReorderItems(container,
+    options.itemSelector);
+  if (items.length < 2 || items.indexOf(item) < 0) {
+    return;
+  }
+  ssReorderDrag = {
+    pointerId: ev.pointerId,
+    startX: ev.clientX, startY: ev.clientY,
+    engaged: false,
+    handle: handle, item: item, container: container,
+    selector: options.itemSelector,
+    keyOf: options.keyOf, onCommit: options.onCommit,
+    axis: options.axis || "list",
+    scrollEl: options.scrollEl || null,
+    items0: items,
+    keys0: items.map(options.keyOf),
+    indicator: null
+  };
+  if (handle.setPointerCapture &&
+      ev.pointerId !== undefined) {
+    try { handle.setPointerCapture(ev.pointerId); }
+    catch (e) { /* capture is a nicety, not the drag */ }
+  }
+  window.addEventListener("pointermove", onReorderDragMove);
+  window.addEventListener("pointerup", onReorderDragUp);
+  window.addEventListener("pointercancel",
+    onReorderDragCancel);
+  document.addEventListener("keydown",
+    onReorderDragKeydown, true);
+}
+
+/* Where the dragged item lands among the others for a
+   pointer at (x, y): the first other item the pointer
+   has reached. A list reads by vertical midpoint; the
+   Home grid reads in reading order (a row's top first,
+   then the midpoint across the row). */
+function reorderDragIndex(others, x, y, axis) {
+  for (let i = 0; i < others.length; i++) {
+    const r = others[i].getBoundingClientRect();
+    if (axis === "grid") {
+      if (y < r.top) { return i; }
+      if (y <= r.bottom) {
+        return x < (r.left + r.right) / 2 ? i : i + 1;
+      }
+    } else if (y < (r.top + r.bottom) / 2) {
+      return i;
+    }
+  }
+  return others.length;
+}
+
+function clearReorderIndicators(session) {
+  if (session.indicator) {
+    session.indicator.classList.remove("ss-drop-before");
+    session.indicator.classList.remove("ss-drop-after");
+    session.indicator = null;
+  }
+}
+
+function onReorderDragMove(ev) {
+  const s = ssReorderDrag;
+  if (!s || ev.pointerId !== s.pointerId) { return; }
+  if (!s.engaged) {
+    if (Math.hypot(ev.clientX - s.startX,
+        ev.clientY - s.startY) < SS_REORDER_DRAG_PX) {
+      return;
+    }
+    s.engaged = true;
+    s.item.classList.add("ss-drag-item");
+    document.body.classList.add("ss-reorder-dragging");
+  }
+  ev.preventDefault();
+  const items = ssReorderItems(s.container, s.selector);
+  const others = items.filter(function (el) {
+    return el !== s.item;
+  });
+  if (!others.length) { return; }
+  const idx = reorderDragIndex(others, ev.clientX,
+    ev.clientY, s.axis);
+  clearReorderIndicators(s);
+  if (idx >= others.length) {
+    const last = others[others.length - 1];
+    if (s.container.lastElementChild !== s.item) {
+      s.container.appendChild(s.item);
+    }
+    last.classList.add("ss-drop-after");
+    s.indicator = last;
+  } else {
+    const ref = others[idx];
+    if (ref.previousElementSibling !== s.item) {
+      s.container.insertBefore(s.item, ref);
+    }
+    ref.classList.add("ss-drop-before");
+    s.indicator = ref;
+  }
+  const sc = typeof s.scrollEl === "function"
+    ? s.scrollEl() : s.scrollEl;
+  if (sc) {
+    const r = sc.getBoundingClientRect();
+    if (ev.clientY < r.top + 40 && sc.scrollTop > 0) {
+      sc.scrollTop -= 12;
+    } else if (ev.clientY > r.bottom - 40 &&
+        sc.scrollTop <
+          sc.scrollHeight - sc.clientHeight) {
+      sc.scrollTop += 12;
+    }
+  }
+}
+
+function finishReorderDrag(commit) {
+  const s = ssReorderDrag;
+  if (!s) { return; }
+  ssReorderDrag = null;
+  window.removeEventListener("pointermove",
+    onReorderDragMove);
+  window.removeEventListener("pointerup", onReorderDragUp);
+  window.removeEventListener("pointercancel",
+    onReorderDragCancel);
+  document.removeEventListener("keydown",
+    onReorderDragKeydown, true);
+  clearReorderIndicators(s);
+  s.item.classList.remove("ss-drag-item");
+  document.body.classList.remove("ss-reorder-dragging");
+  if (!s.engaged) { return; }
+  if (!commit) {
+    /* Restore the order the drag started from. */
+    s.items0.forEach(function (el) {
+      s.container.appendChild(el);
+    });
+    return;
+  }
+  const keys = ssReorderItems(s.container, s.selector)
+    .map(s.keyOf);
+  const changed = keys.length !== s.keys0.length ||
+    keys.some(function (k, i) { return k !== s.keys0[i]; });
+  if (changed) { s.onCommit(keys); }
+}
+
+function onReorderDragUp(ev) {
+  if (!ssReorderDrag ||
+      ev.pointerId !== ssReorderDrag.pointerId) {
+    return;
+  }
+  finishReorderDrag(true);
+}
+
+function onReorderDragCancel(ev) {
+  if (!ssReorderDrag ||
+      ev.pointerId !== ssReorderDrag.pointerId) {
+    return;
+  }
+  finishReorderDrag(false);
+}
+
+function onReorderDragKeydown(ev) {
+  if (ev.key === "Escape" && ssReorderDrag) {
+    ev.preventDefault();
+    finishReorderDrag(false);
+  }
+}
+
+/* The Shortcuts surface's order owner: write a dragged
+   order (the rendered rows' kind and target keys) into
+   state.shortcuts and persist it through the shortcuts
+   save. Entries whose targets exist nowhere render no
+   row and so cannot be dragged; they keep their slots,
+   and the dragged sequence fills the rendered entries'
+   slots in order, so a ghost entry can never be moved
+   or lost by a drag it was not part of. Returns true
+   when the order changed. */
+function reorderShortcutsTo(keys) {
+  const rendered = state.shortcuts.filter(function (e) {
+    return shortcutTarget(e).state !== "missing";
+  });
+  const byKey = {};
+  rendered.forEach(function (e) {
+    byKey[e.kind + "\n" + e.id] = e;
+  });
+  const seq = keys.map(function (k) { return byKey[k]; });
+  if (seq.length !== rendered.length ||
+      seq.some(function (e) { return !e; })) {
+    return false;
+  }
+  if (seq.every(function (e, i) {
+      return e === rendered[i];
+    })) {
+    return false;
+  }
+  let at = 0;
+  state.shortcuts = state.shortcuts.map(function (e) {
+    return shortcutTarget(e).state === "missing"
+      ? e : seq[at++];
+  });
+  persistShortcuts();
+  renderAll();
+  return true;
+}
+
+/* --------------------------------------------------------------------------
    v2.31: shortcuts (Evernote parity, phase 1 release 3)
 
    Evernote's model, from its own help pages and guides:
@@ -14583,6 +15029,31 @@ function buildShortcutRow(entry) {
   btn.appendChild(label);
   btn.addEventListener("click", function () {
     followShortcut(entry);
+  });
+  /* v2.42: the row's drag handle, ahead of the main
+     button. Dragging it reorders the Shortcuts list
+     through the shared helper and reorderShortcutsTo;
+     the main button's click and the menu button are
+     separate elements, so neither can start or be
+     mistaken for a drag. */
+  const dragBtn = document.createElement("button");
+  dragBtn.type = "button";
+  dragBtn.className = "nav-shortcut-drag ss-drag-handle";
+  dragBtn.setAttribute("aria-label",
+    "Drag to reorder shortcut " + target.label);
+  dragBtn.title = "Drag to reorder";
+  dragBtn.innerHTML = SS_DRAG_GRIP_ICON;
+  wrap.appendChild(dragBtn);
+  attachReorderDrag(dragBtn, wrap, {
+    itemSelector: ".nav-shortcut-row",
+    keyOf: function (el) {
+      return el.getAttribute("data-kind") + "\n" +
+        el.getAttribute("data-target");
+    },
+    scrollEl: function () {
+      return document.getElementById("sidebar");
+    },
+    onCommit: function (keys) { reorderShortcutsTo(keys); }
   });
   wrap.appendChild(btn);
   const menuBtn = document.createElement("button");
@@ -15217,6 +15688,84 @@ function homeMoveWidget(type, dir) {
   renderAll();
 }
 
+/* v2.42: the Home surface's drag order owner. A widget
+   drag on the Home page commits the grid's type order
+   here; the layout entries themselves (the Filtered
+   Notes widget's search binding above all) are carried
+   across by identity, and the write is the same home
+   layout write the Move buttons make, so dragging and
+   the buttons can never disagree. Returns true when
+   the order changed. */
+function applyHomeWidgetDragOrder(types) {
+  const current = state.home.widgets;
+  if (types.length !== current.length) { return false; }
+  const byType = {};
+  current.forEach(function (e) { byType[e.type] = e; });
+  const seq = types.map(function (t) { return byType[t]; });
+  if (seq.some(function (e) { return !e; })) {
+    return false;
+  }
+  if (seq.every(function (e, i) {
+      return e === current[i];
+    })) {
+    return false;
+  }
+  state.home.widgets = seq;
+  persistHome();
+  renderAll();
+  return true;
+}
+
+/* v2.42: while Customize is open, every widget on the
+   Home page carries a drag handle in its header, and
+   dragging it reorders the widgets on the page itself
+   (Chris's own ask for this release). Outside Customize
+   there are no handles and nothing on the page is
+   draggable, so using the Tasks widget or the Scratch
+   Pad can never start a drag. renderHome calls this
+   after the grid is built; a widget the render reused
+   (the focused Scratch Pad) keeps its handle and its
+   one binding. */
+function syncHomeWidgetDragHandles() {
+  const grid = document.getElementById("homeGrid");
+  if (!grid) { return; }
+  Array.prototype.forEach.call(
+    grid.querySelectorAll(".home-widget"), function (widget) {
+      let handle = widget.querySelector(".home-widget-drag");
+      if (!homeCustomizeOpen) {
+        if (handle) { handle.remove(); }
+        return;
+      }
+      const head = widget.querySelector(".home-widget-head");
+      if (!head) { return; }
+      if (!handle) {
+        handle = document.createElement("button");
+        handle.type = "button";
+        handle.className = "home-widget-drag ss-drag-handle";
+        const type = widget.getAttribute("data-widget-type");
+        handle.setAttribute("aria-label",
+          "Drag to reorder " +
+            (HOME_WIDGET_LABELS[type] || "widget"));
+        handle.title = "Drag to reorder";
+        handle.innerHTML = SS_DRAG_GRIP_ICON;
+        head.insertBefore(handle, head.firstChild);
+      }
+      attachReorderDrag(handle, widget, {
+        itemSelector: ".home-widget",
+        axis: "grid",
+        keyOf: function (el) {
+          return el.getAttribute("data-widget-type");
+        },
+        scrollEl: function () {
+          return grid.closest(".home-scroll");
+        },
+        onCommit: function (keys) {
+          applyHomeWidgetDragOrder(keys);
+        }
+      });
+    });
+}
+
 /* Session only Home view state: whether the Customize
    panel is open, and which of the Recent widget's two
    lists is showing. Neither is a stored fact. */
@@ -15705,6 +16254,11 @@ function renderHomeCustomize() {
   head.className = "home-cust-head";
   head.textContent = "Choose and order your widgets";
   panel.appendChild(head);
+  const hint = document.createElement("div");
+  hint.className = "home-cust-hint";
+  hint.textContent = "Drag a widget by its handle on the " +
+    "page to reorder it, or use the Move buttons here.";
+  panel.appendChild(hint);
   state.home.widgets.forEach(function (entry) {
     panel.appendChild(homeCustomizeRow(entry.type, true));
   });
@@ -15808,6 +16362,9 @@ function renderHome() {
     empty.classList.toggle("hidden",
       state.home.widgets.length > 0);
   }
+  /* v2.42: the widgets' drag handles follow the
+     Customize mode (see syncHomeWidgetDragHandles). */
+  syncHomeWidgetDragHandles();
 }
 
 /* --------------------------------------------------------------------------
@@ -16691,6 +17248,138 @@ async function duplicateNote(source) {
   return copy;
 }
 
+/* --------------------------------------------------------------------------
+   v2.42: the merge order dialog. Through v2.41 the merge
+   ran behind a plain confirm and always combined in
+   list order. Evernote's merge opens a pop up listing
+   the notes to be merged, draggable into a chosen
+   order, the new note taking the title of the note
+   listed at the top. This dialog is that shape, order
+   only: the Advanced options Evernote offers beside
+   the order (keep a copy of the originals, divider and
+   title toggles) stay unbuilt, a named deviation, and
+   everything past the order (title headings, dividers,
+   tag union, attachment true copies, originals to
+   Trash) is the merge machinery it always was.
+
+   openMergeOrderDialog resolves with the chosen order
+   (an array of the same note objects), or null when the
+   dialog is cancelled: Cancel, a click on the backdrop,
+   or Escape. While the dialog is open nothing in state
+   has changed; the rows' order lives in the DOM and in
+   mergeOrderPending.notes, and Merge reads the DOM's
+   final order, so what the user sees is what merges.
+   -------------------------------------------------------------------------- */
+let mergeOrderPending = null;   /* { notes, resolve } */
+
+function openMergeOrderDialog(notes) {
+  return new Promise(function (resolve) {
+    const modal = document.getElementById("mergeOrderModal");
+    const list = document.getElementById("mergeOrderList");
+    if (!modal || !list) {
+      /* Without the dialog there is no order to choose;
+         the list order the caller holds is the merge. */
+      resolve(notes.slice());
+      return;
+    }
+    mergeOrderPending = { notes: notes.slice(),
+      resolve: resolve };
+    renderMergeOrderRows();
+    modal.classList.remove("hidden");
+    const firstHandle = list.querySelector(".merge-order-drag");
+    if (firstHandle) { firstHandle.focus(); }
+  });
+}
+
+function renderMergeOrderRows() {
+  const list = document.getElementById("mergeOrderList");
+  const pending = mergeOrderPending;
+  if (!list || !pending) { return; }
+  list.innerHTML = "";
+  pending.notes.forEach(function (note) {
+    const row = document.createElement("div");
+    row.className = "merge-order-row";
+    row.setAttribute("data-note-id", note.id);
+    const handle = document.createElement("button");
+    handle.type = "button";
+    handle.className = "merge-order-drag ss-drag-handle";
+    handle.setAttribute("aria-label",
+      "Drag to reorder " + (note.title || "Untitled note"));
+    handle.title = "Drag to reorder";
+    handle.innerHTML = SS_DRAG_GRIP_ICON;
+    row.appendChild(handle);
+    const text = document.createElement("div");
+    text.className = "merge-order-text";
+    const title = document.createElement("span");
+    title.className = "merge-order-title";
+    title.textContent = note.title || "Untitled note";
+    text.appendChild(title);
+    const nb = document.createElement("span");
+    nb.className = "merge-order-nb";
+    nb.textContent = notebookNameForSlug(note.notebook);
+    text.appendChild(nb);
+    row.appendChild(text);
+    list.appendChild(row);
+    attachReorderDrag(handle, row, {
+      itemSelector: ".merge-order-row",
+      keyOf: function (el) {
+        return el.getAttribute("data-note-id");
+      },
+      scrollEl: list,
+      onCommit: function (keys) {
+        if (!mergeOrderPending) { return; }
+        const byId = {};
+        mergeOrderPending.notes.forEach(function (n) {
+          byId[n.id] = n;
+        });
+        const seq = keys.map(function (k) {
+          return byId[k];
+        });
+        if (seq.some(function (n) { return !n; })) {
+          return;
+        }
+        mergeOrderPending.notes = seq;
+        updateMergeOrderResultTitle();
+      }
+    });
+  });
+  updateMergeOrderResultTitle();
+}
+
+/* The result line names the title the merged note will
+   take: the first row's, updated as the order changes. */
+function updateMergeOrderResultTitle() {
+  const el = document.getElementById("mergeOrderResultTitle");
+  const pending = mergeOrderPending;
+  if (!el || !pending || !pending.notes.length) { return; }
+  el.textContent = pending.notes[0].title || "Untitled note";
+}
+
+function closeMergeOrderDialog(ordered) {
+  const pending = mergeOrderPending;
+  if (!pending) { return; }
+  mergeOrderPending = null;
+  const modal = document.getElementById("mergeOrderModal");
+  if (modal) { modal.classList.add("hidden"); }
+  pending.resolve(ordered || null);
+}
+
+function confirmMergeOrderDialog() {
+  const pending = mergeOrderPending;
+  if (!pending) { return; }
+  const list = document.getElementById("mergeOrderList");
+  const byId = {};
+  pending.notes.forEach(function (n) { byId[n.id] = n; });
+  const ordered = Array.prototype.map.call(
+    list.querySelectorAll(".merge-order-row"),
+    function (r) {
+      return byId[r.getAttribute("data-note-id")];
+    }).filter(function (n) { return !!n; });
+  closeMergeOrderDialog(
+    ordered.length === pending.notes.length
+      ? ordered : pending.notes.slice());
+}
+
 /* Merge the live list's checked notes into one new note (see
    the section header). Validation and every fallible step run
    BEFORE anything in state changes: the selection resolves
@@ -16722,12 +17411,13 @@ async function mergeSelectedNotes() {
       "Nothing was changed.", true);
     return null;
   }
-  /* The merge order is the list's current order: what
+  /* The merge starts in the list's current order: what
      visibleNotes shows, filtered to the selection. A selected
      note the current filters hide keeps its place at the end,
      in selection order, rather than dropping out of the merge
-     it was checked for. */
-  const chosen = visibleNotes().filter(function (n) {
+     it was checked for. The order dialog below may then
+     reorder the merge; its choice replaces this order. */
+  let chosen = visibleNotes().filter(function (n) {
     return ids.indexOf(n.id) >= 0;
   });
   sources.forEach(function (n) {
@@ -16745,11 +17435,15 @@ async function mergeSelectedNotes() {
     }
   }
   chosen.forEach(function (note) { collectIfOpen(note); });
-  const ok = confirm("Merge " + chosen.length + " notes into one " +
-    "new note? The merged note takes the first note's title (\"" +
-    (chosen[0].title || "Untitled note") + "\") and the original " +
-    "notes are moved to Trash, where they can be restored.");
-  if (!ok) { return null; }
+  /* v2.42: the plain confirm is the merge order dialog
+     now (Evernote's shape): it lists the chosen notes in
+     this order, the user may drag them into a new one,
+     and Merge runs in the order it returns. Cancelling
+     it leaves the notes, the trash, and the selection
+     exactly as they were, as the old confirm's No did. */
+  const ordered = await openMergeOrderDialog(chosen);
+  if (!ordered) { return null; }
+  chosen = ordered;
   /* One copy pass per source into one shared map, so every
      placeholder in every section can be remapped below; the
      same records list carries all of them. */
@@ -40437,6 +41131,30 @@ function wireEvents() {
   });
   document.getElementById("templateModal").addEventListener("click", function (ev) {
     if (ev.target === ev.currentTarget) { closeTemplateGallery(); }
+  });
+  /* v2.42: the merge order dialog's buttons, backdrop,
+     and Escape. Merge confirms the order the rows stand
+     in; everything else cancels, and a cancel changes
+     nothing. Escape is the dialog's own only while it is
+     the open surface (an engaged row drag takes Escape
+     first, in the drag helper's capture listener, and
+     merely ends the drag). */
+  document.getElementById("mergeOrderConfirmBtn").addEventListener("click", function () {
+    confirmMergeOrderDialog();
+  });
+  document.getElementById("mergeOrderCancelBtn").addEventListener("click", function () {
+    closeMergeOrderDialog(null);
+  });
+  document.getElementById("mergeOrderModal").addEventListener("click", function (ev) {
+    if (ev.target === ev.currentTarget) { closeMergeOrderDialog(null); }
+  });
+  document.addEventListener("keydown", function (ev) {
+    if (ev.key !== "Escape") { return; }
+    const modal = document.getElementById("mergeOrderModal");
+    if (modal && !modal.classList.contains("hidden") &&
+        !ssReorderDrag) {
+      closeMergeOrderDialog(null);
+    }
   });
   /* v2.38: the gallery entry menu's Rename and Delete,
      the saved search menu's handlers in shape: resolve
