@@ -40,10 +40,42 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-28-SSN-V2350
-  Version: 2.35.0
+  BUILD STAMP: 2026-10-28-SSN-V2360
+  Version: 2.36.0
 
   Revision history:
+    v2.36.0 2026-10-28 Backlinks, the first release of the
+                      Evernote parity program's phase 3.
+                      A note other notes link to now shows
+                      a Backlinks bar at the top of the
+                      editor, where Evernote puts its own
+                      Backlinks button: a count of the
+                      linking notes, and opening it lists
+                      each source with its title and a
+                      short snippet of the text around its
+                      link; clicking an entry opens the
+                      source note. The count counts source
+                      notes, not links. The graph behind
+                      the bar is derived in memory from the
+                      saved bodies themselves: each loaded
+                      note's outgoing ssnote: edges are
+                      extracted once per body version,
+                      catalog shells are filled in by the
+                      existing per note body load working
+                      in the background while a note is
+                      open (opening the app itself still
+                      downloads no bodies, as the catalog
+                      fast path promises), and sources are
+                      judged live at read time, so an edit,
+                      a trash, a restore, or a sync arrival
+                      is reflected on the next render with
+                      nothing written to Drive for the
+                      graph. Sources are notes only (task
+                      description links create no backlink,
+                      as in Evernote), a self link never
+                      lists its own note, and the bar hides
+                      entirely when nothing links to the
+                      open note.
     v2.35.0 2026-10-28 Note reminders, the third and
                       final release of the Evernote
                       parity program's phase 2 (Home,
@@ -3627,6 +3659,51 @@ body.dark .modal:hover::-webkit-scrollbar-thumb{
   border-color:var(--secondary);outline:none;
   box-shadow:0 0 0 3px rgba(87,167,115,.22);
 }
+/* v2.36: the backlinks bar, at the top of the note where
+   Evernote puts its Backlinks button. The toggle reads as a
+   quiet pill (surface, border, muted label, a count badge in
+   the soft surface tone); the list under it is a plain stack
+   of entries, each a full width button with the linking
+   note's title over a muted snippet of the text around its
+   link. Every color is a theme variable, so the bar follows
+   dark and light like the rest of the editor chrome. */
+.backlinks-bar{margin-bottom:12px;}
+#backlinksToggle{
+  display:inline-flex;align-items:center;gap:7px;
+  padding:5px 10px;border:1px solid var(--border);
+  border-radius:999px;background:var(--surface);
+  color:var(--muted);font-size:13px;font-weight:600;
+  cursor:pointer;
+}
+#backlinksToggle:hover{color:var(--text);border-color:var(--secondary);}
+#backlinksToggle svg{flex:0 0 auto;}
+.backlinks-count{
+  background:var(--soft);color:var(--primary);
+  border-radius:999px;padding:0 7px;font-size:12px;
+  font-weight:700;line-height:18px;
+}
+.backlinks-list{
+  margin-top:8px;border:1px solid var(--border);
+  border-radius:var(--radius-card);background:var(--surface);
+  overflow:hidden;
+}
+.backlink-entry{
+  display:block;width:100%;text-align:left;
+  padding:8px 12px;background:transparent;border:none;
+  border-bottom:1px solid var(--border);
+  color:var(--text);cursor:pointer;
+}
+.backlink-entry:last-child{border-bottom:none;}
+.backlink-entry:hover{background:var(--bg);}
+.backlink-entry-title{
+  display:block;font-size:14px;font-weight:600;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.backlink-entry-snippet{
+  display:block;font-size:12.5px;color:var(--muted);
+  margin-top:1px;white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis;
+}
 /* v2.2: the .pin-toggle rule that styled the editor's Pinned
    checkbox lived here; the checkbox is gone (pinning moved to the
    notes list toolbar menu), so the rule went with it. */
@@ -6335,6 +6412,21 @@ body.dark .version-date{color:var(--accent);}
                  the sidebar, beside the Synced pill. -->
           </div>
 
+          <!-- v2.36: the backlinks bar. Evernote shows a
+               Backlinks button at the top of a note that other
+               notes link to, with the count of linking notes;
+               this bar is that button plus its list, rendered
+               by renderBacklinks from the in memory link graph
+               (see the v2.36 section in the script). It is a
+               sibling of #noteBody inside .editor-inner, so it
+               can never be saved into a note, and it stays
+               hidden until the open note has at least one
+               backlink. -->
+          <div id="backlinksBar" class="backlinks-bar hidden">
+            <button type="button" id="backlinksToggle" aria-expanded="false" aria-controls="backlinksList" title="Notes that link to this note"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M10 14a5 5 0 0 0 7.1 0l2.8-2.8a5 5 0 0 0-7-7.1L11.4 5.6"/><path d="M14 10a5 5 0 0 0-7.1 0L4.1 12.8a5 5 0 0 0 7 7.1l1.5-1.5"/></svg><span class="backlinks-label">Backlinks</span><span id="backlinksCount" class="backlinks-count">0</span><span class="backlinks-caret" aria-hidden="true"> &#9662;</span></button>
+            <div id="backlinksList" class="backlinks-list hidden" role="list" aria-label="Notes linking to this note"></div>
+          </div>
+
           <!-- Formatting toolbar. v1.3 restyled it into labeled groups
                modeled on a modern editor bar: an Insert menu, a text
                style dropdown, font family and size pickers, text and
@@ -7412,8 +7504,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-28-SSN-V2350";
-const APP_VERSION = "2.35.0";
+const APP_BUILD = "2026-10-28-SSN-V2360";
+const APP_VERSION = "2.36.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -11581,6 +11673,12 @@ async function syncNow(showToast) {
     } finally {
       syncOpenNoteRefresh = null;
     }
+    /* v2.36: the auto sync editor guard can let renderEditor
+       return early when the OPEN note did not change, even
+       when the sync rewrote a note that links to it; sweep
+       the link graph once more here so the open note's
+       backlinks bar follows arrivals either way. */
+    refreshBacklinksPanel();
     refreshSyncPill();
     if (showToast) { toast("Synced with " + storageDisplayName() + "."); }
   } catch (err) {
@@ -18568,6 +18666,12 @@ function renderNoteList() {
       "No notes here yet. Press New Note to write your first one.";
     listEl.appendChild(noNotes);
   }
+  /* v2.36: nearly every change to the store (a save landing,
+     a trash or restore, a rename, a delete) re-renders this
+     list, so it is the honest place to keep the open note's
+     backlinks bar current with it; the panel refresh is
+     signature guarded and leaves a settled bar untouched. */
+  refreshBacklinksPanel();
 }
 
 /* --------------------------------------------------------------------------
@@ -21156,6 +21260,14 @@ function renderEditor() {
   /* v2.5: the notebook link's locked state was set by
      refreshNotebookLink above (it replaced the old picker's
      disabled line here). */
+  /* v2.36: the backlinks bar follows the open note. It
+     renders from the link graph on every editor render of a
+     loaded note, and its own background fills (shell body
+     loads landing) re-render it when its entries change;
+     see the v2.36 section. The early returns above (no note,
+     Things page, shell) hide #editorWrap, and the bar with
+     it. */
+  renderBacklinks();
 }
 renderEditor._forId = null;
 
@@ -24061,6 +24173,279 @@ function followNoteLink(noteId) {
     return;
   }
   toast("That note no longer exists.", true);
+}
+
+/* ----- v2.36.0: backlinks ------------------------------------
+   Evernote's model: a backlink is created automatically
+   whenever a note contains an internal link to another note.
+   The target note shows a Backlinks button at the top of the
+   note with the count of the notes linking to it; opening it
+   lists those notes, and clicking one opens it. (In Evernote
+   this is a paid tier feature; SnakeScale has no tiers, so it
+   is simply here.) The count counts source NOTES, not links:
+   a note linking twice still appears once.
+
+   Here the graph is derived from the bodies themselves. A
+   note link is an ssnote: anchor in a saved body, so a note's
+   outgoing edges are extracted from its body string
+   (extractNoteLinks) and cached per source note
+   (backlinkGraphBySource), each scan stamped with the exact
+   body string it read (backlinkScannedBody). Any path that
+   changes a body (an edit's save, a sync arrival, a conflict
+   adoption) replaces the note object's body, so the next
+   sweep sees the stamp mismatch and rescans just that note;
+   no save or sync hook has to know the graph exists. Sources
+   are judged live at read time (backlinkEntriesFor reads
+   state.notes only), so trashing, restoring, archiving, or
+   deleting a source is correct on the next render with no
+   graph surgery, and a self link never lists its own note.
+
+   Catalog shells carry no body, so a fresh session cannot
+   know a shell's edges. While a note is open,
+   refreshBacklinkGraph kicks the existing per note load
+   (ensureNoteBodyLoaded) for every live shell once, and
+   each landing rescans that note and
+   re-renders the open note's bar if its entries changed, so
+   the panel fills in behind the open note and never blocks
+   it. The graph is memory only: nothing about backlinks is
+   written to Drive, because it can always be rebuilt from
+   the bodies that are already there.
+
+   Two deliberate choices, stated plainly. Sources are NOTES
+   only: task descriptions can carry ssnote: anchors (v2.28),
+   but Evernote's backlinks are notes linking to notes (its
+   tasks live inside notes and have no separate link class),
+   so a task description link creates no backlink here.
+   And each entry shows, under the source's title, a short
+   snippet of the text around the link: Evernote's own list
+   shows titles only, and the snippet is SnakeScale's one
+   addition, kept because a bare title cannot say why the
+   note links here. */
+
+const backlinkGraphBySource = new Map();
+const backlinkScannedBody = new Map();
+const backlinkLoadKicked = new Set();
+let backlinksOpen = false;
+let backlinksForId = null;
+let backlinksRenderedSig = "";
+
+/* One body's outgoing note links: [{ targetId, snippet }],
+   unique per target, the FIRST link to a target supplying
+   the snippet. The parse is the app's own detached div
+   pattern (htmlToText); a body with no ssnote: text at all
+   costs one indexOf and no parse. */
+function extractNoteLinks(bodyHtml) {
+  const out = [];
+  if (!bodyHtml || bodyHtml.indexOf(SSNOTE_HREF_PREFIX) < 0) {
+    return out;
+  }
+  const host = document.createElement("div");
+  host.innerHTML = bodyHtml;
+  const seen = new Set();
+  host.querySelectorAll("a").forEach(function (anchor) {
+    const targetId = noteLinkIdOf(anchor);
+    if (!targetId || seen.has(targetId)) { return; }
+    seen.add(targetId);
+    out.push({ targetId: targetId,
+      snippet: backlinkSnippetAround(anchor) });
+  });
+  return out;
+}
+
+/* The text around one link, from its block: up to about 45
+   characters on each side of the link's own words, cut with
+   a plain "..." where the block runs longer. Whitespace is
+   collapsed the way htmlToText collapses it, so the snippet
+   reads as the sentence it was cut from. When the link's
+   words cannot be found in the block text (a face whose
+   label differs from its anchor text), the block's opening
+   stands in. */
+function backlinkSnippetAround(anchor) {
+  const blockTags = { P: 1, DIV: 1, LI: 1, BLOCKQUOTE: 1,
+    H1: 1, H2: 1, H3: 1, H4: 1, H5: 1, H6: 1, TD: 1, PRE: 1 };
+  let block = anchor;
+  while (block.parentElement && !blockTags[block.tagName]) {
+    block = block.parentElement;
+  }
+  const text = (block.textContent || "")
+    .replace(/\s+/g, " ").trim();
+  const words = (anchor.textContent || "")
+    .replace(/\s+/g, " ").trim();
+  if (!text) { return ""; }
+  const at = words ? text.indexOf(words) : -1;
+  if (at < 0) {
+    return text.length > 90 ? text.slice(0, 90) + "..." : text;
+  }
+  const from = Math.max(0, at - 45);
+  const to = Math.min(text.length, at + words.length + 45);
+  return (from > 0 ? "..." : "") + text.slice(from, to) +
+    (to < text.length ? "..." : "");
+}
+
+/* Fold one note's current body into the graph, unless the
+   stamp says this exact body was already folded. Shells are
+   skipped: there is no body to read until the load lands. */
+function scanNoteIntoLinkGraph(note) {
+  if (!note || note.bodyLoaded === false) { return; }
+  const body = note.body || "";
+  if (backlinkScannedBody.get(note.id) === body) { return; }
+  backlinkScannedBody.set(note.id, body);
+  const targets = new Map();
+  extractNoteLinks(body).forEach(function (link) {
+    targets.set(link.targetId, link.snippet);
+  });
+  backlinkGraphBySource.set(note.id, targets);
+}
+
+/* Bring the graph up to date with the live notes as they
+   stand: rescan every loaded note whose body moved since
+   its scan, and start the body load of every live shell
+   that has not been started for the graph yet. Each load
+   that lands rescans its note (re-read from state by id,
+   since a load can replace the note object) and re-renders
+   the open note's bar when its entries changed. */
+function refreshBacklinkGraph() {
+  /* The background loads are gated on a note being open.
+     The backlinks bar only exists in the editor, and the
+     catalog fast path (v2.20) promises that opening the
+     app downloads no note bodies at all: a boot, and any
+     list browsing with nothing open, scans the bodies
+     already in memory and loads nothing. Opening a note
+     lifts the gate, so the open note's panel fills in
+     behind it while the library's other bodies load once,
+     in the background; a landed body stays loaded for the
+     session, and the fingerprint scan keeps later sweeps
+     free. */
+  const gateOpen = !!(state.selectedId && state.notes.some(
+    function (n) { return n.id === state.selectedId; }));
+  state.notes.forEach(function (note) {
+    if (note.bodyLoaded === false) {
+      if (!gateOpen) { return; }
+      if (backlinkLoadKicked.has(note.id)) { return; }
+      backlinkLoadKicked.add(note.id);
+      const kickedId = note.id;
+      ensureNoteBodyLoaded(note).then(function () {
+        backlinkLoadKicked.delete(kickedId);
+        const fresh = state.notes.find(function (n) {
+          return n.id === kickedId;
+        });
+        if (!fresh || fresh.bodyLoaded === false) { return; }
+        scanNoteIntoLinkGraph(fresh);
+        refreshBacklinksPanel();
+      });
+      return;
+    }
+    scanNoteIntoLinkGraph(note);
+  });
+}
+
+/* The open note's backlinks as the panel shows them: one
+   entry per LIVE source note linking to it, the note itself
+   excluded, sorted by the source's current title (a rename
+   is just the note object's title, read fresh here, so
+   entries always speak in current names). */
+function backlinkEntriesFor(noteId) {
+  const entries = [];
+  if (!noteId) { return entries; }
+  state.notes.forEach(function (src) {
+    if (src.id === noteId) { return; }
+    const targets = backlinkGraphBySource.get(src.id);
+    if (targets && targets.has(noteId)) {
+      entries.push({ sourceId: src.id,
+        title: src.title || "Untitled note",
+        snippet: targets.get(noteId) || "" });
+    }
+  });
+  entries.sort(function (a, b) {
+    const fa = a.title.toLowerCase(), fb = b.title.toLowerCase();
+    if (fa !== fb) { return fa < fb ? -1 : 1; }
+    if (a.title !== b.title) { return a.title < b.title ? -1 : 1; }
+    return a.sourceId < b.sourceId ? -1 :
+      (a.sourceId > b.sourceId ? 1 : 0);
+  });
+  return entries;
+}
+
+/* What the bar would show for a note, as one string: the
+   refresh paths compare it against what is on screen and
+   leave the DOM alone when nothing moved. */
+function backlinkPanelSignature(note) {
+  if (!note) { return ""; }
+  return note.id + "|" + backlinkEntriesFor(note.id)
+    .map(function (e) { return e.sourceId + ":" + e.title; })
+    .join(",");
+}
+
+/* Render the open note's backlinks bar (the #backlinksBar
+   furniture in .editor-inner). Called at the end of every
+   editor render of a loaded note; the graph sweep runs
+   first, so a body that changed since its last scan is
+   folded in before entries are read. The bar hides entirely
+   when the count is zero, like Evernote's button, which
+   only exists on a note something links to. */
+function renderBacklinks() {
+  const bar = document.getElementById("backlinksBar");
+  if (!bar) { return; }
+  refreshBacklinkGraph();
+  const note = currentNote();
+  if (!note) {
+    bar.classList.add("hidden");
+    backlinksForId = null;
+    backlinksRenderedSig = "";
+    return;
+  }
+  if (backlinksForId !== note.id) {
+    backlinksForId = note.id;
+    backlinksOpen = false;
+  }
+  const entries = backlinkEntriesFor(note.id);
+  backlinksRenderedSig = backlinkPanelSignature(note);
+  if (!entries.length) {
+    bar.classList.add("hidden");
+    return;
+  }
+  bar.classList.remove("hidden");
+  document.getElementById("backlinksCount").textContent =
+    String(entries.length);
+  const toggle = document.getElementById("backlinksToggle");
+  toggle.setAttribute("aria-expanded",
+    backlinksOpen ? "true" : "false");
+  const list = document.getElementById("backlinksList");
+  list.classList.toggle("hidden", !backlinksOpen);
+  list.innerHTML = "";
+  entries.forEach(function (entry) {
+    const item = document.createElement("button");
+    item.type = "button";
+    item.className = "backlink-entry";
+    item.setAttribute("role", "listitem");
+    item.setAttribute("data-source-id", entry.sourceId);
+    const title = document.createElement("span");
+    title.className = "backlink-entry-title";
+    title.textContent = entry.title;
+    item.appendChild(title);
+    if (entry.snippet) {
+      const snip = document.createElement("span");
+      snip.className = "backlink-entry-snippet";
+      snip.textContent = entry.snippet;
+      item.appendChild(snip);
+    }
+    item.addEventListener("click", function () {
+      followNoteLink(entry.sourceId);
+    });
+    list.appendChild(item);
+  });
+}
+
+/* The refresh other renders call (the list render, a sync's
+   tail): sweep the graph, then re-render the bar only when
+   what it would show actually changed, so a keystroke of
+   list churn never rebuilds a settled bar. */
+function refreshBacklinksPanel() {
+  refreshBacklinkGraph();
+  if (backlinkPanelSignature(currentNote()) !==
+      backlinksRenderedSig) {
+    renderBacklinks();
+  }
 }
 
 /* ----- v2.28.0: task links (sstask:) ------------------------------
@@ -37598,6 +37983,14 @@ function wireEvents() {
   document.getElementById("noteReminderBtn").addEventListener("click", function () {
     if (!state.selectedId) { return; }
     openNoteReminderPanel(state.selectedId);
+  });
+  /* v2.36: the backlinks bar's toggle folds and unfolds its
+     list; the entries' own clicks are wired per render (see
+     renderBacklinks), the way the notebook menu wires its
+     items per open. */
+  document.getElementById("backlinksToggle").addEventListener("click", function () {
+    backlinksOpen = !backlinksOpen;
+    renderBacklinks();
   });
   /* v2.35: the reminder panel's own controls. The quick
      choices only fill the fields; Save lands them. */
