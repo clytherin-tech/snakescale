@@ -40,10 +40,53 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-28-SSN-V2430
-  Version: 2.43.0
+  BUILD STAMP: 2026-10-28-SSN-V2440
+  Version: 2.44.0
 
   Revision history:
+    v2.44.0 2026-10-28 The tasks load speed fix, queued by
+                      Chris on 2026-10-28 after the
+                      diagnosis was verified in the code.
+                      The boot cache snapshot carried
+                      every store field except the tasks
+                      (v2.24's field was never plumbed
+                      in, while every parity field after
+                      it was), and loadAllFromRepo only
+                      lands state.tasks at the very end
+                      of the full Drive load, so the
+                      Tasks view and the Home Tasks and
+                      Calendar widgets started empty on
+                      every launch while the notes
+                      painted instantly from the cache.
+                      Tasks now ride the snapshot exactly
+                      like the other fields: the snapshot
+                      carries them, applying one restores
+                      them through the load's own
+                      sanitizer (malformed entries drop
+                      or default, a snapshot with no
+                      tasks field loads as an empty
+                      list), and the task mutation funnel
+                      makes the saveCache call it never
+                      made, so task changes refresh the
+                      snapshot like every other mutation.
+                      The painted tasks are display only
+                      until the real load lands: the
+                      writer stays unarmed and the
+                      reminder catch up stays on
+                      onTasksLoaded, the scheduler never
+                      fires from the painted copy, task
+                      mutations refuse until armed,
+                      asking for the task editor queues
+                      the open the way a notification
+                      click's open already queues, and
+                      the completion checkboxes, quick
+                      adds, and New Task button render
+                      disabled for the span. When the
+                      load lands the Drive copy replaces
+                      the painted one through the ordinary
+                      renderAll, controls live. The load
+                      order itself is unchanged, and
+                      tasks.json's format with it.
     v2.43.0 2026-10-28 The Home upgrade, the second of the
                       two post phase 3 releases Chris
                       approved on 2026-10-28. Home gains
@@ -8300,8 +8343,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-28-SSN-V2430";
-const APP_VERSION = "2.43.0";
+const APP_BUILD = "2026-10-28-SSN-V2440";
+const APP_VERSION = "2.44.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -9289,6 +9332,14 @@ function cacheSnapshot() {
     /* v2.38: the custom templates ride it too, so a cache
        first paint can open the same gallery. */
     templates: state.templates,
+    /* v2.44: the tasks ride it as well, the field v2.24
+       never plumbed in, so a cache first paint shows the
+       same Tasks view and Home widgets the store load
+       will. Display only until that load lands: the
+       writer arms and the reminder catch up runs from
+       the real load alone (see the v2.44 gates in the
+       tasks section). */
+    tasks: state.tasks,
     notes: state.notes,
     trash: state.trash,
     archive: state.archive,
@@ -9321,6 +9372,15 @@ function applyCacheSnapshot(c) {
      list, exactly like an index.json written before
      v2.38 does. */
   state.templates = sanitizeTemplates(c.templates);
+  /* v2.44: snapshots written before tasks rode the cache
+     have no list; they load as an empty Tasks view,
+     exactly like an index.json written before v2.24
+     does. Present entries restore through the load's
+     own sanitizer, so a damaged entry is dropped or
+     defaulted here the same way it is from Drive. */
+  state.tasks = (Array.isArray(c.tasks) ? c.tasks : [])
+    .map(function (raw) { return sanitizeTask(raw); })
+    .filter(function (task) { return task !== null; });
   state.notes = c.notes || [];
   state.trash = c.trash || [];
   /* v1.5: caches written before archiving existed have no archive
@@ -11400,6 +11460,14 @@ function sortTasksForList(tasks) {
    task can already be due a reminder). */
 function afterTasksChanged() {
   saveTasks();
+  /* v2.44: and the local cache, the call every other
+     mutation path already makes. The tasks path never
+     made it, so before tasks rode the snapshot at all
+     this only looked harmless; now it is what keeps the
+     snapshot's tasks as fresh as its notes between
+     loads. saveCache's catalog half stays inert until
+     armed, exactly as on the other paths. */
+  saveCache();
   renderSidebar();
   if (state.view.kind === "tasks" || state.view.kind === "all" ||
       state.view.kind === "notebook") {
@@ -11421,6 +11489,8 @@ function afterTasksChanged() {
 }
 
 function createTask(fields) {
+  /* v2.44: the pre load gate (see toggleTaskComplete). */
+  if (!tasksArmed) { return null; }
   const now = new Date().toISOString();
   const task = sanitizeTask({
     id: newNoteId(),
@@ -11448,6 +11518,8 @@ function createTask(fields) {
 }
 
 function updateTask(id, patch) {
+  /* v2.44: the pre load gate (see toggleTaskComplete). */
+  if (!tasksArmed) { return null; }
   const task = findTaskById(id);
   if (!task) { return null; }
   ["title", "description", "descriptionFormat", "notebook",
@@ -11465,6 +11537,8 @@ function updateTask(id, patch) {
 }
 
 function deleteTask(id) {
+  /* v2.44: the pre load gate (see toggleTaskComplete). */
+  if (!tasksArmed) { return; }
   const at = state.tasks.findIndex(function (t) { return t.id === id; });
   if (at < 0) { return; }
   state.tasks.splice(at, 1);
@@ -11479,6 +11553,19 @@ function deleteTask(id) {
    stamps it completed; unchecking a completed task reopens it
    with its due date as it was. */
 function toggleTaskComplete(id) {
+  /* v2.44: the pre load gate, shared by every task
+     mutation below (toggle, create, update, delete, and
+     the editor's open). Until this session's real load
+     arms the tasks, state.tasks may be the cache paint's
+     display only copy: a mutation applied to it could
+     never be written (saveTasks refuses while unarmed)
+     and would be silently discarded when the load
+     replaces the list with the Drive copy. Refusing
+     here keeps the painted copy honest; the surfaces
+     render their controls disabled for the same span
+     (buildTaskRowEl, buildTaskCalEntryEl, the quick
+     adds), and the load's renderAll repaints them live. */
+  if (!tasksArmed) { return; }
   const task = findTaskById(id);
   if (!task) { return; }
   const now = new Date().toISOString();
@@ -21939,6 +22026,12 @@ function buildTaskRowEl(task, opts) {
   const box = document.createElement("input");
   box.type = "checkbox";
   box.checked = task.status === "completed";
+  /* v2.44: disabled while the tasks are the cache paint's
+     display only copy (the pre load gate in
+     toggleTaskComplete is the enforcement; this is its
+     visible face). The load's renderAll rebuilds the
+     rows enabled over the Drive copy. */
+  box.disabled = !tasksArmed;
   box.setAttribute("aria-label",
     (task.status === "completed" ? "Reopen task: " : "Complete task: ") +
     task.title);
@@ -22279,6 +22372,10 @@ function renderTasksView() {
   input.id = "taskQuickTitle";
   input.placeholder = "Add a task and press Enter";
   input.setAttribute("aria-label", "New task title");
+  /* v2.44: disabled until the real load arms the tasks
+     (see toggleTaskComplete's pre load gate); the
+     load's renderAll rebuilds it enabled. */
+  input.disabled = !tasksArmed;
   quick.appendChild(input);
   const select = document.createElement("select");
   select.id = "taskQuickNotebook";
@@ -22303,6 +22400,9 @@ function renderTasksView() {
   newBtn.className = "btn accent";
   newBtn.id = "taskNewBtn";
   newBtn.textContent = "New Task";
+  /* v2.44: disabled until the real load arms the tasks,
+     like the quick add beside it. */
+  newBtn.disabled = !tasksArmed;
   newBtn.addEventListener("click", function () {
     openTaskEditor(null, select.value || defaultTaskNotebook());
   });
@@ -22554,6 +22654,9 @@ function buildTaskCalEntryEl(task) {
   const box = document.createElement("input");
   box.type = "checkbox";
   box.checked = task.status === "completed";
+  /* v2.44: disabled until the real load arms the tasks,
+     the rows' own rule (see buildTaskRowEl). */
+  box.disabled = !tasksArmed;
   box.setAttribute("aria-label",
     (task.status === "completed" ? "Reopen task: " : "Complete task: ") +
     task.title);
@@ -22877,6 +22980,9 @@ function renderThingsView() {
   input.type = "text";
   input.id = "thingsQuickTitle";
   input.placeholder = "Add a task and press Enter";
+  /* v2.44: disabled until the real load arms the tasks,
+     the Tasks view quick add's own rule. */
+  input.disabled = !tasksArmed;
   input.setAttribute("aria-label",
     "New task title for " + name);
   quick.appendChild(input);
@@ -22955,6 +23061,17 @@ function fillTaskNotebookSelect(selected) {
 function openTaskEditor(taskId, presetNotebook) {
   const modal = document.getElementById("taskModal");
   if (!modal) { return; }
+  /* v2.44: the pre load gate (see toggleTaskComplete).
+     An existing task's open waits the way a notification
+     click's open already waits: queued here, and
+     onTasksLoaded opens it over the Drive copy when the
+     load lands. A create simply waits unopened; the
+     surfaces' New Task controls render disabled for the
+     same span. */
+  if (!tasksArmed) {
+    if (taskId) { queueTaskOpen(taskId); }
+    return;
+  }
   const task = taskId ? findTaskById(taskId) : null;
   taskEditorState = { id: task ? task.id : null, dirty: false };
   /* v2.28.0: a fresh editor starts with the @ popup
@@ -23785,6 +23902,16 @@ function readNoteReminderParamFromUrl() {
 }
 
 function checkTaskReminders() {
+  /* v2.44: never before this session's real load has
+     armed the tasks. Until then state.tasks can hold
+     the cache paint's display only copy, and firing
+     from it could notify for a task another device has
+     since completed or re stamp a moment the store has
+     already moved past. The gate costs nothing today:
+     before the cache carried tasks the list was simply
+     empty until this same moment. The boot catch up
+     still runs, from onTasksLoaded, after the load. */
+  if (!tasksArmed) { return; }
   if (!state.taskReminders) { return; }
   if (notificationPermission() !== "granted") { return; }
   const now = Date.now();
