@@ -40,10 +40,85 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-28-SSN-V2390
-  Version: 2.39.0
+  BUILD STAMP: 2026-10-28-SSN-V2400
+  Version: 2.40.0
 
   Revision history:
+    v2.40.0 2026-10-28 Code block polish, the fifth release
+                      of the Evernote parity program's
+                      phase 3, modeled on Evernote's code
+                      block (its official keyboard
+                      shortcuts page lists Insert code
+                      block; the block itself is plain
+                      text, monospace, on a shaded,
+                      bordered surface). Evernote has no
+                      syntax highlighting in code blocks,
+                      and this release adds none,
+                      deliberately: highlighted spans
+                      would be saved markup fighting the
+                      save funnel, for a feature the model
+                      product has never shipped. A code
+                      block here is any pre in the body:
+                      the Insert menu's pre.ss-code-block
+                      and the Aa style menu's bare pre
+                      are two doors to the same block, and
+                      the polish is behavior, so notes
+                      saved by earlier builds edit exactly
+                      like new ones and keep their stored
+                      bytes until they are edited. Enter
+                      inside a block is now the app's own
+                      edit rather than the browser's
+                      contenteditable split, whose stored
+                      shape varies by engine: a plain
+                      newline at the caret, a selection
+                      replaced by one newline, and from
+                      the block's empty last line an exit
+                      onto the paragraph after the block
+                      (created when the block ends the
+                      note); a wholly empty block's Enter
+                      removes it and leaves a paragraph,
+                      the checklist exit's shape. Tab and
+                      Shift+Tab inside a block indent and
+                      outdent the touched text lines (one
+                      tab character the unit; outdent
+                      also lifts up to two leading spaces
+                      from a space indented line), decided
+                      ahead of the body's other Tab paths,
+                      which are unchanged everywhere else.
+                      A paste whose caret sits in a block
+                      inserts the clipboard's plain text
+                      only and opens no Paste options
+                      popup. The classed block gains its
+                      own stylesheet rule (no wrap, tab
+                      stops at four) over the shared pre
+                      rule. Interplay, each proven by the
+                      new CP checks: Clear formatting
+                      unwraps a cleared block's code
+                      element, so the cleared text is
+                      truly plain; the table of contents
+                      never lists a heading nested inside
+                      a pre; the backlink scanner ignores
+                      anchors inside a pre (through
+                      v2.39.0 it counted them); and search
+                      and the catalog checklist facts read
+                      code as the ordinary text it is.
+                      Named deviations from Evernote: no
+                      three backtick auto format and no
+                      Insert code block keyboard shortcut
+                      (the Insert menu is the one route,
+                      as before); Enter on the empty last
+                      line exits the block, where
+                      Evernote's help documents no Enter
+                      exit (its users arrow out of the
+                      block, which works here too wherever
+                      a block follows); the first Enter,
+                      Tab, or paste edit in a block
+                      flattens any inline markup inside it
+                      to the plain text it displays, where
+                      Evernote's block never holds markup
+                      to flatten; and Shift+Tab outdents
+                      space indented lines too, past
+                      Evernote's tab based indent model.
     v2.39.0 2026-10-28 Duplicate note and Merge notes, the
                       fourth release of the Evernote parity
                       program's phase 3, modeled on
@@ -4766,6 +4841,17 @@ body.dark #conflictReloadBtn{background:#574512;color:#FFE1A8;border-color:#A887
    Insert menu's code block wraps one); it must not pick up the inline
    code chip styling below. */
 #noteBody pre code{font:inherit;background:none;border:none;padding:0;}
+/* v2.40.0: the Insert menu's code block (pre.ss-code-block) is its
+   own surface on top of the shared pre rule above: an explicit
+   no wrap pre (long lines scroll, which the shared rule's
+   overflow already provides for) and tab stops at four, so the
+   tab characters the code block line editing inserts read as
+   code indentation rather than the browser's eight wide
+   default. Everything else (the soft surface, border, padding,
+   monospace stack) is inherited from the shared rule, so the
+   classed block and the Aa style menu's bare pre read as the
+   same block in both themes, as they always have. */
+#noteBody pre.ss-code-block{white-space:pre;tab-size:4;}
 /* v2.1.0: inline code (class ss-inline-code, from the Insert menu):
    monospace in a soft chip so it stands out inside a sentence. */
 #noteBody code.ss-inline-code{
@@ -7820,8 +7906,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-28-SSN-V2390";
-const APP_VERSION = "2.39.0";
+const APP_BUILD = "2026-10-28-SSN-V2400";
+const APP_VERSION = "2.40.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -25626,6 +25712,13 @@ function extractNoteLinks(bodyHtml) {
   host.innerHTML = bodyHtml;
   const seen = new Set();
   host.querySelectorAll("a").forEach(function (anchor) {
+    /* v2.40.0: an anchor inside a code block (any pre) is
+       code text that happens to be an element, not a link
+       the note makes, so it creates no backlink. Through
+       this release such an anchor (one pasted into a pre,
+       or made by linking selected code text) WAS counted;
+       the fix is deliberate. */
+    if (anchor.closest && anchor.closest("pre")) { return; }
     const targetId = noteLinkIdOf(anchor);
     if (!targetId || seen.has(targetId)) { return; }
     seen.add(targetId);
@@ -28156,6 +28249,406 @@ function insertInlineCode() {
   }
 }
 
+/* ----- v2.40.0: code block editing (Enter, Tab, paste) --------------------
+   Code block polish, phase 3 release 5 of the Evernote parity
+   program, modeled on Evernote's code block: a dedicated block
+   (Insert menu here; Evernote also offers its Insert menu, a
+   keyboard shortcut, and typing three backticks) holding plain
+   monospace text on a shaded, bordered surface. Evernote's
+   block has NO syntax highlighting (its users have asked for
+   years; it has never shipped), and this release adds none
+   either, deliberately: highlighted spans would be saved
+   markup fighting the save funnel, for a feature the model
+   product does not have.
+
+   A code block here is any pre in the body. The Insert menu's
+   pre.ss-code-block (its text riding in a code element) and
+   the Aa style menu's bare pre are the app's two doors to the
+   same block (their styling has been one shared rule since
+   v2.1.0), so the keys below treat every pre identically, and
+   a note saved by any earlier build edits exactly like a new
+   one. Nothing here rewrites a stored body on its own: the
+   polish is behavior, applied when a key is pressed in the
+   block, so old notes keep their bytes until they are edited.
+
+   The text model: the line operations count the text the pre
+   displays (text nodes contribute their characters, a br
+   contributes the line break it renders), and the first edit
+   in a block flattens it to that one plain text (see
+   flattenCodePre). Code is plain text by definition, so the
+   flatten loses nothing a code block can mean; it exists so
+   Enter, Tab, and paste produce the same stored shape on
+   every browser instead of each engine's own contenteditable
+   markup (one engine's br lines, another's split pres). */
+
+/* The code block (pre) a node sits in, or null. A pre inside
+   a table cell or an attachment placeholder is not the
+   block: table Tab stays navigation and placeholders are
+   not editable text, the same exclusions the tab machinery
+   has always made. A pre holding an attachment or TOC block
+   (a shape only damaged markup takes) is not treated as
+   code either; its furniture is never flattened away. */
+function codeBlockOfNode(node) {
+  const bodyEl = document.getElementById("noteBody");
+  let el = node && node.nodeType === 1 ? node
+    : node && node.parentElement;
+  if (!el || !el.closest) { return null; }
+  const pre = el.closest("pre");
+  if (!pre || !bodyEl || !bodyEl.contains(pre)) { return null; }
+  if (pre.closest("table") || pre.closest(".ss-attachment")) {
+    return null;
+  }
+  if (pre.querySelector &&
+      pre.querySelector(".ss-attachment, .ss-toc")) {
+    return null;
+  }
+  return pre;
+}
+
+/* The code block at the current selection, or null: both
+   ends of the selection inside the one block. The paste
+   route's entry point. */
+function codeBlockAtSelection() {
+  const bodyEl = document.getElementById("noteBody");
+  const sel = window.getSelection();
+  if (!sel || !sel.rangeCount || !bodyEl) { return null; }
+  const range = sel.getRangeAt(0);
+  if (!bodyEl.contains(range.startContainer)) { return null; }
+  const pre = codeBlockOfNode(range.startContainer);
+  if (!pre || !pre.contains(range.endContainer)) { return null; }
+  return pre;
+}
+
+/* The text a pre displays, in the line operations' measure:
+   text nodes contribute their characters and a br
+   contributes the line break it renders. Other elements
+   contribute what they hold. */
+function codePreText(el) {
+  let out = "";
+  const kids = el.childNodes;
+  for (let i = 0; i < kids.length; i++) {
+    const n = kids[i];
+    if (n.nodeType === 3) { out += n.data; }
+    else if (n.nodeType === 1) {
+      if (n.tagName === "BR") { out += "\n"; }
+      else { out += codePreText(n); }
+    }
+  }
+  return out;
+}
+
+/* The displayed-text length of one node (see codePreText). */
+function codeTextLength(node) {
+  if (!node) { return 0; }
+  if (node.nodeType === 3) { return node.data.length; }
+  if (node.nodeType !== 1) { return 0; }
+  if (node.tagName === "BR") { return 1; }
+  let total = 0;
+  node.childNodes.forEach(function (c) {
+    total += codeTextLength(c);
+  });
+  return total;
+}
+
+/* The offset of a caret point inside a pre, in the pre's
+   displayed text: how many displayed characters stand
+   before it. Element points count the children before the
+   child index; text points count into the text. A point
+   outside the pre measures the whole block (callers only
+   pass points inside it). */
+function codeOffsetInPre(pre, container, offset) {
+  let acc = 0;
+  let found = false;
+  function walk(node) {
+    if (found) { return; }
+    if (node === container) {
+      if (node.nodeType === 3) {
+        acc += Math.min(offset, node.data.length);
+      } else if (node.nodeType === 1) {
+        const kids = node.childNodes;
+        for (let i = 0; i < offset && i < kids.length; i++) {
+          acc += codeTextLength(kids[i]);
+        }
+      }
+      found = true;
+      return;
+    }
+    if (node.nodeType === 3) { acc += node.data.length; return; }
+    if (node.nodeType === 1) {
+      if (node.tagName === "BR") { acc += 1; return; }
+      const kids = node.childNodes;
+      for (let i = 0; i < kids.length; i++) {
+        walk(kids[i]);
+        if (found) { return; }
+      }
+    }
+  }
+  walk(pre);
+  return acc;
+}
+
+/* Flatten a code block to the plain text it displays and
+   return the single text node then holding it (null when
+   the block is empty). The text lands where the block's
+   text already lives: inside the code element when the
+   block is the Insert menu's shape (the code element as
+   the pre's only child), otherwise directly in the pre.
+   For the blocks the app itself makes the flatten is a
+   no-op (already one text node carrying exactly the
+   displayed text); it only rewrites a block whose content
+   arrived with inline markup or br line breaks, the shapes
+   pastes and imports can leave behind. */
+function flattenCodePre(pre) {
+  const text = codePreText(pre);
+  let host = pre;
+  if (pre.childNodes.length === 1 &&
+      pre.firstChild.nodeType === 1 &&
+      pre.firstChild.tagName === "CODE") {
+    host = pre.firstChild;
+  }
+  if (host.childNodes.length === 1 &&
+      host.firstChild.nodeType === 3 &&
+      host.firstChild.data === text) {
+    return host.firstChild;
+  }
+  host.textContent = text;
+  return host.firstChild;
+}
+
+/* Set a code block's text through the node flattenCodePre
+   returned, keeping that node (and so the caret mapping
+   below) stable; an empty block grows its text node in the
+   same host the flatten would have chosen. Returns the
+   text node now holding the text. */
+function setCodePreText(pre, textNode, text) {
+  if (textNode) {
+    textNode.data = text;
+    return textNode;
+  }
+  let host = pre;
+  if (pre.childNodes.length === 1 &&
+      pre.firstChild.nodeType === 1 &&
+      pre.firstChild.tagName === "CODE") {
+    host = pre.firstChild;
+  }
+  const node = document.createTextNode(text);
+  host.appendChild(node);
+  return node;
+}
+
+/* Park the selection at displayed-text offsets inside a
+   code block's one text node. */
+function setCodeCaret(textNode, startOff, endOff) {
+  const sel = window.getSelection();
+  const range = document.createRange();
+  const len = textNode.data.length;
+  range.setStart(textNode, Math.max(0, Math.min(startOff, len)));
+  range.setEnd(textNode, Math.max(0, Math.min(endOff, len)));
+  sel.removeAllRanges();
+  sel.addRange(range);
+}
+
+/* Enter with the caret in a code block; returns true when
+   the key was the block's. The ordinary case is a plain
+   newline at the caret (a selection is replaced by it),
+   inserted by the app rather than left to the browser,
+   whose contenteditable Enter inside a pre varies by
+   engine and would vary the stored form with it. The exit
+   is Enter pressed at the very end of the block on an
+   empty last line: a block with content keeps it, minus
+   the trailing newline the exit consumes, and the caret
+   lands in the paragraph after the block (created when
+   the block ends the note, the paragraph the Insert route
+   has always placed after a fresh block); a wholly empty
+   block is removed outright and a paragraph stands in its
+   place, the checklist exit's shape (an empty checklist
+   item's Enter leaves the list the same way). Modified
+   Enter chords are never the block's. */
+function handleCodeBlockEnter() {
+  const note = currentNote();
+  if (!note || note.trashed || note.archived) { return false; }
+  const bodyEl = document.getElementById("noteBody");
+  if (!bodyEl || bodyEl.contentEditable === "false") {
+    return false;
+  }
+  const sel = window.getSelection();
+  if (!sel || !sel.rangeCount) { return false; }
+  const range = sel.getRangeAt(0);
+  const pre = codeBlockOfNode(range.startContainer);
+  if (!pre || !pre.contains(range.endContainer)) { return false; }
+  let start = codeOffsetInPre(pre, range.startContainer,
+    range.startOffset);
+  let end = codeOffsetInPre(pre, range.endContainer,
+    range.endOffset);
+  if (end < start) {
+    const swap = start; start = end; end = swap;
+  }
+  const textNode0 = flattenCodePre(pre);
+  const text = textNode0 ? textNode0.data : "";
+  start = Math.min(start, text.length);
+  end = Math.min(end, text.length);
+  if (range.collapsed && start === text.length &&
+      (text === "" || text.charAt(text.length - 1) === "\n")) {
+    if (text === "") {
+      const p = emptyFollowParagraph();
+      pre.replaceWith(p);
+      placeCaretIn(p, 0);
+    } else {
+      setCodePreText(pre, textNode0, text.slice(0, -1));
+      let next = pre.nextElementSibling;
+      if (!next) {
+        next = emptyFollowParagraph();
+        pre.after(next);
+      }
+      placeCaretIn(next, 0);
+    }
+    markDirty();
+    return true;
+  }
+  const node = setCodePreText(pre, textNode0,
+    text.slice(0, start) + "\n" + text.slice(end));
+  setCodeCaret(node, start + 1, start + 1);
+  markDirty();
+  return true;
+}
+
+/* Tab and Shift+Tab with the caret in a code block (called
+   from handleBodyTabKey): indent and outdent the text
+   lines the selection touches, in place. The indent unit
+   is one tab character, the app's tab currency since v2.4;
+   a pre preserves it natively, so no span is needed here.
+   Outdent removes one leading tab, or up to two leading
+   spaces where a line arrived space indented (a pasted
+   snippet's usual shape). A selection ending exactly at a
+   line's start does not touch that line, the code editor
+   convention. The caret and selection follow their text
+   through the edit. Returns whether anything changed. */
+function codeIndentLines(pre, range, outdent) {
+  let start = codeOffsetInPre(pre, range.startContainer,
+    range.startOffset);
+  let end = codeOffsetInPre(pre, range.endContainer,
+    range.endOffset);
+  if (end < start) {
+    const swap = start; start = end; end = swap;
+  }
+  const textNode0 = flattenCodePre(pre);
+  const text = textNode0 ? textNode0.data : "";
+  start = Math.min(start, text.length);
+  end = Math.min(end, text.length);
+  const starts = [0];
+  for (let i = 0; i < text.length; i++) {
+    if (text.charAt(i) === "\n") { starts.push(i + 1); }
+  }
+  function lineOf(off) {
+    let line = 0;
+    for (let i = 0; i < starts.length; i++) {
+      if (starts[i] <= off) { line = i; } else { break; }
+    }
+    return line;
+  }
+  const firstLine = lineOf(start);
+  let lastLine = lineOf(end);
+  if (end > start && end === starts[lastLine]) { lastLine--; }
+  let newText = text;
+  let newStart = start;
+  let newEnd = end;
+  let changed = false;
+  if (!outdent) {
+    const points = [];
+    for (let l = firstLine; l <= lastLine; l++) {
+      points.push(starts[l]);
+    }
+    /* Insert last line first, so the earlier offsets stay
+       valid while the new text is built. */
+    for (let i = points.length - 1; i >= 0; i--) {
+      newText = newText.slice(0, points[i]) + "\t" +
+        newText.slice(points[i]);
+    }
+    newStart = start + points.filter(function (p) {
+      return p <= start;
+    }).length;
+    newEnd = end + points.filter(function (p) {
+      return p < end || (p === end && end === start);
+    }).length;
+    changed = true;
+  } else {
+    const removals = [];
+    for (let l = firstLine; l <= lastLine; l++) {
+      const at = starts[l];
+      let count = 0;
+      if (text.charAt(at) === "\t") { count = 1; }
+      else {
+        while (count < 2 && text.charAt(at + count) === " ") {
+          count++;
+        }
+      }
+      removals.push({ at: at, count: count });
+    }
+    let built = "";
+    let cursor = 0;
+    removals.forEach(function (rm) {
+      built += text.slice(cursor, rm.at);
+      cursor = rm.at + rm.count;
+    });
+    built += text.slice(cursor);
+    newText = built;
+    function shifted(off) {
+      let delta = 0;
+      removals.forEach(function (rm) {
+        if (off > rm.at) {
+          delta += Math.min(rm.count, off - rm.at);
+        }
+      });
+      return off - delta;
+    }
+    newStart = shifted(start);
+    newEnd = shifted(end);
+    changed = removals.some(function (rm) {
+      return rm.count > 0;
+    });
+  }
+  const node = setCodePreText(pre, textNode0, newText);
+  setCodeCaret(node, newStart, newEnd);
+  if (changed) { markDirty(); }
+  return changed;
+}
+
+/* Insert plain text into a code block at the selection,
+   replacing it, and leave the caret after the text: the
+   paste route for a caret inside a pre (Evernote's code
+   blocks hold plain text only, so the clipboard's rich
+   payload has nothing to offer the block). Line endings
+   are normalized to the block's own newline. Returns
+   whether the text landed. */
+function insertPlainTextIntoCode(pre, text) {
+  const note = currentNote();
+  if (!note || note.trashed || note.archived) { return false; }
+  const sel = window.getSelection();
+  if (!sel || !sel.rangeCount) { return false; }
+  const range = sel.getRangeAt(0);
+  if (!pre.contains(range.startContainer) ||
+      !pre.contains(range.endContainer)) {
+    return false;
+  }
+  let start = codeOffsetInPre(pre, range.startContainer,
+    range.startOffset);
+  let end = codeOffsetInPre(pre, range.endContainer,
+    range.endOffset);
+  if (end < start) {
+    const swap = start; start = end; end = swap;
+  }
+  const textNode0 = flattenCodePre(pre);
+  const cur = textNode0 ? textNode0.data : "";
+  start = Math.min(start, cur.length);
+  end = Math.min(end, cur.length);
+  const clean = String(text || "").replace(/\r\n?/g, "\n");
+  const node = setCodePreText(pre, textNode0,
+    cur.slice(0, start) + clean + cur.slice(end));
+  setCodeCaret(node, start + clean.length, start + clean.length);
+  markDirty();
+  return true;
+}
+
 /* ----- v2.37.0: the table of contents block --------------------------------
    Evernote parity (phase 3, release 2), modeled on Evernote's
    automatic table of contents (its help page "How to create a
@@ -28210,6 +28703,12 @@ function tocHeadingsUnder(rootEl) {
   if (!rootEl || !rootEl.querySelectorAll) { return out; }
   rootEl.querySelectorAll("h1, h2, h3").forEach(function (h) {
     if (h.closest && h.closest(".ss-toc")) { return; }
+    /* v2.40.0: a heading nested inside a code block (any
+       pre) is code text, not a section of the note: a
+       damaged paste can leave one nested there and the
+       parser keeps it, so without this guard it would be
+       listed and given an anchor id like a real heading. */
+    if (h.closest && h.closest("pre")) { return; }
     out.push(h);
   });
   return out;
@@ -30309,6 +30808,18 @@ function handleBodyTabKey(ev) {
   const cell = tableCellFromNode(range.startContainer);
   if (cell) {
     tabNavigateTable(cell, range, shift);
+    return true;
+  }
+  /* v2.40.0: inside a code block, Tab indents and Shift+Tab
+     outdents the touched text lines (see codeIndentLines in
+     the code block section). This is decided before the list
+     and multi block paths below: a selection inside one pre
+     is one block's lines, not the several blocks those paths
+     prefix, and a caret in a pre is not in a plain block the
+     tab character path serves. */
+  const codePre = codeBlockOfNode(range.startContainer);
+  if (codePre && codePre.contains(range.endContainer)) {
+    codeIndentLines(codePre, range, shift);
     return true;
   }
   /* v2.7: list items indent and outdent (see the sub-list block
@@ -32787,6 +33298,61 @@ function clearReplaceUnconvertedBlocks(plan) {
   });
 }
 
+/* v2.40.0: unwrap the code elements inside every pre the
+   clear touches. A code block's code child is part of the
+   code formatting being removed: left in place it would
+   ride the block conversion into the new paragraph and
+   keep the text monospace (a browser's own style for the
+   element), so the clear would leave standing the one
+   style it exists to remove. Scoped to pres: inline code
+   elsewhere in a selection is not this pass's business.
+   The collection mirrors the deep clean's (the touched
+   blocks, their descendants, and everything the range
+   intersects), and the deepest code elements unwrap
+   first, so a code nested in a code (a shape pasted
+   markup can take) unwraps completely in one pass. */
+function clearUnwrapCodeInPres(bodyEl, range, touched) {
+  const pres = [];
+  const seen = new Set();
+  function addPre(el) {
+    if (el && !seen.has(el)) { seen.add(el); pres.push(el); }
+  }
+  (touched || []).forEach(function (block) {
+    if (!block || block.nodeType !== 1) { return; }
+    if (block.tagName === "PRE") { addPre(block); }
+    if (block.querySelectorAll) {
+      block.querySelectorAll("pre").forEach(addPre);
+    }
+  });
+  if (range && bodyEl) {
+    bodyEl.querySelectorAll("pre").forEach(function (pre) {
+      let hit = false;
+      try { hit = range.intersectsNode(pre); } catch (e) {
+        hit = false;
+      }
+      if (hit) { addPre(pre); }
+    });
+  }
+  pres.forEach(function (pre) {
+    const codes = Array.prototype.slice.call(
+      pre.querySelectorAll("code"));
+    codes.sort(function (a, b) {
+      let da = 0, db = 0, n = a, m = b;
+      while (n && n !== pre) { da++; n = n.parentElement; }
+      while (m && m !== pre) { db++; m = m.parentElement; }
+      return db - da;
+    });
+    codes.forEach(function (code) {
+      if (!code.parentNode) { return; }
+      const parent = code.parentNode;
+      while (code.firstChild) {
+        parent.insertBefore(code.firstChild, code);
+      }
+      parent.removeChild(code);
+    });
+  });
+}
+
 /* ----- remove formatting (extended) ---------------------------------------
    Starts with the classic behavior (removeFormat plus formatBlock),
    then unwraps the spans our own font, size, color, and highlight
@@ -32857,6 +33423,10 @@ function clearFormattingExtended() {
      post lift set every later pass works with. */
   const touchedBefore = clearLiftTouchedBlocks(bodyEl,
     clearTouchedTopBlocks(bodyEl, range0));
+  /* v2.40.0: a touched code block's code wrapper is code
+     formatting too, and goes before the plan is computed
+     (see clearUnwrapCodeInPres). */
+  clearUnwrapCodeInPres(bodyEl, range0, touchedBefore);
   const plan = clearConversionPlan(bodyEl, range0, touchedBefore);
   /* v2.18: the operation also strips background styling (the
      cleanBackgroundsInRoots pass) from every touched top
@@ -41163,6 +41733,30 @@ function wireEvents() {
       });
       return;
     }
+    /* v2.40.0: a paste whose caret sits in a code block
+       lands as plain text only (see insertPlainTextIntoCode):
+       Evernote's code blocks hold plain text, and the rich
+       payload would otherwise carry spans and styles into
+       the block. The Paste options popup never opens for
+       it: there is no formatting choice to offer about
+       plain text. Decided before the HTML branch below,
+       and only when the clipboard actually carries text;
+       a paste with no text payload falls through to the
+       ordinary paths. */
+    const codePre = codeBlockAtSelection();
+    if (codePre) {
+      let plainText = "";
+      try {
+        plainText = ev.clipboardData.getData("text/plain") || "";
+      } catch (e) { plainText = ""; }
+      if (plainText &&
+          insertPlainTextIntoCode(codePre, plainText)) {
+        ev.preventDefault();
+        captureCaret();
+        closePastePopup();
+        return;
+      }
+    }
     let htmlText = "";
     try {
       htmlText = (ev.clipboardData &&
@@ -41303,6 +41897,22 @@ function wireEvents() {
   noteBodyEl.addEventListener("keydown", function (ev) {
     if (ev.key === "Enter" && !ev.shiftKey) {
       if (handleChecklistEnter()) { ev.preventDefault(); }
+    }
+  });
+
+  /* v2.40.0 code block Enter behavior (see handleCodeBlockEnter
+     in the editor section). An Enter with the caret inside a
+     code block is the app's own edit, so the stored form does
+     not depend on the browser's contenteditable split: a plain
+     newline inside the block, and the exit onto a paragraph
+     from the block's empty last line. Plain and Shift+Enter
+     are both the block's (a code block has no second Enter
+     meaning); modified chords are never claimed, and an Enter
+     the handler does not claim keeps the browser default. */
+  noteBodyEl.addEventListener("keydown", function (ev) {
+    if (ev.key === "Enter" && !ev.ctrlKey && !ev.metaKey &&
+        !ev.altKey) {
+      if (handleCodeBlockEnter()) { ev.preventDefault(); }
     }
   });
 
