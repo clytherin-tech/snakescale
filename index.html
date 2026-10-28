@@ -40,10 +40,92 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-28-SSN-V2320
-  Version: 2.32.0
+  BUILD STAMP: 2026-10-28-SSN-V2330
+  Version: 2.33.0
 
   Revision history:
+    v2.33.0 2026-10-28 Home, the dashboard, the first
+                      release of the Evernote parity
+                      program (phase 2: Home, calendar,
+                      and reminders). Opening the app now
+                      lands on Home, the way Evernote
+                      opens: a Deep Forest header band
+                      carrying a greeting by the time of
+                      day and the full date, over a grid
+                      of widgets. The widgets: Pinned Note
+                      (one note, chosen by a Pin to Home
+                      item in the notes list toolbar menu
+                      beside Pin note, or from the widget
+                      itself; the widget shows the note's
+                      title and a preview, opens it on
+                      click, and shows an empty state
+                      rather than a dead click when the
+                      note is trashed, archived, or
+                      deleted; this is a different pin from
+                      Pin note, which orders the list),
+                      Recent Notes (tabs for Recently
+                      updated and Recently created, each
+                      row opening its note), Tasks (open
+                      tasks sorted by due moment, overdue
+                      and today first, the completion box
+                      completing in place through the
+                      tasks' own completion path,
+                      recurrence roll forward included,
+                      and a row opening the task editor),
+                      Scratch Pad (a plain text pad that
+                      persists and syncs and never appears
+                      in search results), Filtered Notes
+                      (bound to one saved search chosen in
+                      the widget, showing its first
+                      results, its title running the full
+                      search, and a hint state when no
+                      saved searches exist), Tags (in the
+                      sidebar's tree order; a click filters
+                      by the tag), and Notebooks (in the
+                      sidebar's order; a click opens the
+                      notebook). A Customize button hides,
+                      shows, and reorders the widgets. The
+                      whole home field (pinned note id,
+                      scratch text, widget layout) rides
+                      in index.json beside saved searches
+                      and shortcuts, through the same
+                      writer and loaders those fields use,
+                      sanitized on every read, because
+                      Evernote's Home customization syncs
+                      and settings live only on one
+                      device. The one per device piece is
+                      the landing itself: a When opening
+                      choice in Settings offers Home or
+                      the Notes list, mirroring Evernote's
+                      start view preference; a first run
+                      still opens its seeded starter note.
+                      A search typed while Home is showing
+                      lands on its results, the way
+                      Evernote leaves Home for a search.
+                      Named deviations from Evernote: no
+                      Calendar widget (there is no
+                      calendar account to connect; a
+                      calendar view of task due dates is
+                      phase 2 release 2); no changeable
+                      background photo (the Deep Forest
+                      band stands in its place); widgets
+                      do not resize, and each widget type
+                      appears at most once; the Recent
+                      widget's second tab is Recently
+                      created, not Evernote's server
+                      generated Suggested, and the
+                      Notebooks widget has no Suggested
+                      tab; no Shortcuts widget and no
+                      Recently Captured widget this
+                      release; Customize reorders with
+                      Move up and Move down buttons, not
+                      drag; the scratch pad has no convert
+                      to note action, custom title or
+                      color, or enforced size cap; and
+                      Evernote gates several widgets and
+                      customization behind its paid tiers,
+                      while this app has no tiers and
+                      includes them all.
     v2.32.0 2026-10-28 Saved searches and advanced
                       search syntax, the fourth release
                       of the Evernote parity program
@@ -3113,6 +3195,117 @@ body.note-drag-active{touch-action:none;overscroll-behavior:none;}
 #taskspane{flex:1;display:flex;flex-direction:column;overflow:hidden;background:var(--surface);}
 .tasks-scroll{overflow-y:auto;overflow-x:auto;flex:1;padding:26px 30px 40px;}
 .tasks-inner{width:100%;max-width:860px;margin:0 auto;}
+/* v2.33: the Home dashboard's pane, the tasks pane's
+   sibling: it takes the whole main area while Home is
+   the active view (the hidden class, traded by
+   syncTasksPane, is what hides it the rest of the time).
+   The header is a Deep Forest band (the brand greens in
+   both themes, as the sidebar is): the greeting over
+   the full date, Customize at its right. Below it the
+   grid fits as many widget columns as the width allows,
+   Evernote's desktop arrangement; each widget is a
+   surface card with a header row (its title plus its
+   controls) and a body of rows, the shared shapes where
+   the app already has one (the Tasks widget's rows are
+   the shared task row builder's own). */
+#homepane{flex:1;display:flex;flex-direction:column;overflow:hidden;background:var(--bg);}
+.home-scroll{overflow-y:auto;overflow-x:hidden;flex:1;padding:22px 26px 40px;}
+.home-inner{width:100%;max-width:1120px;margin:0 auto;}
+.home-head{
+  display:flex;align-items:center;justify-content:space-between;gap:16px;
+  background:linear-gradient(120deg,#0B3D2E,#14532D);
+  border-radius:14px;padding:22px 24px;margin-bottom:18px;
+}
+.home-head h2{margin:0;font-size:24px;color:#fff;}
+.home-date{margin-top:3px;font-size:13.5px;color:#CFE3D2;}
+.home-customize-btn{
+  background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.45);
+  color:#fff;flex:0 0 auto;
+}
+#homeCustomizePanel{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:12px;padding:12px 16px;margin-bottom:18px;
+}
+.home-cust-head{font-weight:700;color:var(--primary);margin-bottom:8px;}
+body.dark .home-cust-head{color:var(--accent);}
+.home-cust-row{
+  display:flex;align-items:center;gap:8px;padding:6px 0;
+  border-top:1px solid var(--border);
+}
+.home-cust-label{flex:1;font-weight:600;color:var(--text);}
+.home-grid{
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));
+  gap:16px;align-items:start;
+}
+.home-widget{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:12px;padding:14px 16px;
+}
+.home-widget-head{display:flex;align-items:center;gap:10px;margin-bottom:10px;}
+.home-widget-title{margin:0;font-size:15px;color:var(--primary);}
+body.dark .home-widget-title{color:var(--accent);}
+button.home-widget-title{
+  background:none;border:none;cursor:pointer;padding:0;
+  font:inherit;font-weight:700;text-align:left;
+}
+.home-widget-action{
+  margin-left:auto;padding:2px 0;background:none;border:none;cursor:pointer;
+  color:var(--primary);font-size:12.5px;font-weight:700;flex:0 0 auto;
+}
+body.dark .home-widget-action{color:var(--accent);}
+.home-widget-body{display:flex;flex-direction:column;gap:2px;}
+.home-widget[data-widget-type="tags"] .home-widget-body,
+.home-widget[data-widget-type="notebooks"] .home-widget-body{
+  max-height:264px;overflow-y:auto;
+}
+.home-note-row,.home-tag-row,.home-nb-row{
+  display:flex;align-items:center;gap:10px;width:100%;
+  background:none;border:none;border-bottom:1px solid var(--border);
+  padding:7px 4px;cursor:pointer;text-align:left;color:var(--text);font:inherit;
+}
+.home-note-row:last-child,.home-tag-row:last-child,.home-nb-row:last-child{
+  border-bottom:none;
+}
+.home-note-row-title,.home-tag-label,.home-nb-label{
+  flex:1;font-weight:600;white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis;
+}
+.home-note-row-meta,.home-tag-count,.home-nb-count{
+  color:var(--muted);font-size:12px;flex:0 0 auto;
+}
+.home-hint{color:var(--muted);font-size:13px;padding:6px 2px;}
+.home-pinned-open{
+  display:block;width:100%;background:none;border:none;padding:2px;
+  text-align:left;cursor:pointer;color:var(--text);font:inherit;
+}
+.home-pinned-title{font-size:16px;font-weight:700;}
+.home-pinned-preview{
+  color:var(--muted);font-size:13px;margin-top:4px;
+  display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;
+  overflow:hidden;
+}
+.home-pin-picker,.home-filtered-picker{
+  display:flex;flex-direction:column;gap:2px;margin-top:8px;
+  border-top:1px solid var(--border);padding-top:8px;
+}
+.home-pin-row,.home-filtered-row{
+  display:block;width:100%;background:none;border:none;padding:6px 4px;
+  cursor:pointer;text-align:left;color:var(--text);font:inherit;font-weight:600;
+}
+.home-pin-clear,.home-filtered-clear{color:var(--muted);font-weight:400;}
+.home-recent-tabs{display:flex;gap:4px;margin-left:auto;flex:0 0 auto;}
+.home-recent-tab{
+  background:none;border:1px solid var(--border);border-radius:999px;
+  padding:2px 10px;font-size:12px;cursor:pointer;color:var(--muted);
+}
+.home-recent-tab.active{
+  background:var(--primary);border-color:var(--primary);color:#fff;
+}
+.home-scratch{
+  width:100%;box-sizing:border-box;font:inherit;font-size:14px;
+  padding:10px;border:1px solid var(--border);border-radius:8px;
+  background:var(--bg);color:var(--text);resize:vertical;
+}
 /* v1.7.2: overflow-x is named explicitly so an image sized wider
    than the reading column scrolls horizontally inside this pane
    instead of breaking the layout or sliding under the sidebar;
@@ -5169,15 +5362,18 @@ body.dark .version-date{color:var(--accent);}
   }
   #mobileBar .brand-mini{font-size:17px;font-weight:800;margin-right:auto;}
   #mobileBar .brand-mini span{color:var(--accent);}
-  #sidebar,#listpane,#editorpane,#taskspane{width:100%;flex:1 1 auto;display:none;min-height:0;}
+  #sidebar,#listpane,#editorpane,#taskspane,#homepane{width:100%;flex:1 1 auto;display:none;min-height:0;}
   body.view-nav #sidebar{display:flex;}
   body.view-list #listpane{display:flex;}
   body.view-list #taskspane{display:flex;}
+  body.view-list #homepane{display:flex;}
   body.view-editor #editorpane{display:flex;}
   .gate{padding:20px 12px;}
   .gate-card{padding:24px 20px 20px;}
   .editor-scroll{padding:18px 16px 28px;}
   .tasks-scroll{padding:18px 16px 28px;}
+  .home-scroll{padding:18px 16px 28px;}
+  .home-grid{grid-template-columns:1fr;}
   .editor-foot{padding:10px 14px;}
 }
 
@@ -5497,6 +5693,11 @@ body.dark .version-date{color:var(--accent);}
     </div>
 
     <div class="nav-section">
+      <!-- v2.33: Home, at the top of the navigation, where
+           Evernote keeps it. It opens the dashboard (the
+           homepane section below); a returning boot lands
+           there unless Settings say the notes list. -->
+      <button class="nav-item" id="navHome" type="button">Home</button>
       <button class="nav-item" id="navAll" type="button">All Notes <span class="count count-pill" id="countAll"></span></button>
       <!-- v2.24: the Tasks view's entry, directly under All
            Notes, with the open task count as its pill. -->
@@ -5778,6 +5979,14 @@ body.dark .version-date{color:var(--accent);}
                  and hides it in Trash and Archive, exactly
                  like the pin item. -->
             <button type="button" class="list-menu-item" id="nbShortcutNoteBtn" role="menuitem">Add Note to Shortcuts</button>
+            <!-- v2.33: Pin to Home, Evernote's own surface
+                 for choosing the Home dashboard's pinned
+                 note. renderListToolbar sets the label
+                 (Pin to Home or Unpin from Home), enables
+                 it only when a live note is selected, and
+                 hides it in Trash and Archive, exactly
+                 like the Pin note item above it. -->
+            <button type="button" class="list-menu-item" id="nbHomePinBtn" role="menuitem">Pin to Home</button>
             <!-- v1.8.1: the menu adapts to the view. These three items
                  belong to Trash and the Archive; renderListToolbar
                  shows and enables the ones for the current view and
@@ -6466,6 +6675,31 @@ body.dark .version-date{color:var(--accent);}
       <div class="tasks-inner" id="tasksInner"></div>
     </div>
   </section>
+
+  <!-- v2.33: Home, the dashboard, its own pane like the
+       Tasks view's: while Home is the active view the list
+       and editor panes hide (syncTasksPane trades the
+       hidden classes). The header is the greeting over
+       the full date on the Deep Forest band; the Customize
+       button opens the panel renderHomeCustomize fills;
+       the grid is renderHome's, one card per widget in
+       the stored layout. -->
+  <section id="homepane" class="hidden">
+    <div class="home-scroll" id="homeScroll">
+      <div class="home-inner">
+        <header class="home-head">
+          <div class="home-head-text">
+            <h2 id="homeGreeting">Good day</h2>
+            <div class="home-date" id="homeDate"></div>
+          </div>
+          <button type="button" class="btn small home-customize-btn" id="homeCustomizeBtn">Customize</button>
+        </header>
+        <div id="homeCustomizePanel" class="hidden"></div>
+        <div class="home-grid" id="homeGrid"></div>
+        <div id="homeEmpty" class="home-hint hidden">All widgets are hidden. Use Customize to bring some back.</div>
+      </div>
+    </div>
+  </section>
 </div>
 
 <!-- ==========================================================================
@@ -6514,6 +6748,20 @@ body.dark .version-date{color:var(--accent);}
       <div class="theme-segmented" role="group" aria-label="Theme">
         <button id="settingsThemeLightBtn" type="button" aria-pressed="false">Light</button>
         <button id="settingsThemeDarkBtn" type="button" aria-pressed="true">Dark</button>
+      </div>
+      <!-- v2.33: the When opening choice, Evernote's own
+           start view preference. The select is the whole
+           control: its shown value is the saved choice,
+           saved on this device only (Evernote's choice is
+           per device too; the dashboard it lands on is
+           the synced one). -->
+      <div class="field">
+        <label for="settingsStartViewSelect">When opening SnakeScale Notes</label>
+        <select id="settingsStartViewSelect">
+          <option value="home">Home</option>
+          <option value="notes">Notes list</option>
+        </select>
+        <div class="settings-help">Where a fresh visit lands. Home is the dashboard; the dashboard itself, its pinned note, scratch pad, and layout, are the same on every device either way.</div>
       </div>
     </section>
 
@@ -6826,8 +7074,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-28-SSN-V2320";
-const APP_VERSION = "2.32.0";
+const APP_BUILD = "2026-10-28-SSN-V2330";
+const APP_VERSION = "2.33.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -6921,7 +7169,7 @@ const state = {
   trash: [],                // note objects with trashed = true
   archive: [],              // v1.5: note objects with archived = true
   index: null,              // parsed index.json contents, or null
-  view: { kind: "all", value: null }, // all | tasks | pinned | trash | archive | notebook | tag
+  view: { kind: "all", value: null }, // all | home | tasks | pinned | trash | archive | notebook | tag
   selectedId: null,         // id of the note open in the editor
   search: "",               // current search text, lowercased
   listFilters: {            // v1.8: notes list filters, session only.
@@ -7001,6 +7249,46 @@ const state = {
                             // only one device could see
                             // would not be a saved search
                             // list.
+  home: {                   // v2.33: the Home dashboard's
+                            // facts: the pinned note's id (or
+                            // null), the scratch pad's text,
+                            // and the widget layout (an
+                            // ordered list of widget entries;
+                            // a widget absent from the list
+                            // is hidden, and the filtered
+                            // entry carries the saved search
+                            // it is bound to). It lives in
+                            // index.json (see
+                            // buildIndexObject), NOT in
+                            // settings, for the same reason
+                            // the saved searches do: Evernote
+                            // Home and its customization
+                            // sync across devices, and a
+                            // dashboard only one device
+                            // could see would not be a
+                            // dashboard.
+    pinnedNoteId: null,
+    scratch: "",
+    widgets: [
+      { type: "pinned" },
+      { type: "recent" },
+      { type: "tasks" },
+      { type: "scratch" },
+      { type: "filtered", searchId: null },
+      { type: "tags" },
+      { type: "notebooks" }
+    ]
+  },
+  startView: "home",        // v2.33: where a returning boot
+                            // lands: "home" (the Home
+                            // dashboard) or "notes" (the
+                            // notes list). Evernote's own
+                            // start choice (When opening
+                            // Evernote) is per device, so
+                            // this one is remembered in
+                            // settings and edited in the
+                            // Settings modal; it is NOT
+                            // part of the synced home field.
   versionsLimit: 10,        // v2.8: how many past versions to keep
                             // per note (0 turns version history
                             // off), remembered in settings and
@@ -7625,6 +7913,12 @@ function loadSettings() {
      only an explicitly stored false turns them off, exactly
      like autoSync above. */
   if (s.taskReminders === false) { state.taskReminders = false; }
+  /* v2.33: the When opening choice. Home is the default, so
+     only an explicitly stored "notes" moves the landing to
+     the notes list; anything else (an absent field from an
+     older build, a damaged value) leaves the Home default
+     in place. */
+  if (s.startView === "notes") { state.startView = "notes"; }
 }
 
 
@@ -7642,7 +7936,8 @@ function saveSettings() {
     defaultPasteMode: state.defaultPasteMode,   // v2.23: the paste default
     customHighlightColor: state.customHighlightColor,   // v2.24.2: palette memory
     customTextColor: state.customTextColor,   // v2.24.2: palette memory
-    taskReminders: state.taskReminders   // v2.24: reminder notifications
+    taskReminders: state.taskReminders,   // v2.24: reminder notifications
+    startView: state.startView   // v2.33: the When opening choice
   }));
 }
 
@@ -7705,6 +8000,9 @@ function cacheSnapshot() {
     /* v2.32: the saved searches ride it too, so a cache
        first paint can surface the same list. */
     savedSearches: state.savedSearches,
+    /* v2.33: the home field rides it as well, so a cache
+       first paint shows the same dashboard. */
+    home: state.home,
     notes: state.notes,
     trash: state.trash,
     archive: state.archive,
@@ -7728,6 +8026,10 @@ function applyCacheSnapshot(c) {
      list, exactly like an index.json written before v2.32
      does. */
   state.savedSearches = sanitizeSavedSearches(c.savedSearches);
+  /* v2.33: snapshots written before Home existed have no
+     home field; they load as the default dashboard,
+     exactly like an index.json written before v2.33 does. */
+  state.home = sanitizeHome(c.home);
   state.notes = c.notes || [];
   state.trash = c.trash || [];
   /* v1.5: caches written before archiving existed have no archive
@@ -8700,6 +9002,10 @@ function buildIndexObject() {
     /* v2.32: the saved searches, on the same reasoning
        again: no unrelated save can drop them either. */
     savedSearches: state.savedSearches,
+    /* v2.33: the home field, on the same reasoning once
+       more: no unrelated save can drop the pinned note,
+       the scratch pad, or the widget layout. */
+    home: state.home,
     updated: new Date().toISOString()
   };
 }
@@ -8817,7 +9123,9 @@ function buildIndexFromFolders(folderSlugs) {
      way, for the same reason. */
   /* v2.32: the saved searches are carried across the same
      way again, for the same reason. */
-  return { version: 1, notebooks: rebuilt, tagParents: state.tagParents, shortcuts: state.shortcuts, savedSearches: state.savedSearches, updated: new Date().toISOString() };
+  /* v2.33: the home field is carried across the same way
+     too, for the same reason. */
+  return { version: 1, notebooks: rebuilt, tagParents: state.tagParents, shortcuts: state.shortcuts, savedSearches: state.savedSearches, home: state.home, updated: new Date().toISOString() };
 }
 
 /* --------------------------------------------------------------------------
@@ -9743,6 +10051,12 @@ function afterTasksChanged() {
       state.view.kind === "notebook") {
     renderNoteList();
   }
+  /* v2.33: an open Home re-renders in place too, like the
+     Things page below: a completion from its Tasks
+     widget's own rows, an edit saved in the task editor
+     over Home, or a sync's task reload lands on the
+     dashboard at once. */
+  if (state.view.kind === "home") { renderHome(); }
   /* v2.24.3: an open Things to do page re-renders in place,
      so a completion from its own rows, an edit saved in the
      task editor, or a quick add lands on the page at once.
@@ -10573,6 +10887,10 @@ async function loadAllFromRepo() {
     if (index && index.savedSearches) {
       state.savedSearches = sanitizeSavedSearches(index.savedSearches);
     }
+    /* v2.33: the home field is salvaged the same way. */
+    if (index && index.home) {
+      state.home = sanitizeHome(index.home);
+    }
     index = buildIndexFromFolders(folderSlugs);
     state.notebooks = index.notebooks;
     state.index = index;
@@ -10598,6 +10916,11 @@ async function loadAllFromRepo() {
        saved searches existed has no field and loads as an
        empty list. */
     state.savedSearches = sanitizeSavedSearches(index.savedSearches);
+    /* v2.33: the home field loads with the index too,
+       sanitized on the way in; an index written before
+       Home existed has no field and loads as the default
+       dashboard. */
+    state.home = sanitizeHome(index.home);
     state.index = index;
     /* A notebook folder with no index entry still gets listed, so notes
        are never hidden by a stale index. */
@@ -13440,7 +13763,17 @@ function runSavedSearch(entry) {
   if (input) { input.value = entry.query; }
   state.search = normalizeSearchText(entry.query);
   closeSavedSearchPanel();
-  renderNoteList();
+  /* v2.33: run from Home (the Filtered Notes widget's
+     title, or a search shortcut clicked while Home is
+     showing), the results are the destination: land on
+     All Notes with them, the way Evernote leaves Home
+     for a search. From any other view nothing changes. */
+  if (state.view.kind === "home") {
+    state.view = { kind: "all", value: null };
+    renderAll();
+  } else {
+    renderNoteList();
+  }
   setMobileView("list");
 }
 
@@ -13606,6 +13939,785 @@ function confirmDeleteSavedSearch(entry) {
   if (!confirm(msg)) { return; }
   deleteSavedSearch(entry.id);
   toast("Saved search \"" + entry.name + "\" deleted.");
+}
+
+/* --------------------------------------------------------------------------
+   v2.33: Home, the dashboard (Evernote parity, phase 2 release 1)
+
+   Evernote opens on Home: a greeting header (Good morning /
+   afternoon / evening, over the full date) above a grid of
+   widgets, customized from a Customize control on the page
+   itself (widgets added, removed, and rearranged there),
+   with the customization syncing across the user's devices.
+   This section is that dashboard. Its facts (the pinned
+   note, the scratch pad's text, and the widget layout) live
+   in the home field of index.json (see buildIndexObject),
+   so they sync like everything else in the index; the one
+   Home choice that does NOT sync is where a boot lands,
+   because Evernote's own When opening choice is per device:
+   it is state.startView, remembered in settings.
+
+   The widgets, each reading live state and navigating like
+   the thing it mirrors: Pinned Note (one note, chosen from
+   the notes list menu's Pin to Home item or from the
+   widget's own picker; the widget shows a read only preview
+   and opens the note on a click; a pinned note that leaves
+   the notebooks renders an empty state, never a dead
+   click), Recent Notes (by updated, with a Recently created
+   tab where Evernote's second tab is its server's
+   Suggested), Tasks (open tasks in the Tasks view's own
+   due order, rows built by the shared task row builder, so
+   the completion checkbox runs the real completion path
+   and a recurring task rolls forward), Scratch Pad (plain
+   text, saved through the index writer like every other
+   index fact; it is not a note and never appears in
+   search), Filtered Notes (bound to one saved search,
+   showing its first matches; the widget's title runs the
+   full search), Tags (the tag tree's order, labels flat,
+   counts exact, navigating like the sidebar rows), and
+   Notebooks (the sidebar's Evernote order, navigating like
+   the sidebar rows). Evernote's Calendar widget is not
+   here: it renders a connected calendar account's events,
+   and this app has no calendar account to connect (phase 2
+   release 2 gives tasks a calendar view instead).
+   -------------------------------------------------------------------------- */
+
+const HOME_WIDGET_TYPES = ["pinned", "recent", "tasks",
+  "scratch", "filtered", "tags", "notebooks"];
+const HOME_WIDGET_LABELS = {
+  pinned: "Pinned Note", recent: "Recent Notes",
+  tasks: "Tasks", scratch: "Scratch Pad",
+  filtered: "Filtered Notes", tags: "Tags",
+  notebooks: "Notebooks"
+};
+
+/* The default layout: every widget, in the order a fresh
+   dashboard shows them. Built fresh on every call, so a
+   caller can hold the result without sharing it. */
+function defaultHomeWidgets() {
+  return [
+    { type: "pinned" },
+    { type: "recent" },
+    { type: "tasks" },
+    { type: "scratch" },
+    { type: "filtered", searchId: null },
+    { type: "tags" },
+    { type: "notebooks" }
+  ];
+}
+
+/* Read a stored home field into a safe one, the way the
+   tag parent map (v2.30), the shortcuts list (v2.31), and
+   the saved searches (v2.32) are read: a non-string pin
+   and a non-string scratch pad fall back, an unknown
+   widget kind drops, a kind appears once (first
+   occurrence wins), a filtered entry's binding survives
+   only as a string, and an explicitly stored layout is
+   honored even when it is empty (the user hid every
+   widget). A missing or damaged field is the default
+   dashboard. */
+function sanitizeHome(raw) {
+  const out = { pinnedNoteId: null, scratch: "",
+    widgets: defaultHomeWidgets() };
+  if (!raw || typeof raw !== "object") { return out; }
+  if (typeof raw.pinnedNoteId === "string" &&
+      raw.pinnedNoteId.trim()) {
+    out.pinnedNoteId = raw.pinnedNoteId;
+  }
+  if (typeof raw.scratch === "string") {
+    out.scratch = raw.scratch;
+  }
+  if (Array.isArray(raw.widgets)) {
+    const seen = {};
+    const list = [];
+    raw.widgets.forEach(function (e) {
+      if (!e || typeof e !== "object") { return; }
+      if (HOME_WIDGET_TYPES.indexOf(e.type) < 0) { return; }
+      if (seen[e.type]) { return; }
+      seen[e.type] = true;
+      if (e.type === "filtered") {
+        list.push({ type: "filtered",
+          searchId: typeof e.searchId === "string" &&
+            e.searchId.trim() ? e.searchId : null });
+      } else {
+        list.push({ type: e.type });
+      }
+    });
+    out.widgets = list;
+  }
+  return out;
+}
+
+/* The home field is index data, so its saves take the
+   shape every other index fact takes (the persist twins
+   of v2.30 to v2.32): the index write behind the caller's
+   back, guarded to a live store, and the cache with it. */
+function persistHome() {
+  if (state.online && state.repoExists) { saveIndex(); }
+  saveCache();
+}
+
+/* Where a returning boot lands, from the device's When
+   opening choice: Home, or the notes list. Applied once
+   per boot (connectAndLoad), before the first paint, and
+   never on a first run, whose seeded starter note still
+   opens the way it always has. */
+function applyStartView() {
+  state.view = state.startView === "notes"
+    ? { kind: "all", value: null }
+    : { kind: "home", value: null };
+}
+
+function homeWidgetEntry(type) {
+  return state.home.widgets.find(function (e) {
+    return e.type === type;
+  }) || null;
+}
+
+/* Pin (or unpin, with null) the note Home shows. The pin
+   is the note's id only; the widget reads the note's
+   current title and text at render, so a rename follows
+   it the way a shortcut's label follows its target. */
+function setHomePinnedNote(id) {
+  state.home.pinnedNoteId = id || null;
+  persistHome();
+  renderAll();
+}
+
+/* The notes list menu's Pin to Home item: it belongs to
+   the selected note, like the pin item beside it, and
+   re-checks that the selection is a live note. Pinning
+   the already pinned note unpins it. */
+function toggleSelectedNoteHomePin() {
+  const note = currentNote();
+  if (!note || state.notes.indexOf(note) < 0) { return; }
+  setHomePinnedNote(
+    state.home.pinnedNoteId === note.id ? null : note.id);
+}
+
+/* Bind the Filtered Notes widget to a saved search (or
+   clear the binding, with null). The binding is the
+   search's id; its name and query are read at render, so
+   a rename follows and a deleted search unbinds the
+   widget back to its hint. */
+function setHomeFilteredSearch(id) {
+  const entry = homeWidgetEntry("filtered");
+  if (!entry) { return; }
+  entry.searchId = id || null;
+  persistHome();
+  renderAll();
+}
+
+/* The Customize operations. Each mutates the stored
+   layout (the single source the grid renders from),
+   persists it, and re-renders, so the panel and the
+   grid can never disagree. */
+function homeAddWidget(type) {
+  if (HOME_WIDGET_TYPES.indexOf(type) < 0) { return; }
+  if (homeWidgetEntry(type)) { return; }
+  state.home.widgets.push(type === "filtered"
+    ? { type: "filtered", searchId: null } : { type: type });
+  persistHome();
+  renderAll();
+}
+
+function homeRemoveWidget(type) {
+  state.home.widgets = state.home.widgets.filter(
+    function (e) { return e.type !== type; });
+  persistHome();
+  renderAll();
+}
+
+function homeMoveWidget(type, dir) {
+  const at = state.home.widgets.findIndex(function (e) {
+    return e.type === type;
+  });
+  const to = at + dir;
+  if (at < 0 || to < 0 || to >= state.home.widgets.length) {
+    return;
+  }
+  const entry = state.home.widgets[at];
+  state.home.widgets[at] = state.home.widgets[to];
+  state.home.widgets[to] = entry;
+  persistHome();
+  renderAll();
+}
+
+/* Session only Home view state: whether the Customize
+   panel is open, and which of the Recent widget's two
+   lists is showing. Neither is a stored fact. */
+let homeCustomizeOpen = false;
+let homeRecentTab = "updated";
+
+/* Evernote greets by the time of day. */
+function homeGreetingText(now) {
+  const h = now.getHours();
+  if (h < 12) { return "Good morning"; }
+  if (h < 18) { return "Good afternoon"; }
+  return "Good evening";
+}
+
+/* Opening a note from Home: the note opens in the notes
+   view (All Notes), the way following a note link from
+   anywhere outside the list lands, so the editor and
+   the list are both there when the user comes back. */
+function openNoteFromHome(id) {
+  state.view = { kind: "all", value: null };
+  openNote(id);
+}
+
+/* A tag widget row navigates like the sidebar tag row
+   it mirrors, the click again to clear rule included. */
+function homeOpenTag(tag) {
+  if (state.view.kind === "tag" && state.view.value === tag) {
+    state.view = { kind: "all", value: null };
+  } else {
+    state.view = { kind: "tag", value: tag };
+  }
+  renderAll();
+  setMobileView("list");
+}
+
+/* The notes a search text matches, judged exactly the
+   way the notes list judges the same text (the grammar
+   path for a query carrying syntax, the plain predicate
+   otherwise), in the list's own order. The Filtered
+   Notes widget renders from this; the list itself keeps
+   its own path through visibleNotes. */
+function notesMatchingSearchText(rawQuery) {
+  const q = normalizeSearchText(rawQuery);
+  let list = state.notes.slice();
+  if (q) {
+    const parsed = parseSearchQuery(q);
+    if (parsed) {
+      list = list.filter(function (n) {
+        return noteMatchesParsedSearch(n, parsed);
+      });
+    } else {
+      list = list.filter(function (n) {
+        return noteMatchesPlainSearch(n, q);
+      });
+    }
+  }
+  list.sort(function (a, b) {
+    if (!!b.pinned !== !!a.pinned) { return b.pinned ? 1 : -1; }
+    return compareNotesByListSort(a, b);
+  });
+  return list;
+}
+
+/* One widget's shell: the card, its header (the title,
+   plus whatever controls the builder adds), and its
+   body. Every widget is built through here, so the
+   grid's cards share one shape. */
+function homeWidgetShell(type, titleText) {
+  const widget = document.createElement("section");
+  widget.className = "home-widget";
+  widget.setAttribute("data-widget-type", type);
+  const head = document.createElement("div");
+  head.className = "home-widget-head";
+  const title = document.createElement("h3");
+  title.className = "home-widget-title";
+  title.textContent = titleText;
+  head.appendChild(title);
+  widget.appendChild(head);
+  const body = document.createElement("div");
+  body.className = "home-widget-body";
+  widget.appendChild(body);
+  return { widget: widget, head: head, body: body };
+}
+
+/* A note row, shared by the Recent and Filtered Notes
+   widgets: the title, the date the caller is ordering
+   by, and a click that opens the note. */
+function homeNoteRow(note, field) {
+  const row = document.createElement("button");
+  row.type = "button";
+  row.className = "home-note-row";
+  row.setAttribute("data-note-id", note.id);
+  const title = document.createElement("span");
+  title.className = "home-note-row-title";
+  title.textContent = note.title;
+  row.appendChild(title);
+  const stamp = note[field || "updated"];
+  if (stamp) {
+    const meta = document.createElement("span");
+    meta.className = "home-note-row-meta";
+    meta.textContent = new Date(stamp).toLocaleDateString();
+    row.appendChild(meta);
+  }
+  row.addEventListener("click", function () {
+    openNoteFromHome(note.id);
+  });
+  return row;
+}
+
+function homeHint(text) {
+  const hint = document.createElement("div");
+  hint.className = "home-hint";
+  hint.textContent = text;
+  return hint;
+}
+
+/* The Pinned Note widget. Evernote's widget shows a
+   read only preview and opens the note in the editor;
+   the note is chosen from the note's own menu (Pin to
+   Home, in the notes list menu here) or from this
+   widget's own picker. A pinned note that is no longer
+   in the notebooks (trashed, archived, or deleted on
+   another device) renders the empty state: the stored
+   pin is left alone (a restore makes the widget whole
+   again), and nothing in the widget navigates. */
+function buildHomePinnedWidget() {
+  const parts = homeWidgetShell("pinned", "Pinned Note");
+  const note = state.home.pinnedNoteId
+    ? state.notes.find(function (n) {
+        return n.id === state.home.pinnedNoteId;
+      }) || null
+    : null;
+  const change = document.createElement("button");
+  change.type = "button";
+  change.className = "home-widget-action home-pinned-change";
+  change.textContent = note ? "Change" : "Choose a note";
+  change.addEventListener("click", function () {
+    toggleHomePinPicker(parts.widget);
+  });
+  parts.head.appendChild(change);
+  if (!note) {
+    const empty = document.createElement("div");
+    empty.className = "home-hint home-pinned-empty";
+    empty.textContent = state.home.pinnedNoteId
+      ? "The pinned note is no longer in your notebooks. " +
+        "Choose another note to pin here."
+      : "No note is pinned to Home yet. Choose a note to " +
+        "keep it here.";
+    parts.body.appendChild(empty);
+  } else {
+    const open = document.createElement("button");
+    open.type = "button";
+    open.className = "home-pinned-open";
+    const title = document.createElement("div");
+    title.className = "home-pinned-title";
+    title.textContent = note.title;
+    open.appendChild(title);
+    const preview = document.createElement("div");
+    preview.className = "home-pinned-preview";
+    preview.textContent = noteListText(note).slice(0, 240);
+    open.appendChild(preview);
+    open.addEventListener("click", function () {
+      openNoteFromHome(note.id);
+    });
+    parts.body.appendChild(open);
+  }
+  const picker = document.createElement("div");
+  picker.className = "home-pin-picker hidden";
+  parts.body.appendChild(picker);
+  return parts.widget;
+}
+
+/* The pin picker's rows are filled when it opens (the
+   note list it offers is the most recently updated
+   first, capped, like a picker's shortlist), so an
+   unopened picker costs nothing and a re-render simply
+   closes it. */
+function toggleHomePinPicker(widget) {
+  const picker = widget.querySelector(".home-pin-picker");
+  if (!picker) { return; }
+  if (!picker.classList.contains("hidden")) {
+    picker.classList.add("hidden");
+    return;
+  }
+  picker.innerHTML = "";
+  if (state.home.pinnedNoteId) {
+    const clear = document.createElement("button");
+    clear.type = "button";
+    clear.className = "home-pin-row home-pin-clear";
+    clear.textContent = "Remove pin";
+    clear.addEventListener("click", function () {
+      setHomePinnedNote(null);
+    });
+    picker.appendChild(clear);
+  }
+  const notes = state.notes.slice().sort(function (a, b) {
+    return String(b.updated || "")
+      .localeCompare(String(a.updated || ""));
+  }).slice(0, 12);
+  notes.forEach(function (n) {
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = "home-pin-row";
+    row.setAttribute("data-note-id", n.id);
+    row.textContent = n.title;
+    row.addEventListener("click", function () {
+      setHomePinnedNote(n.id);
+    });
+    picker.appendChild(row);
+  });
+  if (!notes.length) {
+    picker.appendChild(homeHint("No notes yet."));
+  }
+  picker.classList.remove("hidden");
+}
+
+/* The Recent Notes widget: the most recently updated
+   notes, with the Recently created list one tab away.
+   (Evernote's second tab is Suggested, its server's
+   picks; this app has no server to suggest from, so the
+   second list is the created order instead.) */
+function buildHomeRecentWidget() {
+  const parts = homeWidgetShell("recent", "Recent Notes");
+  const tabs = document.createElement("div");
+  tabs.className = "home-recent-tabs";
+  [["updated", "Recent"], ["created", "Created"]]
+    .forEach(function (pair) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "home-recent-tab" +
+        (homeRecentTab === pair[0] ? " active" : "");
+      btn.setAttribute("data-tab", pair[0]);
+      btn.setAttribute("aria-selected",
+        homeRecentTab === pair[0] ? "true" : "false");
+      btn.textContent = pair[1];
+      btn.addEventListener("click", function () {
+        homeRecentTab = pair[0];
+        renderHome();
+      });
+      tabs.appendChild(btn);
+    });
+  parts.head.appendChild(tabs);
+  const field = homeRecentTab === "created"
+    ? "created" : "updated";
+  const notes = state.notes.slice().sort(function (a, b) {
+    return String(b[field] || "")
+      .localeCompare(String(a[field] || ""));
+  }).slice(0, 8);
+  if (!notes.length) {
+    parts.body.appendChild(homeHint("No notes yet."));
+  }
+  notes.forEach(function (n) {
+    parts.body.appendChild(homeNoteRow(n, field));
+  });
+  return parts.widget;
+}
+
+/* The Tasks widget: open tasks in the Tasks view's own
+   order (sortTasksForList: open first, by due moment,
+   no date last), each row the shared task row, so its
+   checkbox completes through the real path (a recurring
+   task rolls forward) and its click opens the task
+   editor, exactly as in the Tasks view and the Things
+   to do page. */
+function buildHomeTasksWidget() {
+  const parts = homeWidgetShell("tasks", "Tasks");
+  const open = sortTasksForList(state.tasks.filter(
+    function (t) { return t.status === "open"; })).slice(0, 8);
+  if (!open.length) {
+    parts.body.appendChild(homeHint("No open tasks."));
+  }
+  open.forEach(function (task) {
+    parts.body.appendChild(buildTaskRowEl(task, {}));
+  });
+  return parts.widget;
+}
+
+/* The Scratch Pad widget: a plain text area whose every
+   input writes state and persists through the index
+   writer, whose own coalescing (saveIndex's debounce)
+   is the batching. It is not a note: it is never
+   searched, listed, or versioned. While the pad holds
+   the focus, renderHome keeps its live element (see
+   there), so a sync landing mid sentence can never eat
+   the sentence. */
+function buildHomeScratchWidget() {
+  const parts = homeWidgetShell("scratch", "Scratch Pad");
+  const area = document.createElement("textarea");
+  area.id = "homeScratchText";
+  area.className = "home-scratch";
+  area.rows = 6;
+  area.placeholder = "Jot something down...";
+  area.setAttribute("aria-label", "Scratch pad");
+  area.value = state.home.scratch;
+  area.addEventListener("input", function () {
+    state.home.scratch = area.value;
+    persistHome();
+  });
+  parts.body.appendChild(area);
+  return parts.widget;
+}
+
+/* The Filtered Notes widget, bound to one saved search:
+   its title is the search's name and runs the search,
+   its body is the search's first matches. Unbound, it
+   says what would bind it, in the state's own terms. */
+function buildHomeFilteredWidget() {
+  const entry = homeWidgetEntry("filtered");
+  const search = entry && entry.searchId
+    ? savedSearchById(entry.searchId) : null;
+  const parts = homeWidgetShell("filtered", "Filtered Notes");
+  if (search) {
+    const titleEl = parts.head.querySelector(".home-widget-title");
+    const run = document.createElement("button");
+    run.type = "button";
+    run.className = "home-widget-title home-filtered-run";
+    run.textContent = search.name;
+    run.title = "Run this search";
+    run.addEventListener("click", function () {
+      runSavedSearch(search);
+    });
+    titleEl.parentNode.replaceChild(run, titleEl);
+  }
+  const choose = document.createElement("button");
+  choose.type = "button";
+  choose.className = "home-widget-action home-filtered-choose";
+  choose.textContent = search ? "Change search" : "Choose search";
+  choose.addEventListener("click", function () {
+    toggleHomeFilteredPicker(parts.widget);
+  });
+  parts.head.appendChild(choose);
+  if (!state.savedSearches.length) {
+    const hint = homeHint("No saved searches yet. Run a " +
+      "search and choose Save search to create one.");
+    hint.classList.add("home-filtered-hint");
+    parts.body.appendChild(hint);
+  } else if (!search) {
+    const hint = homeHint("Choose a saved search to show " +
+      "its notes here.");
+    hint.classList.add("home-filtered-hint");
+    parts.body.appendChild(hint);
+  } else {
+    const matches = notesMatchingSearchText(search.query)
+      .slice(0, 6);
+    if (!matches.length) {
+      parts.body.appendChild(
+        homeHint("No notes match this search."));
+    }
+    matches.forEach(function (n) {
+      parts.body.appendChild(homeNoteRow(n, "updated"));
+    });
+  }
+  const picker = document.createElement("div");
+  picker.className = "home-filtered-picker hidden";
+  parts.body.appendChild(picker);
+  return parts.widget;
+}
+
+function toggleHomeFilteredPicker(widget) {
+  const picker = widget.querySelector(".home-filtered-picker");
+  if (!picker) { return; }
+  if (!picker.classList.contains("hidden")) {
+    picker.classList.add("hidden");
+    return;
+  }
+  picker.innerHTML = "";
+  const entry = homeWidgetEntry("filtered");
+  if (entry && entry.searchId) {
+    const clear = document.createElement("button");
+    clear.type = "button";
+    clear.className = "home-filtered-row home-filtered-clear";
+    clear.textContent = "No search";
+    clear.addEventListener("click", function () {
+      setHomeFilteredSearch(null);
+    });
+    picker.appendChild(clear);
+  }
+  state.savedSearches.forEach(function (s) {
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = "home-filtered-row";
+    row.setAttribute("data-search-id", s.id);
+    row.textContent = s.name;
+    row.addEventListener("click", function () {
+      setHomeFilteredSearch(s.id);
+    });
+    picker.appendChild(row);
+  });
+  if (!state.savedSearches.length) {
+    picker.appendChild(homeHint("No saved searches yet."));
+  }
+  picker.classList.remove("hidden");
+}
+
+/* The Tags widget: every tag in the sidebar tree's order
+   with its count, labels flat (the tree's shape is the
+   sidebar's business; here the order is the borrow),
+   navigating like the sidebar rows. */
+function buildHomeTagsWidget() {
+  const parts = homeWidgetShell("tags", "Tags");
+  const tags = allTagsWithCounts();
+  if (!tags.length) {
+    parts.body.appendChild(homeHint("No tags yet."));
+  }
+  tagTreeRows(tags, false).forEach(function (row) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "home-tag-row";
+    btn.setAttribute("data-tag", row.tag);
+    const label = document.createElement("span");
+    label.className = "home-tag-label";
+    label.textContent = row.tag;
+    btn.appendChild(label);
+    const count = document.createElement("span");
+    count.className = "home-tag-count";
+    count.textContent = String(row.count);
+    btn.appendChild(count);
+    btn.addEventListener("click", function () {
+      homeOpenTag(row.tag);
+    });
+    parts.body.appendChild(btn);
+  });
+  return parts.widget;
+}
+
+/* The Notebooks widget: the notebooks in the sidebar's
+   Evernote order, flattened the way the other notebook
+   pickers flatten it, navigating like the sidebar rows. */
+function buildHomeNotebooksWidget() {
+  const parts = homeWidgetShell("notebooks", "Notebooks");
+  const list = notebooksInSidebarOrder();
+  if (!list.length) {
+    parts.body.appendChild(homeHint("No notebooks yet."));
+  }
+  list.forEach(function (nb) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "home-nb-row";
+    btn.setAttribute("data-slug", nb.slug);
+    const label = document.createElement("span");
+    label.className = "home-nb-label";
+    label.textContent = nb.name;
+    btn.appendChild(label);
+    const count = document.createElement("span");
+    count.className = "home-nb-count";
+    count.textContent = String(notebookCount(nb.slug));
+    btn.appendChild(count);
+    btn.addEventListener("click", function () {
+      state.view = { kind: "notebook", value: nb.slug };
+      renderAll();
+      setMobileView("list");
+    });
+    parts.body.appendChild(btn);
+  });
+  return parts.widget;
+}
+
+/* The Customize panel: one row per widget. A visible
+   widget's row carries Move up, Move down, and Remove;
+   a hidden widget's row carries Add. The rows are
+   rebuilt on every render while the panel is open, so
+   the panel always describes the layout as it stands. */
+function renderHomeCustomize() {
+  const panel = document.getElementById("homeCustomizePanel");
+  if (!panel) { return; }
+  panel.classList.toggle("hidden", !homeCustomizeOpen);
+  if (!homeCustomizeOpen) { return; }
+  panel.innerHTML = "";
+  const head = document.createElement("div");
+  head.className = "home-cust-head";
+  head.textContent = "Choose and order your widgets";
+  panel.appendChild(head);
+  state.home.widgets.forEach(function (entry) {
+    panel.appendChild(homeCustomizeRow(entry.type, true));
+  });
+  HOME_WIDGET_TYPES.forEach(function (type) {
+    if (!homeWidgetEntry(type)) {
+      panel.appendChild(homeCustomizeRow(type, false));
+    }
+  });
+}
+
+function homeCustomizeRow(type, isVisible) {
+  const row = document.createElement("div");
+  row.className = "home-cust-row";
+  row.setAttribute("data-widget-type", type);
+  const label = document.createElement("span");
+  label.className = "home-cust-label";
+  label.textContent = HOME_WIDGET_LABELS[type];
+  row.appendChild(label);
+  function opBtn(op, text, fn) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "btn small home-cust-op";
+    btn.setAttribute("data-cust-op", op);
+    btn.textContent = text;
+    btn.addEventListener("click", fn);
+    row.appendChild(btn);
+  }
+  if (isVisible) {
+    opBtn("up", "Move up", function () {
+      homeMoveWidget(type, -1);
+    });
+    opBtn("down", "Move down", function () {
+      homeMoveWidget(type, 1);
+    });
+    opBtn("remove", "Remove", function () {
+      homeRemoveWidget(type);
+    });
+  } else {
+    opBtn("add", "Add", function () {
+      homeAddWidget(type);
+    });
+  }
+  return row;
+}
+
+/* Render Home: the greeting and date over the widget
+   grid, the widgets in the stored layout's order. The
+   one element a render must never rebuild is the
+   scratch pad while it is being typed in: a render
+   landing then (a sync's, above all) would drop the
+   caret and any not yet persisted keystroke, so the
+   live widget is lifted out of the old grid and set
+   into the new one untouched. */
+function renderHome() {
+  const pane = document.getElementById("homepane");
+  if (!pane) { return; }
+  const greet = document.getElementById("homeGreeting");
+  if (greet) {
+    greet.textContent = homeGreetingText(new Date());
+  }
+  const dateEl = document.getElementById("homeDate");
+  if (dateEl) {
+    dateEl.textContent = new Date().toLocaleDateString(
+      undefined, { weekday: "long", month: "long",
+        day: "numeric", year: "numeric" });
+  }
+  renderHomeCustomize();
+  const grid = document.getElementById("homeGrid");
+  if (!grid) { return; }
+  let liveScratch = null;
+  const active = document.activeElement;
+  const scratchNow = grid.querySelector(
+    ".home-widget[data-widget-type=\"scratch\"]");
+  if (scratchNow && active && scratchNow.contains(active)) {
+    liveScratch = scratchNow;
+  }
+  grid.innerHTML = "";
+  state.home.widgets.forEach(function (entry) {
+    let el = null;
+    if (entry.type === "scratch" && liveScratch) {
+      el = liveScratch;
+    } else if (entry.type === "pinned") {
+      el = buildHomePinnedWidget();
+    } else if (entry.type === "recent") {
+      el = buildHomeRecentWidget();
+    } else if (entry.type === "tasks") {
+      el = buildHomeTasksWidget();
+    } else if (entry.type === "scratch") {
+      el = buildHomeScratchWidget();
+    } else if (entry.type === "filtered") {
+      el = buildHomeFilteredWidget();
+    } else if (entry.type === "tags") {
+      el = buildHomeTagsWidget();
+    } else if (entry.type === "notebooks") {
+      el = buildHomeNotebooksWidget();
+    }
+    if (el) { grid.appendChild(el); }
+  });
+  const empty = document.getElementById("homeEmpty");
+  if (empty) {
+    empty.classList.toggle("hidden",
+      state.home.widgets.length > 0);
+  }
 }
 
 /* --------------------------------------------------------------------------
@@ -14241,6 +15353,15 @@ async function connectAndLoad() {
        supported. A device with no readable cache paints nothing
        and waits for the sync with the overlay up, exactly as
        before v2.21. */
+    /* v2.33: the landing. A returning boot opens on
+       Home (or on the notes list, when this device's
+       When opening choice says so), from the cache paint
+       onward, so the first thing rendered is already the
+       landing view. A first run is the one exception:
+       its seeded starter note opens below, as it always
+       has, so the landing applies only when this boot
+       did not seed. */
+    if (!starter) { applyStartView(); }
     const paintedFromCache = await loadCacheWithKey();
     if (paintedFromCache) {
       renderAll();
@@ -14496,6 +15617,7 @@ function renderAll() {
   syncTasksPane();
   renderSidebar();
   renderNoteList();
+  renderHome();
   renderEditor();
   refreshSyncPill();
 }
@@ -14511,13 +15633,25 @@ function renderAll() {
    leave the panes stale. */
 function syncTasksPane() {
   const tasksActive = state.view.kind === "tasks";
+  /* v2.33: Home is a full main area view like Tasks:
+     while it is active its pane shows and the list and
+     editor panes hide, and the open note survives the
+     trip exactly as it does for Tasks. */
+  const homeActive = state.view.kind === "home";
   document.body.classList.toggle("tasks-view", tasksActive);
+  document.body.classList.toggle("home-view", homeActive);
   const pane = document.getElementById("taskspane");
   if (pane) { pane.classList.toggle("hidden", !tasksActive); }
+  const home = document.getElementById("homepane");
+  if (home) { home.classList.toggle("hidden", !homeActive); }
   const list = document.getElementById("listpane");
-  if (list) { list.classList.toggle("hidden", tasksActive); }
+  if (list) {
+    list.classList.toggle("hidden", tasksActive || homeActive);
+  }
   const editor = document.getElementById("editorpane");
-  if (editor) { editor.classList.toggle("hidden", tasksActive); }
+  if (editor) {
+    editor.classList.toggle("hidden", tasksActive || homeActive);
+  }
 }
 
 /* Count helpers for the sidebar badges. */
@@ -14898,6 +16032,10 @@ function renderSidebar() {
   document.getElementById("countTrash").textContent = state.trash.length || "";
   document.getElementById("countArchive").textContent = state.archive.length || "";
 
+  /* v2.33: the Home entry sits at the top of the nav,
+     where Evernote keeps its own. */
+  document.getElementById("navHome").classList.toggle("active",
+    state.view.kind === "home");
   document.getElementById("navAll").classList.toggle("active",
     state.view.kind === "all");
   document.getElementById("navTasks").classList.toggle("active",
@@ -15637,6 +16775,25 @@ function renderListToolbar() {
       hasShortcut("note", liveSelected.id)
       ? "Remove Note from Shortcuts"
       : "Add Note to Shortcuts";
+  }
+  /* v2.33: the Pin to Home item follows the pin item's
+     rules exactly: hidden in Trash and Archive, enabled
+     only for a live selected note, and its label flips
+     with the note's being the one pinned to Home. (It is
+     a different pin from Pin note: that one orders the
+     list; this one chooses Home's pinned note.) */
+  const homePinBtn = document.getElementById("nbHomePinBtn");
+  if (homePinBtn) {
+    homePinBtn.classList.toggle("hidden",
+      kind === "trash" || kind === "archive");
+    const selected = currentNote();
+    const liveSelected = selected &&
+      state.notes.indexOf(selected) >= 0 ? selected : null;
+    homePinBtn.disabled = !liveSelected;
+    homePinBtn.textContent = liveSelected &&
+      state.home.pinnedNoteId === liveSelected.id
+      ? "Unpin from Home"
+      : "Pin to Home";
   }
   const emptyTrashBtn = document.getElementById("nbEmptyTrashBtn");
   if (emptyTrashBtn) {
@@ -16385,6 +17542,26 @@ function noteMatchesParsedSearch(note, parsed) {
    v2.32: a query carrying search syntax is judged by the
    Evernote grammar above; a plain query runs the matcher the
    app has always used, unchanged. */
+/* The plain (no syntax) search predicate: title, body
+   text, attachment names, or tags containing the query.
+   Through v2.32 this lived inline in visibleNotes;
+   v2.33 names it, unchanged, because the Home Filtered
+   Notes widget judges a saved search's plain queries by
+   the same rule the list does (notesMatchingSearchText). */
+function noteMatchesPlainSearch(n, q) {
+  return n.title.toLowerCase().indexOf(q) >= 0 ||
+    /* v2.20: a shell searches its catalog preview (its full
+       body is not on this device); a loaded note searches
+       its body, as always. */
+    noteListText(n).toLowerCase().indexOf(q) >= 0 ||
+    /* v1.2: attachment file names are searchable. Placeholder markup
+       itself contributes no text, so snippets stay clean. */
+    (n.attachments || []).some(function (a) {
+      return (a.name || "").toLowerCase().indexOf(q) >= 0;
+    }) ||
+    n.tags.some(function (t) { return t.toLowerCase().indexOf(q) >= 0; });
+}
+
 function visibleNotes() {
   let list;
   if (state.view.kind === "trash") {
@@ -16418,17 +17595,7 @@ function visibleNotes() {
     } else {
       const q = state.search;
       list = list.filter(function (n) {
-        return n.title.toLowerCase().indexOf(q) >= 0 ||
-          /* v2.20: a shell searches its catalog preview (its full
-             body is not on this device); a loaded note searches
-             its body, as always. */
-          noteListText(n).toLowerCase().indexOf(q) >= 0 ||
-          /* v1.2: attachment file names are searchable. Placeholder markup
-             itself contributes no text, so snippets stay clean. */
-          (n.attachments || []).some(function (a) {
-            return (a.name || "").toLowerCase().indexOf(q) >= 0;
-          }) ||
-          n.tags.some(function (t) { return t.toLowerCase().indexOf(q) >= 0; });
+        return noteMatchesPlainSearch(n, q);
       });
     }
   }
@@ -16443,6 +17610,7 @@ function visibleNotes() {
 }
 
 function viewTitle() {
+  if (state.view.kind === "home") { return "Home"; }
   if (state.view.kind === "tasks") { return "Tasks"; }
   if (state.view.kind === "pinned") { return "Pinned"; }
   if (state.view.kind === "trash") { return "Trash"; }
@@ -18810,6 +19978,13 @@ function syncSettingsControls() {
       .indexOf(state.defaultPasteMode) >= 0
       ? state.defaultPasteMode : "source";
   }
+  /* v2.33: the When opening select shows the saved
+     choice (Home unless this device chose the list). */
+  const startSelect = document.getElementById("settingsStartViewSelect");
+  if (startSelect) {
+    startSelect.value = state.startView === "notes"
+      ? "notes" : "home";
+  }
   /* v2.24: the Notifications section shows the live
      permission and the saved reminders switch. */
   renderNotificationSettings();
@@ -18858,6 +20033,22 @@ function applyDefaultPasteFromSelect() {
   } else {
     state.defaultPasteMode = "source";
     select.value = "source";
+  }
+  saveSettings();
+}
+
+/* v2.33: the When opening select's change handler. The
+   choice persists at once, like every Settings control,
+   on this device only, and takes effect on the next
+   boot; the current session's view does not move. */
+function applyStartViewFromSelect() {
+  const select = document.getElementById("settingsStartViewSelect");
+  if (!select) { return; }
+  if (select.value === "notes" || select.value === "home") {
+    state.startView = select.value;
+  } else {
+    state.startView = "home";
+    select.value = "home";
   }
   saveSettings();
 }
@@ -34747,10 +35938,24 @@ function wireEvents() {
   });
 
   /* Sidebar: view switching. */
+  /* v2.33: Home, the first entry: the dashboard, the
+     same one line navigation as its neighbours. */
+  document.getElementById("navHome").addEventListener("click", function () {
+    state.view = { kind: "home", value: null };
+    renderAll();
+    setMobileView("list");
+  });
   document.getElementById("navAll").addEventListener("click", function () {
     state.view = { kind: "all", value: null };
     renderAll();
     setMobileView("list");
+  });
+  /* v2.33: the Home header's Customize button opens and
+     closes the customize panel; renderHome draws the
+     panel's rows from the stored layout each time. */
+  document.getElementById("homeCustomizeBtn").addEventListener("click", function () {
+    homeCustomizeOpen = !homeCustomizeOpen;
+    renderHome();
   });
   /* v2.24: the Tasks entry under All Notes opens the Tasks
      view, the same one line navigation as its neighbours. */
@@ -34992,6 +36197,14 @@ function wireEvents() {
     if (!note || state.notes.indexOf(note) < 0) { return; }
     toggleShortcut("note", note.id);
   });
+  /* v2.33: the same menu's Pin to Home item, Evernote's
+     surface for the dashboard's pinned note. Like the
+     pin item, it belongs to the selected note and the
+     toggle re-checks the selection. */
+  document.getElementById("nbHomePinBtn").addEventListener("click", function () {
+    closeListPanels();
+    toggleSelectedNoteHomePin();
+  });
   /* v1.8.1: the same menu's Trash and Archive items. renderListToolbar
      only shows them in their view (and disables them when they would
      have nothing to act on); the view guards stay as a second line
@@ -35026,6 +36239,16 @@ function wireEvents() {
   document.getElementById("searchInput").addEventListener("input",
     debounce(function (ev) {
       state.search = ev.target.value.trim().toLowerCase();
+      /* v2.33: a search typed while Home is showing lands
+         on its results, the way Evernote leaves Home for
+         a search; from any other view only the list
+         re-renders, as always. */
+      if (state.view.kind === "home" && state.search) {
+        state.view = { kind: "all", value: null };
+        renderAll();
+        setMobileView("list");
+        return;
+      }
       renderNoteList();
     }, 150));
   /* v2.32: clicking into the search box surfaces the saved
@@ -35185,6 +36408,9 @@ function wireEvents() {
   /* v2.23: the Default paste select in Settings Editor. */
   document.getElementById("settingsDefaultPasteSelect")
     .addEventListener("change", applyDefaultPasteFromSelect);
+  /* v2.33: the When opening select in Settings Appearance. */
+  document.getElementById("settingsStartViewSelect")
+    .addEventListener("change", applyStartViewFromSelect);
 
   /* v2.24: the Settings Notifications controls, and the task
      editor modal, following the Settings modal's own close
