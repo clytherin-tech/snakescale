@@ -40,10 +40,82 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-28-SSN-V2370
-  Version: 2.37.0
+  BUILD STAMP: 2026-10-28-SSN-V2380
+  Version: 2.38.0
 
   Revision history:
+    v2.38.0 2026-10-28 Note templates, the third release
+                      of the Evernote parity program's
+                      phase 3, modeled on Evernote's
+                      templates (its help pages "Use
+                      templates", "Create your own
+                      templates", and "Edit your
+                      templates"): a gallery of built in
+                      templates (Meeting Notes, Weekly
+                      Planner, Project Plan, and Daily
+                      Journal, written fresh for this
+                      app) plus the user's own, saved
+                      from any note through the notes
+                      list menu's Save as Template item,
+                      which collects a name and
+                      snapshots the note's title and
+                      body, so later edits to the source
+                      never move the template. Applying
+                      a template, from the sidebar's
+                      Templates button opening the one
+                      gallery, generates a NEW note
+                      with the template's title and
+                      body in the notebook the New Note
+                      button would choose, and opens
+                      it; the source is never touched.
+                      Custom templates live in
+                      index.json (a templates field
+                      plumbed through every index write
+                      and load path like the parity
+                      fields before them), so they sync
+                      across devices the way Evernote's
+                      saved templates do; the gallery
+                      renames and deletes customs, a
+                      name already taken (by a custom
+                      or a built in) is refused with a
+                      message, and deleting a template
+                      never touches a note made from
+                      it. An attachment block cannot
+                      ride into a template (its file
+                      belongs to the source note), so
+                      at save time each one becomes its
+                      labeled "[Attachment: name]"
+                      line, and a note made from the
+                      template owns no attachments;
+                      self contained body content,
+                      checklists and tables included,
+                      rides as it is. Named deviations
+                      from Evernote: Evernote's gallery
+                      is dozens of templates imported
+                      from its website one by one, this
+                      gallery ships four built ins
+                      always present and not importable
+                      or removable; gallery entries show
+                      a text preview rather than
+                      Evernote's preview images, and a
+                      click applies at once rather than
+                      opening a preview page first;
+                      there is no pin a template as a
+                      new note suggestion, no daily
+                      note template setting, and no
+                      template editor of its own (a
+                      template is edited by making a
+                      note from it, shaping the note,
+                      and saving that as a new
+                      template); saving a custom
+                      template is free here, where
+                      Evernote has historically kept
+                      it in its paid tiers; and the
+                      name prompt and the delete
+                      confirm are the app's native
+                      prompt and confirm flow, the
+                      dialog deviation the earlier
+                      parity releases already carry.
     v2.37.0 2026-10-28 The table of contents block, the
                       second release of the Evernote
                       parity program's phase 3, modeled on
@@ -2941,6 +3013,66 @@ body.dark .gate-brand .wordmark{color:#EAF3EC;}
 }
 #savedSearchMenu button:hover{background:var(--accent-soft);}
 #savedSearchMenu button.danger{color:#C0392B;}
+/* v2.38 (Evernote parity, phase 3 release 3): the
+   templates gallery inside its modal. The rows are the
+   saved search rows' shape (a main button, the name
+   over a muted secondary line, plus a three dot menu
+   button on the rows that can be managed), because a
+   template entry is the same kind of object to scan: a
+   name over the thing it will produce. The gallery
+   scrolls inside the modal card, and the entry menu is
+   the saved search menu's card, positioned under its
+   row at open time. Every color is a themed variable,
+   so the gallery themes like the rest of the app. */
+.template-gallery{
+  position:relative;max-height:55vh;overflow-y:auto;
+  display:flex;flex-direction:column;gap:2px;padding-right:2px;
+}
+.template-group-title{
+  padding:8px 10px 4px;font-size:11.5px;font-weight:700;
+  letter-spacing:.6px;text-transform:uppercase;color:var(--text-muted);
+}
+.template-row{display:flex;align-items:center;gap:2px;}
+.template-main{
+  flex:1;min-width:0;display:flex;flex-direction:column;gap:1px;
+  align-items:flex-start;text-align:left;background:none;border:none;
+  color:var(--text-strong);cursor:pointer;padding:7px 10px;
+  border-radius:var(--radius-button);
+  transition:background-color var(--motion);
+}
+.template-main:hover{background:var(--accent-soft);}
+.template-name{
+  font-size:13.5px;font-weight:600;max-width:100%;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.template-preview{
+  font-size:12px;color:var(--text-muted);max-width:100%;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.template-menu-btn{
+  flex:none;width:24px;height:24px;display:inline-flex;
+  align-items:center;justify-content:center;background:none;
+  border:none;border-radius:var(--radius-button);color:var(--text-muted);
+  font-size:15px;line-height:1;cursor:pointer;
+  transition:background-color var(--motion),color var(--motion);
+}
+.template-menu-btn:hover{background:var(--accent-soft);color:var(--text-strong);}
+.template-empty{padding:6px 10px;font-size:12.5px;color:var(--text-muted);}
+#templateMenu{
+  position:absolute;left:6px;right:6px;z-index:5;min-width:180px;
+  padding:6px;background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius-card);box-shadow:0 10px 28px rgba(0,0,0,.32);
+  display:flex;flex-direction:column;gap:2px;
+}
+#templateMenu.hidden{display:none;}
+#templateMenu button{
+  display:flex;align-items:center;gap:8px;width:100%;text-align:left;
+  background:none;border:none;color:var(--text-strong);cursor:pointer;
+  padding:8px 10px;border-radius:var(--radius-button);font-size:13.5px;
+  transition:background-color var(--motion);
+}
+#templateMenu button:hover{background:var(--accent-soft);}
+#templateMenu button.danger{color:#C0392B;}
 #tagMenu button:disabled{opacity:.55;cursor:default;}
 #tagMenu button:disabled:hover{background:none;}
 #tagMenu button.danger{color:#C0392B;}
@@ -6076,6 +6208,12 @@ body.dark .version-date{color:var(--accent);}
     </div>
 
     <button id="newNoteBtn" class="btn accent block" type="button">+ New Note</button>
+    <!-- v2.38: the templates gallery's door, under New
+         Note where Evernote keeps its template entry
+         points (the New note flow and the Templates
+         section both lead to the one gallery there;
+         here the one button leads to the one gallery). -->
+    <button id="templatesBtn" class="btn block" type="button">Templates</button>
 
     <!-- Search lives in the sidebar so it is in the same place on desktop
          and mobile. It filters the note list locally (title, body, tags).
@@ -6408,6 +6546,14 @@ body.dark .version-date{color:var(--accent);}
                  and Edit reminder with the note's state,
                  set in renderListToolbar. -->
             <button type="button" class="list-menu-item" id="nbReminderBtn" role="menuitem">Add reminder</button>
+            <!-- v2.38: Save as Template, Evernote's own
+                 route (a note's More actions menu there;
+                 this menu is the app's note actions
+                 surface). Snapshots the selected note's
+                 title and body as a custom template; it
+                 follows the reminder item's show and
+                 enable rule, set in renderListToolbar. -->
+            <button type="button" class="list-menu-item" id="nbSaveTemplateBtn" role="menuitem">Save as Template</button>
             <!-- v1.8.1: the menu adapts to the view. These three items
                  belong to Trash and the Archive; renderListToolbar
                  shows and enables the ones for the current view and
@@ -7459,6 +7605,41 @@ body.dark .version-date{color:var(--accent);}
 </div>
 
 <!-- ==========================================================================
+     v2.38: the templates gallery modal, in the reminder
+     modal's family.
+     Two groups, Evernote's own arrangement (its template
+     gallery and the user's saved templates side by side):
+     the built in gallery first, then My templates. Each
+     row is a name over a short text preview; clicking a
+     row applies the template (a NEW note is created and
+     opened, the Evernote behavior). Custom rows carry a
+     three dot entry menu (Rename, Delete); built in rows
+     cannot be managed, the way a gallery's stock items
+     cannot. The menu is one shared card positioned under
+     its row at open time, the saved searches panel's
+     shape.
+     ========================================================================== -->
+<div id="templateModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="templateModalTitle">
+  <div class="modal-card template-modal-card">
+    <h2 id="templateModalTitle">Templates</h2>
+    <p class="modal-sub">Start a new note from a template. The note is created in the notebook you are in, or your first notebook, and opens ready to edit.</p>
+    <div class="template-gallery">
+      <div class="template-group-title">Template gallery</div>
+      <div id="templateBuiltinList"></div>
+      <div class="template-group-title">My templates</div>
+      <div id="templateCustomList"></div>
+      <div id="templateMenu" class="hidden" role="menu" aria-label="Template actions">
+        <button type="button" id="templateRenameBtn" role="menuitem">Rename</button>
+        <button type="button" id="templateDeleteBtn" class="danger" role="menuitem">Delete</button>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" id="templateCloseBtn" type="button">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==========================================================================
      v2.8: Note history
      Opened from the editor footer's History button. The script
      renders one row per stored version of the open note (newest
@@ -7570,8 +7751,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-28-SSN-V2370";
-const APP_VERSION = "2.37.0";
+const APP_BUILD = "2026-10-28-SSN-V2380";
+const APP_VERSION = "2.38.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -7775,6 +7956,24 @@ const state = {
       { type: "notebooks" }
     ]
   },
+  templates: [],            // v2.38: the user's own note
+                            // templates, an ordered array of
+                            // {id, name, title, body,
+                            // created, updated} snapshots
+                            // saved from notes through Save
+                            // as Template. They live in
+                            // index.json (see
+                            // buildIndexObject), NOT in
+                            // settings, for the same reason
+                            // the saved searches do:
+                            // Evernote's saved templates
+                            // sync across devices, and a
+                            // template list only one device
+                            // could see would not be a
+                            // template list. The built in
+                            // gallery templates are code,
+                            // not data, and never appear
+                            // here.
   startView: "home",        // v2.33: where a returning boot
                             // lands: "home" (the Home
                             // dashboard) or "notes" (the
@@ -8534,6 +8733,9 @@ function cacheSnapshot() {
     /* v2.33: the home field rides it as well, so a cache
        first paint shows the same dashboard. */
     home: state.home,
+    /* v2.38: the custom templates ride it too, so a cache
+       first paint can open the same gallery. */
+    templates: state.templates,
     notes: state.notes,
     trash: state.trash,
     archive: state.archive,
@@ -8561,6 +8763,11 @@ function applyCacheSnapshot(c) {
      home field; they load as the default dashboard,
      exactly like an index.json written before v2.33 does. */
   state.home = sanitizeHome(c.home);
+  /* v2.38: snapshots written before templates existed
+     have no list; they load as an empty My templates
+     list, exactly like an index.json written before
+     v2.38 does. */
+  state.templates = sanitizeTemplates(c.templates);
   state.notes = c.notes || [];
   state.trash = c.trash || [];
   /* v1.5: caches written before archiving existed have no archive
@@ -9583,6 +9790,9 @@ function buildIndexObject() {
        more: no unrelated save can drop the pinned note,
        the scratch pad, or the widget layout. */
     home: state.home,
+    /* v2.38: the custom templates, on the same reasoning
+       once more: no unrelated save can drop them either. */
+    templates: state.templates,
     updated: new Date().toISOString()
   };
 }
@@ -9702,7 +9912,9 @@ function buildIndexFromFolders(folderSlugs) {
      way again, for the same reason. */
   /* v2.33: the home field is carried across the same way
      too, for the same reason. */
-  return { version: 1, notebooks: rebuilt, tagParents: state.tagParents, shortcuts: state.shortcuts, savedSearches: state.savedSearches, home: state.home, updated: new Date().toISOString() };
+  /* v2.38: the custom templates are carried across the
+     same way again, for the same reason. */
+  return { version: 1, notebooks: rebuilt, tagParents: state.tagParents, shortcuts: state.shortcuts, savedSearches: state.savedSearches, home: state.home, templates: state.templates, updated: new Date().toISOString() };
 }
 
 /* --------------------------------------------------------------------------
@@ -11491,6 +11703,11 @@ async function loadAllFromRepo() {
     if (index && index.home) {
       state.home = sanitizeHome(index.home);
     }
+    /* v2.38: the custom templates are salvaged the same
+       way. */
+    if (index && index.templates) {
+      state.templates = sanitizeTemplates(index.templates);
+    }
     index = buildIndexFromFolders(folderSlugs);
     state.notebooks = index.notebooks;
     state.index = index;
@@ -11521,6 +11738,11 @@ async function loadAllFromRepo() {
        Home existed has no field and loads as the default
        dashboard. */
     state.home = sanitizeHome(index.home);
+    /* v2.38: the custom templates load with the index
+       too, sanitized on the way in; an index written
+       before templates existed has no field and loads
+       as an empty My templates list. */
+    state.templates = sanitizeTemplates(index.templates);
     state.index = index;
     /* A notebook folder with no index entry still gets listed, so notes
        are never hidden by a stale index. */
@@ -15372,6 +15594,561 @@ function renderHome() {
 }
 
 /* --------------------------------------------------------------------------
+   v2.38: note templates (Evernote parity, phase 3
+   release 3).
+
+   Evernote's model (its help pages "Use templates",
+   "Create your own templates", and "Edit your
+   templates", read at build time):
+   - Templates come in two kinds: a gallery of ready
+     made templates, and the user's own, saved from any
+     note through the note's More actions menu (Save as
+     template), which collects the template's name.
+   - Applying a template, from the new note flow or
+     from the Templates section itself, generates a NEW
+     note whose title and body start from the
+     template's, in the notebook in play. The template
+     and any note it came from are never touched.
+   - A saved template is a snapshot: editing the source
+     note afterwards does not change it.
+   - Saved templates sync across devices, live in a
+     Templates gallery surface (not scattered through
+     notebooks), and can be renamed and deleted;
+     deleting one never touches a note made from it.
+   - Creating custom templates sat in Evernote's paid
+     tiers historically; this app has no tiers, so
+     saving a template is simply free here.
+
+   Built here: four built in gallery templates in code
+   (never stored, never manageable), the user's customs
+   in index.json's templates field ({id, name, title,
+   body, created, updated}), the notes list menu's Save
+   as Template item, and one gallery modal reached from
+   the sidebar's Templates button, listing built ins
+   and customs with rename and delete on the customs.
+
+   The attachment rule: a template body cannot carry an
+   .ss-attachment block honestly, because the block's
+   data-attachment-id names a file that belongs to the
+   SOURCE note's attachment records; a note made from
+   the template would point at a file it does not own.
+   So at save time each attachment block becomes its
+   labeled line, "[Attachment: name]", exactly the
+   label the body shows for the file today, and the
+   applied note's attachments stay empty. Everything
+   else in the body (headings, checklists, tables, and
+   any self contained content) rides as it is, through
+   the same canonicalization a saved body passes.
+
+   Named deviations from Evernote: the gallery ships
+   four built ins (Evernote's is dozens, imported from
+   its website one by one; these are always present and
+   cannot be removed, pinned, or imported); rows show a
+   text preview rather than a preview image, and a
+   click applies at once rather than opening a preview
+   page; there is no pinning a template as a new note
+   suggestion, no daily note template setting, and no
+   standalone template editor (shape a note, save it as
+   the new template, delete the old one); Save as
+   Template lives in the notes list menu, this app's
+   note actions surface, because the editor has no
+   three dot menu; and the name prompt and the delete
+   confirm are the app's native prompt and confirm
+   flow, the dialog deviation the earlier parity
+   releases already carry.
+   -------------------------------------------------------------------------- */
+
+const BUILTIN_TEMPLATES = [
+  {
+    id: "builtin-meeting-notes",
+    name: "Meeting Notes",
+    title: "Meeting Notes",
+    body: "<h1>Meeting Notes</h1>" +
+      "<p><strong>Date:</strong> </p>" +
+      "<p><strong>Attendees:</strong> </p>" +
+      "<h2>Agenda</h2>" +
+      "<ul><li>Topic one</li><li>Topic two</li></ul>" +
+      "<h2>Discussion</h2>" +
+      "<p>Notes from the discussion.</p>" +
+      "<h2>Decisions</h2>" +
+      "<ul><li>Decision one</li></ul>" +
+      "<h2>Action items</h2>" +
+      "<ul class=\"ss-checklist\">" +
+      "<li><input type=\"checkbox\">Follow up item</li>" +
+      "</ul>"
+  },
+  {
+    id: "builtin-weekly-planner",
+    name: "Weekly Planner",
+    title: "Weekly Planner",
+    body: "<h1>Weekly Planner</h1>" +
+      "<p><strong>Week of:</strong> </p>" +
+      "<h2>Top priorities</h2>" +
+      "<ul class=\"ss-checklist\">" +
+      "<li><input type=\"checkbox\">Priority one</li>" +
+      "<li><input type=\"checkbox\">Priority two</li>" +
+      "<li><input type=\"checkbox\">Priority three</li>" +
+      "</ul>" +
+      "<h2>Monday</h2>" +
+      "<ul class=\"ss-checklist\">" +
+      "<li><input type=\"checkbox\">Task</li></ul>" +
+      "<h2>Tuesday</h2>" +
+      "<ul class=\"ss-checklist\">" +
+      "<li><input type=\"checkbox\">Task</li></ul>" +
+      "<h2>Wednesday</h2>" +
+      "<ul class=\"ss-checklist\">" +
+      "<li><input type=\"checkbox\">Task</li></ul>" +
+      "<h2>Thursday</h2>" +
+      "<ul class=\"ss-checklist\">" +
+      "<li><input type=\"checkbox\">Task</li></ul>" +
+      "<h2>Friday</h2>" +
+      "<ul class=\"ss-checklist\">" +
+      "<li><input type=\"checkbox\">Task</li></ul>"
+  },
+  {
+    id: "builtin-project-plan",
+    name: "Project Plan",
+    title: "Project Plan",
+    body: "<h1>Project Plan</h1>" +
+      "<h2>Overview</h2>" +
+      "<p>What this project is and why it matters.</p>" +
+      "<h2>Goals</h2>" +
+      "<ul><li>Goal one</li><li>Goal two</li></ul>" +
+      "<h2>Milestones</h2>" +
+      "<ul><li>Milestone one</li><li>Milestone two</li></ul>" +
+      "<h2>Tasks</h2>" +
+      "<ul class=\"ss-checklist\">" +
+      "<li><input type=\"checkbox\">First task</li>" +
+      "<li><input type=\"checkbox\">Second task</li>" +
+      "</ul>" +
+      "<h2>Notes</h2>" +
+      "<p>Open questions and things to watch.</p>"
+  },
+  {
+    id: "builtin-daily-journal",
+    name: "Daily Journal",
+    title: "Daily Journal",
+    body: "<h1>Daily Journal</h1>" +
+      "<p><strong>Date:</strong> </p>" +
+      "<h2>Grateful for</h2>" +
+      "<ul><li>One thing</li></ul>" +
+      "<h2>Highlights</h2>" +
+      "<p>The best parts of the day.</p>" +
+      "<h2>Notes</h2>" +
+      "<p>Anything else worth remembering.</p>" +
+      "<h2>Tomorrow</h2>" +
+      "<ul class=\"ss-checklist\">" +
+      "<li><input type=\"checkbox\">One thing to do</li>" +
+      "</ul>"
+  }
+];
+
+/* sanitizeTemplates(raw): the read side's one
+   definition of a usable custom template, applied by
+   every load path (sync load, cache apply) before the
+   list is trusted, the sanitizeSavedSearches shape: a
+   template needs a nonblank id and name plus a string
+   title and body (either may be empty text; a titleless
+   snapshot is still a snapshot), duplicate ids lose,
+   and created and updated pass through as strings,
+   blank when the source never said. */
+function sanitizeTemplates(raw) {
+  if (!Array.isArray(raw)) { return []; }
+  const out = [];
+  const seenIds = {};
+  raw.forEach(function (t) {
+    if (!t || typeof t !== "object") { return; }
+    const id = typeof t.id === "string" ? t.id : "";
+    const name = typeof t.name === "string" ? t.name : "";
+    if (!id.trim() || !name.trim()) { return; }
+    if (typeof t.title !== "string" ||
+        typeof t.body !== "string") { return; }
+    if (seenIds[id]) { return; }
+    seenIds[id] = true;
+    out.push({
+      id: id,
+      name: name,
+      title: t.title,
+      body: t.body,
+      created: typeof t.created === "string" ? t.created : "",
+      updated: typeof t.updated === "string" ? t.updated : ""
+    });
+  });
+  return out;
+}
+
+/* persistTemplates(): the custom templates persist
+   exactly the way the saved searches do, because they
+   live in the same place: the queued index write (the
+   single writer discipline; debounce-safe at sign out)
+   while connected with a repo, then the cache snapshot,
+   which carries them to the next cache first paint. */
+function persistTemplates() {
+  if (state.online && state.repoExists) { saveIndex(); }
+  saveCache();
+}
+
+/* customTemplateById(id): a custom lookup helper. Only
+   state.templates is searched: a built in answering to
+   the management paths at all would be a bug, so the
+   management paths each start here and a built in id
+   simply is not found. */
+function customTemplateById(id) {
+  return state.templates.find(function (t) {
+    return t.id === id;
+  }) || null;
+}
+
+/* templateById(id): the lookup apply uses: customs
+   first, then the built ins. Returns the entry itself
+   (both kinds carry the same {id, name, title, body}
+   shape), or null. */
+function templateById(id) {
+  const custom = customTemplateById(id);
+  if (custom) { return custom; }
+  return BUILTIN_TEMPLATES.find(function (t) {
+    return t.id === id;
+  }) || null;
+}
+
+/* templateNameTaken(name, exceptId): a template's name
+   is its identity in the gallery, so a new or renamed
+   custom may not reuse the name of another custom OR
+   of a built in (a custom called Meeting Notes next to
+   the built in Meeting Notes would be
+   indistinguishable). The comparison is trimmed and
+   case-insensitive, so near duplicates are refused
+   too. exceptId spares the entry being renamed. */
+function templateNameTaken(name, exceptId) {
+  const wanted = String(name || "").trim().toLowerCase();
+  if (!wanted) { return false; }
+  const clash = function (t) {
+    return t.id !== exceptId &&
+      t.name.trim().toLowerCase() === wanted;
+  };
+  return state.templates.some(clash) ||
+    BUILTIN_TEMPLATES.some(clash);
+}
+
+/* templateBodyFromNote(note): the snapshot body. The
+   note's body first passes the same canonicalization
+   every save passes (attachment blocks become their
+   saved shells, table of contents blocks their
+   canonical form), then each attachment shell is
+   replaced with its labeled line, because the file it
+   names belongs to the source note (see the section
+   header for the rule). The label is the attachment
+   record's name where one is on the note, and the
+   generic word otherwise. */
+function templateBodyFromNote(note) {
+  const holder = document.createElement("div");
+  holder.innerHTML = canonicalizeAttachmentPlaceholders(
+    note.body || "");
+  holder.querySelectorAll(".ss-attachment").forEach(
+    function (el) {
+      const rec = (note.attachments || []).find(
+        function (a) {
+          return a.id ===
+            el.getAttribute("data-attachment-id");
+        });
+      const p = document.createElement("p");
+      p.textContent = "[Attachment: " +
+        (rec ? rec.name : "attachment") + "]";
+      el.replaceWith(p);
+    });
+  return holder.innerHTML;
+}
+
+/* saveNoteAsTemplate(note, name): the store path
+   behind Save as Template. Refuses an untaken name
+   check exactly the way Save search refuses a duplicate
+   (a toast naming the collision, no entry saved), and
+   snapshots the note's CURRENT title and body into a
+   new entry: the body is copied through
+   templateBodyFromNote, so nothing later done to the
+   note can reach the template (the snapshot rule).
+   Persists and re-renders on success. Returns the new
+   entry, or null when refused. */
+function saveNoteAsTemplate(note, name) {
+  const nm = String(name || "").trim();
+  if (!note || !nm) { return null; }
+  if (templateNameTaken(nm, null)) {
+    toast("A template named \"" + nm +
+      "\" already exists.", true);
+    return null;
+  }
+  const now = new Date().toISOString();
+  const entry = {
+    id: newNoteId(),
+    name: nm,
+    title: note.title || "Untitled note",
+    body: templateBodyFromNote(note),
+    created: now,
+    updated: now
+  };
+  state.templates.push(entry);
+  persistTemplates();
+  renderAll();
+  toast("Saved as template \"" + nm + "\".");
+  return entry;
+}
+
+/* renameTemplate(id, name): the entry menu's Rename.
+   Store rules: only a custom can be renamed (a built
+   in id is not found, so it returns false untouched);
+   a blank name is refused; a name taken by another
+   custom or a built in is refused with the same toast
+   the save path gives, the stacks and saved searches
+   refusal wording. A case only change of the entry's
+   own name is fine. Returns whether the rename landed. */
+function renameTemplate(id, name) {
+  const entry = customTemplateById(id);
+  if (!entry) { return false; }
+  const nm = String(name || "").trim();
+  if (!nm) { return false; }
+  if (templateNameTaken(nm, entry.id)) {
+    toast("A template named \"" + nm +
+      "\" already exists.", true);
+    return false;
+  }
+  entry.name = nm;
+  entry.updated = new Date().toISOString();
+  persistTemplates();
+  renderAll();
+  return true;
+}
+
+/* deleteTemplate(id): the entry menu's Delete. Only a
+   custom can be deleted (a built in id is not found and
+   returns false). The notes are never consulted: a note
+   made from the template carries its own copied body,
+   so deleting the template cannot reach it, the
+   Evernote rule. Persists and re-renders. */
+function deleteTemplate(id) {
+  const before = state.templates.length;
+  state.templates = state.templates.filter(function (t) {
+    return t.id !== id;
+  });
+  if (state.templates.length === before) { return false; }
+  persistTemplates();
+  renderAll();
+  return true;
+}
+
+/* createNoteFromTemplate(tpl): applying, which is note
+   creation, so it mirrors createNoteInRepo step for
+   step (the same notebook choice the New Note button
+   makes, the same background save with the same
+   failure toast), with the template's title and
+   canonicalized body as the starting content. The body
+   passes canonicalizeAttachmentPlaceholders the way an
+   imported body does: a body saved before the
+   attachment rule, or one holding a labeled line only,
+   comes out as a valid saved body, and no attachment
+   records are created (the applied note owns none). */
+async function createNoteFromTemplate(tpl) {
+  let notebookSlug = state.view.kind === "notebook"
+    ? state.view.value
+    : (state.notebooks.length ? state.notebooks[0].slug
+       : null);
+  if (!state.notebooks.length) {
+    await createNotebook("Personal");
+    notebookSlug = state.notebooks[0].slug;
+  }
+  const note = makeNote(notebookSlug || state.notebooks[0].slug,
+    tpl.title || "Untitled note",
+    canonicalizeAttachmentPlaceholders(tpl.body || ""));
+  state.notes.unshift(note);
+  saveCache();
+  renderAll();
+  openNote(note.id);
+  saveNoteToRepo(note, { skipConflictCheck: true, fresh: true })
+    .then(function () { saveCache(); })
+    .catch(function (err) {
+      toast("Note created locally; save failed: " +
+        err.message, true);
+    });
+  return note;
+}
+
+/* applyTemplate(id): the gallery row click. Resolves
+   the template (custom or built in), closes the
+   gallery, and creates the note. Returns the creation
+   promise (resolving to the note), or a resolved null
+   for an unknown id, so no caller has to care which. */
+function applyTemplate(id) {
+  const tpl = templateById(id);
+  if (!tpl) { return Promise.resolve(null); }
+  closeTemplateGallery();
+  return createNoteFromTemplate(tpl);
+}
+
+/* promptSaveNoteAsTemplate(): the notes list menu's
+   Save as Template item. The snapshot must be of the
+   note as the user sees it, so the body is completed
+   first when the note is still a shell (the move to
+   trash shell rule), and the open editor's live content
+   is collected when the note is the one on screen,
+   before the name prompt opens with the note's title
+   as the default, Evernote's save flow. A refused load
+   says so plainly and saves nothing. */
+async function promptSaveNoteAsTemplate() {
+  const note = currentNote();
+  if (!note || state.notes.indexOf(note) < 0) { return; }
+  if (note.bodyLoaded === false) {
+    await ensureNoteBodyLoaded(note);
+    if (note.bodyLoaded === false) {
+      toast("That note has not loaded on this device " +
+        "yet, so it cannot be saved as a template.", true);
+      return;
+    }
+  }
+  const editor = document.getElementById("noteBody");
+  const pane = document.getElementById("editorpane");
+  if (state.selectedId === note.id && editor && pane &&
+      !pane.classList.contains("hidden")) {
+    collectEditor(note);
+  }
+  const name = prompt("Save as template",
+    note.title || "Untitled note");
+  if (name === null) { return; }
+  saveNoteAsTemplate(note, name);
+}
+
+/* templatePreviewText(body): the row's preview line:
+   the body's own text, tags stripped by a parse (never
+   a regex over markup), whitespace collapsed, cut to a
+   scannable length. A template with no text at all
+   previews as its title's promise instead: the words
+   say the note starts empty. */
+function templatePreviewText(body) {
+  const holder = document.createElement("div");
+  holder.innerHTML = body || "";
+  const text = (holder.textContent || "")
+    .replace(/\s+/g, " ").trim();
+  if (!text) { return "Blank body"; }
+  return text.length > 140 ? text.slice(0, 140) + "..." : text;
+}
+
+/* templateMenuFor: the custom template id the open
+   gallery entry menu acts on, or null, the saved search
+   menu's one variable. */
+let templateMenuFor = null;
+
+function closeTemplateMenu() {
+  templateMenuFor = null;
+  const menu = document.getElementById("templateMenu");
+  if (menu) { menu.classList.add("hidden"); }
+}
+
+/* openTemplateMenu(entry, rowEl): positions the shared
+   entry menu under its row, the saved search menu's
+   geometry (row offset top plus its height, in the
+   positioned gallery wrap's coordinates). Opening a
+   second row's menu simply moves the one card. */
+function openTemplateMenu(entry, rowEl) {
+  const menu = document.getElementById("templateMenu");
+  if (!menu) { return; }
+  if (templateMenuFor === entry.id &&
+      !menu.classList.contains("hidden")) {
+    closeTemplateMenu();
+    return;
+  }
+  templateMenuFor = entry.id;
+  menu.style.top = (rowEl.offsetTop + rowEl.offsetHeight + 2) + "px";
+  menu.classList.remove("hidden");
+}
+
+/* buildTemplateRow(tpl, isBuiltin): one gallery row: a
+   main button (the name over its preview, the
+   preview muted so the name leads, the saved search
+   row's hierarchy) whose click applies the template,
+   plus, for customs only, the three dot entry menu
+   button. Built in rows get no menu button at all:
+   a gallery's stock items are not the user's to
+   rename or delete. */
+function buildTemplateRow(tpl, isBuiltin) {
+  const row = document.createElement("div");
+  row.className = "template-row";
+  row.setAttribute("data-id", tpl.id);
+  if (isBuiltin) { row.setAttribute("data-builtin", "1"); }
+  const main = document.createElement("button");
+  main.type = "button";
+  main.className = "template-main";
+  const nameEl = document.createElement("span");
+  nameEl.className = "template-name";
+  nameEl.textContent = tpl.name;
+  const previewEl = document.createElement("span");
+  previewEl.className = "template-preview";
+  previewEl.textContent = templatePreviewText(tpl.body);
+  main.appendChild(nameEl);
+  main.appendChild(previewEl);
+  main.addEventListener("click", function () {
+    applyTemplate(tpl.id);
+  });
+  row.appendChild(main);
+  if (!isBuiltin) {
+    const menuBtn = document.createElement("button");
+    menuBtn.type = "button";
+    menuBtn.className = "template-menu-btn";
+    menuBtn.textContent = "\u22EE"; /* the vertical
+       ellipsis, the saved search menu button's glyph,
+       written as an escape like the rest of the file */
+    menuBtn.setAttribute("aria-label",
+      "Actions for template " + tpl.name);
+    menuBtn.addEventListener("click", function (ev) {
+      ev.stopPropagation();
+      openTemplateMenu(tpl, row);
+    });
+    row.appendChild(menuBtn);
+  }
+  return row;
+}
+
+/* renderTemplateGallery(): rebuilds both groups from
+   state: the built ins in their code order, then the
+   customs in saved order, or the empty line Evernote's
+   empty gallery answers with in spirit (here: how to
+   make the first one). Any open entry menu closes,
+   since its row is about to be replaced. */
+function renderTemplateGallery() {
+  const builtinList = document.getElementById(
+    "templateBuiltinList");
+  const customList = document.getElementById(
+    "templateCustomList");
+  if (!builtinList || !customList) { return; }
+  closeTemplateMenu();
+  builtinList.innerHTML = "";
+  BUILTIN_TEMPLATES.forEach(function (tpl) {
+    builtinList.appendChild(buildTemplateRow(tpl, true));
+  });
+  customList.innerHTML = "";
+  if (!state.templates.length) {
+    const empty = document.createElement("div");
+    empty.className = "template-empty";
+    empty.textContent = "No custom templates yet. Open a " +
+      "note and choose Save as Template in the notes " +
+      "list menu to make one.";
+    customList.appendChild(empty);
+  }
+  state.templates.forEach(function (tpl) {
+    customList.appendChild(buildTemplateRow(tpl, false));
+  });
+}
+
+function openTemplateGallery() {
+  renderTemplateGallery();
+  document.getElementById("templateModal")
+    .classList.remove("hidden");
+}
+
+function closeTemplateGallery() {
+  closeTemplateMenu();
+  const modal = document.getElementById("templateModal");
+  if (modal) { modal.classList.add("hidden"); }
+}
+
+/* --------------------------------------------------------------------------
    Note operations: create, trash, restore, delete forever, archive
    Moving a note between the notebooks tree, trash/, and archive/ is a
    write to the new path plus a delete of the old path. Offline, both
@@ -17474,6 +18251,19 @@ function renderListToolbar() {
     reminderBtn.textContent = liveSelected && liveSelected.reminderAt
       ? "Edit reminder"
       : "Add reminder";
+  }
+  /* v2.38: Save as Template follows the reminder item's
+     rule exactly (hidden in Trash and Archive, enabled
+     only for a live selected note): a template is saved
+     from a live note, never from Trash or the Archive. */
+  const saveTemplateBtn = document.getElementById("nbSaveTemplateBtn");
+  if (saveTemplateBtn) {
+    saveTemplateBtn.classList.toggle("hidden",
+      kind === "trash" || kind === "archive");
+    const selected = currentNote();
+    const liveSelected = selected &&
+      state.notes.indexOf(selected) >= 0 ? selected : null;
+    saveTemplateBtn.disabled = !liveSelected;
   }
   const emptyTrashBtn = document.getElementById("nbEmptyTrashBtn");
   if (emptyTrashBtn) {
@@ -38332,6 +39122,58 @@ function wireEvents() {
     const note = currentNote();
     if (!note || state.notes.indexOf(note) < 0) { return; }
     openNoteReminderPanel(note.id);
+  });
+  /* v2.38: the notes list menu's Save as Template item:
+     the same close the panels, then act shape as the
+     reminder item above it. The flow is async (a shell's
+     body completes first), with failures landing in a
+     toast. */
+  document.getElementById("nbSaveTemplateBtn").addEventListener("click", function () {
+    closeListPanels();
+    promptSaveNoteAsTemplate().catch(function (err) {
+      toast(err.message, true);
+    });
+  });
+  /* v2.38: the sidebar's Templates button opens the one
+     gallery; the gallery's own Close button and a
+     backdrop click close it, the modal family's
+     established gestures. */
+  document.getElementById("templatesBtn").addEventListener("click", function () {
+    openTemplateGallery();
+  });
+  document.getElementById("templateCloseBtn").addEventListener("click", function () {
+    closeTemplateGallery();
+  });
+  document.getElementById("templateModal").addEventListener("click", function (ev) {
+    if (ev.target === ev.currentTarget) { closeTemplateGallery(); }
+  });
+  /* v2.38: the gallery entry menu's Rename and Delete,
+     the saved search menu's handlers in shape: resolve
+     the row's template, close the menu first, then the
+     native prompt or confirm, then the store path, then
+     re-render the gallery so the change shows where the
+     user is looking. */
+  document.getElementById("templateRenameBtn").addEventListener("click", function () {
+    const entry = customTemplateById(templateMenuFor);
+    closeTemplateMenu();
+    if (!entry) { return; }
+    const next = prompt("Rename template", entry.name);
+    if (next === null) { return; }
+    if (renameTemplate(entry.id, next)) {
+      renderTemplateGallery();
+    }
+  });
+  document.getElementById("templateDeleteBtn").addEventListener("click", function () {
+    const entry = customTemplateById(templateMenuFor);
+    closeTemplateMenu();
+    if (!entry) { return; }
+    if (!confirm("Delete the template \"" + entry.name +
+      "\"? Notes you made from it stay as they are.")) {
+      return;
+    }
+    if (deleteTemplate(entry.id)) {
+      renderTemplateGallery();
+    }
   });
   /* v2.35: the editor footer's Reminder button opens the
      same panel for the open note. */
