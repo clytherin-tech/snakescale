@@ -40,10 +40,60 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-28-SSN-V2400
-  Version: 2.40.0
+  BUILD STAMP: 2026-10-28-SSN-V2410
+  Version: 2.41.0
 
   Revision history:
+    v2.41.0 2026-10-28 Create Table of Contents Note, the
+                      closing extra of the Evernote parity
+                      program's phase 3, modeled on
+                      Evernote's classic multi select
+                      command of the same name (its current
+                      help center covers only the in-note
+                      table of contents, v2.37.0 here; the
+                      multi note command is documented by
+                      Evernote's older help and a decade of
+                      consistent accounts). The notes list
+                      menu gains a Create Table of Contents
+                      Note item beside Merge Selected,
+                      hidden in Trash and the Archive and
+                      enabled at two or more checked live
+                      notes. Running it creates ONE new
+                      note titled "Table of Contents" in
+                      the notebook of the first selected
+                      note in the list's current order,
+                      holding one note link per selected
+                      note in list order, each labeled
+                      with its title and born in Mention
+                      view, the shape Link to Note inserts.
+                      The new note opens in the editor and
+                      the selection clears, as after a
+                      merge; it is an ordinary note in
+                      every system, and each target's
+                      Backlinks panel counts it as a
+                      source. No selected note is modified,
+                      moved, or trashed. A selected note
+                      that has left the live notes since it
+                      was checked is left out, with the
+                      count named in the completion toast,
+                      rather than stopping the action the
+                      way Merge refuses: merging moves the
+                      originals, this moves nothing. When
+                      fewer than two valid notes remain,
+                      nothing is created. Named deviations
+                      from Evernote: the command lives in
+                      the notes list menu (Evernote shows
+                      it in the multi select options panel
+                      that replaces the editor, a surface
+                      this app does not have); a cross
+                      notebook selection is allowed and
+                      lands in the first note's notebook,
+                      where Evernote's selection is made
+                      inside one notebook or list at a
+                      time; and the stale member rule
+                      above is this app's own, Evernote's
+                      selection being always live by
+                      construction.
     v2.40.0 2026-10-28 Code block polish, the fifth release
                       of the Evernote parity program's
                       phase 3, modeled on Evernote's code
@@ -6716,6 +6766,16 @@ body.dark .version-date{color:var(--accent);}
                  notes, and counts the selection in its
                  label, the Delete Selected pattern. -->
             <button type="button" class="list-menu-item hidden" id="nbMergeSelectedBtn" role="menuitem">Merge Selected</button>
+            <!-- v2.41: Create Table of Contents Note, the
+                 live views' other bulk action, after Merge
+                 Selected in this menu. renderListToolbar
+                 shows it outside Trash and the Archive and
+                 enables it at two or more checked live
+                 notes, like Merge; Evernote's command of
+                 the same name (offered by its multi select
+                 options panel) makes one new note holding
+                 an internal link to each selected note. -->
+            <button type="button" class="list-menu-item hidden" id="nbTocNoteBtn" role="menuitem">Create Table of Contents Note</button>
           </div>
           <!-- v2.29: the stack picker panel, built at open time
                by buildStackPanel: New stack... first, then one
@@ -7906,8 +7966,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-28-SSN-V2400";
-const APP_VERSION = "2.40.0";
+const APP_BUILD = "2026-10-28-SSN-V2410";
+const APP_VERSION = "2.41.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -16766,6 +16826,130 @@ async function mergeSelectedNotes() {
   return merged;
 }
 
+/* --------------------------------------------------------------------------
+   v2.41: Create Table of Contents Note (Evernote parity, phase 3
+   closing extra), modeled on Evernote's classic multi select
+   command of the same name: select notes, choose the command,
+   and Evernote makes ONE new note inside the notebook the
+   selection was made in, titled "Table of Contents", whose body
+   is one internal note link per selected note, in list order,
+   each labeled with the note's title. (Evernote's current help
+   center covers only the in-note table of contents, the v2.37
+   block; the multi note command is documented by Evernote's
+   older help and a decade of consistent accounts.) The selected
+   notes are not modified, moved, or trashed, and the new note
+   is an ordinary note from birth: it is made by makeNote, saved
+   through the same funnel, and read by search, the catalog,
+   templates, shortcuts, and the backlink graph exactly like
+   any other note, so each target's Backlinks panel counts it
+   as a source the moment it exists, and it can itself be an
+   entry in a later table of contents note.
+
+   The command needs a multi selection (in Evernote the options
+   panel offering it only replaces the editor when more than
+   one note is selected), so the menu item enables at two or
+   more checked live notes, like Merge Selected. The notebook
+   rule follows the selection's list order, the merge
+   convention: the new note lands in the notebook of the FIRST
+   selected note in the list's current order, which is the
+   notebook of the selection whenever the selection sits in one
+   notebook, as Evernote's does by construction.
+
+   One deliberate departure from Merge's validated selection
+   discipline, stated plainly: a selected note that has left
+   the live notes since it was checked (trashed, archived, or
+   deleted elsewhere) is left out rather than stopping the
+   whole action. Merging moves the originals, so a stale member
+   there is a stop; this action moves nothing, so the stale
+   member is simply skipped and the completion toast names how
+   many were left out. When fewer than two valid notes remain,
+   nothing is created and the toast says so. The selection
+   clears when the note is created, exactly as Merge leaves
+   it. -------------------------------------------------------------------------- */
+
+/* One table of contents entry: the app's own note link anchor,
+   born in Mention view with the target's title as its label
+   and tooltip, exactly the shape Link to Note and the "@"
+   popup insert (see pickNoteLinkTarget), wrapped in its own
+   paragraph so each entry stands on its own line. */
+function tocNoteLinkParagraph(note) {
+  const title = note.title || "Untitled note";
+  return "<p><a href=\"" + SSNOTE_HREF_PREFIX + note.id +
+    "\" class=\"ss-note-link\" title=\"" + escapeHtml(title) +
+    "\" data-ss-link-view=\"mention\">" + escapeHtml(title) +
+    "</a></p>";
+}
+
+/* Create the table of contents note for the live list's
+   checked notes (see the section header). Nothing fallible
+   stands between the validation and the creation: the note
+   needs no source body and copies no file, so once the
+   selection resolves to two or more live notes the note is
+   made, saved through the real funnel, and opened; a failed
+   save keeps the local note and names itself, the duplicate
+   flow's shape. */
+async function createTableOfContentsNote() {
+  const ids = state.listSelection.slice();
+  if (ids.length < 2) {
+    toast("Select at least two notes to make a table of " +
+      "contents note.", true);
+    return null;
+  }
+  /* Resolve the selection against the live notes, in the
+     list's current order, the merge order rule: what
+     visibleNotes shows, filtered to the selection, then any
+     selected live note the current filters hide, in
+     selection order. Members that are no longer live notes
+     are counted and left out (see the header). */
+  const chosen = visibleNotes().filter(function (n) {
+    return ids.indexOf(n.id) >= 0;
+  });
+  ids.forEach(function (id) {
+    const live = state.notes.find(function (n) {
+      return n.id === id;
+    });
+    if (live && chosen.indexOf(live) < 0) { chosen.push(live); }
+  });
+  const leftOut = ids.length - chosen.length;
+  if (chosen.length < 2) {
+    toast("Table of contents stopped: fewer than two of the " +
+      "selected notes are still in the live list, so no note " +
+      "was created.", true);
+    return null;
+  }
+  const first = chosen[0];
+  const toc = makeNote(first.notebook, "Table of Contents", "");
+  toc.body = canonicalizeAttachmentPlaceholders(
+    chosen.map(tocNoteLinkParagraph).join(""));
+  /* Point of no return: the selection empties and the new
+     note joins the notes, exactly the merge flow's shape,
+     minus anything being moved anywhere. */
+  state.listSelection = [];
+  state.notes.unshift(toc);
+  saveCache();
+  renderAll();
+  try {
+    await saveNoteToRepo(toc, { skipConflictCheck: true, fresh: true });
+  } catch (err) {
+    /* The note exists locally but is not stored; it can be
+       edited, retried, or deleted like any failed save, and
+       no source note was ever touched. */
+    toast("The table of contents note was created locally, " +
+      "but its save failed: " + err.message, true);
+    openNote(toc.id);
+    return toc;
+  }
+  saveCache();
+  openNote(toc.id);
+  toast("Created \"Table of Contents\" linking " + chosen.length +
+    " notes." + (leftOut > 0
+      ? " " + leftOut + " selected " +
+        (leftOut === 1 ? "note was" : "notes were") +
+        " no longer in the live list and left out."
+      : ""));
+  return toc;
+}
+
 /* v2.20: the four placement operations whose implementations
    follow (trash, restore, archive, unarchive) capture the note's
    file text synchronously at action time, so a catalog shell,
@@ -18833,6 +19017,17 @@ function renderListToolbar() {
     mergeSelectedBtn.textContent = count >= 2
       ? "Merge Selected (" + count + ")"
       : "Merge Selected";
+  }
+  /* v2.41: Create Table of Contents Note follows Merge
+     Selected's rule: hidden in Trash and the Archive,
+     enabled once two or more live notes are checked. Its
+     label keeps Evernote's command name at every count,
+     where Merge counts the selection in its own. */
+  const tocNoteBtn = document.getElementById("nbTocNoteBtn");
+  if (tocNoteBtn) {
+    tocNoteBtn.classList.toggle("hidden",
+      kind === "trash" || kind === "archive");
+    tocNoteBtn.disabled = state.listSelection.length < 2;
   }
   const emptyTrashBtn = document.getElementById("nbEmptyTrashBtn");
   if (emptyTrashBtn) {
@@ -40217,6 +40412,16 @@ function wireEvents() {
   document.getElementById("nbMergeSelectedBtn").addEventListener("click", function () {
     closeListPanels();
     mergeSelectedNotes().catch(function (err) {
+      toast(err.message, true);
+    });
+  });
+  /* v2.41: the notes list menu's Create Table of Contents
+     Note item, beside Merge Selected;
+     createTableOfContentsNote validates the selection
+     itself and names every refusal or leftover. */
+  document.getElementById("nbTocNoteBtn").addEventListener("click", function () {
+    closeListPanels();
+    createTableOfContentsNote().catch(function (err) {
       toast(err.message, true);
     });
   });
