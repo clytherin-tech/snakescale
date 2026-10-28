@@ -40,10 +40,51 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-28-SSN-V2440
-  Version: 2.44.0
+  BUILD STAMP: 2026-10-28-SSN-V2450
+  Version: 2.45.0
 
   Revision history:
+    v2.45.0 2026-10-28 Document scan with corner crop,
+                      Phase 4 release 1 of the Evernote
+                      parity program, built to the shape
+                      of Evernote's scan flow: capture,
+                      adjust the corners, enhance, review
+                      the pages, save into the note. The
+                      Insert menu gains Scan document,
+                      opening a themed dialog over the
+                      open note. Pages arrive through a
+                      camera capture input (the browser's
+                      camera on mobile) or an ordinary
+                      image pick; each page's four corners
+                      start where a luminance grid guess
+                      places them (an inset default when
+                      no page edge can be guessed) and
+                      are dragged on the page image, with
+                      a flattened preview under the stage.
+                      Pages are selected, retaken, and
+                      removed in a page strip, and a Color
+                      or Document (grayscale with a
+                      contrast lift) enhancement is chosen
+                      per scan. Inserting exports every
+                      page as a perspective warped JPEG
+                      (long edge capped at 2000 px) and
+                      hands the files to the ordinary
+                      attachment upload flow, so a scan
+                      page is a plain image attachment in
+                      every system, image menus, thumbnail,
+                      and Transcribe included; nothing is
+                      uploaded before Insert, and Cancel
+                      discards the scan whole. Named
+                      deviations from Evernote: browser
+                      capture instead of a native scanner
+                      viewfinder with live edge detection
+                      (the corners are adjusted after the
+                      shot), pages saved as individual
+                      image attachments rather than a
+                      combined PDF, no server OCR (the
+                      on device Transcribe on each image
+                      remains the local answer), and no
+                      page reordering in the strip.
     v2.44.0 2026-10-28 The tasks load speed fix, queued by
                       Chris on 2026-10-28 after the
                       diagnosis was verified in the code.
@@ -3493,6 +3534,93 @@ body.dark .merge-order-drag:hover{color:var(--accent);}
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
 }
 .merge-order-nb{font-size:12px;color:var(--muted);}
+/* v2.45: the scan dialog, in the modal family's shapes.
+   The stage is exactly the page image's box, so the four
+   corner handles and the quad outline position by percent
+   of the image itself; the page strip scrolls sideways
+   inside the card when a scan runs long, and its
+   scrollbar themes with the app like every other scroll
+   area (the modal shell sets the per theme color
+   scheme). The current page's chip is filled, so the
+   selection is obvious at a glance. */
+.scan-modal-card{max-width:640px;}
+.scan-stage-empty{
+  padding:22px 16px;text-align:center;color:var(--muted);
+  font-size:14px;border:1px dashed var(--border);
+  border-radius:var(--radius-card);background:var(--surface);
+}
+.scan-stage{
+  position:relative;border:1px solid var(--border);
+  border-radius:var(--radius-card);overflow:hidden;
+  background:var(--surface);line-height:0;
+}
+.scan-stage img{
+  display:block;width:100%;height:auto;user-select:none;
+  -webkit-user-drag:none;
+}
+.scan-quad{
+  position:absolute;inset:0;width:100%;height:100%;
+  pointer-events:none;z-index:2;
+}
+.scan-quad polygon{
+  fill:rgba(87,167,115,.20);stroke:var(--accent);
+  stroke-width:1.5;vector-effect:non-scaling-stroke;
+}
+.scan-handle{
+  position:absolute;width:26px;height:26px;margin:-13px 0 0 -13px;
+  border-radius:50%;border:2px solid var(--accent);
+  background:var(--bg);cursor:grab;z-index:3;touch-action:none;
+  box-shadow:0 1px 4px rgba(0,0,0,.35);
+}
+.scan-handle::after{
+  content:"";position:absolute;left:50%;top:50%;
+  width:6px;height:6px;margin:-3px 0 0 -3px;border-radius:50%;
+  background:var(--accent);
+}
+.scan-handle:active{cursor:grabbing;}
+.scan-handle:focus-visible{
+  outline:2px solid var(--accent);outline-offset:2px;
+}
+.scan-preview-wrap{margin-top:12px;}
+.scan-preview-label{
+  font-size:12.5px;font-weight:600;color:var(--muted);
+  margin-bottom:4px;
+}
+#scanPreviewCanvas{
+  display:block;max-width:100%;height:auto;
+  border:1px solid var(--border);border-radius:var(--radius-button);
+  background:var(--surface);
+}
+.scan-controls{
+  display:flex;flex-wrap:wrap;gap:8px;align-items:center;
+  margin-top:14px;
+}
+.scan-count{font-size:13.5px;color:var(--muted);margin-left:2px;}
+.scan-mode-row{
+  display:flex;flex-wrap:wrap;gap:10px;align-items:center;
+  margin-top:12px;
+}
+.scan-mode-label{font-size:14px;font-weight:600;}
+.scan-page-strip{
+  display:flex;gap:8px;overflow-x:auto;padding:6px 2px;
+  margin-top:10px;min-height:10px;
+}
+.scan-page-chip{
+  display:flex;flex-direction:column;align-items:center;gap:4px;
+  flex:0 0 auto;padding:6px;background:var(--surface);
+  border:1px solid var(--border);border-radius:var(--radius-button);
+  color:var(--text);cursor:pointer;font-size:12px;
+}
+.scan-page-chip img{
+  width:46px;height:58px;object-fit:cover;border-radius:4px;
+  background:var(--bg);pointer-events:none;
+}
+.scan-page-chip.current{
+  border-color:var(--primary);
+  box-shadow:inset 0 0 0 1px var(--primary);
+  background:var(--accent-soft);color:var(--text-strong);
+  font-weight:600;
+}
 #tagMenu button:disabled{opacity:.55;cursor:default;}
 #tagMenu button:disabled:hover{background:none;}
 #tagMenu button.danger{color:#C0392B;}
@@ -7221,6 +7349,7 @@ body.dark .version-date{color:var(--accent);}
                 <button type="button" id="insertBtn" title="Insert into the note" aria-haspopup="true">+ Insert &#9662;</button>
                 <div class="tb-menu hidden" id="insertMenu" role="menu">
                   <button type="button" data-insert="attach">Attach file or image</button>
+                  <button type="button" data-insert="scan">Scan document</button>
                   <button type="button" data-insert="link">Link</button>
                   <button type="button" data-insert="noteLink">Link to note</button>
                   <button type="button" data-insert="divider">Divider</button>
@@ -7387,6 +7516,15 @@ body.dark .version-date{color:var(--accent);}
             <button type="button" id="voiceCancelBtn" class="btn small">Cancel</button>
           </div>
           <input type="file" id="attachFileInput" multiple class="hidden" aria-hidden="true">
+          <!-- v2.45: the scan dialog's two capture doors. The
+               camera input asks the browser for the device
+               camera on mobile (capture="environment") and
+               falls back to a photo pick where no camera is
+               offered; the pick input is the plain image
+               picker. Both feed the scan dialog only; the
+               note's own attach input above is untouched. -->
+          <input type="file" id="scanCameraInput" accept="image/*" capture="environment" class="hidden" aria-hidden="true">
+          <input type="file" id="scanPickInput" accept="image/*" multiple class="hidden" aria-hidden="true">
 
           <!-- Rich text body. The note body is stored as HTML inside the
                .md file (documented in the script header), which keeps
@@ -8232,6 +8370,60 @@ body.dark .version-date{color:var(--accent);}
 </div>
 
 <!-- ==========================================================================
+     v2.45: the document scan dialog
+     Opened by the Insert menu's Scan document item. Pages
+     arrive through the hidden camera and pick inputs beside
+     the attach input; each page shows on the stage with
+     four draggable corner handles over a quad outline, the
+     strip below selects, retakes, and removes pages, and
+     the enhancement segmented control picks Color or
+     Document for the whole scan. Insert flattens every
+     page to a JPEG and hands the files to the ordinary
+     attachment upload flow, so a scan page lands in the
+     note as a plain image attachment; Cancel discards
+     everything and uploads nothing. The script's scan
+     section owns the state and the math.
+     ========================================================================== -->
+<div id="scanModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="scanModalTitle">
+  <div class="modal-card scan-modal-card">
+    <h2 id="scanModalTitle">Scan document</h2>
+    <p class="modal-sub">Photograph or pick each page, drag the corners to the edges of the page, then insert the flattened pages into this note as images.</p>
+    <div id="scanStageEmpty" class="scan-stage-empty">No pages yet. Use the camera or add a photo to start the scan.</div>
+    <div id="scanStage" class="scan-stage hidden">
+      <img id="scanStageImg" alt="Scan page being adjusted">
+      <svg id="scanQuadSvg" class="scan-quad" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><polygon id="scanQuadPoly" points=""></polygon></svg>
+      <div class="scan-handle" data-corner="0" role="button" tabindex="0" aria-label="Drag to move the top left corner"></div>
+      <div class="scan-handle" data-corner="1" role="button" tabindex="0" aria-label="Drag to move the top right corner"></div>
+      <div class="scan-handle" data-corner="2" role="button" tabindex="0" aria-label="Drag to move the bottom right corner"></div>
+      <div class="scan-handle" data-corner="3" role="button" tabindex="0" aria-label="Drag to move the bottom left corner"></div>
+    </div>
+    <div id="scanPreviewWrap" class="scan-preview-wrap hidden">
+      <div class="scan-preview-label">Flattened preview</div>
+      <canvas id="scanPreviewCanvas" width="2" height="2"></canvas>
+    </div>
+    <div class="scan-controls">
+      <button class="btn" id="scanCameraBtn" type="button">Use Camera</button>
+      <button class="btn" id="scanPickBtn" type="button">Add photo</button>
+      <button class="btn" id="scanRetakeBtn" type="button">Retake page</button>
+      <button class="btn" id="scanRemovePageBtn" type="button">Remove page</button>
+      <span id="scanPageCount" class="scan-count">No pages yet</span>
+    </div>
+    <div class="scan-mode-row">
+      <span class="scan-mode-label" id="scanModeLabel">Enhancement</span>
+      <div class="theme-segmented" role="group" aria-labelledby="scanModeLabel">
+        <button type="button" id="scanModeColorBtn" aria-pressed="true">Color</button>
+        <button type="button" id="scanModeDocumentBtn" aria-pressed="false">Document</button>
+      </div>
+    </div>
+    <div id="scanPageStrip" class="scan-page-strip" role="listbox" aria-label="Scan pages"></div>
+    <div class="modal-foot">
+      <button class="btn" id="scanCancelBtn" type="button">Cancel</button>
+      <button class="btn primary" id="scanInsertBtn" type="button" disabled>Insert pages</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==========================================================================
      v2.8: Note history
      Opened from the editor footer's History button. The script
      renders one row per stored version of the open note (newest
@@ -8343,8 +8535,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-28-SSN-V2440";
-const APP_VERSION = "2.44.0";
+const APP_BUILD = "2026-10-28-SSN-V2450";
+const APP_VERSION = "2.45.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -35514,6 +35706,14 @@ function runInsertAction(kind) {
     startAttachFlow();
     return;
   }
+  if (kind === "scan") {
+    /* v2.45: the scan dialog is the attach flow's sibling:
+       it performs the same note, trash, and offline checks
+       and captures the caret before the dialog opens, so
+       the inserted pages land where the caret was. */
+    openScanDialog();
+    return;
+  }
   restoreFormatSelection();
   if (kind === "noteLink") {
     /* The picker captures the caret itself (it needs the selection
@@ -40364,6 +40564,722 @@ function emptyLineDeleteGuard(ev) {
   return true;
 }
 
+/* ----- v2.45: document scan ----------------------------------------------
+   Phase 4 release 1, built to the shape of Evernote's scan
+   flow: capture pages, adjust the crop corners, enhance,
+   review the pages, and save into the note. Evernote's
+   scanner is a native camera with live edge detection;
+   this app runs in a browser, so the camera arrives
+   through a capture file input on mobile and an ordinary
+   image pick anywhere, and the crop is adjusted after the
+   shot instead of live. The flow's shape is the parity;
+   the native viewfinder is the named deviation.
+
+   A page is a decoded image plus four corners in fractions
+   of the image (top left, top right, bottom right, bottom
+   left). The corners start where the auto guess puts them
+   (scanGuessCorners over a downscaled luminance grid: a
+   page that differs from its surround gets its corners,
+   anything else gets the inset default) and the user drags
+   them on the stage. Confirming exports each page through
+   a perspective warp (a homography onto the quad's own
+   rectangle, drawn as an affine mesh) plus the session's
+   enhancement, encodes it as a JPEG, and hands the files
+   to handleIncomingFiles: the scan inserts through the
+   app's REAL attachment upload path, so a scan page is an
+   ordinary image attachment in every system after that
+   (same records, same placeholders, same image menus,
+   thumbnail, and Transcribe). Nothing is uploaded before
+   confirm, and Cancel discards every page. No body format
+   changes and no new placeholder kinds exist for scans.
+
+   The small helpers scanDecodeImage, scanCanvasContext,
+   and scanCanvasToBlob are the flow's only doors to the
+   browser's image and canvas machinery, the image
+   editor's seam pattern, so the behavior can be exercised
+   in tests that stub them. The math (scanQuadDestSize,
+   scanHomography, scanMapPoint, scanEnhancePixels,
+   scanGuessCorners) is pure and proven directly. */
+
+/* The export's long edge cap: a phone photo of a page is
+   commonly 4000 px on its long edge, and a flattened scan
+   stays legible far below that; 2000 keeps pages sharp
+   (about 250 dpi on a letter page) without ballooning
+   uploads. The JPEG quality matches the image editor's
+   0.92 only in spirit: scans are documents, and 0.85
+   keeps text edges clean at a much smaller size. */
+const SCAN_MAX_EDGE = 2000;
+const SCAN_JPEG_QUALITY = 0.85;
+/* Corner placement when no page edge can be guessed: the
+   page inset 6% from each edge of the photo. */
+const SCAN_DEFAULT_INSET = 0.06;
+/* The warp mesh density: the homography is drawn as this
+   many affine cells per side. 10 by 10 reads as a true
+   perspective flatten on real pages and stays cheap. */
+const SCAN_WARP_MESH = 10;
+
+let scanState = null;
+let scanDrag = null;
+
+function scanCanvasContext(canvas) {
+  try { return canvas ? canvas.getContext("2d") : null; }
+  catch (err) { return null; }
+}
+
+function scanDecodeImage(url) {
+  return new Promise(function (resolve, reject) {
+    const img = new Image();
+    img.onload = function () { resolve(img); };
+    img.onerror = function () {
+      reject(new Error("The photo could not be read."));
+    };
+    img.src = url;
+  });
+}
+
+function scanCanvasToBlob(canvas) {
+  return new Promise(function (resolve, reject) {
+    if (typeof canvas.toBlob === "function") {
+      canvas.toBlob(function (blob) {
+        if (blob) { resolve(blob); }
+        else { reject(new Error("The scanned page could not be prepared.")); }
+      }, "image/jpeg", SCAN_JPEG_QUALITY);
+      return;
+    }
+    try {
+      const url = canvas.toDataURL("image/jpeg", SCAN_JPEG_QUALITY);
+      const comma = url.indexOf(",");
+      const bin = atob(url.slice(comma + 1));
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) {
+        bytes[i] = bin.charCodeAt(i);
+      }
+      resolve(new Blob([bytes], { type: "image/jpeg" }));
+    } catch (err) { reject(err); }
+  });
+}
+
+function scanDefaultCorners() {
+  const i = SCAN_DEFAULT_INSET;
+  return [
+    { x: i, y: i }, { x: 1 - i, y: i },
+    { x: 1 - i, y: 1 - i }, { x: i, y: 1 - i }
+  ];
+}
+
+function scanClamp01(v) {
+  return v < 0 ? 0 : (v > 1 ? 1 : v);
+}
+
+/* The corner guess over a luminance grid (values 0 to
+   255, row major, gw by gh). The background is the mean
+   of the four corner patches; a pixel belongs to the
+   page when it differs from that background by more
+   than the threshold, in either direction, so a bright
+   page on a dark table and a dark page on a bright one
+   both read. The corners are the mask's extreme points
+   (smallest and largest x+y and x-y), returned in image
+   fractions. A mask covering almost nothing or almost
+   everything is no page at all: null, and the caller
+   uses the inset default. Honest quality note: this is
+   a starting placement, not edge detection. It works
+   when the page contrasts with its surround and the
+   surround is fairly even; clutter, shadows, and a page
+   filling the frame all defeat it, and the inset
+   default plus a drag is the answer there. */
+function scanGuessCorners(lum, gw, gh) {
+  if (!lum || !gw || !gh || gw < 4 || gh < 4) { return null; }
+  function patchMean(cx, cy) {
+    let sum = 0, n = 0;
+    for (let y = Math.max(0, cy - 1); y <= Math.min(gh - 1, cy + 1); y++) {
+      for (let x = Math.max(0, cx - 1); x <= Math.min(gw - 1, cx + 1); x++) {
+        sum += lum[y * gw + x]; n++;
+      }
+    }
+    return n ? sum / n : 0;
+  }
+  const bg = (patchMean(0, 0) + patchMean(gw - 1, 0) +
+    patchMean(gw - 1, gh - 1) + patchMean(0, gh - 1)) / 4;
+  let count = 0;
+  let tl = null, tr = null, br = null, bl = null;
+  for (let y = 0; y < gh; y++) {
+    for (let x = 0; x < gw; x++) {
+      if (Math.abs(lum[y * gw + x] - bg) <= 28) { continue; }
+      count++;
+      const sum = x + y, diff = x - y;
+      if (!tl || sum < tl.sum) { tl = { x: x, y: y, sum: sum }; }
+      if (!br || sum > br.sum) { br = { x: x, y: y, sum: sum }; }
+      if (!tr || diff > tr.diff) { tr = { x: x, y: y, diff: diff }; }
+      if (!bl || diff < bl.diff) { bl = { x: x, y: y, diff: diff }; }
+    }
+  }
+  const frac = count / (gw * gh);
+  if (!tl || !tr || !br || !bl || frac < 0.04 || frac > 0.97) {
+    return null;
+  }
+  function norm(p) {
+    return { x: (p.x + 0.5) / gw, y: (p.y + 0.5) / gh };
+  }
+  return [norm(tl), norm(tr), norm(br), norm(bl)];
+}
+
+/* The starting corners for a freshly decoded page: the
+   guess over a 64 px luminance sampling of the image,
+   or the inset default whenever any step is unavailable
+   (no canvas context, a tainted or unreadable sampling).
+   Never throws: a scan must always open. */
+async function scanDetectCorners(img) {
+  try {
+    const iw = (img && (img.naturalWidth || img.width)) || 0;
+    const ih = (img && (img.naturalHeight || img.height)) || 0;
+    if (!iw || !ih) { return scanDefaultCorners(); }
+    const canvas = document.createElement("canvas");
+    canvas.width = 64;
+    canvas.height = Math.max(4, Math.round(64 * ih / iw));
+    const ctx = scanCanvasContext(canvas);
+    if (!ctx || typeof ctx.getImageData !== "function") {
+      return scanDefaultCorners();
+    }
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    const data = ctx.getImageData(0, 0,
+      canvas.width, canvas.height).data;
+    const lum = new Float32Array(canvas.width * canvas.height);
+    for (let i = 0; i < lum.length; i++) {
+      lum[i] = 0.299 * data[i * 4] + 0.587 * data[i * 4 + 1] +
+        0.114 * data[i * 4 + 2];
+    }
+    return scanGuessCorners(lum, canvas.width, canvas.height) ||
+      scanDefaultCorners();
+  } catch (err) {
+    return scanDefaultCorners();
+  }
+}
+
+/* The warp's destination size: the quad's own edge
+   lengths in source pixels (the longer of each opposite
+   pair), so a page photographed at an angle keeps the
+   proportions the paper had, capped at SCAN_MAX_EDGE on
+   the long edge with the proportions held. */
+function scanQuadDestSize(corners, srcW, srcH) {
+  function dist(a, b) {
+    const dx = (a.x - b.x) * srcW, dy = (a.y - b.y) * srcH;
+    return Math.sqrt(dx * dx + dy * dy);
+  }
+  let w = Math.max(dist(corners[0], corners[1]),
+    dist(corners[3], corners[2]));
+  let h = Math.max(dist(corners[0], corners[3]),
+    dist(corners[1], corners[2]));
+  w = Math.max(2, Math.round(w));
+  h = Math.max(2, Math.round(h));
+  const longest = Math.max(w, h);
+  if (longest > SCAN_MAX_EDGE) {
+    const s = SCAN_MAX_EDGE / longest;
+    w = Math.max(2, Math.round(w * s));
+    h = Math.max(2, Math.round(h * s));
+  }
+  return { w: w, h: h };
+}
+
+/* The 3 by 3 homography (as 9 numbers, last one 1) that
+   maps each point of `from` onto the matching point of
+   `to`, solved by Gauss-Jordan elimination. Null when
+   the system is degenerate (a self crossing quad). */
+function scanHomography(from, to) {
+  const A = [], b = [];
+  for (let i = 0; i < 4; i++) {
+    const x = from[i].x, y = from[i].y;
+    const u = to[i].x, v = to[i].y;
+    A.push([x, y, 1, 0, 0, 0, -u * x, -u * y]); b.push(u);
+    A.push([0, 0, 0, x, y, 1, -v * x, -v * y]); b.push(v);
+  }
+  const n = 8;
+  for (let col = 0; col < n; col++) {
+    let piv = col;
+    for (let r = col + 1; r < n; r++) {
+      if (Math.abs(A[r][col]) > Math.abs(A[piv][col])) { piv = r; }
+    }
+    if (Math.abs(A[piv][col]) < 1e-12) { return null; }
+    if (piv !== col) {
+      const ta = A[piv]; A[piv] = A[col]; A[col] = ta;
+      const tb = b[piv]; b[piv] = b[col]; b[col] = tb;
+    }
+    const d = A[col][col];
+    for (let c = col; c < n; c++) { A[col][c] /= d; }
+    b[col] /= d;
+    for (let r = 0; r < n; r++) {
+      if (r === col || A[r][col] === 0) { continue; }
+      const f = A[r][col];
+      for (let c = col; c < n; c++) { A[r][c] -= f * A[col][c]; }
+      b[r] -= f * b[col];
+    }
+  }
+  return [b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7], 1];
+}
+
+function scanMapPoint(H, x, y) {
+  const den = H[6] * x + H[7] * y + H[8];
+  return {
+    x: (H[0] * x + H[1] * y + H[2]) / den,
+    y: (H[3] * x + H[4] * y + H[5]) / den
+  };
+}
+
+/* The enhancement as a pure pixel transform over an
+   ImageData style array (RGBA quads, mutated in place).
+   Color is the identity: the photo stands as shot.
+   Document is the scanner's black and white: grayscale
+   by luminance with a levels lift (16 to 239 stretched
+   to 0 to 255), which drops gray paper toward white and
+   gray print toward black the way Evernote's document
+   enhancement reads. Alpha is never touched. */
+function scanEnhancePixels(data, mode) {
+  if (mode !== "document") { return data; }
+  for (let i = 0; i < data.length; i += 4) {
+    const lum = 0.299 * data[i] + 0.587 * data[i + 1] +
+      0.114 * data[i + 2];
+    let v = (lum - 16) * 255 / 223;
+    v = v < 0 ? 0 : (v > 255 ? 255 : v);
+    data[i] = v; data[i + 1] = v; data[i + 2] = v;
+  }
+  return data;
+}
+
+/* One affine cell of the warp: the canvas transform that
+   carries the source triangle (s0, s1, s2) onto the
+   destination triangle (d0, d1, d2), drawn clipped to
+   the destination triangle. Null transform (a degenerate
+   source triangle) draws nothing. */
+function scanDrawWarpCell(ctx, img, s0, s1, s2, d0, d1, d2) {
+  const det = (s1.x - s0.x) * (s2.y - s0.y) -
+    (s2.x - s0.x) * (s1.y - s0.y);
+  if (!det) { return; }
+  const m11 = ((d1.x - d0.x) * (s2.y - s0.y) -
+    (d2.x - d0.x) * (s1.y - s0.y)) / det;
+  const m12 = ((d2.x - d0.x) * (s1.x - s0.x) -
+    (d1.x - d0.x) * (s2.x - s0.x)) / det;
+  const m21 = ((d1.y - d0.y) * (s2.y - s0.y) -
+    (d2.y - d0.y) * (s1.y - s0.y)) / det;
+  const m22 = ((d2.y - d0.y) * (s1.x - s0.x) -
+    (d1.y - d0.y) * (s2.x - s0.x)) / det;
+  const e = d0.x - m11 * s0.x - m12 * s0.y;
+  const f = d0.y - m21 * s0.x - m22 * s0.y;
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(d0.x, d0.y);
+  ctx.lineTo(d1.x, d1.y);
+  ctx.lineTo(d2.x, d2.y);
+  ctx.closePath();
+  ctx.clip();
+  ctx.setTransform(m11, m21, m12, m22, e, f);
+  ctx.drawImage(img, 0, 0);
+  ctx.restore();
+}
+
+/* Draws the page's quad flattened onto an outW by outH
+   rectangle in the given context: the destination to
+   source homography places a mesh of destination cells,
+   each drawn as two affine triangles. A degenerate quad
+   (no homography) falls back to a plain stretch draw, so
+   a flattened page always comes out. */
+function scanDrawWarped(ctx, img, page, outW, outH) {
+  const srcW = (img && (img.naturalWidth || img.width)) || 0;
+  const srcH = (img && (img.naturalHeight || img.height)) || 0;
+  if (!srcW || !srcH) { return; }
+  const srcQuad = page.corners.map(function (c) {
+    return { x: c.x * srcW, y: c.y * srcH };
+  });
+  const dstQuad = [
+    { x: 0, y: 0 }, { x: outW, y: 0 },
+    { x: outW, y: outH }, { x: 0, y: outH }
+  ];
+  const back = scanHomography(dstQuad, srcQuad);
+  if (!back) {
+    ctx.drawImage(img, 0, 0, outW, outH);
+    return;
+  }
+  const mesh = SCAN_WARP_MESH;
+  for (let gy = 0; gy < mesh; gy++) {
+    for (let gx = 0; gx < mesh; gx++) {
+      const x0 = outW * gx / mesh, x1 = outW * (gx + 1) / mesh;
+      const y0 = outH * gy / mesh, y1 = outH * (gy + 1) / mesh;
+      const s00 = scanMapPoint(back, x0, y0);
+      const s10 = scanMapPoint(back, x1, y0);
+      const s11 = scanMapPoint(back, x1, y1);
+      const s01 = scanMapPoint(back, x0, y1);
+      scanDrawWarpCell(ctx, img, s00, s10, s01,
+        { x: x0, y: y0 }, { x: x1, y: y0 }, { x: x0, y: y1 });
+      scanDrawWarpCell(ctx, img, s10, s11, s01,
+        { x: x1, y: y0 }, { x: x1, y: y1 }, { x: x0, y: y1 });
+    }
+  }
+}
+
+/* Applies the session's enhancement to a warped canvas
+   in place. Guarded throughout: an enhancement failure
+   leaves the warped page as it stands rather than
+   losing the scan over it. */
+function scanApplyEnhancement(canvas, ctx, mode) {
+  if (mode !== "document") { return; }
+  if (typeof ctx.getImageData !== "function" ||
+      typeof ctx.putImageData !== "function") { return; }
+  try {
+    const id = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    scanEnhancePixels(id.data, mode);
+    ctx.putImageData(id, 0, 0);
+  } catch (err) { /* the unenhanced page stands */ }
+}
+
+/* One page, flattened and enhanced, as a JPEG blob: the
+   export the confirm path uploads. The mode is the
+   session's, read from the live dialog state. */
+async function scanExportPageToBlob(page) {
+  const img = page.img;
+  const srcW = (img && (img.naturalWidth || img.width)) || 0;
+  const srcH = (img && (img.naturalHeight || img.height)) || 0;
+  if (!srcW || !srcH) {
+    throw new Error("A scan page had no readable image.");
+  }
+  const size = scanQuadDestSize(page.corners, srcW, srcH);
+  const canvas = document.createElement("canvas");
+  canvas.width = size.w;
+  canvas.height = size.h;
+  const ctx = scanCanvasContext(canvas);
+  if (!ctx) {
+    throw new Error("This browser could not prepare the scanned page.");
+  }
+  scanDrawWarped(ctx, img, page, size.w, size.h);
+  scanApplyEnhancement(canvas, ctx,
+    (scanState && scanState.mode) || "color");
+  return scanCanvasToBlob(canvas);
+}
+
+function scanCurrentPage() {
+  if (!scanState || !scanState.pages.length) { return null; }
+  const i = Math.min(Math.max(scanState.current, 0),
+    scanState.pages.length - 1);
+  return scanState.pages[i];
+}
+
+/* The stage's quad furniture (outline and handles)
+   follows the current page's corners. A corner fraction
+   renders as its percent number (0.5 as "50"), rounded
+   to two decimals so equal corners render byte equal
+   strings; the outline's viewBox is 0 to 100, so the
+   same numbers serve it and the handle styles. */
+function scanPercent(v) {
+  return String(Math.round(v * 10000) / 100);
+}
+
+function positionScanQuad() {
+  const page = scanCurrentPage();
+  if (!page) { return; }
+  const poly = document.getElementById("scanQuadPoly");
+  poly.setAttribute("points", page.corners.map(function (c) {
+    return scanPercent(c.x) + "," + scanPercent(c.y);
+  }).join(" "));
+  document.querySelectorAll("#scanStage .scan-handle")
+    .forEach(function (h) {
+      const c = page.corners[Number(h.getAttribute("data-corner"))];
+      if (!c) { return; }
+      h.style.left = scanPercent(c.x) + "%";
+      h.style.top = scanPercent(c.y) + "%";
+    });
+}
+
+/* The flattened preview under the stage: the same warp
+   and enhancement the export runs, drawn small. Where
+   the browser offers no canvas the preview simply does
+   not show; the stage above it still carries the page. */
+function scanRenderPreview() {
+  const wrap = document.getElementById("scanPreviewWrap");
+  const canvas = document.getElementById("scanPreviewCanvas");
+  const page = scanCurrentPage();
+  if (!page || !page.w || !page.h) {
+    wrap.classList.add("hidden");
+    return;
+  }
+  const size = scanQuadDestSize(page.corners, page.w, page.h);
+  const scale = Math.min(1, 480 / size.w);
+  canvas.width = Math.max(2, Math.round(size.w * scale));
+  canvas.height = Math.max(2, Math.round(size.h * scale));
+  const ctx = scanCanvasContext(canvas);
+  if (!ctx) {
+    wrap.classList.add("hidden");
+    return;
+  }
+  wrap.classList.remove("hidden");
+  ctx.save();
+  ctx.scale(canvas.width / size.w, canvas.height / size.h);
+  scanDrawWarped(ctx, page.img, page, size.w, size.h);
+  ctx.restore();
+  scanApplyEnhancement(canvas, ctx,
+    (scanState && scanState.mode) || "color");
+}
+
+function renderScanDialog() {
+  if (!scanState) { return; }
+  const pages = scanState.pages;
+  const page = scanCurrentPage();
+  document.getElementById("scanStageEmpty").classList
+    .toggle("hidden", !!page);
+  document.getElementById("scanStage").classList
+    .toggle("hidden", !page);
+  if (page) {
+    const img = document.getElementById("scanStageImg");
+    if (img.getAttribute("src") !== page.url) {
+      img.setAttribute("src", page.url);
+    }
+    positionScanQuad();
+  }
+  const strip = document.getElementById("scanPageStrip");
+  strip.innerHTML = "";
+  pages.forEach(function (p, i) {
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "scan-page-chip" +
+      (i === scanState.current ? " current" : "");
+    chip.setAttribute("role", "option");
+    chip.setAttribute("aria-selected",
+      i === scanState.current ? "true" : "false");
+    chip.setAttribute("aria-label", "Page " + (i + 1) + ": " + p.name);
+    const thumb = document.createElement("img");
+    thumb.setAttribute("src", p.url);
+    thumb.setAttribute("alt", "");
+    const label = document.createElement("span");
+    label.textContent = "Page " + (i + 1);
+    chip.appendChild(thumb);
+    chip.appendChild(label);
+    chip.addEventListener("click", function () {
+      if (!scanState) { return; }
+      scanState.current = i;
+      scanState.replaceArmed = false;
+      renderScanDialog();
+    });
+    strip.appendChild(chip);
+  });
+  document.getElementById("scanPageCount").textContent =
+    !pages.length ? "No pages yet" :
+      pages.length + (pages.length === 1 ? " page" : " pages");
+  document.getElementById("scanRetakeBtn").disabled = !page;
+  document.getElementById("scanRemovePageBtn").disabled = !page;
+  const insertBtn = document.getElementById("scanInsertBtn");
+  insertBtn.disabled = !pages.length || scanState.busy;
+  insertBtn.textContent = !pages.length ? "Insert pages" :
+    pages.length === 1 ? "Insert page" :
+      "Insert " + pages.length + " pages";
+  document.getElementById("scanModeColorBtn")
+    .setAttribute("aria-pressed",
+      scanState.mode === "color" ? "true" : "false");
+  document.getElementById("scanModeDocumentBtn")
+    .setAttribute("aria-pressed",
+      scanState.mode === "document" ? "true" : "false");
+  scanRenderPreview();
+}
+
+/* Opens the scan dialog over the open note. The guards
+   are the attach flow's own (a live note, online),
+   because the pages upload the same way at confirm. The
+   caret is captured first, exactly as startAttachFlow
+   does, so the inserted pages land where the caret was. */
+function openScanDialog() {
+  const note = currentNote();
+  if (!note) {
+    toast("Open a note first, then scan a document into it.", true);
+    return;
+  }
+  if (note.trashed) {
+    toast("A document cannot be scanned into a note in Trash. Restore it first.", true);
+    return;
+  }
+  if (note.archived) {
+    toast("A document cannot be scanned into an archived note. Unarchive it first.", true);
+    return;
+  }
+  if (!state.online) {
+    toast("Scanning needs an internet connection: the pages are uploaded to your storage provider when you insert them. You appear to be offline.", true);
+    return;
+  }
+  captureCaret();
+  scanState = {
+    pages: [], current: 0, mode: "color",
+    busy: false, replaceArmed: false
+  };
+  renderScanDialog();
+  document.getElementById("scanModal").classList.remove("hidden");
+}
+
+/* Discards the whole scan: every page's object URL is
+   revoked and nothing is uploaded, ever, on this path. */
+function closeScanDialog() {
+  if (scanState) {
+    scanState.pages.forEach(function (p) {
+      try { URL.revokeObjectURL(p.url); } catch (err) { /* gone */ }
+    });
+  }
+  scanState = null;
+  scanDrag = null;
+  document.getElementById("scanModal").classList.add("hidden");
+}
+
+/* Feeds picked or photographed files into the dialog as
+   pages. With replace set (a Retake), the first file
+   replaces the current page in place; the rest append.
+   A file that is not an image, is over the attachment
+   cap, or cannot be decoded is named and skipped, never
+   silently swallowed. */
+async function scanAddFiles(files, replace) {
+  if (!scanState) { return; }
+  for (const file of files) {
+    if (!file) { continue; }
+    if ((file.type || "").indexOf("image/") !== 0) {
+      toast("\"" + (file.name || "That file") +
+        "\" is not an image and was skipped.", true);
+      continue;
+    }
+    if (file.size > ATTACH_MAX_BYTES) {
+      toast("\"" + file.name +
+        "\" is larger than the 100 MB per file limit and was skipped.", true);
+      continue;
+    }
+    const url = URL.createObjectURL(file);
+    let img;
+    try {
+      img = await scanDecodeImage(url);
+    } catch (err) {
+      try { URL.revokeObjectURL(url); } catch (e) { /* gone */ }
+      toast("That photo could not be read: " + err.message, true);
+      continue;
+    }
+    const page = {
+      id: newNoteId(),
+      name: file.name || "Photo",
+      url: url, img: img,
+      w: (img && (img.naturalWidth || img.width)) || 0,
+      h: (img && (img.naturalHeight || img.height)) || 0,
+      corners: await scanDetectCorners(img)
+    };
+    if (!scanState) {
+      try { URL.revokeObjectURL(url); } catch (e) { /* gone */ }
+      return;
+    }
+    if (replace && scanState.pages.length) {
+      const old = scanState.pages[scanState.current];
+      if (old) {
+        try { URL.revokeObjectURL(old.url); } catch (e) { /* gone */ }
+      }
+      scanState.pages[scanState.current] = page;
+      replace = false;
+    } else {
+      scanState.pages.push(page);
+      scanState.current = scanState.pages.length - 1;
+    }
+    renderScanDialog();
+  }
+}
+
+/* The two capture inputs share one change path (the
+   attach picker's discipline: copy the list, clear the
+   input so the same photo can be picked again). */
+function onScanInputChange(ev) {
+  const files = Array.prototype.slice.call(ev.target.files || []);
+  ev.target.value = "";
+  if (!scanState || !files.length) { return; }
+  const replace = scanState.replaceArmed;
+  scanState.replaceArmed = false;
+  scanAddFiles(files, replace).catch(function (err) {
+    toast("Scan failed: " + err.message, true);
+  });
+}
+
+/* Confirm: export EVERY page first, so an export failure
+   leaves the dialog open with the scan intact and
+   nothing uploaded; only then hand the JPEG files to
+   the ordinary attachment flow, which rechecks the note
+   and the provider itself, inserts at the captured
+   caret in order, and owns every failure message after
+   this point. */
+async function confirmScanDialog() {
+  if (!scanState || scanState.busy) { return; }
+  if (!scanState.pages.length) {
+    toast("Add at least one page first.", true);
+    return;
+  }
+  scanState.busy = true;
+  renderScanDialog();
+  const files = [];
+  try {
+    for (let i = 0; i < scanState.pages.length; i++) {
+      const blob = await scanExportPageToBlob(scanState.pages[i]);
+      files.push(new File([blob],
+        "Scanned page " + (i + 1) + ".jpg",
+        { type: "image/jpeg" }));
+    }
+  } catch (err) {
+    if (scanState) {
+      scanState.busy = false;
+      renderScanDialog();
+    }
+    toast("The scan could not be prepared: " + err.message, true);
+    return;
+  }
+  closeScanDialog();
+  try {
+    await handleIncomingFiles(files);
+  } catch (err) {
+    toast("Attach failed: " + err.message, true);
+  }
+}
+
+/* The corner drag: a press on a handle tracks that
+   corner by pointer id until the pointer lifts, the
+   reorder drag's discipline in miniature (window level
+   move and up listeners, the stage's own rect as the
+   coordinate frame, fractions clamped to the image).
+   Only the furniture moves during the drag; the page's
+   corners are the model and the preview follows. */
+function onScanHandlePointerDown(ev) {
+  if (!scanState || !scanCurrentPage()) { return; }
+  if (ev.pointerType === "mouse" && ev.button !== 0) { return; }
+  const handle = ev.currentTarget;
+  scanDrag = {
+    pointerId: ev.pointerId,
+    corner: Number(handle.getAttribute("data-corner"))
+  };
+  if (handle.setPointerCapture && ev.pointerId !== undefined) {
+    try { handle.setPointerCapture(ev.pointerId); }
+    catch (err) { /* capture is a nicety, not the drag */ }
+  }
+  window.addEventListener("pointermove", onScanDragMove);
+  window.addEventListener("pointerup", onScanDragUp);
+  window.addEventListener("pointercancel", onScanDragUp);
+  ev.preventDefault();
+}
+
+function onScanDragMove(ev) {
+  if (!scanDrag || ev.pointerId !== scanDrag.pointerId) { return; }
+  const page = scanCurrentPage();
+  if (!page) { return; }
+  const rect = document.getElementById("scanStage")
+    .getBoundingClientRect();
+  if (!rect.width || !rect.height) { return; }
+  page.corners[scanDrag.corner] = {
+    x: scanClamp01((ev.clientX - rect.left) / rect.width),
+    y: scanClamp01((ev.clientY - rect.top) / rect.height)
+  };
+  positionScanQuad();
+  scanRenderPreview();
+}
+
+function onScanDragUp(ev) {
+  if (!scanDrag || (ev && ev.pointerId !== scanDrag.pointerId)) {
+    return;
+  }
+  scanDrag = null;
+  window.removeEventListener("pointermove", onScanDragMove);
+  window.removeEventListener("pointerup", onScanDragUp);
+  window.removeEventListener("pointercancel", onScanDragUp);
+}
+
 /* ----- attach entry point ------------------------------------------------
    v1.3.4: startAttachFlow() is the single entry point for attaching
    files with the picker. The Insert menu's "Attach file or image"
@@ -41812,6 +42728,72 @@ function wireEvents() {
     if (modal && !modal.classList.contains("hidden") &&
         !ssReorderDrag) {
       closeMergeOrderDialog(null);
+    }
+  });
+  /* v2.45: the scan dialog's wiring: the two capture
+     doors, the page controls, the enhancement segmented
+     control, the corner handles, and the modal family's
+     backdrop and Escape gestures (a cancel, so an
+     accidental dismissal discards the scan and uploads
+     nothing, exactly like the Cancel button). */
+  document.getElementById("scanCameraInput")
+    .addEventListener("change", onScanInputChange);
+  document.getElementById("scanPickInput")
+    .addEventListener("change", onScanInputChange);
+  document.getElementById("scanCameraBtn").addEventListener("click", function () {
+    if (!scanState) { return; }
+    scanState.replaceArmed = false;
+    document.getElementById("scanCameraInput").click();
+  });
+  document.getElementById("scanPickBtn").addEventListener("click", function () {
+    if (!scanState) { return; }
+    scanState.replaceArmed = false;
+    document.getElementById("scanPickInput").click();
+  });
+  document.getElementById("scanRetakeBtn").addEventListener("click", function () {
+    if (!scanState || !scanCurrentPage()) { return; }
+    scanState.replaceArmed = true;
+    document.getElementById("scanCameraInput").click();
+  });
+  document.getElementById("scanRemovePageBtn").addEventListener("click", function () {
+    if (!scanState || !scanCurrentPage()) { return; }
+    const gone = scanState.pages.splice(scanState.current, 1)[0];
+    if (gone) {
+      try { URL.revokeObjectURL(gone.url); } catch (err) { /* gone */ }
+    }
+    if (scanState.current >= scanState.pages.length) {
+      scanState.current = Math.max(0, scanState.pages.length - 1);
+    }
+    renderScanDialog();
+  });
+  document.getElementById("scanModeColorBtn").addEventListener("click", function () {
+    if (!scanState) { return; }
+    scanState.mode = "color";
+    renderScanDialog();
+  });
+  document.getElementById("scanModeDocumentBtn").addEventListener("click", function () {
+    if (!scanState) { return; }
+    scanState.mode = "document";
+    renderScanDialog();
+  });
+  document.getElementById("scanCancelBtn").addEventListener("click", function () {
+    closeScanDialog();
+  });
+  document.getElementById("scanInsertBtn").addEventListener("click", function () {
+    confirmScanDialog();
+  });
+  document.getElementById("scanModal").addEventListener("click", function (ev) {
+    if (ev.target === ev.currentTarget) { closeScanDialog(); }
+  });
+  document.querySelectorAll("#scanStage .scan-handle")
+    .forEach(function (h) {
+      h.addEventListener("pointerdown", onScanHandlePointerDown);
+    });
+  document.addEventListener("keydown", function (ev) {
+    if (ev.key !== "Escape") { return; }
+    const modal = document.getElementById("scanModal");
+    if (modal && !modal.classList.contains("hidden") && !scanDrag) {
+      closeScanDialog();
     }
   });
   /* v2.38: the gallery entry menu's Rename and Delete,
