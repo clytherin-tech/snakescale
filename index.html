@@ -40,10 +40,66 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-28-SSN-V2450
-  Version: 2.45.0
+  BUILD STAMP: 2026-10-29-SSN-V2460
+  Version: 2.46.0
 
   Revision history:
+    v2.46.0 2026-10-29 Sketch block, Phase 4 release 2
+                      of the Evernote parity program.
+                      The Insert menu gains Sketch,
+                      opening a themed dialog with a
+                      drawing canvas: a pen with eight
+                      colors and three thicknesses, an
+                      eraser, Undo, and Clear, all on
+                      one Pointer Events path (mouse,
+                      touch, and stylus). Saving exports
+                      the drawing as a PNG and inserts
+                      it through the ordinary attachment
+                      upload flow. A sketch is marked
+                      twice, in step: its attachment
+                      record carries sketch:true (kept
+                      only when exactly true and written
+                      only for sketches, so other records
+                      serialize exactly as before) and
+                      its placeholder carries
+                      data-ss-sketch="1", preserved by
+                      the save funnel like the alignment
+                      attributes. The image menu of a
+                      marked image gains Edit sketch,
+                      which reopens the dialog with the
+                      saved drawing loaded as the canvas
+                      base, and saving replaces the
+                      attachment's file in place (same
+                      record, same block, same position)
+                      through the image editor's own
+                      replace path. Duplicate and merge
+                      copies carry the marking to their
+                      new records, so a copied sketch
+                      stays editable; exports treat a
+                      sketch as the ordinary PNG image
+                      it is, and the marking, which
+                      lives in the note file only, does
+                      not travel into exported files.
+                      Cancel discards the drawing and
+                      uploads nothing; nothing uploads
+                      before Save. Named deviations from
+                      Evernote: no highlighter, lasso,
+                      or shape tools and no redo
+                      (Evernote offers all four); a
+                      fixed palette of eight colors and
+                      three thicknesses rather than
+                      Evernote's ten colors and five
+                      thicknesses; re-editing draws over
+                      the flattened PNG (the original
+                      strokes are not stored as vectors,
+                      so Undo in a reopened sketch
+                      reaches only the new session's
+                      strokes, and the eraser there
+                      lifts new paint only, never the
+                      saved drawing under it); and no
+                      server handwriting search (the
+                      per image Transcribe remains the
+                      local answer).
     v2.45.0 2026-10-28 Document scan with corner crop,
                       Phase 4 release 1 of the Evernote
                       parity program, built to the shape
@@ -3621,6 +3677,43 @@ body.dark .merge-order-drag:hover{color:var(--accent);}
   background:var(--accent-soft);color:var(--text-strong);
   font-weight:600;
 }
+/* v2.46: the sketch dialog, in the modal family's shapes.
+   The canvas is white paper in both themes (a sketch is a
+   sheet of paper, like Evernote's canvas, whatever the app
+   theme around it) and scales to the card's width while its
+   bitmap keeps the drawing's own pixels. The tool rows wrap
+   at phone widths; the active tool is the segmented
+   control's pressed side, the current color is ringed, and
+   the current thickness is filled, so the choice in force
+   is obvious at a glance. touch-action:none on the canvas
+   means a finger or stylus draws instead of scrolling the
+   dialog. */
+.sketch-modal-card{max-width:720px;}
+.sketch-stage{
+  border:1px solid var(--border);border-radius:var(--radius-card);
+  overflow:hidden;background:#FFFFFF;line-height:0;
+}
+#sketchCanvas{
+  display:block;width:100%;height:auto;touch-action:none;
+  cursor:crosshair;background:#FFFFFF;
+}
+.sketch-tools{
+  display:flex;flex-wrap:wrap;gap:10px 14px;align-items:center;
+  margin-top:14px;
+}
+.sketch-tools-label{font-size:14px;font-weight:600;padding-right:2px;}
+.sketch-color{
+  width:30px;height:30px;border-radius:50%;cursor:pointer;
+  border:2px solid var(--border);padding:0;flex:none;
+}
+.sketch-color.current{
+  border-color:var(--primary);
+  box-shadow:0 0 0 2px var(--bg),0 0 0 4px var(--primary);
+}
+.sketch-width-btn.current{
+  background:var(--soft);border-color:var(--accent);font-weight:700;
+}
+
 #tagMenu button:disabled{opacity:.55;cursor:default;}
 #tagMenu button:disabled:hover{background:none;}
 #tagMenu button.danger{color:#C0392B;}
@@ -7350,6 +7443,7 @@ body.dark .version-date{color:var(--accent);}
                 <div class="tb-menu hidden" id="insertMenu" role="menu">
                   <button type="button" data-insert="attach">Attach file or image</button>
                   <button type="button" data-insert="scan">Scan document</button>
+                  <button type="button" data-insert="sketch">Sketch</button>
                   <button type="button" data-insert="link">Link</button>
                   <button type="button" data-insert="noteLink">Link to note</button>
                   <button type="button" data-insert="divider">Divider</button>
@@ -7685,6 +7779,7 @@ body.dark .version-date{color:var(--accent);}
           <div id="attMenu" class="hidden" role="menu" aria-label="Image options">
             <button class="att-menu-item" type="button" data-action="preview"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M16 3h3a2 2 0 0 1 2 2v3"/><path d="M8 21H5a2 2 0 0 1-2-2v-3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg><span class="att-menu-label">Full screen preview</span></button>
             <button class="att-menu-item" type="button" data-action="edit"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg><span class="att-menu-label">Edit &amp; Annotate</span></button>
+            <button class="att-menu-item hidden" type="button" data-action="sketchEdit" id="attSketchItem"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg><span class="att-menu-label">Edit sketch</span></button>
             <button class="att-menu-item" type="button" data-action="crop"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M18 22V8a2 2 0 0 0-2-2H2"/></svg><span class="att-menu-label">Crop</span></button>
             <div class="att-menu-sep"></div>
             <button class="att-menu-item" type="button" data-action="transcribe"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 20 12 4l7 16"/><path d="M7.6 14h8.8"/></svg><span class="att-menu-label">Transcribe</span></button>
@@ -8424,6 +8519,60 @@ body.dark .version-date{color:var(--accent);}
 </div>
 
 <!-- ==========================================================================
+     v2.46: the sketch dialog
+     Opened by the Insert menu's Sketch item for a new
+     sketch, and by the image menu's Edit sketch item for
+     one already in the note. One canvas, one toolbar: Pen
+     and Eraser, eight pen colors, three thicknesses, Undo,
+     and Clear. Save exports the canvas as a PNG: a new
+     sketch goes through the ordinary attachment upload
+     flow marked as a sketch, and an edited sketch
+     replaces its attachment's file in place. Cancel
+     discards the drawing and uploads nothing. The
+     script's sketch section owns the state and the
+     stroke model.
+     ========================================================================== -->
+<div id="sketchModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="sketchModalTitle">
+  <div class="modal-card sketch-modal-card">
+    <h2 id="sketchModalTitle">Sketch</h2>
+    <p class="modal-sub" id="sketchModalSub">Draw with the pen, erase with the eraser, then save the sketch into this note as an image you can reopen and keep editing.</p>
+    <div class="sketch-stage">
+      <canvas id="sketchCanvas" width="1200" height="800"></canvas>
+    </div>
+    <div class="sketch-tools" id="sketchTools">
+      <span class="sketch-tools-label" id="sketchToolLabel">Tool</span>
+      <span class="theme-segmented" role="group" aria-labelledby="sketchToolLabel">
+        <button type="button" id="sketchPenBtn" aria-pressed="true">Pen</button>
+        <button type="button" id="sketchEraserBtn" aria-pressed="false">Eraser</button>
+      </span>
+      <span class="sketch-tools-label" id="sketchColorLabel">Color</span>
+      <span role="group" aria-labelledby="sketchColorLabel">
+        <button class="sketch-color current" type="button" data-sketch-color="#111111" style="background:#111111" aria-label="Black"></button>
+        <button class="sketch-color" type="button" data-sketch-color="#FFFFFF" style="background:#FFFFFF" aria-label="White"></button>
+        <button class="sketch-color" type="button" data-sketch-color="#D23B2E" style="background:#D23B2E" aria-label="Red"></button>
+        <button class="sketch-color" type="button" data-sketch-color="#E8871E" style="background:#E8871E" aria-label="Orange"></button>
+        <button class="sketch-color" type="button" data-sketch-color="#FFD83D" style="background:#FFD83D" aria-label="Yellow"></button>
+        <button class="sketch-color" type="button" data-sketch-color="#2E7D4F" style="background:#2E7D4F" aria-label="Green"></button>
+        <button class="sketch-color" type="button" data-sketch-color="#2456C8" style="background:#2456C8" aria-label="Blue"></button>
+        <button class="sketch-color" type="button" data-sketch-color="#7B4FA6" style="background:#7B4FA6" aria-label="Purple"></button>
+      </span>
+      <span class="sketch-tools-label" id="sketchWidthLabel">Thickness</span>
+      <span role="group" aria-labelledby="sketchWidthLabel">
+        <button class="btn small sketch-width-btn current" type="button" data-sketch-width="3">Thin</button>
+        <button class="btn small sketch-width-btn" type="button" data-sketch-width="6">Medium</button>
+        <button class="btn small sketch-width-btn" type="button" data-sketch-width="12">Thick</button>
+      </span>
+      <button class="btn small" type="button" id="sketchUndoBtn" disabled>Undo</button>
+      <button class="btn small" type="button" id="sketchClearBtn" disabled>Clear</button>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" id="sketchCancelBtn" type="button">Cancel</button>
+      <button class="btn primary" id="sketchSaveBtn" type="button">Save sketch</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==========================================================================
      v2.8: Note history
      Opened from the editor footer's History button. The script
      renders one row per stored version of the open note (newest
@@ -8535,8 +8684,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-28-SSN-V2450";
-const APP_VERSION = "2.45.0";
+const APP_BUILD = "2026-10-29-SSN-V2460";
+const APP_VERSION = "2.46.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -10360,14 +10509,18 @@ function notePath(note) {
    the fields the app depends on, coerced to plain strings and numbers, so
    a hand edited note file can never inject odd shapes into the app.
    Every attachment object keeps this exact shape:
-   {id, provider, fileId, name, storageName, mime, size, created}. */
+   {id, provider, fileId, name, storageName, mime, size, created}.
+   v2.46: one optional field rides along only when it is
+   exactly true: sketch, the marking of a sketch record
+   (see the sketch section). It is absent from every
+   other record, so their shape is unchanged. */
 function sanitizeAttachments(list) {
   if (!Array.isArray(list)) { return []; }
   const out = [];
   list.forEach(function (a) {
     if (!a || typeof a !== "object") { return; }
     if (!a.id || !a.provider || !a.fileId) { return; }
-    out.push({
+    const rec = {
       id: String(a.id),
       provider: String(a.provider),
       fileId: String(a.fileId),
@@ -10376,7 +10529,13 @@ function sanitizeAttachments(list) {
       mime: String(a.mime || "application/octet-stream"),
       size: Number(a.size) || 0,
       created: String(a.created || "")
-    });
+    };
+    /* v2.46: a sketch's marking on its record, kept only when
+       exactly true, so a sketchless record (and a hand edited
+       truthy string in the field) serializes exactly as every
+       record did before sketches existed. */
+    if (a.sketch === true) { rec.sketch = true; }
+    out.push(rec);
   });
   return out;
 }
@@ -17969,7 +18128,7 @@ async function copyAttachmentsForNewNote(source, bodyHtml) {
           "\" could not be copied.");
       }
       uploaded.push({ driver: driver, fileId: String(result.fileId) });
-      records.push({
+      const newRec = {
         id: newId,
         provider: providerName,
         fileId: String(result.fileId),
@@ -17978,7 +18137,13 @@ async function copyAttachmentsForNewNote(source, bodyHtml) {
         mime: att.mime || "application/octet-stream",
         size: bytes.length,
         created: new Date().toISOString()
-      });
+      };
+      /* v2.46: a copied sketch stays a sketch: the marking
+         rides to the new record, and the placeholder
+         attribute rides the copied body, so the copy's
+         image menu offers Edit sketch like the original's. */
+      if (att.sketch === true) { newRec.sketch = true; }
+      records.push(newRec);
       idMap[att.id] = newId;
     }
   } catch (err) {
@@ -25476,6 +25641,12 @@ function canonicalizeAttachmentPlaceholders(html) {
     }
     if (el.getAttribute("data-ss-view") === "title") {
       clean.setAttribute("data-ss-view", "title");
+    }
+    /* v2.46: a sketch's placeholder marking rides the shell
+       the same way, so the saved body and the attachment
+       record agree about which images are sketches. */
+    if (el.getAttribute("data-ss-sketch") === "1") {
+      clean.setAttribute("data-ss-sketch", "1");
     }
     /* v2.11: a caption is real note content, the one figure child
        that is not editor furniture: its element and its text carry
@@ -35714,6 +35885,14 @@ function runInsertAction(kind) {
     openScanDialog();
     return;
   }
+  if (kind === "sketch") {
+    /* v2.46: the sketch dialog is the scan dialog's sibling:
+       it performs the same note, trash, and offline checks
+       and captures the caret before the dialog opens, so
+       the inserted sketch lands where the caret was. */
+    openSketchDialog();
+    return;
+  }
   restoreFormatSelection();
   if (kind === "noteLink") {
     /* The picker captures the caret itself (it needs the selection
@@ -38559,6 +38738,14 @@ function refreshAttMenuStates() {
     thumbLabel.textContent = note.thumbnail === att.id
       ? "Remove note thumbnail" : "Set as note thumbnail";
   }
+  /* v2.46: Edit sketch shows only for a marked sketch
+     (see isSketchAttachment); every other image keeps the
+     menu it has always had. */
+  const sketchItem = document.getElementById("attSketchItem");
+  if (sketchItem) {
+    sketchItem.classList.toggle("hidden",
+      !isSketchAttachment(att, el));
+  }
   const view = imageViewOf(el);
   const titleItem = document.getElementById("attViewTitleItem");
   const previewItem = document.getElementById("attViewPreviewItem");
@@ -38782,6 +38969,12 @@ function runAttMenuAction(action) {
   if (!note || !att) { return; }
   if (action === "preview") {
     openImageLightbox(note, att, el).catch(function (err) {
+      toast(err.message, true);
+    });
+    return;
+  }
+  if (action === "sketchEdit") {
+    openSketchEditorFor(note, att, el).catch(function (err) {
       toast(err.message, true);
     });
     return;
@@ -41280,6 +41473,407 @@ function onScanDragUp(ev) {
   window.removeEventListener("pointercancel", onScanDragUp);
 }
 
+/* ----- v2.46: sketch block ------------------------------------------------
+   Phase 4 release 2 of the Evernote parity program, built to
+   Evernote's sketch (its help and release coverage agree on the
+   shape): from an open note, the Insert menu (desktop) or the pen
+   item (mobile) opens a canvas over the note; the tools are a pen
+   and a highlighter (each with colors and thicknesses to pick), an
+   eraser, and a selection tool; finger or stylus draws; Done saves
+   the canvas into the note as an image that sizes to fit, and
+   tapping that image later reopens it in the sketch editor, on
+   every device the note syncs to.
+
+   This build, in that shape and with the deviations named in the
+   header history: one canvas in a themed dialog; a pen (eight
+   colors, three thicknesses), an eraser, Undo, and Clear; no
+   highlighter, lasso, or redo. Saving exports the canvas as a PNG
+   (the standing format rule: PNG first, never WebP; line art
+   belongs in PNG) through the app's real attachment path.
+
+   The marking, chosen light and doubled so each half backs the
+   other: a sketch's attachment record carries sketch:true (the
+   sanitizer keeps the field only when it is exactly true, and it
+   is written only for sketches, so every other record serializes
+   byte identically to before), and its placeholder carries
+   data-ss-sketch="1", which the save funnel preserves the way it
+   preserves the alignment and view attributes. isSketchAttachment
+   reads either half. The image menu shows Edit sketch only for a
+   marked image; that action reopens this dialog with the saved
+   PNG loaded as the canvas's base image, and Save replaces the
+   attachment's file in place through the image editor's own
+   replaceAttachmentImage (same record, same block, same spot in
+   the note; the record keeps sketch:true untouched). Duplicate
+   and merge copies carry the field to the new records (see
+   copyAttachmentsForNewNote), so a copied sketch stays a sketch;
+   the placeholder attribute rides the copied body the same way.
+   Exports meet only the PNG: the marking lives in the note file
+   (the front matter JSON and the body placeholder) and grants
+   nothing outside this app.
+
+   The stroke model is the session's truth: a list of strokes,
+   each a tool, a color, a width, and its points in canvas pixels.
+   The base (a reopened sketch's saved drawing, or nothing) is NOT
+   part of the model: it is drawn under a transparent stroke
+   layer, and the eraser lifts paint from that layer only. In a
+   fresh sketch the layer is the whole drawing, so the eraser
+   erases; in a reopened sketch the eraser and Undo reach only the
+   new session's strokes, never the saved drawing flattened under
+   them. That is the honest cost of storing a PNG instead of
+   Evernote's vector ink, and it is named in the header history
+   as a deviation.
+
+   The canvas doors are the image editor's small helpers (its
+   context getter, image loader, and blob exporter), so tests
+   that stub them still exercise the real dialog, handlers, model,
+   and upload path; jsdom has no rasterizer, so no test here can
+   prove a pixel.
+   -------------------------------------------------------------------------- */
+const SKETCH_NEW_WIDTH = 1200;
+const SKETCH_NEW_HEIGHT = 800;
+/* The eraser runs broader than the pen at the same thickness
+   choice: erasing with a hairline is miserable on a finger. */
+const SKETCH_ERASER_SCALE = 4;
+
+let sketchState = null;
+
+/* A marked image, by either half of the marking (see the section
+   head): the record's sketch flag, or the saved placeholder
+   attribute on the figure itself. */
+function isSketchAttachment(att, el) {
+  if (att && att.sketch === true) { return true; }
+  if (el && el.getAttribute &&
+      el.getAttribute("data-ss-sketch") === "1") { return true; }
+  return false;
+}
+
+function sketchCanvasEl() {
+  return document.getElementById("sketchCanvas");
+}
+
+/* Opens the dialog for a NEW sketch over the open note. The
+   guards are the attach flow's own (a live note, online),
+   because the drawing uploads the same way at Save. The caret
+   is captured first, exactly as startAttachFlow does, so the
+   inserted sketch lands where the caret was. */
+function openSketchDialog() {
+  const note = currentNote();
+  if (!note) {
+    toast("Open a note first, then add a sketch to it.", true);
+    return;
+  }
+  if (note.trashed) {
+    toast("A sketch cannot be added to a note in Trash. Restore it first.", true);
+    return;
+  }
+  if (note.archived) {
+    toast("A sketch cannot be added to an archived note. Unarchive it first.", true);
+    return;
+  }
+  if (!state.online) {
+    toast("Sketching needs an internet connection: the sketch is uploaded to your storage provider when you save it. You appear to be offline.", true);
+    return;
+  }
+  captureCaret();
+  sketchOpenWith({
+    note: note, att: null, el: null,
+    baseImg: null, baseUrl: null,
+    width: SKETCH_NEW_WIDTH, height: SKETCH_NEW_HEIGHT
+  });
+}
+
+/* Opens the dialog on an EXISTING sketch: the saved PNG is
+   fetched through the shared attachment reader and loaded as
+   the canvas's base image, at its own pixel size, so new
+   strokes land on the drawing exactly where they are drawn.
+   Any failure leaves the note untouched and the dialog shut. */
+async function openSketchEditorFor(note, att, el) {
+  if (!note || !att) { return; }
+  if (!isSketchAttachment(att, el)) {
+    toast("That image is not a sketch and cannot be edited as one.", true);
+    return;
+  }
+  let blob;
+  try {
+    blob = await fetchAttachmentBlob(att);
+  } catch (err) {
+    toast(err.message, true);
+    return;
+  }
+  const url = URL.createObjectURL(blob);
+  let img;
+  try {
+    img = await imageEditorLoadImage(url);
+  } catch (err) {
+    try { URL.revokeObjectURL(url); } catch (e) { /* gone */ }
+    toast(err.message, true);
+    return;
+  }
+  sketchOpenWith({
+    note: note, att: att, el: el || null,
+    baseImg: img, baseUrl: url,
+    width: (img && (img.naturalWidth || img.width)) || SKETCH_NEW_WIDTH,
+    height: (img && (img.naturalHeight || img.height)) || SKETCH_NEW_HEIGHT
+  });
+}
+
+/* Shared open: fresh session state (the pen in black at the
+   thin width, an empty stroke list, an offscreen stroke layer
+   the size of the canvas), the canvas sized, the dialog
+   rendered and shown. */
+function sketchOpenWith(spec) {
+  const canvas = sketchCanvasEl();
+  canvas.width = spec.width;
+  canvas.height = spec.height;
+  const layer = document.createElement("canvas");
+  layer.width = spec.width;
+  layer.height = spec.height;
+  sketchState = {
+    note: spec.note, att: spec.att, el: spec.el,
+    baseImg: spec.baseImg, baseUrl: spec.baseUrl,
+    strokes: [], current: null,
+    tool: "pen", color: "#111111", widthPx: 3,
+    saving: false, layer: layer
+  };
+  renderSketchDialog();
+  document.getElementById("sketchModal").classList.remove("hidden");
+}
+
+/* Discards the session whole: the base image's object URL is
+   revoked (a new sketch has none) and nothing is uploaded,
+   ever, on this path. */
+function closeSketchDialog() {
+  if (sketchState && sketchState.baseUrl) {
+    try { URL.revokeObjectURL(sketchState.baseUrl); }
+    catch (err) { /* gone */ }
+  }
+  sketchState = null;
+  document.getElementById("sketchModal").classList.add("hidden");
+}
+
+/* Renders the dialog's stateful controls from the session: the
+   title and sub (a new sketch, or the one being edited, with
+   the eraser's reach stated where it matters), the Save label,
+   the tool segmented control's pressed side, the current
+   color's ring and the current thickness's fill (the visibly
+   obvious choice rule), and Undo and Clear enabled only while
+   strokes exist. Then the canvas itself. */
+function renderSketchDialog() {
+  const st = sketchState;
+  if (!st) { return; }
+  document.getElementById("sketchModalTitle").textContent =
+    st.att ? "Edit sketch" : "Sketch";
+  document.getElementById("sketchModalSub").textContent = st.att
+    ? st.att.name + ". Saving replaces the sketch in this note, " +
+      "in the same place; the eraser and Undo reach only the " +
+      "strokes you add now."
+    : "Draw with the pen, erase with the eraser, then save the " +
+      "sketch into this note as an image you can reopen and " +
+      "keep editing.";
+  const saveBtn = document.getElementById("sketchSaveBtn");
+  saveBtn.textContent = st.att ? "Save changes" : "Save sketch";
+  saveBtn.disabled = !!st.saving;
+  document.getElementById("sketchPenBtn").setAttribute("aria-pressed",
+    st.tool === "pen" ? "true" : "false");
+  document.getElementById("sketchEraserBtn").setAttribute("aria-pressed",
+    st.tool === "eraser" ? "true" : "false");
+  document.querySelectorAll("#sketchTools .sketch-color")
+    .forEach(function (btn) {
+      btn.classList.toggle("current",
+        btn.getAttribute("data-sketch-color") === st.color);
+    });
+  document.querySelectorAll("#sketchTools .sketch-width-btn")
+    .forEach(function (btn) {
+      btn.classList.toggle("current",
+        Number(btn.getAttribute("data-sketch-width")) === st.widthPx);
+    });
+  document.getElementById("sketchUndoBtn").disabled =
+    !st.strokes.length || !!st.saving;
+  document.getElementById("sketchClearBtn").disabled =
+    !st.strokes.length || !!st.saving;
+  sketchRedraw();
+}
+
+/* One stroke onto a context: a round capped polyline through
+   its points (a lone point draws as a dot). Eraser strokes run
+   under destination-out, which is only ever applied to the
+   stroke layer, so they lift session paint and can never touch
+   the base under it. */
+function sketchDrawStroke(ctx, stroke) {
+  const pts = stroke.points;
+  if (!pts || !pts.length) { return; }
+  ctx.save();
+  if (stroke.tool === "eraser") {
+    ctx.globalCompositeOperation = "destination-out";
+  }
+  ctx.strokeStyle = stroke.color;
+  ctx.lineWidth = stroke.width;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.beginPath();
+  ctx.moveTo(pts[0].x, pts[0].y);
+  for (let i = 1; i < pts.length; i++) { ctx.lineTo(pts[i].x, pts[i].y); }
+  if (pts.length === 1) { ctx.lineTo(pts[0].x + 0.1, pts[0].y + 0.1); }
+  ctx.stroke();
+  ctx.restore();
+}
+
+/* The canvas, repainted whole from the model on every change:
+   white paper, the base image if this session edits one, then
+   the stroke layer (the session's strokes, the current one
+   included, rendered onto the transparent offscreen layer).
+   Guarded: where the browser offers no canvas context the
+   model still records every stroke, and only the paint is
+   skipped. */
+function sketchRedraw() {
+  const st = sketchState;
+  if (!st) { return; }
+  const canvas = sketchCanvasEl();
+  const ctx = imageEditorContext(canvas);
+  if (!ctx) { return; }
+  const lctx = imageEditorContext(st.layer);
+  if (lctx) {
+    lctx.clearRect(0, 0, st.layer.width, st.layer.height);
+    st.strokes.forEach(function (s) { sketchDrawStroke(lctx, s); });
+    if (st.current) { sketchDrawStroke(lctx, st.current); }
+  }
+  ctx.fillStyle = "#FFFFFF";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  if (st.baseImg) {
+    ctx.drawImage(st.baseImg, 0, 0, canvas.width, canvas.height);
+  }
+  if (lctx) { ctx.drawImage(st.layer, 0, 0); }
+}
+
+/* A pointer position in canvas pixels: the displayed size
+   scales to the bitmap size, the image editor's own mapping. */
+function sketchPoint(ev) {
+  const canvas = sketchCanvasEl();
+  const rect = canvas.getBoundingClientRect();
+  const sx = rect.width ? canvas.width / rect.width : 1;
+  const sy = rect.height ? canvas.height / rect.height : 1;
+  return {
+    x: (ev.clientX - rect.left) * sx,
+    y: (ev.clientY - rect.top) * sy
+  };
+}
+
+/* The drawing handlers: one Pointer Events path for mouse,
+   touch, and stylus, the canvas holding the capture so a
+   stroke survives leaving its edge mid drag. A press starts a
+   stroke in the active tool (the eraser at its broadened
+   width), moves extend it, and a lift commits it to the model
+   and re-renders the controls (Undo wakes). */
+function onSketchPointerDown(ev) {
+  const st = sketchState;
+  if (!st || st.saving) { return; }
+  if (ev.pointerType === "mouse" && ev.button !== 0) { return; }
+  ev.preventDefault();
+  st.current = {
+    tool: st.tool,
+    color: st.color,
+    width: st.tool === "eraser"
+      ? st.widthPx * SKETCH_ERASER_SCALE : st.widthPx,
+    points: [sketchPoint(ev)]
+  };
+  const canvas = sketchCanvasEl();
+  if (canvas.setPointerCapture && ev.pointerId !== undefined) {
+    try { canvas.setPointerCapture(ev.pointerId); }
+    catch (err) { /* capture is a nicety, not the stroke */ }
+  }
+  sketchRedraw();
+}
+
+function onSketchPointerMove(ev) {
+  const st = sketchState;
+  if (!st || !st.current) { return; }
+  st.current.points.push(sketchPoint(ev));
+  sketchRedraw();
+}
+
+function onSketchPointerUp() {
+  const st = sketchState;
+  if (!st || !st.current) { return; }
+  st.strokes.push(st.current);
+  st.current = null;
+  renderSketchDialog();
+}
+
+/* Undo takes back the last committed stroke, pen or eraser
+   alike; with the model as truth, the repaint is the undo. */
+function sketchUndoLast() {
+  const st = sketchState;
+  if (!st || st.saving || !st.strokes.length) { return; }
+  st.strokes.pop();
+  renderSketchDialog();
+}
+
+/* Clear empties the session's strokes. A reopened sketch keeps
+   its base: Clear there removes only what this session added,
+   the same reach as the eraser and Undo. */
+function sketchClearStrokes() {
+  const st = sketchState;
+  if (!st || st.saving || !st.strokes.length) { return; }
+  st.strokes = [];
+  st.current = null;
+  renderSketchDialog();
+}
+
+/* The export seam: the flattened canvas as a PNG blob, through
+   the image editor's blob door. */
+function sketchExportToBlob() {
+  sketchRedraw();
+  return imageEditorToBlob(sketchCanvasEl(), "image/png");
+}
+
+/* Save. A new sketch must hold at least one stroke; an edited
+   one may save with none added (the drawing stands as it was).
+   The new sketch exports first, then the dialog closes and the
+   PNG goes through the ordinary attachment flow marked as a
+   sketch, landing at the captured caret. The edited sketch
+   replaces its attachment's file in place through the image
+   editor's replace path (which rehydrates the block and marks
+   the note dirty); the dialog closes only once the replacement
+   has landed. Any failure before the swap leaves the note, the
+   block, and the record exactly as they were, and the dialog
+   stays open so the drawing is not lost. */
+async function saveSketchDialog() {
+  const st = sketchState;
+  if (!st || st.saving) { return; }
+  if (!st.att && !st.strokes.length) {
+    toast("Draw something first, or Cancel to add no sketch.", true);
+    return;
+  }
+  st.saving = true;
+  renderSketchDialog();
+  const saveBtn = document.getElementById("sketchSaveBtn");
+  saveBtn.textContent = "Saving...";
+  try {
+    const blob = await sketchExportToBlob();
+    if (st.att) {
+      await replaceAttachmentImage(
+        { note: st.note, att: st.att, el: st.el }, blob);
+      if (st.el && st.el.isConnected) {
+        st.el.setAttribute("data-ss-sketch", "1");
+      }
+      closeSketchDialog();
+      toast("Sketch updated.");
+    } else {
+      const file = new File([blob], "Sketch.png",
+        { type: "image/png" });
+      closeSketchDialog();
+      await handleIncomingFiles([file], { sketch: true });
+    }
+  } catch (err) {
+    toast("The sketch could not be saved: " + err.message, true);
+  } finally {
+    if (sketchState === st) {
+      st.saving = false;
+      renderSketchDialog();
+    }
+  }
+}
+
 /* ----- attach entry point ------------------------------------------------
    v1.3.4: startAttachFlow() is the single entry point for attaching
    files with the picker. The Insert menu's "Attach file or image"
@@ -41314,7 +41908,7 @@ function startAttachFlow() {
   document.getElementById("attachFileInput").click();
 }
 
-async function handleIncomingFiles(fileList) {
+async function handleIncomingFiles(fileList, opts) {
   const incomingFiles = Array.prototype.slice.call(fileList || []);
   const note = currentNote();
   if (!note) {
@@ -41358,12 +41952,12 @@ async function handleIncomingFiles(fileList) {
   uploadUi.index = 0;
   for (const file of accepted) {
     uploadUi.index++;
-    await uploadOneAttachment(note, providerName, driver, file);
+    await uploadOneAttachment(note, providerName, driver, file, opts);
   }
   hideUploadProgress();
 }
 
-async function uploadOneAttachment(note, providerName, driver, file) {
+async function uploadOneAttachment(note, providerName, driver, file, opts) {
   const attId = newNoteId() + "a";
   const storageName = attId + "__" + sanitizeFileName(file.name);
   const isImage = (file.type || "").indexOf("image/") === 0;
@@ -41371,6 +41965,12 @@ async function uploadOneAttachment(note, providerName, driver, file) {
   el.setAttribute("class", "ss-attachment");
   el.setAttribute("data-attachment-id", attId);
   el.setAttribute("contenteditable", "false");
+  /* v2.46: a sketch upload is born marked on its block as
+     well as on its record (below), so the note's first save
+     already carries both halves of the marking in step. */
+  if (opts && opts.sketch) {
+    el.setAttribute("data-ss-sketch", "1");
+  }
   /* v1.7: decorated by the shared decoration function, with the
      file's type standing in for the record that does not exist yet,
      so the block is born with the inline image class and the
@@ -41397,6 +41997,8 @@ async function uploadOneAttachment(note, providerName, driver, file) {
       size: file.size,
       created: new Date().toISOString()
     };
+    /* v2.46: the record half of the sketch marking. */
+    if (opts && opts.sketch) { att.sketch = true; }
     note.attachments = note.attachments || [];
     note.attachments.push(att);
     await hydrateOneAttachment(note, el);
@@ -42794,6 +43396,71 @@ function wireEvents() {
     const modal = document.getElementById("scanModal");
     if (modal && !modal.classList.contains("hidden") && !scanDrag) {
       closeScanDialog();
+    }
+  });
+  /* v2.46: the sketch dialog's wiring: the canvas's pointer
+     path, the tool, color, and thickness controls, Undo and
+     Clear, and the modal family's backdrop and Escape
+     gestures (a cancel, so an accidental dismissal discards
+     the drawing and uploads nothing, exactly like the
+     Cancel button). Picking a color also picks the pen:
+     colors belong to the pen, and a color tap while erasing
+     means the drawing hand is back. */
+  document.getElementById("sketchCanvas")
+    .addEventListener("pointerdown", onSketchPointerDown);
+  document.getElementById("sketchCanvas")
+    .addEventListener("pointermove", onSketchPointerMove);
+  document.getElementById("sketchCanvas")
+    .addEventListener("pointerup", onSketchPointerUp);
+  document.getElementById("sketchCanvas")
+    .addEventListener("pointercancel", onSketchPointerUp);
+  document.getElementById("sketchPenBtn").addEventListener("click", function () {
+    if (!sketchState) { return; }
+    sketchState.tool = "pen";
+    renderSketchDialog();
+  });
+  document.getElementById("sketchEraserBtn").addEventListener("click", function () {
+    if (!sketchState) { return; }
+    sketchState.tool = "eraser";
+    renderSketchDialog();
+  });
+  document.querySelectorAll("#sketchTools .sketch-color")
+    .forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        if (!sketchState) { return; }
+        sketchState.color = btn.getAttribute("data-sketch-color");
+        sketchState.tool = "pen";
+        renderSketchDialog();
+      });
+    });
+  document.querySelectorAll("#sketchTools .sketch-width-btn")
+    .forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        if (!sketchState) { return; }
+        sketchState.widthPx = Number(btn.getAttribute("data-sketch-width"));
+        renderSketchDialog();
+      });
+    });
+  document.getElementById("sketchUndoBtn").addEventListener("click", function () {
+    sketchUndoLast();
+  });
+  document.getElementById("sketchClearBtn").addEventListener("click", function () {
+    sketchClearStrokes();
+  });
+  document.getElementById("sketchCancelBtn").addEventListener("click", function () {
+    closeSketchDialog();
+  });
+  document.getElementById("sketchSaveBtn").addEventListener("click", function () {
+    saveSketchDialog();
+  });
+  document.getElementById("sketchModal").addEventListener("click", function (ev) {
+    if (ev.target === ev.currentTarget) { closeSketchDialog(); }
+  });
+  document.addEventListener("keydown", function (ev) {
+    if (ev.key !== "Escape") { return; }
+    const modal = document.getElementById("sketchModal");
+    if (modal && !modal.classList.contains("hidden")) {
+      closeSketchDialog();
     }
   });
   /* v2.38: the gallery entry menu's Rename and Delete,
