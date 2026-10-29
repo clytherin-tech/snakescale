@@ -40,10 +40,48 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-29-SSN-V2560
-  Version: 2.56.0
+  BUILD STAMP: 2026-10-29-SSN-V2570
+  Version: 2.57.0
 
   Revision history:
+    v2.57.0 2026-10-29 The save state becomes a
+                      floating pill: the save
+                      status leaves the sidebar
+                      footer for a fixed chip at
+                      the bottom center of the
+                      app, written by the same
+                      setSaveState, so Chris can
+                      see saving happen from any
+                      view without scrolling
+                      the sidebar, and in the
+                      icon rail layout where
+                      the footer is not on
+                      screen at all. Saving
+                      states show while true,
+                      the Saved wording lingers
+                      briefly once the save
+                      settles and then fades (a
+                      new save during the
+                      linger cancels the fade,
+                      so a burst is one
+                      continuous pill), and the
+                      failure, offline, paused,
+                      and conflict wordings are
+                      sticky in the warning
+                      tones until the state
+                      changes or the pill is
+                      tapped away. Resting
+                      wordings render nothing,
+                      and the rail flyout keeps
+                      its mirror line. The
+                      landing save's Saved
+                      wording is now guarded
+                      by the settlement counts,
+                      so the status never
+                      claims Saved over a newer
+                      unsettled edit; no save,
+                      settle, sync, or queue
+                      behavior changes.
     v2.56.0 2026-10-29 Editor breadcrumbs: a slim
                       trail at the top of the
                       editor, Notebooks, the
@@ -4340,8 +4378,6 @@ body.dark .merge-order-drag:hover{color:var(--accent);}
 }
 .update-pill:hover{border-color:#FFE1A8;}
 .update-pill.hidden{display:none;}
-.save-state-row{margin-bottom:10px;}
-#saveState{font-size:12.5px;color:#9DB8A6;font-weight:600;}
 /* v2.7: the sidebar's three dot menu button and its menu.
    The button is a quiet dark chip like the footer buttons it
    replaced; the menu is the standard card (the #attMenu look)
@@ -7467,6 +7503,58 @@ body.dark .version-date{color:var(--accent);}
    so one value serves both: bottom:68px is the full footer plus 16px
    of clear space above it. */
 #toastBox{position:fixed;right:14px;bottom:68px;z-index:60;display:flex;flex-direction:column;gap:8px;max-width:min(92vw,380px);}
+/* v2.57: the save state as a floating pill. Through v2.56.0
+   the status was a quiet line in the sidebar footer, which
+   Chris could not see without scrolling the sidebar, and
+   which the icon rail layout hides entirely. The pill is
+   its visible home now: a chip in the sync pill's own
+   language (the deep green body, the tone carried by its
+   border, text, and dot), centered at the toast box's own
+   bottom offset (so it clears the editor footer by the
+   same margin) and one z step above the toast box, so it
+   floats over whichever pane is up and never collides
+   with the right hand toast stack. It lives inside #app,
+   so it renders only while the app screen does. The
+   data-state tones are renderSavePill's: saving (amber,
+   the dot pulses), saved (green), warn (amber: offline,
+   paused, conflict), bad (red: a failed save). Only the
+   sticky tones take pointer events, for the tap that
+   dismisses them; a transient pill lets every click
+   through to the work underneath. */
+#savePill{
+  position:fixed;left:50%;transform:translateX(-50%);bottom:68px;z-index:65;
+  display:inline-flex;align-items:center;gap:7px;padding:5px 12px;
+  border-radius:var(--radius-pill);font-size:12.5px;font-weight:700;
+  background:#0A2E21;color:#EAF3EC;border:1px solid #2A5240;
+  box-shadow:var(--shadow);pointer-events:none;cursor:default;
+  transition:opacity .25s ease;
+}
+#savePill.hidden{display:none;}
+#savePill.fading{opacity:0;}
+#savePill .save-pill-dot{
+  width:8px;height:8px;border-radius:50%;background:var(--accent);flex:none;
+}
+#savePill[data-state="saving"]{color:#FFE1A8;border-color:#8A6D2F;}
+#savePill[data-state="saving"] .save-pill-dot{
+  background:#D9A441;animation:savePillPulse 1s ease-in-out infinite;
+}
+#savePill[data-state="saved"]{color:#BEE3C8;border-color:var(--secondary);}
+#savePill[data-state="saved"] .save-pill-dot{background:var(--accent);}
+#savePill[data-state="warn"]{
+  color:#FFE1A8;border-color:#D9A441;pointer-events:auto;cursor:pointer;
+}
+#savePill[data-state="warn"] .save-pill-dot{background:#D9A441;}
+#savePill[data-state="bad"]{
+  color:#FFC4BC;border-color:var(--danger);pointer-events:auto;cursor:pointer;
+}
+#savePill[data-state="bad"] .save-pill-dot{background:#C0392B;}
+@keyframes savePillPulse{
+  0%,100%{opacity:1;}50%{opacity:.35;}
+}
+@media (prefers-reduced-motion: reduce){
+  #savePill{transition:none;}
+  #savePill[data-state="saving"] .save-pill-dot{animation:none;}
+}
 /* v1.7: the attachment undo toasts live in their own box at the TOP
    center of the window, above the app but below the modal dialogs
    (z-index 80), because the undo window is short and the button must
@@ -7601,6 +7689,7 @@ body.dark .version-date{color:var(--accent);}
   #thingsBackBtn,#editorBackBtn{min-height:44px;padding:9px 14px;}
   .undo-toast-btn{min-height:36px;padding:7px 14px;}
   #toastBox{bottom:calc(68px + env(safe-area-inset-bottom));}
+  #savePill{bottom:calc(68px + env(safe-area-inset-bottom));}
   .note-select input[type="checkbox"]{width:22px;height:22px;}
   #attMenu,#attCardMenu,#attAlignMenu,#tableMenu,#cellMenu,
   #linkViewMenu{max-width:calc(100vw - 16px);}
@@ -7999,8 +8088,14 @@ body.dark .version-date{color:var(--accent);}
            moved markup carries its own history with it.
            What stays here is what always lived on its own
            lines: the save status (here since v2.7 moved it
-           off the pill row) and the version line. -->
-      <div class="save-state-row"><span id="saveState">No changes</span></div>
+           off the pill row) and the version line.
+           v2.57: the save status line leaves the footer
+           for the floating save pill (the last child of
+           #app, beside the toast box comment in the
+           script), because a status Chris has to scroll
+           the sidebar to find is one he cannot see while
+           he works, and the icon rail hides it entirely.
+           The footer keeps the version line alone. -->
       <!-- v1.6: the running app's version, written from APP_VERSION
            by the script at boot. Never hard code a version here. -->
       <div class="app-version" id="appVersion"></div>
@@ -8995,6 +9090,15 @@ body.dark .version-date{color:var(--accent);}
       </div>
     </div>
   </section>
+
+  <!-- v2.57: the save status as a floating pill, its visible
+       home now (see renderSavePill in the script). It sits
+       inside #app so it renders only while the app screen
+       is shown, and never over the sign in gate or the
+       loading overlay. Its second span is the same save
+       status text setSaveState has always written; the
+       rail flyout keeps its own mirror line, as before. -->
+  <div id="savePill" class="hidden" data-state="off"><span class="save-pill-dot" aria-hidden="true"></span><span id="saveState">No changes</span></div>
 </div>
 
 <!-- ==========================================================================
@@ -9639,8 +9743,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-29-SSN-V2560";
-const APP_VERSION = "2.56.0";
+const APP_BUILD = "2026-10-29-SSN-V2570";
+const APP_VERSION = "2.57.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -27850,6 +27954,165 @@ function setSaveState(text) {
      collapsed to the icon rail. One writer, two homes. */
   const railSave = document.getElementById("railSaveState");
   if (railSave) { railSave.textContent = text; }
+  /* v2.57: the same wording also drives the floating save
+     pill (renderSavePill, next below). The span the first
+     line writes lives inside the pill now, so this stays
+     the one writer for every home the status has, and the
+     pill can never read anything the machinery did not
+     say. */
+  renderSavePill(text);
+}
+
+/* ------------------------------------------------------------------
+   v2.57: the save pill. Through v2.56.0 the save status's
+   visible home was a line in the sidebar footer, and
+   Chris's report was that he could not see when the app
+   was saving without scrolling the sidebar to find it
+   (in the icon rail layout it is not on screen at all).
+   The status therefore also renders as a floating pill
+   (the save pill markup inside #app, styled beside the
+   toast box), visible from every view and gone at rest.
+
+   setSaveState stays the one writer: it writes the
+   wording into the pill's own span and the rail mirror
+   exactly as before, and renderSavePill decides what
+   the pill does with the wording. The classification
+   keys off the wording itself, so every caller, present
+   and future, inherits it:
+
+     saving: "Unsaved changes..." and "Saving...". The
+       edits exist or the write is in flight. The pill
+       shows while either is the latest wording; only a
+       later wording supersedes it, never a timer.
+     saved: "Saved" and "Saved <time>". The machinery
+       settled. The pill shows for a short linger, so a
+       save Chris was watching visibly completes, and
+       then fades out. A new wording during the linger
+       cancels the fade, which is what makes a burst of
+       saves one continuous pill with no flicker.
+     warn and bad (the sticky tones): "Offline: changes
+       queued", "Saving paused: this note changed
+       elsewhere", and "Conflict saved as a copy" (warn,
+       amber), and "Save failed" (bad, red). A standing
+       problem is not a flash: the pill stays until a
+       later wording supersedes it or Chris taps it
+       away, and a dismissed wording stays dismissed
+       until the wording changes. The conflict wording
+       is normally superseded within the same pass by
+       the preserved copy's own opening "Saved", exactly
+       as the footer behaved; it is classified sticky
+       because, if it ever stood alone, it must not fade.
+     rest: everything else, today "No changes", "In
+       Trash", and "Archived". Those wordings say where
+       a note lives or that nothing has happened yet,
+       not that a save is running or stuck; the
+       breadcrumb and the locked editor already name a
+       locked note's home. The pill renders nothing,
+       and the rail mirror still carries the wording,
+       as it always has.
+
+   The pill is deliberately not a live region. The
+   footer line was plain text, and the pill keeps that
+   exact presence (its span is the same save status
+   text) instead of announcing every autosave.
+   ------------------------------------------------------------------ */
+const SAVE_PILL_LINGER_MS = 1500;
+const SAVE_PILL_FADE_MS = 280;
+let savePillLingerTimer = null;
+let savePillFadeTimer = null;
+let savePillWording = "";
+let savePillDismissedWording = null;
+
+/* The tone a save state wording belongs to (see the
+   v2.57 block above). Exact wordings first: "Saving
+   paused..." must never fall into the saved prefix
+   test, and the saved test itself is the app's own
+   "Saved" plus the timestamped form the autosave
+   writes. */
+function saveStateTone(text) {
+  if (text === "Saving..." || text === "Unsaved changes...") {
+    return "saving";
+  }
+  if (text === "Save failed") { return "bad"; }
+  if (text === "Offline: changes queued" ||
+      text === "Saving paused: this note changed elsewhere" ||
+      text === "Conflict saved as a copy") {
+    return "warn";
+  }
+  if (text === "Saved" || text.indexOf("Saved ") === 0) {
+    return "saved";
+  }
+  return "rest";
+}
+
+function renderSavePill(text) {
+  const pill = document.getElementById("savePill");
+  if (!pill) { return; }
+  /* Every wording restarts the pill's clocks: a fade
+     scheduled by an earlier Saved must never hide a
+     state that has already moved on. */
+  if (savePillLingerTimer !== null) {
+    clearTimeout(savePillLingerTimer);
+    savePillLingerTimer = null;
+  }
+  if (savePillFadeTimer !== null) {
+    clearTimeout(savePillFadeTimer);
+    savePillFadeTimer = null;
+  }
+  /* A dismissal belongs to its wording: any different
+     wording clears it, so the next problem always
+     shows. */
+  if (text !== savePillWording) { savePillDismissedWording = null; }
+  savePillWording = text;
+  const tone = saveStateTone(text);
+  if (tone === "rest" || text === savePillDismissedWording) {
+    pill.classList.remove("fading");
+    pill.classList.add("hidden");
+    pill.setAttribute("data-state", "off");
+    pill.removeAttribute("title");
+    return;
+  }
+  pill.setAttribute("data-state", tone);
+  pill.classList.remove("fading");
+  pill.classList.remove("hidden");
+  if (tone === "warn" || tone === "bad") {
+    pill.title = "Dismiss";
+  } else {
+    pill.removeAttribute("title");
+  }
+  if (tone === "saved") {
+    savePillLingerTimer = setTimeout(function () {
+      savePillLingerTimer = null;
+      /* Fade first, hide after: the fade is opacity
+         only, and the hide lands at its end. A wording
+         arriving mid fade cleared this timer on its way
+         in, so the pill can never pop out from under a
+         newer state. */
+      pill.classList.add("fading");
+      savePillFadeTimer = setTimeout(function () {
+        savePillFadeTimer = null;
+        pill.classList.add("hidden");
+        pill.classList.remove("fading");
+        pill.setAttribute("data-state", "off");
+      }, SAVE_PILL_FADE_MS);
+    }, SAVE_PILL_LINGER_MS);
+  }
+}
+
+/* A tap dismisses a sticky pill's wording until the
+   wording changes (see renderSavePill). The transient
+   tones take no pointer events, so a click can only
+   ever arrive from a sticky pill; the tone test is the
+   second lock. */
+function dismissSavePill() {
+  const pill = document.getElementById("savePill");
+  if (!pill) { return; }
+  const tone = pill.getAttribute("data-state");
+  if (tone !== "warn" && tone !== "bad") { return; }
+  savePillDismissedWording = savePillWording;
+  pill.classList.add("hidden");
+  pill.setAttribute("data-state", "off");
+  pill.removeAttribute("title");
 }
 
 /* Mobile pane switching. Desktop CSS ignores these classes. */
@@ -36356,7 +36619,22 @@ async function runEditorAutosave() {
       setSaveState("Saving paused: this note changed elsewhere");
       savePaused = true;
     } else {
-      setSaveState("Saved " + new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }));
+      /* v2.57: the Saved wording is set only when the
+         edits this pass collected are still the latest
+         ones. An edit typed during the flight already
+         set "Unsaved changes..." through markDirty and
+         owns a later pass of its own; letting this
+         landing overwrite that wording would have the
+         save status (the floating pill now) claim a
+         settled state the settlement counts above deny,
+         in exactly the window a note switch settle or a
+         waiting update reload is watching those counts.
+         The save itself landed either way; only the
+         wording is guarded, and the newer edit's own
+         pass sets the final wording when it lands. */
+      if (seqAtCollect === swEditorDirtySeq) {
+        setSaveState("Saved " + new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }));
+      }
       saveLanded = true;
     }
   } catch (err) {
@@ -47583,6 +47861,14 @@ function wireEvents() {
      (see onUpdateReadyPillClick). */
   document.getElementById("updateReadyPill").addEventListener("click", function () {
     onUpdateReadyPillClick();
+  });
+  /* v2.57: tapping a sticky save pill (a failure, an
+     offline queue, a pause) dismisses it until the
+     state changes; the transient tones take no pointer
+     events, so this fires only for the sticky ones
+     (see dismissSavePill). */
+  document.getElementById("savePill").addEventListener("click", function () {
+    dismissSavePill();
   });
   document.getElementById("sidebarMenu").addEventListener("click", function (ev) {
     ev.stopPropagation();
