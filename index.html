@@ -40,10 +40,67 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-29-SSN-V2500
-  Version: 2.50.0
+  BUILD STAMP: 2026-10-29-SSN-V2510
+  Version: 2.51.0
 
   Revision history:
+    v2.51.0 2026-10-29 The note switch settle: a data
+                      loss fix, chosen by Chris on
+                      2026-10-29 ahead of the queued
+                      Home work. Through v2.50.0 an
+                      edit lived only in the editor
+                      until the debounced autosave
+                      collected it 800 ms after the
+                      last keystroke, so opening
+                      another note inside that window
+                      discarded text that existed
+                      nowhere else, and the note
+                      reopened without it under a
+                      save state that read Saved.
+                      Leaving a note now settles it
+                      first: openNote, the one funnel
+                      every opening runs through,
+                      runs the outgoing note's
+                      autosave pass early (the same
+                      collect, the same untouched
+                      note gate, freshness check, and
+                      conflict handling as always; a
+                      save already in flight is
+                      queued behind in the note's
+                      save chain, never raced), and
+                      the switch completes when the
+                      settle resolves. The Trash and
+                      Archive moves of the open note
+                      settle the same way first, so
+                      the copy that lands in Trash or
+                      Archive carries the final text.
+                      A hard failure aborts the
+                      switch instead: the note stays
+                      open with its text on screen
+                      and the failure stated. A
+                      paused (diverged) note is the
+                      one exception: its pass still
+                      collects the final text into
+                      the note, and the switch
+                      proceeds, leaving the note to
+                      its Reload recovery. A newer
+                      navigation supersedes a switch
+                      deferred behind a settle, so
+                      the last note asked for is the
+                      one that stands, while the
+                      settle still saves the outgoing
+                      note. A clean switch is
+                      unchanged, with no extra saves
+                      or writes, and re-opening the
+                      note already open is not a
+                      switch. The v2.50.0 self update
+                      reload keeps its accounting,
+                      because a settle lands through
+                      the same settlement counts the
+                      reload waits on, so a waiting
+                      update still applies at the
+                      exact moment the last edit
+                      lands.
     v2.50.0 2026-10-29 The shell build, three changes
                       Chris directed and confirmed on
                       2026-10-29. (1) The latest
@@ -9096,8 +9153,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-29-SSN-V2500";
-const APP_VERSION = "2.50.0";
+const APP_BUILD = "2026-10-29-SSN-V2510";
+const APP_VERSION = "2.51.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -19101,6 +19158,24 @@ function moveNoteToTrash(note, quiet) {
       return moveNoteToTrashNow(note, quiet);
     });
   }
+  /* v2.51: moving the OPEN note to Trash serializes the
+     note object, so its unsettled editor edits settle
+     first (see settleOpenNoteEdits): the copy that lands
+     in Trash then carries the final text, and the settle's
+     save is chained ahead of the move's own writes on the
+     note's operation chain. The settle's verdict is not
+     consulted here: landed is the ordinary case, a pause
+     still leaves the collected object for the move's
+     unconditional write (and the move clears the
+     divergence mark, as it always has), and even a hard
+     failure leaves the collected text in the object the
+     move writes and caches. The move is its own
+     preservation, so it proceeds in every case. */
+  if (note && state.selectedId === note.id && swEditorUnsettled()) {
+    return settleOpenNoteEdits().then(function () {
+      return moveNoteToTrashNow(note, quiet);
+    });
+  }
   return moveNoteToTrashNow(note, quiet);
 }
 
@@ -19126,6 +19201,18 @@ function archiveNote(note) {
           "could not be archived.", true);
         return null;
       }
+      return archiveNoteNow(note);
+    });
+  }
+  /* v2.51: the archive move serializes the note object
+     exactly as the trash move does, so the open note's
+     unsettled edits settle first the same way, and the
+     archived copy carries the final text. See the matching
+     block in moveNoteToTrash above for the full reasoning;
+     as there, the move proceeds on its own preservation
+     whatever the settle's verdict. */
+  if (note && state.selectedId === note.id && swEditorUnsettled()) {
+    return settleOpenNoteEdits().then(function () {
       return archiveNoteNow(note);
     });
   }
@@ -24900,9 +24987,59 @@ function onTasksLoaded(prevTaskUpdatedById) {
   maybeOpenPendingTask();
 }
 
+/* v2.51: the navigation epoch. Every openNote call bumps
+   it, and a switch deferred behind a settle (below)
+   compares its captured value before completing: a newer
+   openNote call supersedes the deferred switch, so the
+   LAST navigation asked for is the one that stands,
+   exactly as it was when every switch was instant. Without
+   this, a deferred switch could land after a later
+   navigation (even a re-open of the note already showing)
+   and yank the editor to a note the user has already
+   clicked away from. */
+let openNoteEpoch = 0;
+
 /* Open one note in the editor. On mobile this also switches the visible
-   pane to the editor. */
+   pane to the editor.
+   v2.51: this is the one funnel every note opening runs
+   through (the notes list, search results, backlinks, note
+   links, Home, Shortcuts, the Reminders view, notification
+   arrivals, restores), so the note switch settle lives
+   here: when a DIFFERENT note is open with unsettled
+   edits, the outgoing note settles first and the switch
+   happens only when the settle resolves. A clean switch,
+   and re-opening the note already open, run the old body
+   (openNoteNow, below) synchronously and unchanged. On a
+   hard settle failure the switch is aborted outright:
+   the outgoing note stays open with its text on screen,
+   because replacing the editor would discard edits that
+   exist nowhere else (see settleOpenNoteEdits). */
 function openNote(id) {
+  const epoch = ++openNoteEpoch;
+  const outgoing = currentNote();
+  if (outgoing && outgoing.id !== id && !outgoing.trashed &&
+      !outgoing.archived && swEditorUnsettled()) {
+    settleOpenNoteEdits().then(function (ok) {
+      if (!ok) {
+        toast("Your last edit could not be saved, so the " +
+          "note was left open.", true);
+        return;
+      }
+      /* A newer openNote call superseded this switch
+         while the settle ran: drop the navigation (the
+         settle itself still saved the outgoing note). */
+      if (epoch !== openNoteEpoch) { return; }
+      openNoteNow(id);
+    });
+    return;
+  }
+  openNoteNow(id);
+}
+
+/* The switch itself, exactly as openNote ran it through
+   v2.50. Kept separate so the settle gate above can defer
+   it without duplicating it. */
+function openNoteNow(id) {
   state.selectedId = id;
   /* v2.24.3: a note opening replaces any Things to do page. */
   state.thingsNotebook = null;
@@ -34518,7 +34655,28 @@ function initNoteDragAndDrop() {
   }, true);
 }
 
-const autosave = debounce(async function () {
+/* v2.51: one autosave pass, as a named function
+   (runEditorAutosave below). Through v2.50 this body was an
+   anonymous function inside the generic debounce helper;
+   v2.51 needs the pass runnable on demand, by name, because
+   leaving a note now settles the outgoing note first (see
+   settleOpenNoteEdits below): the settle runs THIS pass
+   early rather than a second save system of its own, so a
+   settle is an ordinary autosave in every respect (the
+   untouched note gate, the conflict machinery, the v2.50
+   settlement counts) that merely happens before the editor
+   lets go of the note instead of 800 ms after the last
+   keystroke. The pass reports its outcome as a string so
+   the settle can tell a landing from a pause from a hard
+   failure: "landed" (written, queued offline, preserved
+   through a conflict, or the untouched gate's no op),
+   "held" (the save paused on a diverged note; the pass
+   still collected the editor into the note object, which
+   is the paused state's own preservation contract), and
+   "failed" (the save threw; nothing landed anywhere).
+   Callers that do not care ignore the return, exactly as
+   they ignored the debounce's. */
+async function runEditorAutosave() {
   const note = currentNote();
   if (!note || note.trashed || note.archived) {
     /* v2.50: no live note to save: whatever edits were
@@ -34532,7 +34690,7 @@ const autosave = debounce(async function () {
        found the count still open. */
     swEditorSettledSeq = swEditorDirtySeq;
     maybeReloadForUpdate();
-    return;
+    return "none";
   }
   const previousPath = notePath(note);
   const previousNotebook = note.notebook;
@@ -34581,7 +34739,7 @@ const autosave = debounce(async function () {
     maybeReloadForUpdate();
     renderSidebar();
     renderNoteList();
-    return;
+    return "landed";
   }
   setSaveState("Saving...");
   /* v2.50: whether this save settles the edits it
@@ -34589,6 +34747,11 @@ const autosave = debounce(async function () {
      or failed save settles nothing: the work is still only
      on screen, and a waiting update reload keeps waiting. */
   let saveLanded = false;
+  /* v2.51: the pass's outcome for the note switch settle
+     (see runEditorAutosave's header): a paused save is its
+     own outcome, distinct from a landing and from a hard
+     failure, because the settle treats it differently. */
+  let savePaused = false;
   try {
     const result = await saveNoteAndSettleMove(note, previousPath);
     if (result && result.queued) {
@@ -34603,6 +34766,7 @@ const autosave = debounce(async function () {
       /* v2.17.1: the note is diverged; its saves pause until
          Reload. Say so where "Saved" would otherwise lie. */
       setSaveState("Saving paused: this note changed elsewhere");
+      savePaused = true;
     } else {
       setSaveState("Saved " + new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }));
       saveLanded = true;
@@ -34623,7 +34787,173 @@ const autosave = debounce(async function () {
   renderSidebar();
   renderNoteList();
   void previousNotebook;
-}, 800);
+  /* v2.51: report the outcome to the note switch settle
+     (see runEditorAutosave's header). Every other caller
+     ignores this, as it ignored the debounce's return. */
+  return saveLanded ? "landed" : (savePaused ? "held" : "failed");
+}
+
+/* v2.51: the autosave's 800 ms debounce, as a named timer
+   instead of the generic debounce helper, with exactly the
+   debounce's behavior: every call (markDirty's, and any
+   direct caller forcing a pass) resets the wait, and the
+   pass that finally runs is runEditorAutosave itself. The
+   timer has a name so the note switch settle below can
+   cancel a pending pass: once a settle has run the pass
+   early and landed the edits, the timer that was counting
+   down to run it again must not fire a second, pointless
+   pass against whatever note the editor shows by then. */
+let editorAutosaveTimer = null;
+function autosave() {
+  if (editorAutosaveTimer !== null) {
+    clearTimeout(editorAutosaveTimer);
+  }
+  editorAutosaveTimer = setTimeout(function () {
+    editorAutosaveTimer = null;
+    void runEditorAutosave();
+  }, 800);
+}
+
+/* Cancel the pending debounced autosave pass, if one is
+   counting down. Called by the note switch settle, which
+   runs the pass itself, immediately, instead. */
+function cancelPendingAutosave() {
+  if (editorAutosaveTimer !== null) {
+    clearTimeout(editorAutosaveTimer);
+    editorAutosaveTimer = null;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   v2.51: leaving a note settles the outgoing note first.
+
+   The bug this fixes, proven in the v2.50 build's own
+   experiment (and re-proven against v2.50.0 before this
+   fix): edits live in the editor's fields and reach the
+   note's stored object only when the debounced autosave
+   collects them, 800 ms after the last keystroke. Opening
+   another note inside that window re-rendered the editor
+   from the new note's stored body, and the pending pass
+   then collected the NEW note's fields against the new
+   note: the outgoing note's last edits, which existed
+   nowhere but the discarded DOM, were simply gone, and
+   the save state line afterwards read "Saved".
+
+   The settle below is the whole fix, and it is
+   deliberately not a second save system: it runs the
+   autosave's own pass (runEditorAutosave) early, under
+   the settle's control, until the editor's unsettled
+   count (the v2.50 settlement counts the self update
+   reload also reads) reaches zero. Everything the
+   debounced pass would have done happens identically:
+   the collect, the untouched note gate, the freshness
+   baseline and the inverted conflict handling inside
+   saveNoteToRepo (reached through saveNoteAndSettleMove),
+   the per note operation chain (a save already in flight
+   for the note simply lands first; the settle's pass
+   queues its own write behind it in the chain, never
+   beside it), and the settlement accounting, so a waiting
+   self update reload still fires at the exact moment the
+   last edit lands, even when the landing is a note switch.
+
+   When there is nothing unsettled, the settle is a no
+   op: no collect, no save, no Drive write, and a clean
+   switch keeps its old timing exactly (the NS section of
+   the harness counts the writes to prove it).
+
+   The settle resolves true when it is safe to leave:
+   - every edit landed (written, queued offline, or
+     preserved through a conflict: the pass's "landed");
+   - or the save paused on a diverged note ("held"). The
+     pass still collected the editor into the note
+     object before its save paused, and in-memory
+     preservation pending Reload is the paused state's
+     own contract (the divergence machinery, not the
+     switch, owns what happens next), so leaving loses
+     nothing the app ever promised to keep.
+   It resolves false only on a hard failure (the pass
+   threw), or when edits keep arriving through five
+   landed passes (something is dirtying the note faster
+   than saves can land, and chasing it forever would
+   trap the switch): the edits exist only in the editor,
+   so the caller that is REPLACING the editor (openNote)
+   aborts the switch and leaves the note open with its
+   text on screen, while the callers that carry their own
+   preservation (the Trash and Archive moves, whose
+   unconditional writes serialize the object the pass
+   collected) proceed on that basis. A save that cannot
+   land is never retried by the loop at all: a failed
+   pass ends the settle on the spot, and the failure is
+   the autosave's own "Save failed" report, never a
+   silent spin.
+
+   One settle at a time: a second caller while one is
+   running (a rapid second click at another note) attaches
+   to the same promise, and its own navigation runs when
+   that promise resolves, so the editor is never settled
+   twice concurrently and the last navigation asked for
+   is the one that stands.
+   -------------------------------------------------------------------------- */
+let noteSettleInFlight = null;
+
+function settleOpenNoteEdits() {
+  if (noteSettleInFlight) { return noteSettleInFlight; }
+  const run = (async function () {
+    try {
+      const note = currentNote();
+      /* Read only notes never hold unsettled edits
+         (markDirty refuses them), and no note means no
+         editor fields at all: nothing to settle. */
+      if (!note || note.trashed || note.archived) { return true; }
+      if (!swEditorUnsettled()) { return true; }
+      /* The settle runs the pending pass itself, so the
+         timer that would have run it later is cancelled:
+         after a successful settle it could only collect
+         the next note's untouched fields and report a
+         phantom "Saved". */
+      cancelPendingAutosave();
+      /* The pass loop. A pass that lands can still leave
+         the editor unsettled when NEW edits arrived while
+         it was in flight: the editor stays alive during
+         the settle, and the note's own machinery (the
+         link bar's saves and retargets above all) can
+         edit the outgoing note until the switch actually
+         completes. Those edits are this settle's
+         responsibility too, so a landed pass with edits
+         outstanding runs the pass again for them. The
+         chase is capped: if edits keep arriving through
+         five landed passes, something is dirtying the
+         note faster than saves can land, and the settle
+         gives up rather than chase forever, leaving the
+         switch to abort with the text on screen. A pass
+         that does not land ends the settle at once:
+         "held" resolves on the paused state's own
+         preservation, and a hard failure is the caller's
+         abort signal. */
+      let passes = 0;
+      for (;;) {
+        const outcome = await runEditorAutosave();
+        passes++;
+        if (!swEditorUnsettled()) { return true; }
+        if (outcome === "held") { return true; }
+        if (outcome !== "landed") { return false; }
+        if (passes >= 5) { return false; }
+      }
+    } catch (err) {
+      /* A settle must never throw into a navigation: a
+         failure to even run the pass reads as a failed
+         settle, and the callers' lose-nothing rules
+         apply. */
+      return false;
+    }
+  })();
+  noteSettleInFlight = run;
+  const clear = function () {
+    if (noteSettleInFlight === run) { noteSettleInFlight = null; }
+  };
+  run.then(clear, clear);
+  return run;
+}
 
 function markDirty() {
   const note = currentNote();
