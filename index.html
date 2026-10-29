@@ -40,10 +40,29 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-29-SSN-V2590
-  Version: 2.59.0
+  BUILD STAMP: 2026-10-29-SSN-V2600
+  Version: 2.60.0
 
   Revision history:
+    v2.60.0 2026-10-29 The Scratch Pad remembers its
+                      height. The Home scratch pad's
+                      native resize grip set an inline
+                      height that vanished on the next
+                      render, so the pad always came
+                      back at its default size; the
+                      chosen height is now stored in
+                      the home field as scratchHeight,
+                      whole pixels, clamped on every
+                      read to the grip's own range (64
+                      to 1200), applied when the widget
+                      renders so the packing arranges
+                      around it, and captured through a
+                      size observer with a short settle
+                      debounce. The height is content
+                      like the pad's text: it saves at
+                      once, even inside a Home
+                      customize session, and no session
+                      outcome reverts it.
     v2.59.0 2026-10-29 Menu text contrast fix. The
                       sidebar's tag, shortcut, and saved
                       search menus, the templates
@@ -5128,7 +5147,8 @@ body.dark .home-widget-action{color:var(--accent);}
   background:var(--primary);border-color:var(--primary);color:#fff;
 }
 .home-scratch{
-  width:100%;box-sizing:border-box;font:inherit;font-size:14px;
+  width:100%;box-sizing:border-box;min-height:64px;
+  font:inherit;font-size:14px;
   padding:10px;border:1px solid var(--border);border-radius:8px;
   background:var(--bg);color:var(--text);resize:vertical;
 }
@@ -9844,8 +9864,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-29-SSN-V2590";
-const APP_VERSION = "2.59.0";
+const APP_BUILD = "2026-10-29-SSN-V2600";
+const APP_VERSION = "2.60.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -10038,6 +10058,11 @@ const state = {
                             // could see would not be a
                             // dashboard.
     scratch: "",
+    scratchHeight: null,    // v2.60: the scratch pad's
+                            // remembered height in whole
+                            // pixels (see sanitizeHome);
+                            // null is no remembered
+                            // height, the default size.
     widgets: [
       { type: "pinned" },
       { type: "recent" },
@@ -17446,7 +17471,9 @@ function confirmDeleteSavedSearch(entry) {
    and a recurring task rolls forward), Scratch Pad (plain
    text, saved through the index writer like every other
    index fact; it is not a note and never appears in
-   search), Filtered Notes (bound to one saved search,
+   search; v2.60: the pad's resized height is remembered
+   beside the text, as home.scratchHeight), Filtered
+   Notes (bound to one saved search,
    showing its first matches; the widget's title runs the
    full search), Tags (the tag tree's order, labels flat,
    counts exact, navigating like the sidebar rows), and
@@ -17494,6 +17521,48 @@ function defaultHomeWidgets() {
   ];
 }
 
+/* v2.60: the Scratch Pad's remembered height. The pad's
+   text area carries the browser's native vertical resize
+   grip; through v2.59 the grip set an inline height that
+   vanished on the next render, so the pad always came
+   back at its default size. The chosen height is now a
+   home field beside the text (scratchHeight, whole
+   pixels), judged by the one clamp both its paths share:
+   a finite number is rounded and clamped into the range
+   the grip itself can produce (the floor is the text
+   area's own 64px minimum height; the ceiling, 1200px,
+   is generous headroom over any screen the dashboard
+   runs on), and anything else (absent, null, a string, a
+   non-finite number) is null, which renders the pad at
+   its default height exactly as before. The read path
+   (sanitizeHome) and the capture path
+   (settleHomeScratchHeight) both judge through this
+   clamp, so a value is treated the same way wherever it
+   arrives from. */
+const HOME_SCRATCH_MIN_HEIGHT = 64;
+const HOME_SCRATCH_MAX_HEIGHT = 1200;
+/* How long a resize must sit still before it is saved:
+   long enough that a drag's intermediate sizes never
+   reach the index, short enough that the size feels
+   remembered the moment the grip is let go. The save
+   itself rides persistHome into the index writer's own
+   800 ms coalescing, like a scratch keystroke. */
+const HOME_SCRATCH_RESIZE_DEBOUNCE_MS = 650;
+
+function clampHomeScratchHeight(value) {
+  if (typeof value !== "number" || !isFinite(value)) {
+    return null;
+  }
+  const rounded = Math.round(value);
+  if (rounded < HOME_SCRATCH_MIN_HEIGHT) {
+    return HOME_SCRATCH_MIN_HEIGHT;
+  }
+  if (rounded > HOME_SCRATCH_MAX_HEIGHT) {
+    return HOME_SCRATCH_MAX_HEIGHT;
+  }
+  return rounded;
+}
+
 /* Read a stored home field into a safe one, the way the
    tag parent map (v2.30), the shortcuts list (v2.31), and
    the saved searches (v2.32) are read: a non-string
@@ -17507,14 +17576,20 @@ function defaultHomeWidgets() {
    at all. The Pinned Notes widget lists the notes whose
    own pinned flag is set, so a stored pinnedNoteId from
    an older build is simply not read: it is shed here,
-   and the next index write stores a home without it. */
+   and the next index write stores a home without it.
+   v2.60: the scratch pad's remembered height rides the
+   same read, judged by clampHomeScratchHeight; a home
+   stored before it existed has no such key and reads as
+   null, the default size. */
 function sanitizeHome(raw) {
-  const out = { scratch: "",
+  const out = { scratch: "", scratchHeight: null,
     widgets: defaultHomeWidgets() };
   if (!raw || typeof raw !== "object") { return out; }
   if (typeof raw.scratch === "string") {
     out.scratch = raw.scratch;
   }
+  out.scratchHeight = clampHomeScratchHeight(
+    raw.scratchHeight);
   if (Array.isArray(raw.widgets)) {
     const seen = {};
     const list = [];
@@ -17944,6 +18019,12 @@ function watchHomeWidgetSizes(grid) {
     grid.querySelectorAll(".home-widget"), function (el) {
       homePackObserver.observe(el);
     });
+  /* v2.60: the scratch height capture follows the pad's
+     live element the same way (a render that kept the
+     focused pad lifts the same element into the new
+     grid, and the capture must keep watching it). */
+  watchHomeScratchSize(grid.querySelector(
+    "#homeScratchText"));
 }
 
 if (typeof window !== "undefined" && window.addEventListener) {
@@ -18537,6 +18618,91 @@ function buildHomeTasksWidget() {
   return parts.widget;
 }
 
+/* v2.60: capturing the pad's height. The native resize
+   grip fires no events, so size changes are detected
+   through a ResizeObserver on the text area (the same
+   browser surface the packing observer uses for widget
+   sizes). Three guards keep the capture honest:
+   - The baseline. The first size seen for a freshly
+     rendered pad only seeds the baseline (that size is
+     the render's own: the stored height applied, or the
+     default), and a render that applies a stored height
+     seeds the baseline with it directly, so applying a
+     remembered size can never trigger a save of itself.
+   - The comparison. A size equal to the baseline, or
+     to the height already stored, writes nothing:
+     opening Home is write free in this field, and
+     re-renders and packing passes that leave the pad's
+     height alone stay silent.
+   - The debounce. A changed size only arms a timer;
+     the save lands after the size settles (see
+     HOME_SCRATCH_RESIZE_DEBOUNCE_MS), so a drag writes
+     once, at the size it ended at.
+   The height is content, like the pad's text, not
+   layout: the save goes through persistHome directly
+   (never homeLayoutTouched), so inside a customize
+   session it persists at once, piggybacked on the
+   pre-session layout exactly as a scratch keystroke
+   does (the v2.55 CU13 pattern), and no session
+   outcome, Done or Cancel, can revert or clobber it;
+   a session's working copy governs the widget entries
+   alone. */
+let homeScratchObserver = null;
+let homeScratchSaveTimer = null;
+let homeScratchBaselineHeight = null;
+
+function watchHomeScratchSize(area) {
+  if (typeof ResizeObserver === "undefined") { return; }
+  if (!area) { return; }
+  if (!homeScratchObserver) {
+    homeScratchObserver = new ResizeObserver(function () {
+      queueHomeScratchSave();
+    });
+  }
+  homeScratchObserver.disconnect();
+  homeScratchObserver.observe(area);
+}
+
+function queueHomeScratchSave() {
+  const area = document.getElementById("homeScratchText");
+  if (!area) { return; }
+  const measured = area.offsetHeight;
+  if (!measured) { return; }
+  if (homeScratchBaselineHeight === null) {
+    homeScratchBaselineHeight = measured;
+    return;
+  }
+  if (measured === homeScratchBaselineHeight) { return; }
+  if (homeScratchSaveTimer !== null) {
+    clearTimeout(homeScratchSaveTimer);
+  }
+  homeScratchSaveTimer = setTimeout(
+    settleHomeScratchHeight, HOME_SCRATCH_RESIZE_DEBOUNCE_MS);
+}
+
+/* The debounce landed: read the pad's height as it
+   stands now (a render may have replaced the element
+   since the timer armed; the replacement renders at
+   the stored height, which the comparison below then
+   correctly leaves alone), clamp it the way the read
+   path clamps, and persist only a real change. A pad
+   with no measurable height (a hidden pane) has no
+   size to remember. */
+function settleHomeScratchHeight() {
+  homeScratchSaveTimer = null;
+  const area = document.getElementById("homeScratchText");
+  if (!area) { return; }
+  if (!area.offsetHeight) { return; }
+  const measured = clampHomeScratchHeight(
+    area.offsetHeight);
+  if (measured === null) { return; }
+  homeScratchBaselineHeight = measured;
+  if (typeof state.home.scratchHeight === "number" &&
+      measured === state.home.scratchHeight) { return; }
+  state.home.scratchHeight = measured;
+  persistHome();
+}
+
 /* The Scratch Pad widget: a plain text area whose every
    input writes state and persists through the index
    writer, whose own coalescing (saveIndex's debounce)
@@ -18544,7 +18710,11 @@ function buildHomeTasksWidget() {
    searched, listed, or versioned. While the pad holds
    the focus, renderHome keeps its live element (see
    there), so a sync landing mid sentence can never eat
-   the sentence. */
+   the sentence. v2.60: the pad's remembered height is
+   applied as part of the render (see below), so the
+   packing pass that follows measures the widget at the
+   chosen size and the grid arranges around it from the
+   first paint. */
 function buildHomeScratchWidget() {
   const parts = homeWidgetShell("scratch", "Scratch Pad");
   const area = document.createElement("textarea");
@@ -18554,11 +18724,25 @@ function buildHomeScratchWidget() {
   area.placeholder = "Jot something down...";
   area.setAttribute("aria-label", "Scratch pad");
   area.value = state.home.scratch;
+  /* v2.60: a remembered height becomes the text area's
+     inline height as the widget is built, before the
+     packing pass measures anything; the same value
+     seeds the capture baseline, so the render's own
+     size is never mistaken for a resize. With no
+     remembered height the baseline starts empty and
+     the observer's first sight of the default size
+     seeds it (see queueHomeScratchSave). */
+  homeScratchBaselineHeight = null;
+  if (typeof state.home.scratchHeight === "number") {
+    area.style.height = state.home.scratchHeight + "px";
+    homeScratchBaselineHeight = state.home.scratchHeight;
+  }
   area.addEventListener("input", function () {
     state.home.scratch = area.value;
     persistHome();
   });
   parts.body.appendChild(area);
+  watchHomeScratchSize(area);
   return parts.widget;
 }
 
