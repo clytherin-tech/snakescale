@@ -40,10 +40,62 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-29-SSN-V2530
-  Version: 2.53.0
+  BUILD STAMP: 2026-10-29-SSN-V2540
+  Version: 2.54.0
 
   Revision history:
+    v2.54.0 2026-10-29 Settings tabs: the Settings
+                      window's seven sections are
+                      seven tab panels under one
+                      tab strip now, on the owner's
+                      word that the stacked window
+                      ran too tall and made him
+                      scroll for the lower sections.
+                      One section shows at a time
+                      inside a card capped as a
+                      flex column, the open panel
+                      scrolling inside the card, so
+                      the window is as tall as the
+                      section on it. The tabs are
+                      Appearance, Connection,
+                      Notifications, Editor,
+                      History, Web clipper, and
+                      Getting started, in the
+                      sections' own order; the
+                      History tab shortens its
+                      label only, and its section
+                      still heads itself Note
+                      history. The active tab wears
+                      the primary fill, the theme
+                      segmented control's visibly
+                      marked choice, in both
+                      themes; the strip scrolls
+                      sideways on narrow screens
+                      rather than wrapping. The
+                      tabs are a real tablist:
+                      aria-selected and
+                      aria-controls wired to the
+                      panels, a roving tabindex,
+                      and the standard keyboard
+                      pattern (arrows move with
+                      activation on focus, Home
+                      and End jump). The session
+                      remembers the last tab in
+                      memory only; a fresh load
+                      starts on Appearance, and an
+                      unknown remembered value
+                      falls back there. Nothing
+                      else about Settings changes:
+                      every control keeps its id,
+                      label, wording, and wiring,
+                      the hidden panels stay live
+                      in the DOM so syncs and live
+                      updates land on them exactly
+                      as before, and the paste
+                      popup's Set default paste
+                      landing now selects the
+                      Editor tab so its select is
+                      the one on screen.
     v2.53.0 2026-10-29 Early tasks: the load's tasks
                       read starts first and lands
                       when it resolves. Through
@@ -6583,6 +6635,82 @@ body.dark .settings-section h3{color:var(--accent);}
   background:var(--primary);border-color:var(--primary);color:#fff;
   box-shadow:0 1px 5px rgba(11,61,46,.25);
 }
+/* v2.54 settings tabs: begin
+   The Settings window is a tabbed card now. The card is a
+   flex column capped at the viewport (the modal overlay's
+   own 28px padding is the 56px), so its height follows the
+   one section on it instead of the seven stacked: the
+   title, the strip, and the footer hold their height and
+   the open panel scrolls inside the card, wearing the
+   v2.18 scrollbar theme in miniature (transparent at rest,
+   the brand green on hover, stronger in the dark theme).
+   The strip itself is the theme segmented control's pill
+   stretched across the card: the active tab is filled
+   with the primary color, so the current section is
+   obvious at a glance in both themes, never silently
+   remembered. On narrow screens the strip scrolls
+   sideways instead of wrapping; its own scrollbar is
+   hidden and the cut off pill at the edge is the
+   affordance. A section's stacked-era separator rule and
+   top margin go away inside the card: the strip is the
+   separation now. */
+.settings-card{
+  display:flex;flex-direction:column;
+  max-height:calc(100vh - 56px);max-height:calc(100dvh - 56px);
+}
+.settings-card>h2,.settings-card>.modal-sub,
+.settings-card>.modal-foot{flex:none;}
+.settings-card>.settings-section{
+  border-top:none;margin-top:0;padding:14px 2px 6px;
+  overflow-y:auto;min-height:0;
+  scrollbar-width:thin;scrollbar-color:transparent transparent;
+  transition:scrollbar-color 250ms ease;
+}
+.settings-card>.settings-section:hover{
+  scrollbar-color:rgba(87,167,115,.55) transparent;
+}
+body.dark .settings-card>.settings-section:hover{
+  scrollbar-color:rgba(87,167,115,.65) transparent;
+}
+.settings-card>.settings-section::-webkit-scrollbar{
+  width:10px;height:10px;
+}
+.settings-card>.settings-section::-webkit-scrollbar-track{
+  background:transparent;
+}
+.settings-card>.settings-section::-webkit-scrollbar-thumb{
+  background-color:transparent;border-radius:8px;
+  border:2px solid transparent;background-clip:padding-box;
+  transition:background-color 250ms ease;
+}
+.settings-card>.settings-section:hover::-webkit-scrollbar-thumb{
+  background-color:rgba(87,167,115,.45);
+}
+body.dark .settings-card>.settings-section:hover::-webkit-scrollbar-thumb{
+  background-color:rgba(87,167,115,.6);
+}
+.settings-tabs{
+  display:flex;gap:3px;padding:3px;margin:0 0 10px;flex:none;
+  border:1px solid var(--border);border-radius:999px;
+  background:var(--soft);
+  overflow-x:auto;scrollbar-width:none;
+}
+.settings-tabs::-webkit-scrollbar{display:none;}
+.settings-tab{
+  flex:0 0 auto;border:1px solid transparent;background:transparent;
+  color:var(--text);border-radius:999px;padding:7px 13px;
+  font:inherit;font-size:14px;font-weight:700;cursor:pointer;
+  white-space:nowrap;
+}
+.settings-tab:hover{border-color:var(--secondary);}
+.settings-tab:focus-visible{
+  outline:2px solid var(--accent);outline-offset:2px;
+}
+.settings-tab[aria-selected="true"]{
+  background:var(--primary);border-color:var(--primary);color:#fff;
+  box-shadow:0 1px 5px rgba(11,61,46,.25);
+}
+/* v2.54 settings tabs: end */
 .modal input[type="number"]{
   width:120px;padding:8px 10px;border:1px solid var(--border);
   border-radius:var(--radius-button);background:var(--surface);
@@ -8715,13 +8843,34 @@ body.dark .version-date{color:var(--accent);}
      same item moved here, running the same refresh flow); Note
      history holds the versions per note limit. Like every modal,
      it lives outside #noteBody and can never be saved into a note.
+     v2.54: the sections are tab panels under the strip below
+     (one shows at a time; the tab labels match the sections,
+     except Note history, whose tab reads History while its
+     heading keeps the full name). The controls themselves
+     are untouched: same ids, same wiring, same wording.
      ========================================================================== -->
 <div id="settingsModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
   <div class="modal-card settings-card">
     <h2 id="settingsTitle">Settings</h2>
     <p class="modal-sub">Settings are saved on this device as you change them.</p>
 
-    <section class="settings-section" aria-labelledby="settingsAppearanceTitle">
+    <!-- v2.54: the tab strip. One tab per section, in the
+         sections' own order, each naming its panel through
+         aria-controls; the sections below are the panels.
+         The active tab is the filled one (see the v2.54
+         stylesheet block), and the strip scrolls sideways
+         on narrow screens rather than wrapping. -->
+    <div class="settings-tabs" id="settingsTabs" role="tablist" aria-label="Settings sections">
+      <button class="settings-tab" id="settingsTabAppearance" type="button" role="tab" data-settings-tab="appearance" aria-controls="settingsPanelAppearance" aria-selected="true">Appearance</button>
+      <button class="settings-tab" id="settingsTabConnection" type="button" role="tab" data-settings-tab="connection" aria-controls="settingsPanelConnection" aria-selected="false" tabindex="-1">Connection</button>
+      <button class="settings-tab" id="settingsTabNotifications" type="button" role="tab" data-settings-tab="notifications" aria-controls="settingsPanelNotifications" aria-selected="false" tabindex="-1">Notifications</button>
+      <button class="settings-tab" id="settingsTabEditor" type="button" role="tab" data-settings-tab="editor" aria-controls="settingsPanelEditor" aria-selected="false" tabindex="-1">Editor</button>
+      <button class="settings-tab" id="settingsTabHistory" type="button" role="tab" data-settings-tab="history" aria-controls="settingsPanelHistory" aria-selected="false" tabindex="-1">History</button>
+      <button class="settings-tab" id="settingsTabWebClip" type="button" role="tab" data-settings-tab="webclip" aria-controls="settingsPanelWebClip" aria-selected="false" tabindex="-1">Web clipper</button>
+      <button class="settings-tab" id="settingsTabStart" type="button" role="tab" data-settings-tab="start" aria-controls="settingsPanelStart" aria-selected="false" tabindex="-1">Getting started</button>
+    </div>
+
+    <section class="settings-section" id="settingsPanelAppearance" role="tabpanel" data-settings-panel="appearance" aria-labelledby="settingsAppearanceTitle">
       <h3 id="settingsAppearanceTitle">Appearance</h3>
       <div class="theme-segmented" role="group" aria-label="Theme">
         <button id="settingsThemeLightBtn" type="button" aria-pressed="false">Light</button>
@@ -8743,7 +8892,7 @@ body.dark .version-date{color:var(--accent);}
       </div>
     </section>
 
-    <section class="settings-section" aria-labelledby="settingsConnectionTitle">
+    <section class="settings-section hidden" id="settingsPanelConnection" role="tabpanel" data-settings-panel="connection" aria-labelledby="settingsConnectionTitle">
       <h3 id="settingsConnectionTitle">Connection</h3>
       <p>Reconnect to Google Drive without reloading the page. The open note is saved on this device first, and nothing is wiped.</p>
       <button class="btn" id="settingsRefreshBtn" type="button"><span id="settingsRefreshLabel">Refresh connection</span></button>
@@ -8775,7 +8924,7 @@ body.dark .version-date{color:var(--accent);}
          permission request must. The switch below it is the
          task reminders setting itself: a real checkbox, so its
          state is the control, never silently remembered. -->
-    <section class="settings-section" aria-labelledby="settingsNotifTitle">
+    <section class="settings-section hidden" id="settingsPanelNotifications" role="tabpanel" data-settings-panel="notifications" aria-labelledby="settingsNotifTitle">
       <h3 id="settingsNotifTitle">Notifications</h3>
       <p>Tasks can carry a reminder. When one comes due, this device shows a notification, generated here in the app: nothing about your tasks is sent anywhere to deliver it. Reminders fire while the app is open on this device; a reminder whose time passed while the app was closed arrives when you next open it.</p>
       <p>Notes can carry a reminder too, set from a note's own Reminder button. Note reminders follow the same rule: they fire on this device, while the app is open, and a missed one arrives when you next open it.</p>
@@ -8805,7 +8954,7 @@ body.dark .version-date{color:var(--accent);}
          changing it persists at once, like every Settings
          control. The paste popup's Set default paste row opens
          Settings focused here. -->
-    <section class="settings-section" aria-labelledby="settingsEditorTitle">
+    <section class="settings-section hidden" id="settingsPanelEditor" role="tabpanel" data-settings-panel="editor" aria-labelledby="settingsEditorTitle">
       <h3 id="settingsEditorTitle">Editor</h3>
       <div class="field">
         <label for="settingsDefaultPasteSelect">Default paste</label>
@@ -8818,7 +8967,7 @@ body.dark .version-date{color:var(--accent);}
       </div>
     </section>
 
-    <section class="settings-section" aria-labelledby="settingsHistoryTitle">
+    <section class="settings-section hidden" id="settingsPanelHistory" role="tabpanel" data-settings-panel="history" aria-labelledby="settingsHistoryTitle">
       <h3 id="settingsHistoryTitle">Note history</h3>
       <div class="field">
         <label for="settingsVersionsInput">Versions to keep per note</label>
@@ -8836,7 +8985,7 @@ body.dark .version-date{color:var(--accent);}
          under it carries the same code for the copy by hand
          route, filled by renderWebClipSettings on every
          Settings open. -->
-    <section class="settings-section" aria-labelledby="settingsWebClipTitle">
+    <section class="settings-section hidden" id="settingsPanelWebClip" role="tabpanel" data-settings-panel="webclip" aria-labelledby="settingsWebClipTitle">
       <h3 id="settingsWebClipTitle">Web clipper</h3>
       <p>Clip web pages into SnakeScale Notes, the way Evernote Web Clipper saves a page as a note with its source page attached. This app has no browser extension, so it uses a bookmarklet instead: a bookmark that runs a small clip script.</p>
       <div class="settings-help">1. Drag the button below to your bookmarks or favorites bar. In Edge, show the favorites bar first (View, or Ctrl+Shift+B).</div>
@@ -8858,7 +9007,7 @@ body.dark .version-date{color:var(--accent);}
          store, however old: the walkthrough replays on demand, and
          the starter note is added (or opened, when it is already
          there) in place. -->
-    <section class="settings-section" aria-labelledby="settingsStartTitle">
+    <section class="settings-section hidden" id="settingsPanelStart" role="tabpanel" data-settings-panel="start" aria-labelledby="settingsStartTitle">
       <h3 id="settingsStartTitle">Getting started</h3>
       <p>New here, or want the tour again? Replay the first run walkthrough, or add the starter note that shows what SnakeScale Notes can do.</p>
       <div class="settings-start-row">
@@ -9301,8 +9450,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-29-SSN-V2530";
-const APP_VERSION = "2.53.0";
+const APP_BUILD = "2026-10-29-SSN-V2540";
+const APP_VERSION = "2.54.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -26127,7 +26276,64 @@ function toggleSidebarMenu() {
    click through to.) The segmented control's selected side is
    refreshed from the body class on every sync, so the active
    choice is always the visibly filled, aria-pressed side.
+
+   v2.54: the modal's sections are tab panels under a tab
+   strip; the tab machinery (selectSettingsTab and the
+   session's remembered tab) sits directly below this
+   comment, ahead of the theme pair.
    -------------------------------------------------------------------------- */
+/* --------------------------------------------------------------------------
+   v2.54: the Settings tabs
+
+   One writer owns which section shows: selectSettingsTab
+   sets the panels' hidden classes and the tabs'
+   aria-selected and roving tabindex together, so the strip
+   and the panels can never disagree. The hidden panels
+   stay in the DOM with every control live: syncSettingsControls
+   and the sections' own render flows (the Last load readout,
+   the notification status, the Web clipper fill) write to
+   them exactly as they did when the sections were stacked,
+   so a value that lands while its tab is hidden reads
+   correctly the moment the tab is shown.
+
+   The remembered tab is session state in memory only: it
+   is not a setting, it is never written to localStorage or
+   the synced store, and a fresh page load starts on
+   Appearance. An unknown remembered value falls back to
+   Appearance at selection time, so the modal can never
+   open on no section at all.
+   -------------------------------------------------------------------------- */
+const SETTINGS_TAB_KEYS = ["appearance", "connection",
+  "notifications", "editor", "history", "webclip", "start"];
+let settingsActiveTab = "appearance";
+
+function settingsTabButton(key) {
+  return document.querySelector(
+    '#settingsTabs [data-settings-tab="' + key + '"]');
+}
+function settingsTabPanel(key) {
+  return document.querySelector(
+    '#settingsModal [data-settings-panel="' + key + '"]');
+}
+
+/* Show one tab's panel and mark its tab selected. Selection
+   is instant and records the tab as the session's
+   remembered one. */
+function selectSettingsTab(key) {
+  if (SETTINGS_TAB_KEYS.indexOf(key) < 0) { key = "appearance"; }
+  settingsActiveTab = key;
+  SETTINGS_TAB_KEYS.forEach(function (k) {
+    const active = k === key;
+    const btn = settingsTabButton(k);
+    if (btn) {
+      btn.setAttribute("aria-selected", active ? "true" : "false");
+      btn.tabIndex = active ? 0 : -1;
+    }
+    const panelEl = settingsTabPanel(k);
+    if (panelEl) { panelEl.classList.toggle("hidden", !active); }
+  });
+}
+
 function syncSettingsThemeControls() {
   const dark = document.body.classList.contains("dark");
   const lightBtn = document.getElementById("settingsThemeLightBtn");
@@ -26204,6 +26410,10 @@ function openSettingsModal() {
      other overlay in the app. */
   hideLinkBar();
   syncSettingsControls();
+  /* v2.54: reopen on the session's remembered tab,
+     Appearance on a fresh load; selectSettingsTab
+     validates the value, so a stale one lands there too. */
+  selectSettingsTab(settingsActiveTab);
   const modal = document.getElementById("settingsModal");
   if (modal) { modal.classList.remove("hidden"); }
   const closeBtn = document.getElementById("settingsCloseBtn");
@@ -26218,6 +26428,10 @@ function openSettingsModal() {
 function openSettingsAtDefaultPaste() {
   closePastePopup();
   openSettingsModal();
+  /* v2.54: the select lives on the Editor tab now, so land
+     there: the choice the popup names is the one on
+     screen, as it was when the sections were stacked. */
+  selectSettingsTab("editor");
   const select = document.getElementById("settingsDefaultPasteSelect");
   if (select) {
     if (typeof select.scrollIntoView === "function") {
@@ -46677,6 +46891,41 @@ function wireEvents() {
   document.getElementById("settingsModal").addEventListener("keydown", function (ev) {
     if (ev.key === "Escape") { closeSettingsModal(); }
   });
+  /* v2.54: the Settings tab strip. A click selects its tab.
+     The arrow keys follow the standard tab pattern: Left
+     and Right move (wrapping at the ends), Home and End
+     jump, and activation follows focus, so moving and
+     choosing are one act. Escape is not intercepted here:
+     it bubbles to the modal's own handler above and
+     closes, from a tab as from anywhere in the dialog. */
+  const settingsTabsEl = document.getElementById("settingsTabs");
+  if (settingsTabsEl) {
+    settingsTabsEl.addEventListener("click", function (ev) {
+      const btn = ev.target.closest("[data-settings-tab]");
+      if (btn) {
+        selectSettingsTab(btn.getAttribute("data-settings-tab"));
+      }
+    });
+    settingsTabsEl.addEventListener("keydown", function (ev) {
+      const btn = ev.target.closest("[data-settings-tab]");
+      if (!btn) { return; }
+      const keys = SETTINGS_TAB_KEYS;
+      const at = keys.indexOf(btn.getAttribute("data-settings-tab"));
+      if (at < 0) { return; }
+      let next = null;
+      if (ev.key === "ArrowRight") {
+        next = keys[(at + 1) % keys.length];
+      } else if (ev.key === "ArrowLeft") {
+        next = keys[(at + keys.length - 1) % keys.length];
+      } else if (ev.key === "Home") { next = keys[0]; }
+      else if (ev.key === "End") { next = keys[keys.length - 1]; }
+      if (next === null) { return; }
+      ev.preventDefault();
+      selectSettingsTab(next);
+      const nextBtn = settingsTabButton(next);
+      if (nextBtn) { nextBtn.focus(); }
+    });
+  }
   document.getElementById("settingsThemeLightBtn").addEventListener("click", function () {
     setTheme(false);
   });
