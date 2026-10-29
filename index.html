@@ -40,10 +40,42 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-29-SSN-V2570
-  Version: 2.57.0
+  BUILD STAMP: 2026-10-29-SSN-V2580
+  Version: 2.58.0
 
   Revision history:
+    v2.58.0 2026-10-29 Pinned Notes, checkbox-free
+                      selection, a note context menu,
+                      and Home Tasks widget rows. The
+                      Pinned Notes widget lists every
+                      live pinned note, most recently
+                      updated first, instead of the
+                      one note Pin to Home chose; the
+                      Pin to Home item is gone, and a
+                      stored home's pinnedNoteId is
+                      shed on read. Note cards carry
+                      no selection checkbox anymore:
+                      a plain click opens and anchors,
+                      Ctrl or Cmd click toggles,
+                      Shift click takes the rendered
+                      range, Ctrl Shift adds it, and
+                      on touch a selection mode starts
+                      from the context menu's Select
+                      item, its bar carrying Done. A
+                      right click, or a touch long
+                      press of about 500 ms, opens the
+                      app's own context menu on a card,
+                      mirroring the per note actions
+                      for its collection, or the whole
+                      selection's when the card is one
+                      of two or more selected. The
+                      Home Tasks widget's rows give
+                      the title the full width, with a
+                      two line description preview
+                      under it and the due and
+                      priority pills on their own line
+                      under that; the Tasks view's
+                      rows are unchanged.
     v2.57.0 2026-10-29 The save state becomes a
                       floating pill: the save
                       status leaves the sidebar
@@ -4623,23 +4655,48 @@ body.dark .filter-group-title{color:var(--accent);}
   white-space:nowrap;flex:none;
 }
 body.dark .tag-chip{color:var(--accent);}
-/* v1.8.1: Trash and Archive multi select. Rows in those two views
-   carry a selection checkbox at their left edge, so the card makes
-   room for it and anchors it; a checked card takes the same selected
-   treatment as the open note's card, so what is selected is obvious
-   at a glance. Other views never get the selectable class and render
-   exactly as before. */
-.note-card.selectable{position:relative;padding-left:37px;}
-.note-select{
-  position:absolute;left:12px;top:14px;display:flex;
-  align-items:center;cursor:pointer;
-}
-.note-select input[type="checkbox"]{
-  width:16px;height:16px;margin:0;cursor:pointer;
-  accent-color:var(--secondary);
-}
+/* v1.8.1: Trash and Archive multi select (v2.58: every
+   view's selection): a selected card takes the selected
+   treatment, so what is selected is obvious at a glance.
+   Through v2.57 a checkbox at the card's left edge drove
+   and showed the selection; v2.58 drives it with the
+   card's own modifier clicks and the touch selection
+   mode, and this treatment alone is the indicator. */
 .note-card.multi-selected{
   background:var(--selected);border-color:var(--secondary);
+}
+/* v2.58: while the touch selection mode runs, every card
+   wears a secondary border as the hint that taps toggle
+   instead of open; a selected card keeps its fill above. */
+#noteList.select-mode .note-card{border-color:var(--secondary);}
+/* v2.58: the selection mode's bar, in the list head,
+   wearing the selected treatment so the mode is
+   unmistakable in both themes. */
+.list-select-bar{
+  display:flex;align-items:center;gap:10px;
+  margin:0 12px 8px;padding:8px 12px;
+  background:var(--selected);border:1px solid var(--secondary);
+  border-radius:var(--radius-card);
+  font-size:13.5px;font-weight:600;color:var(--text);
+}
+.list-select-bar.hidden{display:none;}
+.list-select-bar #listSelectBarText{flex:1;}
+/* v2.58: the note context menu: a fixed panel at the
+   pointer in the list panels' own language (surface,
+   border, card radius, shadow), its items the list menu
+   items, its own scroll when a short screen cannot fit
+   it, themed like every other menu in both themes. */
+.note-ctx-menu{
+  position:fixed;z-index:400;min-width:210px;max-width:86vw;
+  max-height:70vh;overflow-y:auto;
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius-card);box-shadow:var(--shadow);
+  padding:6px;display:flex;flex-direction:column;gap:2px;
+}
+.note-ctx-menu.hidden{display:none;}
+.note-ctx-head{
+  font-size:12.5px;font-weight:700;color:var(--muted);
+  padding:4px 9px 2px;
 }
 /* v2.4: drag and drop notes between notebooks. The drag runs on
    Pointer Events (one path for mouse, touch, and pen); these rules
@@ -5017,25 +5074,15 @@ body.dark .home-widget-action{color:var(--accent);}
   color:var(--muted);font-size:12px;flex:0 0 auto;
 }
 .home-hint{color:var(--muted);font-size:13px;padding:6px 2px;}
-.home-pinned-open{
-  display:block;width:100%;background:none;border:none;padding:2px;
-  text-align:left;cursor:pointer;color:var(--text);font:inherit;
-}
-.home-pinned-title{font-size:16px;font-weight:700;}
-.home-pinned-preview{
-  color:var(--muted);font-size:13px;margin-top:4px;
-  display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;
-  overflow:hidden;
-}
-.home-pin-picker,.home-filtered-picker{
+.home-filtered-picker{
   display:flex;flex-direction:column;gap:2px;margin-top:8px;
   border-top:1px solid var(--border);padding-top:8px;
 }
-.home-pin-row,.home-filtered-row{
+.home-filtered-row{
   display:block;width:100%;background:none;border:none;padding:6px 4px;
   cursor:pointer;text-align:left;color:var(--text);font:inherit;font-weight:600;
 }
-.home-pin-clear,.home-filtered-clear{color:var(--muted);font-weight:400;}
+.home-filtered-clear{color:var(--muted);font-weight:400;}
 .home-recent-tabs{display:flex;gap:4px;margin-left:auto;flex:0 0 auto;}
 .home-recent-tab{
   background:none;border:1px solid var(--border);border-radius:999px;
@@ -6976,6 +7023,15 @@ body.dark .task-group-title{color:var(--accent);}
    preview: its paragraphs and lists sit tight (the
    clamp counts lines, not margins), and its note links
    read as links in the accent both themes carry. */
+/* v2.58: the Home Tasks widget's preview clamp: two
+   lines there, against the Tasks view's three. */
+.task-row-desc.home-task-desc{
+  -webkit-line-clamp:2;line-clamp:2;
+}
+/* v2.58: in the widget's row form the chips are the main
+   column's own line under the title and preview, not the
+   row's right edge: no auto left margin, a small top gap. */
+.task-row-home .task-chips{margin-left:0;margin-top:5px;}
 .task-row-desc p{margin:0;}
 .task-row-desc ul,.task-row-desc ol{margin:0;padding-left:18px;}
 .task-row-desc a{color:var(--accent);text-decoration:underline;
@@ -7690,7 +7746,6 @@ body.dark .version-date{color:var(--accent);}
   .undo-toast-btn{min-height:36px;padding:7px 14px;}
   #toastBox{bottom:calc(68px + env(safe-area-inset-bottom));}
   #savePill{bottom:calc(68px + env(safe-area-inset-bottom));}
-  .note-select input[type="checkbox"]{width:22px;height:22px;}
   #attMenu,#attCardMenu,#attAlignMenu,#tableMenu,#cellMenu,
   #linkViewMenu{max-width:calc(100vw - 16px);}
   .att-menu-item{white-space:normal;overflow-wrap:anywhere;}
@@ -8259,14 +8314,10 @@ body.dark .version-date{color:var(--accent);}
                  and hides it in Trash and Archive, exactly
                  like the pin item. -->
             <button type="button" class="list-menu-item" id="nbShortcutNoteBtn" role="menuitem">Add Note to Shortcuts</button>
-            <!-- v2.33: Pin to Home, Evernote's own surface
-                 for choosing the Home dashboard's pinned
-                 note. renderListToolbar sets the label
-                 (Pin to Home or Unpin from Home), enables
-                 it only when a live note is selected, and
-                 hides it in Trash and Archive, exactly
-                 like the Pin note item above it. -->
-            <button type="button" class="list-menu-item" id="nbHomePinBtn" role="menuitem">Pin to Home</button>
+            <!-- v2.58: the Pin to Home item is gone. The
+                 Pinned Notes widget lists every note whose
+                 own pin is set, so Home has no single pinned
+                 note left to choose here. -->
             <!-- v2.35: the selected note's reminder item,
                  beside the pin items it follows in every
                  rule (hidden in Trash and Archive, enabled
@@ -8327,6 +8378,15 @@ body.dark .version-date{color:var(--accent);}
           <div id="nbStackPanel" class="list-panel hidden" role="menu" aria-label="Add to stack"></div>
         </div>
       </div>
+    </div>
+    <!-- v2.58: the touch selection mode's bar. It shows
+         only while the mode runs (renderListSelectBar),
+         naming the mode and its count, with the Done
+         control that leaves the mode and keeps the
+         selection. -->
+    <div id="listSelectBar" class="list-select-bar hidden">
+      <span id="listSelectBarText">Selecting</span>
+      <button type="button" class="btn small" id="listSelectDoneBtn">Done</button>
     </div>
     <div id="noteList"></div>
   </section>
@@ -9701,6 +9761,11 @@ body.dark .version-date{color:var(--accent);}
      v2.5: the overlay also offers Trash and Archive rows (built
      by the same script pass, carrying data-drop-action like the
      sidebar entries), under a "Move to" heading. -->
+<!-- v2.58: the note context menu (openNoteContextMenu):
+     one fixed panel at the pointer, its items built per
+     opening for the card's collection and target, in the
+     list menu's own item language. -->
+<div id="noteCtxMenu" class="note-ctx-menu hidden" role="menu" aria-label="Note actions"></div>
 <div id="nbDropOverlay" class="hidden" role="dialog" aria-label="Move note">
   <div class="nb-drop-head">Move to</div>
   <div id="nbDropList"></div>
@@ -9743,8 +9808,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-29-SSN-V2570";
-const APP_VERSION = "2.57.0";
+const APP_BUILD = "2026-10-29-SSN-V2580";
+const APP_VERSION = "2.58.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -9936,7 +10001,6 @@ const state = {
                             // dashboard only one device
                             // could see would not be a
                             // dashboard.
-    pinnedNoteId: null,
     scratch: "",
     widgets: [
       { type: "pinned" },
@@ -17333,12 +17397,12 @@ function confirmDeleteSavedSearch(entry) {
    it is state.startView, remembered in settings.
 
    The widgets, each reading live state and navigating like
-   the thing it mirrors: Pinned Note (one note, chosen from
-   the notes list menu's Pin to Home item or from the
-   widget's own picker; the widget shows a read only preview
-   and opens the note on a click; a pinned note that leaves
-   the notebooks renders an empty state, never a dead
-   click), Recent Notes (by updated, with a Recently created
+   the thing it mirrors: Pinned Notes (v2.58: every live note whose own
+   pin is set, most recently updated first, as rows
+   in the Recent Notes row language, each opening
+   its note; through v2.57 this was Pinned Note,
+   one note chosen by a Pin to Home item that no
+   longer exists), Recent Notes (by updated, with a Recently created
    tab where Evernote's second tab is its server's
    Suggested), Tasks (open tasks in the Tasks view's own
    due order, rows built by the shared task row builder, so
@@ -17368,7 +17432,7 @@ const HOME_WIDGET_TYPES = ["pinned", "recent", "shortcuts",
   "tasks", "calendar", "scratch", "filtered", "tags",
   "notebooks"];
 const HOME_WIDGET_LABELS = {
-  pinned: "Pinned Note", recent: "Recent Notes",
+  pinned: "Pinned Notes", recent: "Recent Notes",
   shortcuts: "Shortcuts", tasks: "Tasks",
   calendar: "Calendar", scratch: "Scratch Pad",
   filtered: "Filtered Notes", tags: "Tags",
@@ -17396,22 +17460,22 @@ function defaultHomeWidgets() {
 
 /* Read a stored home field into a safe one, the way the
    tag parent map (v2.30), the shortcuts list (v2.31), and
-   the saved searches (v2.32) are read: a non-string pin
-   and a non-string scratch pad fall back, an unknown
-   widget kind drops, a kind appears once (first
-   occurrence wins), a filtered entry's binding survives
-   only as a string, and an explicitly stored layout is
-   honored even when it is empty (the user hid every
-   widget). A missing or damaged field is the default
-   dashboard. */
+   the saved searches (v2.32) are read: a non-string
+   scratch pad falls back, an unknown widget kind drops,
+   a kind appears once (first occurrence wins), a
+   filtered entry's binding survives only as a string,
+   and an explicitly stored layout is honored even when
+   it is empty (the user hid every widget). A missing or
+   damaged field is the default dashboard.
+   v2.58: the home field no longer carries a pin choice
+   at all. The Pinned Notes widget lists the notes whose
+   own pinned flag is set, so a stored pinnedNoteId from
+   an older build is simply not read: it is shed here,
+   and the next index write stores a home without it. */
 function sanitizeHome(raw) {
-  const out = { pinnedNoteId: null, scratch: "",
+  const out = { scratch: "",
     widgets: defaultHomeWidgets() };
   if (!raw || typeof raw !== "object") { return out; }
-  if (typeof raw.pinnedNoteId === "string" &&
-      raw.pinnedNoteId.trim()) {
-    out.pinnedNoteId = raw.pinnedNoteId;
-  }
   if (typeof raw.scratch === "string") {
     out.scratch = raw.scratch;
   }
@@ -17515,26 +17579,12 @@ function homeWidgetEntry(type) {
   }) || null;
 }
 
-/* Pin (or unpin, with null) the note Home shows. The pin
-   is the note's id only; the widget reads the note's
-   current title and text at render, so a rename follows
-   it the way a shortcut's label follows its target. */
-function setHomePinnedNote(id) {
-  state.home.pinnedNoteId = id || null;
-  persistHome();
-  renderAll();
-}
-
-/* The notes list menu's Pin to Home item: it belongs to
-   the selected note, like the pin item beside it, and
-   re-checks that the selection is a live note. Pinning
-   the already pinned note unpins it. */
-function toggleSelectedNoteHomePin() {
-  const note = currentNote();
-  if (!note || state.notes.indexOf(note) < 0) { return; }
-  setHomePinnedNote(
-    state.home.pinnedNoteId === note.id ? null : note.id);
-}
+/* v2.58: Pin to Home is gone. The Pinned Notes widget
+   lists the notes whose own pinned flag is set (see
+   buildHomePinnedWidget), so there is no Home level pin
+   choice left to set: setHomePinnedNote and
+   toggleSelectedNoteHomePin were removed with the
+   #nbHomePinBtn item that called the toggle. */
 
 /* Bind the Filtered Notes widget to a saved search (or
    clear the binding, with null). The binding is the
@@ -18353,104 +18403,41 @@ function homeHint(text) {
   return hint;
 }
 
-/* The Pinned Note widget. Evernote's widget shows a
-   read only preview and opens the note in the editor;
-   the note is chosen from the note's own menu (Pin to
-   Home, in the notes list menu here) or from this
-   widget's own picker. A pinned note that is no longer
-   in the notebooks (trashed, archived, or deleted on
-   another device) renders the empty state: the stored
-   pin is left alone (a restore makes the widget whole
-   again), and nothing in the widget navigates. */
+/* The Pinned Notes widget. Through v2.57 this was the
+   Pinned Note widget: one note, chosen from the note's
+   own menu (Pin to Home, in the notes list menu) or from
+   the widget's own picker, shown as a read only preview.
+   v2.58 makes it a list instead: every LIVE note whose
+   own pinned flag is set, most recently updated first,
+   rendered as rows in the Recent Notes widget's row
+   language (homeNoteRow), each row opening its note
+   through openNoteFromHome like every other Home note
+   row. The pin itself is the note's own (the notes list
+   menu's Pin note item, or a card's context menu), so
+   the widget follows it with no Home level choice to
+   keep in sync. A note that leaves the notebooks leaves
+   the list (the trash move clears its pin, and Trash
+   and the Archive are never listed here), a note
+   restored and re-pinned returns, and with nothing
+   pinned the widget shows one quiet line. The layout
+   entry keeps its "pinned" type id, so saved layouts
+   carry over untouched. */
 function buildHomePinnedWidget() {
-  const parts = homeWidgetShell("pinned", "Pinned Note");
-  const note = state.home.pinnedNoteId
-    ? state.notes.find(function (n) {
-        return n.id === state.home.pinnedNoteId;
-      }) || null
-    : null;
-  const change = document.createElement("button");
-  change.type = "button";
-  change.className = "home-widget-action home-pinned-change";
-  change.textContent = note ? "Change" : "Choose a note";
-  change.addEventListener("click", function () {
-    toggleHomePinPicker(parts.widget);
-  });
-  parts.head.appendChild(change);
-  if (!note) {
-    const empty = document.createElement("div");
-    empty.className = "home-hint home-pinned-empty";
-    empty.textContent = state.home.pinnedNoteId
-      ? "The pinned note is no longer in your notebooks. " +
-        "Choose another note to pin here."
-      : "No note is pinned to Home yet. Choose a note to " +
-        "keep it here.";
-    parts.body.appendChild(empty);
-  } else {
-    const open = document.createElement("button");
-    open.type = "button";
-    open.className = "home-pinned-open";
-    const title = document.createElement("div");
-    title.className = "home-pinned-title";
-    title.textContent = note.title;
-    open.appendChild(title);
-    const preview = document.createElement("div");
-    preview.className = "home-pinned-preview";
-    preview.textContent = noteListText(note).slice(0, 240);
-    open.appendChild(preview);
-    open.addEventListener("click", function () {
-      openNoteFromHome(note.id);
-    });
-    parts.body.appendChild(open);
-  }
-  const picker = document.createElement("div");
-  picker.className = "home-pin-picker hidden";
-  parts.body.appendChild(picker);
-  return parts.widget;
-}
-
-/* The pin picker's rows are filled when it opens (the
-   note list it offers is the most recently updated
-   first, capped, like a picker's shortlist), so an
-   unopened picker costs nothing and a re-render simply
-   closes it. */
-function toggleHomePinPicker(widget) {
-  const picker = widget.querySelector(".home-pin-picker");
-  if (!picker) { return; }
-  if (!picker.classList.contains("hidden")) {
-    picker.classList.add("hidden");
-    return;
-  }
-  picker.innerHTML = "";
-  if (state.home.pinnedNoteId) {
-    const clear = document.createElement("button");
-    clear.type = "button";
-    clear.className = "home-pin-row home-pin-clear";
-    clear.textContent = "Remove pin";
-    clear.addEventListener("click", function () {
-      setHomePinnedNote(null);
-    });
-    picker.appendChild(clear);
-  }
-  const notes = state.notes.slice().sort(function (a, b) {
+  const parts = homeWidgetShell("pinned", "Pinned Notes");
+  const pinned = state.notes.filter(function (n) {
+    return n.pinned;
+  }).sort(function (a, b) {
     return String(b.updated || "")
       .localeCompare(String(a.updated || ""));
-  }).slice(0, 12);
-  notes.forEach(function (n) {
-    const row = document.createElement("button");
-    row.type = "button";
-    row.className = "home-pin-row";
-    row.setAttribute("data-note-id", n.id);
-    row.textContent = n.title;
-    row.addEventListener("click", function () {
-      setHomePinnedNote(n.id);
-    });
-    picker.appendChild(row);
   });
-  if (!notes.length) {
-    picker.appendChild(homeHint("No notes yet."));
+  if (!pinned.length) {
+    parts.body.appendChild(homeHint("No pinned notes yet."));
+    return parts.widget;
   }
-  picker.classList.remove("hidden");
+  pinned.forEach(function (n) {
+    parts.body.appendChild(homeNoteRow(n, "updated"));
+  });
+  return parts.widget;
 }
 
 /* The Recent Notes widget: the most recently updated
@@ -18509,7 +18496,7 @@ function buildHomeTasksWidget() {
     parts.body.appendChild(homeHint("No open tasks."));
   }
   open.forEach(function (task) {
-    parts.body.appendChild(buildTaskRowEl(task, {}));
+    parts.body.appendChild(buildTaskRowEl(task, { home: true }));
   });
   return parts.widget;
 }
@@ -19701,8 +19688,11 @@ function applyTemplate(id) {
    before the name prompt opens with the note's title
    as the default, Evernote's save flow. A refused load
    says so plainly and saves nothing. */
-async function promptSaveNoteAsTemplate() {
-  const note = currentNote();
+async function promptSaveNoteAsTemplate(targetNote) {
+  /* v2.58: an optional target note (the context menu's
+     Save as Template passes its card's note); with none,
+     the selected note, as always. */
+  const note = targetNote || currentNote();
   if (!note || state.notes.indexOf(note) < 0) { return; }
   if (note.bodyLoaded === false) {
     await ensureNoteBodyLoaded(note);
@@ -20794,6 +20784,10 @@ function deleteNoteForever(note) {
   const path = notePath(note);
   const online = state.online && state.repoExists;
   state.trash = state.trash.filter(function (n) { return n.id !== note.id; });
+  /* v2.58: an archived note deleted forever through the
+     Archive selection's context menu leaves the Archive
+     list the same way; for a trashed note this is a no-op. */
+  state.archive = state.archive.filter(function (n) { return n.id !== note.id; });
   if (state.selectedId === note.id) { state.selectedId = null; }
   /* v2.49.0: the note's linked tasks outlive it (they are
      citizens of the Tasks view in their own right), but
@@ -20849,6 +20843,49 @@ function deleteNoteForever(note) {
       toast("Delete failed on " + storageDisplayName() + ": " + noteError.message, true);
     }
   });
+}
+
+/* v2.58: Delete Forever for one note, with its
+   confirmation. Through v2.57 this body was the editor's
+   Delete Forever button handler itself; the button still
+   runs exactly it, and the Trash context menu's Delete
+   Forever item runs it too, so the confirmation, the
+   attachment cleanup, the delete, and the warnings are
+   one flow, never two. */
+async function confirmDeleteNoteForever(note) {
+  if (!note) { return; }
+  /* v1.2: the confirmation also covers the note's cloud files. They
+     are deleted best effort BEFORE the note file goes, and anything
+     that could not be deleted is named in a warning afterwards, so the
+     user knows exactly what remains in their cloud accounts. */
+  const atts = note.attachments || [];
+  let confirmText = "Delete \"" + (note.title || "Untitled note") +
+    "\" forever? This removes the file from your " +
+    storageDeletePhrase() +
+    " and cannot be undone from inside the app.";
+  if (atts.length) {
+    confirmText += " Its " + atts.length + " attachment file(s) will also be " +
+      "deleted from their cloud storage where that provider is signed in. " +
+      "Files whose provider is not signed in cannot be deleted by the app " +
+      "and will be left behind in that cloud account.";
+  }
+  if (!confirm(confirmText)) { return; }
+  let failed = [];
+  if (atts.length) {
+    failed = state.online
+      ? await deleteAttachmentsBestEffort(note)
+      : atts.map(function (a) { return a.name; });
+  }
+  try {
+    await deleteNoteForever(note);
+    toast("Deleted forever.");
+  } catch (err) {
+    toast(err.message, true);
+  }
+  if (failed.length) {
+    toast("Warning: these cloud files could not be deleted and remain in " +
+      "their storage accounts: " + failed.join(", "), true);
+  }
 }
 
 /* Archive a note (v1.5): tuck it out of its notebook into the archive
@@ -22640,25 +22677,8 @@ function renderListToolbar() {
       ? "Remove Note from Shortcuts"
       : "Add Note to Shortcuts";
   }
-  /* v2.33: the Pin to Home item follows the pin item's
-     rules exactly: hidden in Trash and Archive, enabled
-     only for a live selected note, and its label flips
-     with the note's being the one pinned to Home. (It is
-     a different pin from Pin note: that one orders the
-     list; this one chooses Home's pinned note.) */
-  const homePinBtn = document.getElementById("nbHomePinBtn");
-  if (homePinBtn) {
-    homePinBtn.classList.toggle("hidden",
-      kind === "trash" || kind === "archive");
-    const selected = currentNote();
-    const liveSelected = selected &&
-      state.notes.indexOf(selected) >= 0 ? selected : null;
-    homePinBtn.disabled = !liveSelected;
-    homePinBtn.textContent = liveSelected &&
-      state.home.pinnedNoteId === liveSelected.id
-      ? "Unpin from Home"
-      : "Pin to Home";
-  }
+  /* v2.58: the Pin to Home item and its sync are gone
+     (the Pinned Notes widget reads the notes' own pins). */
   /* v2.35: the Reminder item follows the same rules again:
      hidden in Trash and Archive, enabled only for a live
      selected note, and its label flips between Add reminder
@@ -22843,8 +22863,16 @@ function confirmDeleteStack(name) {
    cannot be reached), and the list re-renders so the PINNED card
    marker, the Pinned view membership, and the menu label all follow
    at once. */
-async function toggleSelectedNotePin() {
-  const note = currentNote();
+/* The per-note pin toggle (v2.58: extracted from
+   toggleSelectedNotePin, which is now this with the
+   selected note). The flag flips on the note object, the
+   list re-renders, the change persists through the same
+   per note save path every other edit uses, and the
+   list re-renders again so the PINNED card marker, the
+   Pinned view membership, and every pin label follow at
+   once. The context menu's Pin note item and its Pin all
+   run this same operation per note. */
+async function toggleNotePin(note) {
   if (!note || state.notes.indexOf(note) < 0) { return; }
   note.pinned = !note.pinned;
   renderNoteList();
@@ -22854,6 +22882,10 @@ async function toggleSelectedNotePin() {
     toast("Could not save the pin change: " + err.message, true);
   }
   renderNoteList();
+}
+
+async function toggleSelectedNotePin() {
+  await toggleNotePin(currentNote());
 }
 
 /* --------------------------------------------------------------------------
@@ -22868,6 +22900,10 @@ async function toggleSelectedNotePin() {
    the same row checkboxes now drawn in every live view too, and
    feeding the one live bulk action, Merge Selected. It follows
    the same clearing rules as the other two.
+   v2.58: the checkboxes are gone. The sets are filled by the
+   cards' own modifier clicks and by the touch selection mode,
+   and read by exactly the same consumers; see the v2.58 section
+   below (handleNoteCardClick and friends).
    -------------------------------------------------------------------------- */
 
 /* Empty the selection sets. Called on every view change and after
@@ -22876,11 +22912,16 @@ function clearListSelections() {
   state.trashSelection = [];
   state.archiveSelection = [];
   state.listSelection = [];
+  /* v2.58: the selection anchor belongs to the sets' view;
+     it goes with them. */
+  listSelectionAnchor = null;
 }
 
-/* One row checkbox changed: record it in the current view's set,
-   then refresh the toolbar so the menu labels and disabled states
-   follow the selection at once. */
+/* One card's membership toggled (v2.58: by a modifier click
+   or a selection mode tap, the inputs that replaced the row
+   checkbox this function was written for): record it in the
+   current view's set, then refresh the toolbar so the menu
+   labels and disabled states follow the selection at once. */
 function toggleListSelection(noteId, checked) {
   const set = state.view.kind === "trash" ? state.trashSelection
     : state.view.kind === "archive" ? state.archiveSelection
@@ -22889,6 +22930,733 @@ function toggleListSelection(noteId, checked) {
   if (checked && at < 0) { set.push(noteId); }
   if (!checked && at >= 0) { set.splice(at, 1); }
   renderListToolbar();
+}
+
+
+/* --------------------------------------------------------------------------
+   v2.58: checkbox-free selection and the note context menu
+
+   Through v2.57 every note card carried a selection
+   checkbox feeding the three selection sets. The sets
+   and their consumers are unchanged (state.listSelection
+   for live views, state.trashSelection and
+   state.archiveSelection for theirs; Duplicate, Merge
+   Selected, Create TOC Note, and the Trash and Archive
+   bulk actions read them exactly as before, and the sets
+   still clear on every view change). What changed is
+   the input and the indicator:
+
+   - A plain click opens the note, as it always has, and
+     also makes that note the whole selection and the
+     selection anchor (the file manager rule).
+   - Ctrl+click (or Cmd+click) toggles the card in the
+     selection without opening it, and moves the anchor
+     to it.
+   - Shift+click selects the contiguous range from the
+     anchor to the clicked card in the currently rendered
+     order, without opening; with no anchor yet in this
+     view the first rendered card is the anchor.
+     Ctrl+Shift+click adds the range instead of
+     replacing the selection.
+   - The indicator is the card's multi-selected treatment
+     (the themed selected fill), no checkbox.
+
+   Touch has no modifier keys, so selection there starts
+   from the context menu's Select item, which enters a
+   selection MODE (noteSelectMode, in memory on this
+   device only): the selection bar shows, seeded with
+   that note, plain taps toggle cards instead of opening
+   them, and the bar's Done control leaves the mode.
+   Leaving the mode KEEPS the selection: the selection's
+   other exits today (the bulk actions) consume it rather
+   than discarding it, and a mode entered by accident
+   costs nothing because the next plain tap outside the
+   mode collapses the selection anyway. The mode ends
+   when the view changes, with the sets.
+
+   The context menu itself (openNoteContextMenu) opens
+   on a card's contextmenu event, suppressed so the
+   browser's menu never appears, and on touch from a
+   long press of about 500 ms that stays within a small
+   movement tolerance (a moved press is a scroll and
+   opens nothing; the press no longer arms note dragging
+   either, see onNoteListPointerDown). The menu mirrors
+   the per-note actions that exist for the card's
+   collection and calls the same handlers they use; on a
+   card that belongs to a selection of two or more it
+   targets the whole selection instead. It is a fixed
+   panel at the pointer, flipped and clamped into the
+   viewport, closing on an outside press, Escape (which
+   returns focus to the card), scroll, resize, and any
+   item activation, with menu semantics for the keyboard.
+   -------------------------------------------------------------------------- */
+
+/* The selection anchor: the card a Shift+click range
+   runs from. In memory only; reset whenever the sets
+   clear, so an anchor never outlives its view. */
+let listSelectionAnchor = null;
+
+/* The touch selection mode (see the section header).
+   In memory only, per device, never persisted. */
+let noteSelectMode = false;
+
+/* The current view's selection set: the one every
+   consumer reads, picked by the view kind exactly the
+   way toggleListSelection writes it. */
+function currentSelectionSet() {
+  return state.view.kind === "trash" ? state.trashSelection
+    : state.view.kind === "archive" ? state.archiveSelection
+    : state.listSelection;
+}
+
+/* The note ids of the rendered cards, in rendered order:
+   the order Shift+click ranges run in. Tiles are not
+   cards and never appear here. */
+function renderedNoteCardIds() {
+  const cards = document.querySelectorAll(
+    "#noteList .note-card[data-note-id]");
+  return Array.prototype.map.call(cards, function (c) {
+    return c.getAttribute("data-note-id");
+  });
+}
+
+/* Repaint after a selection input that does not open a
+   note: the list (the card treatments and the mode's
+   bar) and the toolbar (the count driven labels). */
+function refreshSelectionUI() {
+  renderNoteList();
+  renderListToolbar();
+}
+
+/* One card click, every modifier rule (see the section
+   header). Wired in renderNoteList in place of the plain
+   openNote call the card's click used to make. */
+function handleNoteCardClick(ev, note) {
+  const set = currentSelectionSet();
+  if (noteSelectMode) {
+    toggleListSelection(note.id, set.indexOf(note.id) < 0);
+    listSelectionAnchor = note.id;
+    refreshSelectionUI();
+    return;
+  }
+  if (ev.shiftKey) {
+    const ids = renderedNoteCardIds();
+    const to = ids.indexOf(note.id);
+    if (to < 0) { return; }
+    let from = listSelectionAnchor
+      ? ids.indexOf(listSelectionAnchor) : -1;
+    if (from < 0) { from = 0; }
+    const lo = Math.min(from, to), hi = Math.max(from, to);
+    const range = ids.slice(lo, hi + 1);
+    if (!(ev.ctrlKey || ev.metaKey)) {
+      set.length = 0;
+    }
+    range.forEach(function (id) {
+      if (set.indexOf(id) < 0) { set.push(id); }
+    });
+    refreshSelectionUI();
+    return;
+  }
+  if (ev.ctrlKey || ev.metaKey) {
+    toggleListSelection(note.id, set.indexOf(note.id) < 0);
+    listSelectionAnchor = note.id;
+    refreshSelectionUI();
+    return;
+  }
+  /* The plain click: collapse to this note, anchor on
+     it, and open it, in that order, so the list the open
+     re-renders already wears the collapsed selection. */
+  set.length = 0;
+  set.push(note.id);
+  listSelectionAnchor = note.id;
+  openNote(note.id);
+}
+
+/* The selection bar: visible only in the touch
+   selection mode, naming the mode and its count, with
+   the Done control that leaves it. Called at the end of
+   renderNoteList, so every repaint keeps it true, and
+   it also drives the list's select-mode class, the
+   cards' hint state while the mode runs. */
+function renderListSelectBar() {
+  const bar = document.getElementById("listSelectBar");
+  if (!bar) { return; }
+  const listEl = document.getElementById("noteList");
+  if (listEl) {
+    listEl.classList.toggle("select-mode", noteSelectMode);
+  }
+  if (!noteSelectMode) {
+    bar.classList.add("hidden");
+    return;
+  }
+  const n = currentSelectionSet().length;
+  document.getElementById("listSelectBarText").textContent =
+    "Selecting: " + n + (n === 1 ? " note" : " notes") +
+    " selected";
+  bar.classList.remove("hidden");
+}
+
+/* Enter the touch selection mode, seeded with a note
+   (the context menu's Select item on a touch opening). */
+function enterNoteSelectMode(note) {
+  noteSelectMode = true;
+  const set = currentSelectionSet();
+  if (set.indexOf(note.id) < 0) { set.push(note.id); }
+  listSelectionAnchor = note.id;
+  refreshSelectionUI();
+}
+
+/* Leave the selection mode. The selection is KEPT (see
+   the section header for the reasoning). */
+function exitNoteSelectMode() {
+  if (!noteSelectMode) { return; }
+  noteSelectMode = false;
+  refreshSelectionUI();
+}
+
+/* The open context menu's facts, or null: the note it
+   was opened from, the notes it targets (one, or the
+   whole selection), whether it is a selection menu, the
+   card element (focus returns there on Escape), and the
+   pointer kind that opened it (the Select item starts
+   the touch selection mode only for a touch opening). */
+let noteCtx = null;
+
+/* After a touch long press opens the menu, the press's
+   own click is swallowed once, so opening the menu
+   never also opens the note. Set by the long press in
+   initNoteContextMenu. */
+let noteCtxClickBlock = false;
+
+/* Resolve a note across the three collections (the card
+   a menu or press event names may sit in any of them). */
+function contextMenuNoteById(id) {
+  return state.notes.find(function (n) { return n.id === id; }) ||
+    state.trash.find(function (n) { return n.id === id; }) ||
+    state.archive.find(function (n) { return n.id === id; }) ||
+    null;
+}
+
+/* Open the context menu for a card's note at a point.
+   The target is the current selection when the note
+   belongs to one of two or more; otherwise the note
+   alone. */
+function openNoteContextMenu(note, x, y, pointerType) {
+  if (!note) { return; }
+  if (noteCtx) { closeNoteContextMenu(false); }
+  closeListPanels();
+  const set = currentSelectionSet();
+  const inSet = set.indexOf(note.id) >= 0;
+  const targetIds = (inSet && set.length >= 2)
+    ? set.slice() : [note.id];
+  noteCtx = {
+    noteId: note.id,
+    noteIds: targetIds,
+    selection: targetIds.length >= 2,
+    cardEl: document.querySelector(
+      ".note-card[data-note-id=\"" + note.id + "\"]"),
+    pointerType: pointerType || "mouse"
+  };
+  const menu = document.getElementById("noteCtxMenu");
+  menu.innerHTML = "";
+  buildNoteContextItems(menu, note, targetIds,
+    noteCtx.pointerType);
+  menu.classList.remove("hidden");
+  placeNoteContextMenu(menu, x, y);
+  document.addEventListener("pointerdown",
+    onNoteCtxDocPointerDown, true);
+  document.addEventListener("keydown",
+    onNoteCtxDocKeydown, true);
+  window.addEventListener("resize", onNoteCtxCloseEvent);
+  window.addEventListener("scroll", onNoteCtxScroll, true);
+  const first = menu.querySelector(".list-menu-item");
+  if (first) { first.focus(); }
+}
+
+/* Put the open menu at the pointer, flipped and clamped
+   so it stays fully inside the viewport with a small
+   margin on every side. */
+function placeNoteContextMenu(menu, x, y) {
+  menu.style.left = "0px";
+  menu.style.top = "0px";
+  const rect = menu.getBoundingClientRect();
+  const vw = window.innerWidth || 0;
+  const vh = window.innerHeight || 0;
+  let left = x, top = y;
+  if (left + rect.width > vw - 8) {
+    left = Math.max(8, vw - rect.width - 8);
+  }
+  if (top + rect.height > vh - 8) {
+    top = Math.max(8, vh - rect.height - 8);
+  }
+  if (left < 8) { left = 8; }
+  if (top < 8) { top = 8; }
+  menu.style.left = left + "px";
+  menu.style.top = top + "px";
+}
+
+function closeNoteContextMenu(returnFocus) {
+  if (!noteCtx) { return; }
+  const cardEl = noteCtx.cardEl;
+  noteCtx = null;
+  const menu = document.getElementById("noteCtxMenu");
+  if (menu) {
+    menu.classList.add("hidden");
+    menu.innerHTML = "";
+  }
+  document.removeEventListener("pointerdown",
+    onNoteCtxDocPointerDown, true);
+  document.removeEventListener("keydown",
+    onNoteCtxDocKeydown, true);
+  window.removeEventListener("resize", onNoteCtxCloseEvent);
+  window.removeEventListener("scroll", onNoteCtxScroll, true);
+  if (returnFocus && cardEl) {
+    if (!cardEl.hasAttribute("tabindex")) {
+      cardEl.setAttribute("tabindex", "-1");
+    }
+    cardEl.focus();
+  }
+}
+
+function onNoteCtxDocPointerDown(ev) {
+  const menu = document.getElementById("noteCtxMenu");
+  if (menu && ev.target && menu.contains(ev.target)) { return; }
+  closeNoteContextMenu(false);
+}
+
+function onNoteCtxCloseEvent() { closeNoteContextMenu(false); }
+
+function onNoteCtxScroll(ev) {
+  const menu = document.getElementById("noteCtxMenu");
+  const t = ev.target;
+  if (menu && t && t.nodeType === 1 && menu.contains(t)) {
+    return;
+  }
+  closeNoteContextMenu(false);
+}
+
+/* The menu's keyboard: Escape closes and returns focus
+   to the card; the arrows, Home, and End move among the
+   items (Enter and Space are the buttons' own). */
+function onNoteCtxDocKeydown(ev) {
+  const menu = document.getElementById("noteCtxMenu");
+  if (!menu || menu.classList.contains("hidden")) { return; }
+  if (ev.key === "Escape") {
+    ev.preventDefault();
+    closeNoteContextMenu(true);
+    return;
+  }
+  if (ev.key !== "ArrowDown" && ev.key !== "ArrowUp" &&
+      ev.key !== "Home" && ev.key !== "End") { return; }
+  const items = Array.prototype.slice.call(
+    menu.querySelectorAll(".list-menu-item"));
+  if (!items.length) { return; }
+  ev.preventDefault();
+  const at = items.indexOf(document.activeElement);
+  let next = 0;
+  if (ev.key === "ArrowDown") {
+    next = at < 0 ? 0 : (at + 1) % items.length;
+  } else if (ev.key === "ArrowUp") {
+    next = at < 0 ? items.length - 1
+      : (at - 1 + items.length) % items.length;
+  } else if (ev.key === "End") {
+    next = items.length - 1;
+  }
+  items[next].focus();
+}
+
+/* One menu item. Activation closes the menu first (the
+   standing close rule), then runs the action, so a panel
+   or dialog the action opens never fights the menu for
+   the screen. Async actions surface their errors the way
+   their existing callers surface them: a toast. */
+function noteCtxItem(menu, label, action, danger) {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "list-menu-item" + (danger ? " danger" : "");
+  btn.setAttribute("role", "menuitem");
+  btn.textContent = label;
+  btn.addEventListener("click", function () {
+    closeNoteContextMenu(false);
+    const out = action();
+    if (out && typeof out.catch === "function") {
+      out.catch(function (err) { toast(err.message, true); });
+    }
+  });
+  menu.appendChild(btn);
+  return btn;
+}
+
+/* The menu's contents for its target (see the section
+   header): the single note's own actions, or the
+   selection's, under a count header. Every item calls
+   the same handler the existing UI calls for that
+   action; the bulk helpers below are thin per-note
+   loops over those same handlers, in the selection's
+   order, after clearing the set first (the bulk
+   actions' standing pattern, so a set can never act
+   twice). Merge Selected and Create TOC Note are the
+   exceptions: they read the set themselves and are
+   called exactly as the list menu calls them. */
+function buildNoteContextItems(menu, note, targetIds, pointerType) {
+  const kind = state.view.kind;
+  if (targetIds.length < 2) {
+    buildSingleNoteContextItems(menu, note, kind, pointerType);
+    return;
+  }
+  const targets = selectedNotesInView();
+  const head = document.createElement("div");
+  head.className = "note-ctx-head";
+  head.textContent = targets.length +
+    (targets.length === 1 ? " note" : " notes") + " selected";
+  menu.appendChild(head);
+  if (kind === "trash" || kind === "archive") {
+    noteCtxItem(menu, "Restore all", function () {
+      return restoreSelectedNotes();
+    });
+    noteCtxItem(menu, "Delete Forever", function () {
+      return deleteSelectionForever();
+    }, true);
+  } else {
+    const anyUnpinned = targets.some(function (n) {
+      return !n.pinned;
+    });
+    const anyPinned = targets.some(function (n) {
+      return n.pinned;
+    });
+    if (anyUnpinned) {
+      noteCtxItem(menu, "Pin all", function () {
+        return pinSelectedNotes(true);
+      });
+    }
+    if (anyPinned) {
+      noteCtxItem(menu, "Unpin all", function () {
+        return pinSelectedNotes(false);
+      });
+    }
+    noteCtxItem(menu, "Duplicate", function () {
+      return duplicateSelectedNotes();
+    });
+    noteCtxItem(menu, "Merge Selected", function () {
+      return mergeSelectedNotes();
+    });
+    noteCtxItem(menu, "Create Table of Contents Note",
+      function () {
+        return createTableOfContentsNote();
+      });
+    noteCtxItem(menu, "Archive all", function () {
+      return archiveSelectedNotes();
+    });
+    noteCtxItem(menu, "Move " + targets.length +
+      " notes to Trash", function () {
+        return trashSelectedNotes();
+      });
+  }
+  noteCtxItem(menu, "Clear selection", function () {
+    clearListSelections();
+    refreshSelectionUI();
+  });
+}
+
+/* The single note's items, per collection, mirroring
+   the actions that exist for it today. In Trash: Restore
+   (the editor button's operation) and Delete Forever
+   (confirmDeleteNoteForever, the editor button's own
+   flow). In the Archive: Unarchive, by its existing
+   name; a single archived note has no Delete Forever
+   anywhere in the app today, so the menu does not
+   invent one (the Archive SELECTION's menu has it, the
+   way the brief for this release specifies). Restore
+   and Unarchive here run the note operation and its
+   toast without the editor button's extra navigation
+   into the note: this is a list surface, and the note
+   leaving the list is the feedback, as with the bulk
+   restores. */
+function buildSingleNoteContextItems(menu, note, kind, pointerType) {
+  if (kind === "trash") {
+    noteCtxItem(menu, "Restore", function () {
+      return restoreNote(note).then(function () {
+        toast("Note restored.");
+      });
+    });
+    noteCtxItem(menu, "Delete Forever", function () {
+      return confirmDeleteNoteForever(note);
+    }, true);
+  } else if (kind === "archive") {
+    noteCtxItem(menu, "Unarchive", function () {
+      return unarchiveNote(note).then(function () {
+        toast("Note unarchived.");
+      });
+    });
+  } else {
+    noteCtxItem(menu, note.pinned ? "Unpin note" : "Pin note",
+      function () { return toggleNotePin(note); });
+    noteCtxItem(menu,
+      hasShortcut("note", note.id)
+        ? "Remove Note from Shortcuts"
+        : "Add Note to Shortcuts",
+      function () { toggleShortcut("note", note.id); });
+    noteCtxItem(menu,
+      note.reminderAt ? "Edit reminder" : "Add reminder",
+      function () { openNoteReminderPanel(note.id); });
+    noteCtxItem(menu, "Save as Template", function () {
+      return promptSaveNoteAsTemplate(note);
+    });
+    noteCtxItem(menu, "Duplicate note", function () {
+      return duplicateNote(note);
+    });
+    noteCtxItem(menu, "Archive", function () {
+      return archiveNote(note).then(function () {
+        toast("Note archived.");
+      });
+    });
+    noteCtxItem(menu, "Move to Trash", function () {
+      return moveNoteToTrash(note, false).then(function () {
+        toast("Moved to Trash.");
+      });
+    });
+  }
+  noteCtxItem(menu, "Select", function () {
+    selectNoteFromContextMenu(note, pointerType);
+  });
+}
+
+/* The menu's Select item: on touch it starts the
+   selection mode seeded with this note; on desktop it
+   selects the note without opening it, and anchors
+   ranges on it. */
+function selectNoteFromContextMenu(note, pointerType) {
+  if (pointerType === "touch") {
+    enterNoteSelectMode(note);
+    return;
+  }
+  const set = currentSelectionSet();
+  if (set.indexOf(note.id) < 0) { set.push(note.id); }
+  listSelectionAnchor = note.id;
+  refreshSelectionUI();
+}
+
+/* The selected notes of the current view, in selection
+   order, resolved against the view's own collection. */
+function selectedNotesInView() {
+  const kind = state.view.kind;
+  const collection = kind === "trash" ? state.trash
+    : kind === "archive" ? state.archive : state.notes;
+  return currentSelectionSet().map(function (id) {
+    return collection.find(function (n) { return n.id === id; });
+  }).filter(Boolean);
+}
+
+/* Bulk pin and unpin: the single toggle's own field
+   operation (toggleNotePin's core), per note, each
+   saved through the same per note save the toggle
+   uses. Only notes the change would actually flip are
+   written. */
+async function pinSelectedNotes(pinned) {
+  const targets = selectedNotesInView().filter(function (n) {
+    return n.pinned !== pinned;
+  });
+  clearListSelections();
+  for (const note of targets) {
+    note.pinned = pinned;
+    try {
+      await saveNoteToRepo(note);
+    } catch (err) {
+      toast("Could not save the pin change: " +
+        err.message, true);
+    }
+  }
+  renderAll();
+}
+
+/* Bulk duplicate: the single duplicate, per note, in
+   order. There is no separate bulk duplicate path in
+   the app to call; each copy opens as it is made,
+   exactly as duplicating the notes one at a time would
+   leave things, the last copy open, each with its own
+   "Note duplicated." toast. */
+async function duplicateSelectedNotes() {
+  const targets = selectedNotesInView();
+  clearListSelections();
+  for (const note of targets) {
+    await duplicateNote(note);
+  }
+}
+
+/* Bulk archive: archiveNote per note, sequentially,
+   through the settle-first wrapper the single action
+   uses, so an open note among the targets is settled
+   first and the result matches doing them one at a
+   time. One summary toast stands in for the per-note
+   ones. */
+async function archiveSelectedNotes() {
+  const targets = selectedNotesInView();
+  const count = targets.length;
+  clearListSelections();
+  for (const note of targets) {
+    await archiveNote(note);
+  }
+  renderAll();
+  if (count) {
+    toast("Archived " + count +
+      (count === 1 ? " note." : " notes."));
+  }
+}
+
+/* Bulk trash: moveNoteToTrash per note, sequentially,
+   in its quiet (render once at the end) form, through
+   the same settle-first wrapper as the single action. */
+async function trashSelectedNotes() {
+  const targets = selectedNotesInView();
+  const count = targets.length;
+  clearListSelections();
+  for (const note of targets) {
+    await moveNoteToTrash(note, true);
+  }
+  renderAll();
+  if (count) {
+    toast("Moved " + count + " notes to Trash.");
+  }
+}
+
+/* Restore all: Trash restores through restoreNote, the
+   Archive through unarchiveNote, per note: the same
+   operations their single actions run, and the same
+   pair the Archive's Restore Selected item runs. */
+async function restoreSelectedNotes() {
+  const targets = selectedNotesInView();
+  const count = targets.length;
+  const fromTrash = state.view.kind === "trash";
+  clearListSelections();
+  for (const note of targets) {
+    if (fromTrash) { await restoreNote(note); }
+    else { await unarchiveNote(note); }
+  }
+  renderAll();
+  if (count) {
+    toast("Restored " + count + " notes.");
+  }
+}
+
+/* Delete Forever for a Trash or Archive selection: the
+   Trash menu's Delete Selected confirmation and flow
+   (its wording, its attachment sentence, its warning
+   for files that could not be deleted), over the
+   current view's selection, through the shared
+   deleteNotesForever. */
+async function deleteSelectionForever() {
+  const chosen = selectedNotesInView();
+  if (!chosen.length) { return; }
+  let text = "Delete " + chosen.length +
+    (chosen.length === 1 ? " note" : " notes") +
+    " forever? This cannot be undone. Their note files " +
+    "and version history on " + storageDisplayName() +
+    " will be deleted.";
+  const sentence = bulkAttachmentSentence(chosen);
+  if (sentence) { text += " " + sentence; }
+  if (!confirm(text)) { return; }
+  clearListSelections();
+  const result = await deleteNotesForever(chosen);
+  toast("Deleted forever.");
+  warnUndeletedAttachments(result.failed);
+}
+
+/* Wire the context menu's own inputs on the note list:
+   the contextmenu event (suppressed; the app's menu
+   opens instead) and the touch long press that opens
+   the same menu at the press point. Called once from
+   wireEvents, beside initNoteDragAndDrop. */
+function initNoteContextMenu() {
+  const listEl = document.getElementById("noteList");
+  if (!listEl) { return; }
+  listEl.addEventListener("contextmenu", function (ev) {
+    const card = ev.target && ev.target.closest
+      ? ev.target.closest(".note-card") : null;
+    if (!card || !card.getAttribute("data-note-id")) { return; }
+    ev.preventDefault();
+    const note = contextMenuNoteById(
+      card.getAttribute("data-note-id"));
+    if (!note) { return; }
+    /* A touch long press opens the menu first; the
+       browser's own follow-up contextmenu for the same
+       press lands here with the menu already open for
+       this note, and is simply swallowed. */
+    if (noteCtx && noteCtx.noteId === note.id) { return; }
+    openNoteContextMenu(note, ev.clientX, ev.clientY,
+      ev.pointerType || "mouse");
+  });
+  /* The long press: a stationary touch press of about
+     500 ms. Movement past the slop (the drag section's
+     own tolerance), or the press ending first, cancels
+     it: a moved press is a scroll and opens nothing.
+     The move and end listeners live on the document
+     while a press is armed, the drag machinery's own
+     pattern for press tracking. */
+  let press = null;
+  function cancelPress() {
+    if (!press) { return; }
+    clearTimeout(press.timer);
+    press = null;
+    document.removeEventListener("pointermove",
+      onPressMove, true);
+    document.removeEventListener("pointerup",
+      onPressEnd, true);
+    document.removeEventListener("pointercancel",
+      onPressEnd, true);
+  }
+  function onPressMove(ev) {
+    if (!press || ev.pointerId !== press.pointerId) { return; }
+    if (Math.hypot(ev.clientX - press.x,
+        ev.clientY - press.y) > NOTE_DRAG_TOUCH_SLOP_PX) {
+      cancelPress();
+    }
+  }
+  function onPressEnd(ev) {
+    if (!press || ev.pointerId !== press.pointerId) { return; }
+    cancelPress();
+  }
+  listEl.addEventListener("pointerdown", function (ev) {
+    if (ev.pointerType !== "touch") { return; }
+    const card = ev.target && ev.target.closest
+      ? ev.target.closest(".note-card") : null;
+    if (!card || !card.getAttribute("data-note-id")) { return; }
+    const note = contextMenuNoteById(
+      card.getAttribute("data-note-id"));
+    if (!note) { return; }
+    cancelPress();
+    press = {
+      note: note, x: ev.clientX, y: ev.clientY,
+      pointerId: ev.pointerId,
+      timer: setTimeout(function () {
+        const armed = press;
+        cancelPress();
+        if (!armed) { return; }
+        noteCtxClickBlock = true;
+        openNoteContextMenu(armed.note, armed.x, armed.y,
+          "touch");
+      }, 500)
+    };
+    document.addEventListener("pointermove",
+      onPressMove, true);
+    document.addEventListener("pointerup",
+      onPressEnd, true);
+    document.addEventListener("pointercancel",
+      onPressEnd, true);
+  });
+  document.addEventListener("click", function (ev) {
+    if (noteCtxClickBlock) {
+      noteCtxClickBlock = false;
+      ev.stopPropagation();
+      ev.preventDefault();
+    }
+  }, true);
+  /* The selection mode's Done control. */
+  const doneBtn = document.getElementById("listSelectDoneBtn");
+  if (doneBtn) {
+    doneBtn.addEventListener("click", function () {
+      exitNoteSelectMode();
+    });
+  }
 }
 
 /* Permanently delete several trashed notes, one at a time. Each
@@ -23761,6 +24529,8 @@ function renderNoteList() {
     closeListPanels();
     /* v1.8.1: leaving a view leaves its multi select set behind. */
     clearListSelections();
+    /* v2.58: the touch selection mode ends with the view too. */
+    noteSelectMode = false;
   }
   lastRenderedListViewKey = viewKey;
   /* v2.11: the previous render's thumbnail URLs are released
@@ -23855,29 +24625,15 @@ function renderNoteList() {
        list, so the card itself carries the note id it stands for. */
     card.setAttribute("data-note-id", note.id);
     if (selectSet) {
-      /* A selection checkbox at the row's left edge. Its click is
-         stopped at the picker, so checking a note can never fall
-         through to the card's own click and open the note. */
-      const isChecked = selectSet.indexOf(note.id) >= 0;
-      card.classList.add("selectable");
-      if (isChecked) { card.classList.add("multi-selected"); }
-      const picker = document.createElement("label");
-      picker.className = "note-select";
-      picker.title = "Select note";
-      const box = document.createElement("input");
-      box.type = "checkbox";
-      box.checked = isChecked;
-      box.setAttribute("aria-label",
-        "Select note: " + (note.title || "Untitled note"));
-      picker.addEventListener("click", function (ev) {
-        ev.stopPropagation();
-      });
-      box.addEventListener("change", function () {
-        toggleListSelection(note.id, box.checked);
-        card.classList.toggle("multi-selected", box.checked);
-      });
-      picker.appendChild(box);
-      card.appendChild(picker);
+      /* v2.58: a selected card wears the multi-selected
+         treatment, and that IS the indicator now. There
+         is no checkbox: selection input is the card's
+         own click with its modifiers
+         (handleNoteCardClick), or the touch selection
+         mode the context menu starts. */
+      if (selectSet.indexOf(note.id) >= 0) {
+        card.classList.add("multi-selected");
+      }
     }
     /* v2.18: the card's text column, in the mockup's order: the
        meta line (notebook name, a dot, relative updated time),
@@ -23980,7 +24736,9 @@ function renderNoteList() {
       }
       card.appendChild(box);
     }
-    card.addEventListener("click", function () { openNote(note.id); });
+    card.addEventListener("click", function (ev) {
+      handleNoteCardClick(ev, note);
+    });
     listEl.appendChild(card);
   });
   /* v2.24.3: a view with tiles but no notes (a notebook whose
@@ -24000,6 +24758,9 @@ function renderNoteList() {
      backlinks bar current with it; the panel refresh is
      signature guarded and leaves a settled bar untouched. */
   refreshBacklinksPanel();
+  /* v2.58: the selection bar (the touch selection mode's
+     chrome) repaints with the list it belongs to. */
+  renderListSelectBar();
 }
 
 /* --------------------------------------------------------------------------
@@ -24393,6 +25154,52 @@ function buildTaskGroupHeadEl(title, count, opts) {
   return head;
 }
 
+/* A task row's description preview element, or null
+   when the task has no description worth showing (the
+   v2.27.0/v2.28.0 excerpt logic, shared verbatim): a
+   rich description previews as its sanitized fragment
+   with its plain words as the hover text and its note
+   links claimed on the preview itself; a plain one
+   previews as its full trimmed text. Through v2.57
+   this logic lived inline in the Tasks view's column
+   form of the row; v2.58 extracts it so the Home Tasks
+   widget's rows render the same excerpt the same way,
+   under a widget scoped class that clamps it to two
+   lines. extraClass may be "" (the column form, whose
+   element is byte for byte what it always was). */
+function buildTaskDescPreviewEl(task, extraClass) {
+  const cls = "task-row-desc" +
+    (extraClass ? " " + extraClass : "");
+  if (task.descriptionFormat === "html") {
+    const clean = sanitizeTaskDescriptionHtml(
+      task.description || "");
+    const plain = taskDescriptionTextOfHtml(clean).trim();
+    if (!plain) { return null; }
+    const desc = document.createElement("div");
+    desc.className = cls;
+    desc.innerHTML = clean;
+    desc.title = plain;
+    desc.addEventListener("click", function (ev) {
+      const t = ev.target;
+      const anchor = (t && t.closest) ? t.closest("a") : null;
+      const nid = anchor ? noteLinkIdOf(anchor) : null;
+      if (!nid) { return; }
+      ev.preventDefault();
+      ev.stopPropagation();
+      followNoteLink(nid);
+    });
+    return desc;
+  }
+  const text = typeof task.description === "string"
+    ? task.description.trim() : "";
+  if (!text) { return null; }
+  const desc = document.createElement("div");
+  desc.className = cls;
+  desc.textContent = text;
+  desc.title = text;
+  return desc;
+}
+
 /* One task row, shared by the Tasks view and the Things to
    do page:
    the completion checkbox, the title (with the notebook named
@@ -24460,47 +25267,8 @@ function buildTaskRowEl(task, opts) {
        off; the text itself is never shortened here. A
        task with no description, or only whitespace,
        gets no preview element at all. */
-    if (task.descriptionFormat === "html") {
-      /* v2.28.0: a rich description previews as its
-         fragment, through the sanitizer (the render
-         side of the one funnel), with the extracted
-         plain words as the hover text; a fragment
-         with no words shows nothing. Its note links
-         navigate from here, the click claimed on the
-         preview itself so the row's editor opening
-         never also fires. */
-      const colClean = sanitizeTaskDescriptionHtml(
-        task.description || "");
-      const colPlain = taskDescriptionTextOfHtml(colClean)
-        .trim();
-      if (colPlain) {
-        const colDesc = document.createElement("div");
-        colDesc.className = "task-row-desc";
-        colDesc.innerHTML = colClean;
-        colDesc.title = colPlain;
-        colDesc.addEventListener("click", function (ev) {
-          const t = ev.target;
-          const anchor = (t && t.closest)
-            ? t.closest("a") : null;
-          const nid = anchor ? noteLinkIdOf(anchor) : null;
-          if (!nid) { return; }
-          ev.preventDefault();
-          ev.stopPropagation();
-          followNoteLink(nid);
-        });
-        colMain.appendChild(colDesc);
-      }
-    } else {
-      const colDescText = typeof task.description === "string"
-        ? task.description.trim() : "";
-      if (colDescText) {
-        const colDesc = document.createElement("div");
-        colDesc.className = "task-row-desc";
-        colDesc.textContent = colDescText;
-        colDesc.title = colDescText;
-        colMain.appendChild(colDesc);
-      }
-    }
+    const colDesc = buildTaskDescPreviewEl(task, "");
+    if (colDesc) { colMain.appendChild(colDesc); }
     titleCell.appendChild(colMain);
     const markers = document.createElement("div");
     markers.className = "task-chips";
@@ -24561,7 +25329,7 @@ function buildTaskRowEl(task, opts) {
     meta.textContent = notebookNameForSlug(task.notebook);
     main.appendChild(meta);
   }
-  row.appendChild(main);
+  if (!opts.home) { row.appendChild(main); }
 
   const chips = document.createElement("div");
   chips.className = "task-chips";
@@ -24587,7 +25355,29 @@ function buildTaskRowEl(task, opts) {
   prio.textContent = task.priority === "high" ? "High"
     : task.priority === "low" ? "Low" : "Medium";
   chips.appendChild(prio);
-  row.appendChild(chips);
+  if (opts.home) {
+    /* v2.58: the Home Tasks widget's row form. The title
+       takes the full row width: the main column is the
+       row's only flex child beside the completion
+       checkbox, the description preview sits under the
+       title (buildTaskDescPreviewEl, the Tasks view's
+       own excerpt, clamped to two lines by the
+       home-task-desc rule), and the chips move inside
+       the main column under the preview as their own
+       line, so a long title is never squeezed into a
+       narrow column by its due and priority pills. The
+       checkbox still runs the one completion path (the
+       shared picker above), and the row's click still
+       opens the task editor (below). */
+    row.classList.add("task-row-home");
+    row.appendChild(main);
+    const homeDesc = buildTaskDescPreviewEl(task,
+      "home-task-desc");
+    if (homeDesc) { main.appendChild(homeDesc); }
+    main.appendChild(chips);
+  } else {
+    row.appendChild(chips);
+  }
 
   row.addEventListener("click", function () {
     openTaskEditor(task.id);
@@ -36331,8 +37121,6 @@ function engageNoteDrag() {
   ghost.removeAttribute("data-note-id");
   ghost.classList.remove("active");
   ghost.classList.add("note-drag-ghost");
-  const picker = ghost.querySelector(".note-select");
-  if (picker) { picker.remove(); }
   ghost.style.width = rect.width + "px";
   document.body.appendChild(ghost);
   drag.ghost = ghost;
@@ -36372,6 +37160,15 @@ function cleanupNoteDrag() {
 
 function onNoteListPointerDown(ev) {
   if (noteDrag) { return; }
+  /* v2.58: a touch press never arms a note drag anymore.
+     On touch the press belongs to scrolling, tapping, and
+     the context menu's long press (initNoteContextMenu);
+     through v2.57 a stationary touch press engaged the
+     drag at the long press timer, which is the gesture
+     the context menu owns now. Mouse and pen are
+     unchanged: movement engages, and a pen press still
+     engages at the timer below. */
+  if (ev.pointerType === "touch") { return; }
   if (ev.pointerType === "mouse" && ev.button !== 0) { return; }
   if (state.view.kind === "trash" || state.view.kind === "archive") {
     return;
@@ -36380,7 +37177,6 @@ function onNoteListPointerDown(ev) {
   const card = target && target.closest
     ? target.closest(".note-card") : null;
   if (!card || !card.getAttribute("data-note-id")) { return; }
-  if (target.closest && target.closest(".note-select")) { return; }
   const note = findNoteById(card.getAttribute("data-note-id"));
   if (!note || note.trashed || note.archived) { return; }
   noteDrag = {
@@ -47426,14 +48222,8 @@ function wireEvents() {
     if (!note || state.notes.indexOf(note) < 0) { return; }
     toggleShortcut("note", note.id);
   });
-  /* v2.33: the same menu's Pin to Home item, Evernote's
-     surface for the dashboard's pinned note. Like the
-     pin item, it belongs to the selected note and the
-     toggle re-checks the selection. */
-  document.getElementById("nbHomePinBtn").addEventListener("click", function () {
-    closeListPanels();
-    toggleSelectedNoteHomePin();
-  });
+  /* v2.58: the Pin to Home item's listener is gone with
+     the item. */
   /* v2.35: the same menu's Reminder item opens the one
      reminder panel for the selected note, re-checking the
      selection the way the pin items do. */
@@ -48200,6 +48990,7 @@ function wireEvents() {
      pointerdown on the note list, the drop overlay's Cancel
      button, and the finished drag click suppression. */
   initNoteDragAndDrop();
+  initNoteContextMenu();
 
   /* Mobile bar. */
   document.getElementById("mobileNavBtn").addEventListener("click", function () { setMobileView("nav"); });
@@ -49574,41 +50365,12 @@ function wireEvents() {
       }).catch(function (err) { toast(err.message, true); });
     }
   });
-  document.getElementById("deleteForeverBtn").addEventListener("click", async function () {
-    const note = currentNote();
-    if (!note) { return; }
-    /* v1.2: the confirmation also covers the note's cloud files. They
-       are deleted best effort BEFORE the note file goes, and anything
-       that could not be deleted is named in a warning afterwards, so the
-       user knows exactly what remains in their cloud accounts. */
-    const atts = note.attachments || [];
-    let confirmText = "Delete \"" + (note.title || "Untitled note") +
-      "\" forever? This removes the file from your " +
-      storageDeletePhrase() +
-      " and cannot be undone from inside the app.";
-    if (atts.length) {
-      confirmText += " Its " + atts.length + " attachment file(s) will also be " +
-        "deleted from their cloud storage where that provider is signed in. " +
-        "Files whose provider is not signed in cannot be deleted by the app " +
-        "and will be left behind in that cloud account.";
-    }
-    if (!confirm(confirmText)) { return; }
-    let failed = [];
-    if (atts.length) {
-      failed = state.online
-        ? await deleteAttachmentsBestEffort(note)
-        : atts.map(function (a) { return a.name; });
-    }
-    try {
-      await deleteNoteForever(note);
-      toast("Deleted forever.");
-    } catch (err) {
-      toast(err.message, true);
-    }
-    if (failed.length) {
-      toast("Warning: these cloud files could not be deleted and remain in " +
-        "their storage accounts: " + failed.join(", "), true);
-    }
+  document.getElementById("deleteForeverBtn").addEventListener("click", function () {
+    /* v2.58: the flow is confirmDeleteNoteForever now, a
+       top level function beside deleteNoteForever, so the
+       Trash context menu's Delete Forever item runs the
+       identical confirmation and cleanup. */
+    confirmDeleteNoteForever(currentNote());
   });
 
   /* Online and offline events drive the sync pill and auto flush the
