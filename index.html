@@ -40,10 +40,72 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-29-SSN-V2510
-  Version: 2.51.0
+  BUILD STAMP: 2026-10-29-SSN-V2520
+  Version: 2.52.0
 
   Revision history:
+    v2.52.0 2026-10-29 Home widgets, live drag and
+                      tight packing, directed and
+                      confirmed by Chris on
+                      2026-10-29. The Home page no
+                      longer lays its widgets out
+                      in grid rows (a short widget
+                      used to leave a large empty
+                      area under it beside a taller
+                      neighbor): a packing pass
+                      (homePackCompute) now places
+                      the widgets in columns, each
+                      taking the height its content
+                      needs, each next widget
+                      filling the currently
+                      shortest column, so the page
+                      stacks tightly at any width
+                      and collapses to one column
+                      on phones. The packing is a
+                      pure function of the stored
+                      order plus measured heights:
+                      the home layout in index.json
+                      keeps its exact shape, and
+                      the same order packs to the
+                      same arrangement on every
+                      device. Dragging in Customize
+                      changes too: the widget
+                      itself lifts and follows the
+                      pointer (slightly raised,
+                      in the app's shadow
+                      language), a dashed
+                      placeholder marks its
+                      candidate slot, and the
+                      other widgets slide to their
+                      new packed spots in real
+                      time, so the landing
+                      arrangement is visible
+                      before the drop. The drop
+                      commits a new ORDER through
+                      the same
+                      applyHomeWidgetDragOrder as
+                      before (the preview, the
+                      drop, and a reload all pack
+                      from that one order, so
+                      what is dropped is what
+                      renders); Escape and
+                      pointercancel restore the
+                      original arrangement, and a
+                      drop with no real change
+                      commits nothing. The
+                      placement is the packed
+                      slot nearest the drop
+                      point, not a stored
+                      coordinate: an order driven
+                      packing can occasionally
+                      set a cross column drop in
+                      the neighbouring column
+                      when the column heights
+                      dictate, which is named in
+                      the v2.52.0 notes as the
+                      model's one limitation.
+                      Move up and Move down keep
+                      working on the same order.
     v2.51.0 2026-10-29 The note switch settle: a data
                       loss fix, chosen by Chris on
                       2026-10-29 ahead of the queued
@@ -4620,14 +4682,50 @@ body.dark .home-widget-drag:hover{color:var(--accent);}
 .home-cust-hint{
   color:var(--muted);font-size:12.5px;padding:2px 0 6px;
 }
-.home-grid{
-  display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));
-  gap:16px;align-items:start;
-}
+/* v2.52: the Home layout is a packing, not grid rows.
+   The container is a plain positioned box whose height
+   the packing pass sets; each widget is absolutely
+   placed by that pass (layoutHomeWidgets) at the left
+   and top its column and stack position earned, with
+   the column's width, so a widget's height is always
+   its own content's height and no row can hold a
+   short widget's space open beside a taller neighbor.
+   Before the pass runs (the first paint of a render)
+   the widgets sit at the container's top left in DOM
+   order; the pass runs synchronously at the end of
+   every Home render, so that state never paints. */
+.home-grid{position:relative;}
 .home-widget{
+  position:absolute;box-sizing:border-box;
   background:var(--surface);border:1px solid var(--border);
   border-radius:12px;padding:14px 16px;
 }
+/* While a widget drag is live, the widgets that stay
+   behind slide to their candidate packed spots (the
+   pass rewrites their left and top as the placeholder
+   moves), on the app's own motion timing. */
+.home-grid.ss-home-dragging .home-widget{
+  transition:top 180ms ease,left 180ms ease;
+}
+/* The drag placeholder: the candidate slot, held open
+   at the dragged widget's own height while the real
+   widget travels with the pointer. */
+.home-widget-placeholder{
+  position:absolute;box-sizing:border-box;
+  border:2px dashed var(--accent);border-radius:12px;
+  background:var(--soft);
+  transition:top 180ms ease,left 180ms ease;
+}
+/* The dragged widget itself, lifted: fixed to the
+   viewport so it can follow the pointer across the
+   scroll position, slightly raised in the app's
+   shadow language, inert to the pointer so the move
+   stream stays the session's alone. */
+.home-widget.home-widget-floating{
+  position:fixed;z-index:1200;pointer-events:none;
+  box-shadow:0 14px 34px rgba(0,0,0,.28);
+}
+body.ss-home-dragging{cursor:grabbing;user-select:none;}
 .home-widget-head{display:flex;align-items:center;gap:10px;margin-bottom:10px;}
 .home-widget-title{margin:0;font-size:15px;color:var(--primary);}
 body.dark .home-widget-title{color:var(--accent);}
@@ -9153,8 +9251,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-29-SSN-V2510";
-const APP_VERSION = "2.51.0";
+const APP_BUILD = "2026-10-29-SSN-V2520";
+const APP_VERSION = "2.52.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -16877,6 +16975,418 @@ function applyHomeWidgetDragOrder(types) {
   return true;
 }
 
+/* ------------------------------------------------------------------
+   v2.52: Home packing and the live widget drag (Chris's
+   direction, confirmed 2026-10-29: "when dragging the
+   widgets, I want to see them as I move them, and I
+   want them to be freely moved and stack right up
+   against the others without any of the large empty
+   areas. The widgets should shrink and grow as needed
+   while the others around adjust as needed.")
+
+   The layout half replaces the v2.33 grid rows. Under
+   grid rows a widget's row was as tall as its tallest
+   member, so a short widget left a large empty area
+   under it beside a taller neighbor. The packing here
+   is a pure function of two inputs: the stored order
+   (state.home.widgets, whose shape does not change)
+   and the widgets' measured heights. Widgets are
+   consumed in order and each one fills the currently
+   shortest column (ties go to the leftmost column),
+   taking exactly the height its content needs, so the
+   page stacks tightly at any width and the same order
+   packs to the same arrangement on every device, with
+   no per device layout state anywhere. The column
+   count follows the width the old grid used: as many
+   330px columns as fit, one on a phone.
+
+   The drag half is Home's own (the shared
+   attachReorderDrag still serves Shortcuts and the
+   merge dialog, untouched). Pressing a widget's grip
+   and moving past the shared 4px threshold lifts the
+   widget itself: the real element goes fixed and
+   follows the pointer, slightly raised, while a
+   dashed placeholder takes its candidate slot among
+   the others and the packing pass re-places the
+   others around it, so the landing arrangement is
+   visible before the drop. The candidate slot is the
+   packed slot nearest the pointer (homePackDropIndex
+   packs the dragged height at every order position
+   and measures the distance to the pointer), and the
+   drop commits the resulting ORDER through
+   applyHomeWidgetDragOrder, never coordinates: the
+   preview, the drop, and a later reload all pack from
+   that one order, so what is dropped is what renders.
+   The model's one limitation, named: because packing
+   is order driven, a drop aimed across columns can
+   occasionally land in the neighbouring column when
+   the column heights dictate the packed slot nearest
+   the pointer sits there.
+
+   Touch: the grip already carries touch-action none
+   (the shared .ss-drag-handle rule), so a touch drag
+   starting on a grip never becomes a page scroll;
+   while a drag is engaged the move handler prevents
+   the default, and the Home scroll area edge scrolls
+   the way the shared helper's does, so a widget can
+   still be carried past the fold. Scrolling the page
+   with a finger anywhere off a grip is untouched.
+   ------------------------------------------------------------------ */
+
+const HOME_PACK_GAP = 16;
+const HOME_PACK_MIN_COL = 330;
+
+/* Pack heights (in order) into columns across a
+   container of the given width. Returns the column
+   count and width, one placement (column, left, top)
+   per input height, and the total packed height.
+   Pure: no DOM, no state, so the harness can prove
+   the rule with fixture heights and the renderer can
+   trust that an order always packs the same way. */
+function homePackCompute(heights, width) {
+  const gap = HOME_PACK_GAP;
+  const w = (typeof width === "number" && isFinite(width)
+    && width > 0) ? width : 0;
+  let cols = Math.floor((w + gap) / (HOME_PACK_MIN_COL + gap));
+  if (!isFinite(cols) || cols < 1) { cols = 1; }
+  const colWidth = cols > 0 ? (w - (cols - 1) * gap) / cols : 0;
+  const colHeights = [];
+  for (let c = 0; c < cols; c++) { colHeights.push(0); }
+  const placements = heights.map(function (h) {
+    const height = (typeof h === "number" && isFinite(h)
+      && h > 0) ? h : 0;
+    let col = 0;
+    for (let c = 1; c < cols; c++) {
+      if (colHeights[c] < colHeights[col]) { col = c; }
+    }
+    const top = colHeights[col];
+    colHeights[col] = top + height + gap;
+    return { col: col, left: col * (colWidth + gap), top: top };
+  });
+  let height = 0;
+  colHeights.forEach(function (h) {
+    if (h - gap > height) { height = h - gap; }
+  });
+  return { cols: cols, colWidth: colWidth, gap: gap,
+    placements: placements, height: Math.max(0, height) };
+}
+
+/* The candidate order position for a drag: pack the
+   other widgets' heights with the dragged height
+   inserted at every possible position, and keep the
+   position whose packed slot lies nearest the pointer
+   (distance from the point to the slot's rectangle,
+   zero inside it). Deterministic; ties keep the
+   earliest position. otherHeights are the heights of
+   the widgets that stay behind, in their order. */
+function homePackDropIndex(otherHeights, dragHeight, width, x, y) {
+  let best = 0;
+  let bestDist = Infinity;
+  for (let k = 0; k <= otherHeights.length; k++) {
+    const seq = otherHeights.slice();
+    seq.splice(k, 0, dragHeight);
+    const pack = homePackCompute(seq, width);
+    const p = pack.placements[k];
+    const left = p.left;
+    const top = p.top;
+    const right = left + pack.colWidth;
+    const bottom = top + dragHeight;
+    const dx = x < left ? left - x : (x > right ? x - right : 0);
+    const dy = y < top ? top - y : (y > bottom ? y - bottom : 0);
+    const d = dx * dx + dy * dy;
+    if (d < bestDist) { bestDist = d; best = k; }
+  }
+  return best;
+}
+
+/* Place the Home grid's widgets by the packing rule.
+   Runs at the end of every Home render, on window
+   resize, when a widget's own size changes (the
+   ResizeObserver below: a calendar month change, a
+   scratch pad the user stretched), and through the
+   drag. The grid's children in DOM order are the
+   packing sequence (during a drag the placeholder
+   stands in the sequence and the floating widget is
+   skipped). Widths are set first so each widget's
+   measured height is its height at the column width;
+   then positions and the container height land. A
+   grid with no measurable width (a hidden pane, the
+   harness) is left alone: DOM order still reads
+   correctly there, and the next visible render packs
+   for real. */
+let homePackObserver = null;
+let homePackQueued = false;
+
+function layoutHomeWidgets() {
+  const grid = document.getElementById("homeGrid");
+  if (!grid) { return; }
+  const width = grid.clientWidth;
+  if (!width) { return; }
+  const items = Array.prototype.filter.call(grid.children,
+    function (el) {
+      return el.classList.contains("home-widget-placeholder") ||
+        (el.classList.contains("home-widget") &&
+          !el.classList.contains("home-widget-floating"));
+    });
+  if (!items.length) { grid.style.height = ""; return; }
+  const probe = homePackCompute(
+    items.map(function () { return 0; }), width);
+  items.forEach(function (el) {
+    el.style.width = probe.colWidth + "px";
+  });
+  const heights = items.map(function (el) {
+    if (el.classList.contains("home-widget-placeholder")) {
+      return parseFloat(el.getAttribute("data-pack-height")) || 0;
+    }
+    return el.offsetHeight;
+  });
+  const pack = homePackCompute(heights, width);
+  items.forEach(function (el, i) {
+    el.style.left = pack.placements[i].left + "px";
+    el.style.top = pack.placements[i].top + "px";
+  });
+  grid.style.height = pack.height + "px";
+  watchHomeWidgetSizes(grid);
+}
+
+/* Repack on the next frame, coalesced: the observer
+   and the resize listener can both fire in bursts,
+   and a pack that changes nothing settles at once
+   (it writes the same widths and positions, which
+   fire no further size changes). */
+function queueHomePack() {
+  if (homePackQueued) { return; }
+  homePackQueued = true;
+  const run = function () {
+    homePackQueued = false;
+    layoutHomeWidgets();
+  };
+  if (typeof requestAnimationFrame === "function") {
+    requestAnimationFrame(run);
+  } else {
+    setTimeout(run, 50);
+  }
+}
+
+function watchHomeWidgetSizes(grid) {
+  if (typeof ResizeObserver === "undefined") { return; }
+  if (!homePackObserver) {
+    homePackObserver = new ResizeObserver(function () {
+      queueHomePack();
+    });
+  }
+  homePackObserver.disconnect();
+  Array.prototype.forEach.call(
+    grid.querySelectorAll(".home-widget"), function (el) {
+      homePackObserver.observe(el);
+    });
+}
+
+if (typeof window !== "undefined" && window.addEventListener) {
+  window.addEventListener("resize", queueHomePack);
+}
+
+/* The Home widget drag session, the counterpart of
+   the shared helper's ssReorderDrag for this surface
+   alone. */
+let ssHomeDrag = null;
+
+function attachHomeWidgetDrag(handle, widget) {
+  if (!handle || !widget) { return; }
+  if (handle.getAttribute("data-ss-home-drag-bound") === "1") {
+    return;
+  }
+  handle.setAttribute("data-ss-home-drag-bound", "1");
+  handle.addEventListener("pointerdown", function (ev) {
+    startHomeWidgetDrag(ev, handle, widget);
+  });
+}
+
+function homeDragWidgetEls(grid) {
+  return Array.prototype.slice.call(
+    grid.querySelectorAll(".home-widget"));
+}
+
+function startHomeWidgetDrag(ev, handle, widget) {
+  if (ssHomeDrag) { return; }
+  if (ev.pointerType === "mouse" && ev.button !== 0) {
+    return;
+  }
+  const grid = document.getElementById("homeGrid");
+  if (!grid || widget.parentElement !== grid) { return; }
+  const items = homeDragWidgetEls(grid);
+  if (items.length < 2 || items.indexOf(widget) < 0) {
+    return;
+  }
+  ssHomeDrag = {
+    pointerId: ev.pointerId,
+    startX: ev.clientX, startY: ev.clientY,
+    engaged: false,
+    handle: handle, widget: widget, grid: grid,
+    items0: items,
+    keys0: items.map(function (el) {
+      return el.getAttribute("data-widget-type");
+    }),
+    heights: null, grabDX: 0, grabDY: 0,
+    placeholder: null, slot: -1
+  };
+  if (handle.setPointerCapture &&
+      ev.pointerId !== undefined) {
+    try { handle.setPointerCapture(ev.pointerId); }
+    catch (e) { /* capture is a nicety, not the drag */ }
+  }
+  window.addEventListener("pointermove", onHomeDragMove);
+  window.addEventListener("pointerup", onHomeDragUp);
+  window.addEventListener("pointercancel", onHomeDragCancel);
+  document.addEventListener("keydown", onHomeDragKeydown, true);
+}
+
+/* Lift the widget: measure every widget's height
+   (the packing inputs, taken while the arrangement
+   still stands), put the placeholder in the widget's
+   slot at its height, and send the real widget fixed
+   under the pointer with the grab offset kept, so it
+   does not jump as it lifts. */
+function engageHomeDrag(s) {
+  const rect = s.widget.getBoundingClientRect();
+  s.heights = {};
+  s.items0.forEach(function (el) {
+    s.heights[el.getAttribute("data-widget-type")] =
+      el.getBoundingClientRect().height;
+  });
+  s.grabDX = s.startX - rect.left;
+  s.grabDY = s.startY - rect.top;
+  const ph = document.createElement("div");
+  ph.className = "home-widget-placeholder";
+  ph.setAttribute("data-pack-height", String(rect.height));
+  ph.setAttribute("aria-hidden", "true");
+  ph.style.height = rect.height + "px";
+  s.grid.insertBefore(ph, s.widget);
+  s.placeholder = ph;
+  s.slot = s.items0.indexOf(s.widget);
+  s.widget.classList.add("home-widget-floating");
+  s.widget.style.width = rect.width + "px";
+  s.widget.style.left = rect.left + "px";
+  s.widget.style.top = rect.top + "px";
+  s.grid.classList.add("ss-home-dragging");
+  document.body.classList.add("ss-home-dragging");
+  s.engaged = true;
+}
+
+function onHomeDragMove(ev) {
+  const s = ssHomeDrag;
+  if (!s || ev.pointerId !== s.pointerId) { return; }
+  if (!s.engaged) {
+    if (Math.hypot(ev.clientX - s.startX,
+        ev.clientY - s.startY) < SS_REORDER_DRAG_PX) {
+      return;
+    }
+    engageHomeDrag(s);
+  }
+  ev.preventDefault();
+  /* The widget travels with the pointer. */
+  s.widget.style.left = (ev.clientX - s.grabDX) + "px";
+  s.widget.style.top = (ev.clientY - s.grabDY) + "px";
+  /* The candidate slot: the packed slot nearest the
+     pointer, recomputed from the heights measured at
+     the lift. When it changes, the placeholder moves
+     in the DOM and the packing pass slides the others
+     to their new spots (the transition CSS above). */
+  const gridRect = s.grid.getBoundingClientRect();
+  const x = ev.clientX - gridRect.left;
+  const y = ev.clientY - gridRect.top;
+  const others = s.items0.filter(function (el) {
+    return el !== s.widget;
+  });
+  const otherHeights = others.map(function (el) {
+    return s.heights[el.getAttribute("data-widget-type")] || 0;
+  });
+  const dragH = s.heights[
+    s.widget.getAttribute("data-widget-type")] || 0;
+  const width = s.grid.clientWidth || gridRect.width || 0;
+  const k = homePackDropIndex(otherHeights, dragH, width, x, y);
+  if (k !== s.slot) {
+    s.slot = k;
+    if (k < others.length) {
+      s.grid.insertBefore(s.placeholder, others[k]);
+    } else {
+      s.grid.appendChild(s.placeholder);
+    }
+  }
+  layoutHomeWidgets();
+  /* Edge auto scroll, the shared helper's rule, so a
+     drag can carry a widget past the fold. */
+  const sc = s.grid.closest(".home-scroll");
+  if (sc) {
+    const r = sc.getBoundingClientRect();
+    if (ev.clientY < r.top + 40 && sc.scrollTop > 0) {
+      sc.scrollTop -= 12;
+    } else if (ev.clientY > r.bottom - 40 &&
+        sc.scrollTop < sc.scrollHeight - sc.clientHeight) {
+      sc.scrollTop += 12;
+    }
+  }
+}
+
+function finishHomeDrag(commit) {
+  const s = ssHomeDrag;
+  if (!s) { return; }
+  ssHomeDrag = null;
+  window.removeEventListener("pointermove", onHomeDragMove);
+  window.removeEventListener("pointerup", onHomeDragUp);
+  window.removeEventListener("pointercancel", onHomeDragCancel);
+  document.removeEventListener("keydown", onHomeDragKeydown,
+    true);
+  if (!s.engaged) { return; }
+  const widget = s.widget;
+  if (commit) {
+    /* The widget takes the placeholder's slot in the
+       DOM; the stored order follows the DOM. */
+    s.grid.insertBefore(widget, s.placeholder);
+  } else {
+    /* Restore the order the drag started from. */
+    s.items0.forEach(function (el) {
+      s.grid.appendChild(el);
+    });
+  }
+  s.placeholder.remove();
+  widget.classList.remove("home-widget-floating");
+  widget.style.width = "";
+  widget.style.left = "";
+  widget.style.top = "";
+  s.grid.classList.remove("ss-home-dragging");
+  document.body.classList.remove("ss-home-dragging");
+  layoutHomeWidgets();
+  if (!commit) { return; }
+  const keys = homeDragWidgetEls(s.grid).map(function (el) {
+    return el.getAttribute("data-widget-type");
+  });
+  const changed = keys.length !== s.keys0.length ||
+    keys.some(function (k, i) { return k !== s.keys0[i]; });
+  if (changed) { applyHomeWidgetDragOrder(keys); }
+}
+
+function onHomeDragUp(ev) {
+  if (!ssHomeDrag || ev.pointerId !== ssHomeDrag.pointerId) {
+    return;
+  }
+  finishHomeDrag(true);
+}
+
+function onHomeDragCancel(ev) {
+  if (!ssHomeDrag || ev.pointerId !== ssHomeDrag.pointerId) {
+    return;
+  }
+  finishHomeDrag(false);
+}
+
+function onHomeDragKeydown(ev) {
+  if (ev.key === "Escape" && ssHomeDrag) {
+    ev.preventDefault();
+    finishHomeDrag(false);
+  }
+}
+
 /* v2.42: while Customize is open, every widget on the
    Home page carries a drag handle in its header, and
    dragging it reorders the widgets on the page itself
@@ -16911,19 +17421,10 @@ function syncHomeWidgetDragHandles() {
         handle.innerHTML = SS_DRAG_GRIP_ICON;
         head.insertBefore(handle, head.firstChild);
       }
-      attachReorderDrag(handle, widget, {
-        itemSelector: ".home-widget",
-        axis: "grid",
-        keyOf: function (el) {
-          return el.getAttribute("data-widget-type");
-        },
-        scrollEl: function () {
-          return grid.closest(".home-scroll");
-        },
-        onCommit: function (keys) {
-          applyHomeWidgetDragOrder(keys);
-        }
-      });
+      /* v2.52: Home's drag is its own now (the live
+         lift and packed slide above); the commit still
+         lands in applyHomeWidgetDragOrder. */
+      attachHomeWidgetDrag(handle, widget);
     });
 }
 
@@ -17852,6 +18353,11 @@ function renderHome() {
   /* v2.42: the widgets' drag handles follow the
      Customize mode (see syncHomeWidgetDragHandles). */
   syncHomeWidgetDragHandles();
+  /* v2.52: the packing pass places the widgets (see
+     layoutHomeWidgets); it runs after the handles so
+     a handle's presence is already settled when the
+     heights are measured. */
+  layoutHomeWidgets();
 }
 
 /* --------------------------------------------------------------------------
