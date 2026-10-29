@@ -40,10 +40,75 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-29-SSN-V2480
-  Version: 2.48.0
+  BUILD STAMP: 2026-10-29-SSN-V2490
+  Version: 2.49.0
 
   Revision history:
+    v2.49.0 2026-10-29 Tasks inside notes, the
+                      reference model (Phase 5 item 1
+                      of the Evernote parity program,
+                      approved on its own by Chris on
+                      2026-10-29). Built to Evernote's
+                      visible behavior: a task created
+                      in a note appears inline in the
+                      note body, checkable in place,
+                      and also lives in the Tasks view;
+                      the task editor carries a picker
+                      for the note a task belongs to;
+                      checking the task on either
+                      surface checks the one task, and
+                      a completed task stays visible in
+                      its note. The one sanctioned
+                      deviation, named first: Evernote
+                      stores the task inside the note's
+                      own data; this app stores only a
+                      reference, because embedded task
+                      data in the body would endanger
+                      the note save and conflict
+                      surface. A task gains one optional
+                      noteId in tasks.json (written only
+                      when set, so an unlinked task's
+                      stored form is byte identical to
+                      before), and the note body holds
+                      one generated block, div
+                      .ss-note-tasks, carrying no task
+                      data at all: the save funnel
+                      reduces any stored copy to the
+                      bare marker, and the block paints
+                      live from the task state at
+                      render, this note's tasks, open
+                      first then completed, as the real
+                      task rows, so the checkbox runs
+                      the one completion path and a row
+                      click opens the real task editor.
+                      An Add task button in the block
+                      opens the editor with the note
+                      and its notebook preset. The
+                      block is a window, not a
+                      container: its controls keep
+                      their events from marking the
+                      note dirty, so completing a task
+                      never rewrites the note.
+                      Renaming a note never breaks the
+                      link (ids, not titles); Trash
+                      and Archive keep it, and Delete
+                      Forever clears it through the
+                      task funnel so the tasks live on
+                      unlinked. Search and the catalog
+                      read the saved body and so invent
+                      no task text; print and the text
+                      and Word exports generate the
+                      block's task lines from live
+                      state at that moment. Further
+                      named deviations: one block shows
+                      all of the note's tasks rather
+                      than Evernote's one inline task
+                      per insertion point, the Insert
+                      menu item is the text word Tasks
+                      rather than Evernote's checkmark
+                      icon button, and a block with no
+                      linked tasks prints and exports
+                      as nothing.
     v2.48.0 2026-10-29 Collapsible sections, Phase 4
                       release 4 of the Evernote parity
                       program and the last release of
@@ -5620,6 +5685,20 @@ body.dark #conflictReloadBtn{background:#574512;color:#FFE1A8;border-color:#A887
 #noteBody a.ss-toc-link{color:var(--accent);text-decoration:none;cursor:pointer;}
 #noteBody a.ss-toc-link:hover{text-decoration:underline;}
 #noteBody .ss-toc-empty{color:var(--muted);font-size:.92em;}
+/* v2.49.0: the note tasks block. A generated panel in the
+   body flow, bordered and softly surfaced like the table
+   of contents block it sits beside; inside it, the rows
+   are the app's ordinary task rows (their own global
+   rules), the empty line is the TOC empty line's sibling,
+   and the foot carries the Add task button. The block is
+   a live window onto the task state: what is saved is
+   only the bare marker (see the canonical pass), so none
+   of this furniture ever reaches a file. Theme variables
+   only, so dark and light read the same structure. */
+#noteBody .ss-note-tasks{border:1px solid var(--border);border-radius:10px;background:var(--soft);padding:10px 14px 12px;margin:12px 0;}
+#noteBody .ss-note-tasks-title{font-weight:700;font-size:.92em;color:var(--text);margin-bottom:6px;}
+#noteBody .ss-note-tasks-empty{color:var(--muted);font-size:.92em;}
+#noteBody .ss-note-tasks-foot{margin-top:8px;}
 /* v2.48.0: collapsible sections. The fold toggle is a small
    themed button rendered as the first child of every top
    level H1 to H3 in the editor: a CSS triangle (no text, so
@@ -7608,6 +7687,7 @@ body.dark .version-date{color:var(--accent);}
                   <button type="button" data-insert="datetime">Date and time</button>
                   <button type="button" data-insert="table">Table</button>
                   <button type="button" data-insert="toc">Table of contents</button>
+                  <button type="button" data-insert="noteTasks">Tasks</button>
                   <button type="button" data-insert="codeBlock">Code block</button>
                   <button type="button" data-insert="inlineCode">Inline code</button>
                 </div>
@@ -8491,6 +8571,11 @@ body.dark .version-date{color:var(--accent);}
       <label for="taskNotebookSelect">Notebook</label>
       <select id="taskNotebookSelect"></select>
     </div>
+    <div class="field">
+      <label for="taskNoteSelect">Note</label>
+      <select id="taskNoteSelect"></select>
+      <div class="settings-help">Optional. The note this task belongs to: it shows in that note's Tasks block as well as in the Tasks view. The task itself always lives with the tasks, never inside the note.</div>
+    </div>
     <div class="task-form-row">
       <div class="field">
         <label for="taskDueDateInput">Due date</label>
@@ -8868,8 +8953,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-29-SSN-V2480";
-const APP_VERSION = "2.48.0";
+const APP_BUILD = "2026-10-29-SSN-V2490";
+const APP_VERSION = "2.49.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -11454,14 +11539,22 @@ function sanitizeTask(raw) {
     updated: typeof raw.updated === "string" && raw.updated
       ? raw.updated : new Date().toISOString(),
     lastReminderFor: typeof raw.lastReminderFor === "string"
-      ? raw.lastReminderFor : null
+      ? raw.lastReminderFor : null,
+    /* v2.49.0: the note this task belongs to, if any (the
+       tasks in notes link; see the note tasks block
+       section). Only a non empty string is a link; every
+       other value is no link, so a task written before
+       this field existed, or by a hand edit, loads
+       unlinked rather than dangling. */
+    noteId: typeof raw.noteId === "string" && raw.noteId
+      ? raw.noteId : null
   };
 }
 
 /* The stored form of one task: the same fields, in the shape's
    order, nothing else (no runtime state ever reaches the file). */
 function serializeTask(task) {
-  return {
+  const out = {
     id: task.id,
     title: task.title,
     description: task.description,
@@ -11480,6 +11573,14 @@ function serializeTask(task) {
     updated: task.updated,
     lastReminderFor: task.lastReminderFor
   };
+  /* v2.49.0: the note link is written only when set, the
+     rule the note reminders' front matter follows (v2.35):
+     an unlinked task's stored form is byte identical to
+     the pre v2.49 shape. */
+  if (typeof task.noteId === "string" && task.noteId) {
+    out.noteId = task.noteId;
+  }
+  return out;
 }
 
 function buildTasksObject() {
@@ -12020,6 +12121,15 @@ function afterTasksChanged() {
      It also arrives here on a sync's task reload, which is
      how a remote change reaches the open page. */
   if (state.thingsNotebook) { renderEditor(); }
+  /* v2.49.0: an open note's tasks blocks are windows onto
+     this same task state, so they repaint with every
+     change too: a completion from a block itself, an edit
+     saved in the task editor over the note, a create from
+     the block's own Add task. The Things page above owns
+     the editor pane while it is open and its render
+     already ran, so the note body underneath it is left
+     alone in that case. */
+  if (!state.thingsNotebook) { refreshOpenNoteTaskBlocks(); }
   checkTaskReminders();
 }
 
@@ -12044,7 +12154,8 @@ function createTask(fields) {
     completedAt: null,
     created: now,
     updated: now,
-    lastReminderFor: null
+    lastReminderFor: null,
+    noteId: fields.noteId || null
   });
   state.tasks.push(task);
   if (task.notebook) { state.taskLastNotebook = task.notebook; }
@@ -12059,7 +12170,8 @@ function updateTask(id, patch) {
   if (!task) { return null; }
   ["title", "description", "descriptionFormat", "notebook",
    "dueDate", "dueTime",
-   "flagged", "priority", "recurrence", "reminderOffsetMin"]
+   "flagged", "priority", "recurrence", "reminderOffsetMin",
+   "noteId"]
     .forEach(function (key) {
       if (patch[key] !== undefined) { task[key] = patch[key]; }
     });
@@ -12078,6 +12190,28 @@ function deleteTask(id) {
   if (at < 0) { return; }
   state.tasks.splice(at, 1);
   afterTasksChanged();
+}
+
+/* v2.49.0: clear the note link from every task that
+   points at a note being deleted forever, and return how
+   many were cleared. The tasks themselves are untouched
+   citizens of the Tasks view; only the dangling
+   reference goes. The change flows through
+   afterTasksChanged like every mutation, and, like the
+   reminder bookkeeping in the tasks writer, it does not
+   move the tasks' updated stamps: nothing a person chose
+   about the task changed. Gated on tasksArmed like every
+   task mutation: before the load lands, state.tasks is
+   the cache paint's display only copy, and a clear
+   written against it could never persist. */
+function clearTaskNoteLinks(noteId) {
+  if (!tasksArmed || !noteId) { return 0; }
+  let cleared = 0;
+  state.tasks.forEach(function (t) {
+    if (t.noteId === noteId) { t.noteId = null; cleared++; }
+  });
+  if (cleared) { afterTasksChanged(); }
+  return cleared;
 }
 
 /* Complete or reopen a task. Completing a recurring task with
@@ -18983,6 +19117,14 @@ function deleteNoteForever(note) {
   const online = state.online && state.repoExists;
   state.trash = state.trash.filter(function (n) { return n.id !== note.id; });
   if (state.selectedId === note.id) { state.selectedId = null; }
+  /* v2.49.0: the note's linked tasks outlive it (they are
+     citizens of the Tasks view in their own right), but
+     their link pointed here, so it is cleared at this one
+     site, the path every Delete Forever flow runs
+     through, via the task mutation funnel. Trash and
+     Archive never come here: they keep the link, so a
+     restored note gets its tasks back. */
+  clearTaskNoteLinks(note.id);
   /* v2.31: the note's shortcut goes with it (trashing kept
      it, rendered unavailable; forever is forever). This
      flow writes no index of its own, so a changed list is
@@ -23606,7 +23748,51 @@ function fillTaskNotebookSelect(selected) {
   if (selected) { select.value = selected; }
 }
 
-function openTaskEditor(taskId, presetNotebook) {
+/* v2.49.0: the Note picker in the task editor: None,
+   then the live notes by title (the link is the id, so a
+   label is just the note's current title, and a rename
+   can never strand it). A task whose note sits in Trash
+   or Archive keeps an entry for it, labeled with where
+   it lives, and a noteId naming no note at all keeps a
+   placeholder entry, so opening the editor and saving an
+   unrelated change never silently drops a link this
+   picker cannot otherwise show. The picker's value is
+   the noteId itself; the empty value is None. */
+function fillTaskNoteSelect(selectedNoteId) {
+  const select = document.getElementById("taskNoteSelect");
+  if (!select) { return; }
+  select.innerHTML = "";
+  const none = document.createElement("option");
+  none.value = "";
+  none.textContent = "None";
+  select.appendChild(none);
+  const live = state.notes.slice().sort(function (a, b) {
+    return String(a.title || "").localeCompare(
+      String(b.title || ""));
+  });
+  let found = false;
+  live.forEach(function (n) {
+    const opt = document.createElement("option");
+    opt.value = n.id;
+    opt.textContent = n.title || "Untitled note";
+    select.appendChild(opt);
+    if (n.id === selectedNoteId) { found = true; }
+  });
+  if (selectedNoteId && !found) {
+    const elsewhere = findNoteById(selectedNoteId);
+    const opt = document.createElement("option");
+    opt.value = selectedNoteId;
+    opt.textContent = elsewhere
+      ? (elsewhere.title || "Untitled note") +
+        (elsewhere.trashed ? " (in Trash)"
+          : elsewhere.archived ? " (in Archive)" : "")
+      : "Unavailable note";
+    select.appendChild(opt);
+  }
+  select.value = selectedNoteId || "";
+}
+
+function openTaskEditor(taskId, presetNotebook, presetNoteId) {
   const modal = document.getElementById("taskModal");
   if (!modal) { return; }
   /* v2.44: the pre load gate (see toggleTaskComplete).
@@ -23621,7 +23807,8 @@ function openTaskEditor(taskId, presetNotebook) {
     return;
   }
   const task = taskId ? findTaskById(taskId) : null;
-  taskEditorState = { id: task ? task.id : null, dirty: false };
+  taskEditorState = { id: task ? task.id : null, dirty: false,
+    presetNoteId: task ? null : (presetNoteId || null) };
   /* v2.28.0: a fresh editor starts with the @ popup
      closed, whichever host it was serving. */
   closeMentionPopup();
@@ -23633,6 +23820,7 @@ function openTaskEditor(taskId, presetNotebook) {
     fillTaskEditor(task);
   } else {
     document.getElementById("taskTitleInput").value = "";
+    fillTaskNoteSelect(presetNoteId || "");
     document.getElementById("taskDescInput").innerHTML = "";
     document.getElementById("taskDueDateInput").value = "";
     document.getElementById("taskDueTimeInput").value = "";
@@ -23667,6 +23855,7 @@ function fillTaskEditor(task) {
   document.getElementById("taskTitleInput").value = task.title || "";
   writeTaskDescriptionEditor(task);
   fillTaskNotebookSelect(task.notebook);
+  fillTaskNoteSelect(task.noteId || "");
   document.getElementById("taskDueDateInput").value =
     task.dueDate || "";
   document.getElementById("taskDueTimeInput").value =
@@ -23752,6 +23941,7 @@ function saveTaskEditor() {
     descriptionFormat: descRead.descriptionFormat,
     notebook: document.getElementById("taskNotebookSelect").value
       || defaultTaskNotebook(),
+    noteId: document.getElementById("taskNoteSelect").value || null,
     dueDate: document.getElementById("taskDueDateInput").value
       || null,
     dueTime: document.getElementById("taskDueTimeInput").value
@@ -24536,6 +24726,17 @@ function onTasksLoaded(prevTaskUpdatedById) {
       fillTaskEditor(task);
     }
   }
+  /* v2.49.0: the landed task state is the truth the open
+     note's tasks blocks show, so they repaint here too. A
+     note opened mid load painted its blocks from the
+     cache copy, and the editor's render does not refill a
+     note that is already open (its body did not change),
+     so without this the window would keep showing the
+     cached tasks beside the landed reminder pass. The
+     Things page owns the editor pane while it is open and
+     is left alone, the same guard afterTasksChanged
+     keeps. */
+  if (!state.thingsNotebook) { refreshOpenNoteTaskBlocks(); }
   checkTaskReminders();
   maybeOpenPendingTask();
 }
@@ -24743,6 +24944,14 @@ function renderEditor() {
        filled, beside the TOC refresh, so a note reopens
        with its sections folded exactly as saved. */
     decorateSectionFolds(document.getElementById("noteBody"));
+    /* v2.49.0: the note's tasks blocks paint from the
+       task state as it stands at this render, the cache
+       paint's copy included: the block is a window, and
+       a cold window shows the cached tasks (their rows'
+       controls disabled until the load arms the tasks,
+       the rule buildTaskRowEl already keeps) until the
+       landed load's own render replaces them. */
+    refreshNoteTaskBlocks(document.getElementById("noteBody"), note);
     setSaveState(note.trashed ? "In Trash" :
       (note.archived ? "Archived" : "Saved"));
     /* v1.2: fill the attachment placeholders from the providers. This is
@@ -25906,6 +26115,23 @@ function canonicalizeAttachmentPlaceholders(html) {
       el.removeAttribute("data-ss-folded");
     }
   });
+  /* v2.49.0: a note tasks block canonicalizes harder
+     than an attachment or a table of contents: the
+     stored element is the BARE MARKER (class and
+     contenteditable only, no children, no other
+     attributes), because the block holds no task data
+     at all. Whatever a live render painted into it, and
+     whatever a hand edit or a damaged paste left inside
+     it, is dropped here, so a saved body can never carry
+     a stale task title, state, or count. A note with no
+     block skips the pass, and a note whose block already
+     is the marker round trips byte identically. */
+  holder.querySelectorAll(".ss-note-tasks").forEach(function (el) {
+    const clean = document.createElement("div");
+    clean.setAttribute("class", "ss-note-tasks");
+    clean.setAttribute("contenteditable", "false");
+    el.replaceWith(clean);
+  });
   if (holder.querySelector(".ss-toc")) {
     tocEnsureHeadingIds(holder);
     const tocEntries = tocEntriesFrom(holder);
@@ -26194,6 +26420,10 @@ function linkBarAnchorFor(anchor) {
      their click is a jump inside the note, handled by the
      body's click route, never by the link machinery. */
   if (anchor.closest && anchor.closest(".ss-toc")) { return null; }
+  /* v2.49.0: a note tasks block holds no anchors of its
+     own, but an anchor a damaged body parked inside one
+     gets no bar either, on the same rule. */
+  if (anchor.closest && anchor.closest(".ss-note-tasks")) { return null; }
   /* v2.28.0: task links get no bar, and through this
      same gate no Mention hover card either: their click
      opens the task, and that is their whole link UI. */
@@ -27369,6 +27599,9 @@ function decorateLinkViews(rootEl) {
        by construction and stay that way: no view modes, no
        faces, nothing the canonical rebuild would strip. */
     if (anchor.closest && anchor.closest(".ss-toc")) { return; }
+    /* v2.49.0: anchors inside a note tasks block stay
+       plain too, on the same rule. */
+    if (anchor.closest && anchor.closest(".ss-note-tasks")) { return; }
     decorateLinkView(anchor);
   });
 }
@@ -30434,7 +30667,7 @@ function codeBlockOfNode(node) {
     return null;
   }
   if (pre.querySelector &&
-      pre.querySelector(".ss-attachment, .ss-toc")) {
+      pre.querySelector(".ss-attachment, .ss-toc, .ss-note-tasks")) {
     return null;
   }
   return pre;
@@ -31025,6 +31258,263 @@ function insertTocBlock() {
   placeCaretIn(follow, 0);
 }
 
+/* ----- v2.49.0: tasks inside notes, the reference model ----------------
+   Phase 5 item 1 of the Evernote parity program, approved
+   by Chris on its own on 2026-10-29. Evernote's visible
+   shape, from its help (the note editor overview's
+   "Insert task" checkmark, and its Tasks guidance): a
+   task created in a note appears inline in the note body,
+   checkable in place, and also lives in the Tasks view;
+   the task editor carries a picker for the note the task
+   belongs to; checking the task on either surface checks
+   the one task; and a completed task stays visible in
+   its note as a record.
+
+   THE SANCTIONED DEVIATION, named first: Evernote stores
+   the task inside the note's own data. This app stores
+   only a REFERENCE, the model chosen on 2026-10-28
+   precisely because task data living in the body would
+   endanger the note save and conflict surface. The task
+   lives in tasks.json like every task, owned by the task
+   system, and gains one optional field, noteId: the id
+   of its note. The note body holds ONE generated block,
+   div.ss-note-tasks, carrying NO task data at all: it is
+   only the marker that this note shows its linked tasks.
+   The save funnel reduces any stored copy of the block
+   to that bare marker (see canonicalizeAttachmentPlaceholders),
+   so a saved body can never contain a stale task title,
+   state, or count, and task state can never be a party
+   to a note conflict, because it is never in the body.
+
+   Everything the reader sees is painted live from
+   state.tasks at render: this note's linked tasks, open
+   first then completed (sortTasksForList's order), each
+   row the real task row (buildTaskRowEl), so its
+   checkbox runs the one completion path
+   (toggleTaskComplete, recurrence rolls and reminder
+   bookkeeping included) and a row click opens the real
+   task editor. An Add task button at the block's foot
+   opens that editor in create mode with the note link
+   and the note's notebook preset; saving files the task
+   through the normal funnel, and it appears in the block
+   on the next render and in the Tasks view like any
+   task. An empty state line shows when no task is
+   linked. Refresh runs where task and body changes are
+   already seen: at render (renderEditor, beside the
+   other decorations), on every task change
+   (afterTasksChanged), and on the body's input events
+   (debounced, for the undo, redo, and paste landings).
+   A block whose derived signature already matches is
+   left byte for byte alone, so steady state never
+   rebuilds it under a reader about to click it.
+
+   The block is a window, not a container: adding,
+   completing, editing, or deleting a task changes
+   tasks.json only, never the note. Its controls
+   therefore keep their events to themselves (the guard
+   in renderNoteTasksBlockContent): a checkbox's input
+   or change event must never reach the body's listeners
+   and mark the note dirty, or completing a task would
+   rewrite the note file and move its updated stamp for
+   a note whose bytes never changed.
+
+   The link's lifecycle: an id, so renaming the note
+   never breaks it. Trash and Archive keep it (a restored
+   note gets its tasks back, the way note links behave);
+   Delete Forever clears it at the one site every
+   forever path runs through (deleteNoteForever, via
+   clearTaskNoteLinks), so nothing dangles. A task whose
+   noteId names a note that exists nowhere shows in no
+   block and loses nothing. */
+
+/* The tasks one note shows in its block: every task
+   whose noteId is the note, in the order every task
+   surface lists (open first by due moment, completed
+   after, newest completion first). A fresh array;
+   state.tasks is never sorted in place. */
+function tasksLinkedToNote(noteId) {
+  if (!noteId) { return []; }
+  return sortTasksForList(state.tasks.filter(function (t) {
+    return t.noteId === noteId;
+  }));
+}
+
+/* The signature each live block was last painted with,
+   keyed by the block element itself: the linked tasks'
+   ids and every fact a row shows. Runtime only, like
+   tocBlockSignatures: the canonical pass rebuilds the
+   block from the bare marker, so nothing here can reach
+   a saved file. */
+const noteTaskBlockSignatures = new WeakMap();
+
+/* Blocks whose event guard is already wired (see
+   renderNoteTasksBlockContent). Runtime only. */
+const noteTaskBlockWired = new WeakSet();
+
+/* One plain line for a linked task, the form print and
+   the exports generate from live task state at that
+   moment: a ballot glyph for the status (the U+2610 and
+   U+2611 pair the plain text export already uses for
+   checklists), the title, and, when the task has a due
+   date, its due phrase in the app's own words. */
+function noteTaskPlainLine(task) {
+  let line = (task.status === "completed" ? "\u2611 " : "\u2610 ") +
+    (task.title || "Untitled task");
+  if (task.dueDate) {
+    line += " (due " + taskDuePhrase(task) + ")";
+  }
+  return line;
+}
+
+/* The generated lines for one note's block, from live
+   task state: empty when no task is linked, so a block
+   with no tasks prints and exports as nothing at all.
+   An unused window leaves no trace on paper. */
+function noteTaskPlainLines(noteId) {
+  return tasksLinkedToNote(noteId).map(noteTaskPlainLine);
+}
+
+/* Paint one block for its note: the title line, then
+   either the linked tasks as real task rows or the
+   empty state line, then, on a live note, the Add task
+   foot. Nothing painted here is ever saved: the funnel
+   reduces the block to its bare marker. */
+function renderNoteTasksBlockContent(blockEl, note) {
+  /* The event guard, wired once per block element: the
+     block's own controls (its checkboxes above all)
+     fire input and change events that would otherwise
+     bubble to the note body's listeners and mark the
+     NOTE dirty for a task side act, autosaving a file
+     whose bytes never changed and moving its updated
+     stamp. The rows' own handlers sit on the controls
+     themselves, inside the block, so they run first;
+     this guard stops the bubble on its way out of the
+     block. Click is deliberately NOT stopped: the body's
+     click routes are written to ignore what is not
+     theirs, exactly as they treat a TOC block. */
+  if (!noteTaskBlockWired.has(blockEl)) {
+    noteTaskBlockWired.add(blockEl);
+    ["input", "change"].forEach(function (type) {
+      blockEl.addEventListener(type, function (ev) {
+        ev.stopPropagation();
+      });
+    });
+  }
+  blockEl.innerHTML = "";
+  const title = document.createElement("div");
+  title.setAttribute("class", "ss-note-tasks-title");
+  title.textContent = "Tasks";
+  blockEl.appendChild(title);
+  const tasks = tasksLinkedToNote(note.id);
+  if (!tasks.length) {
+    const empty = document.createElement("div");
+    empty.setAttribute("class", "ss-note-tasks-empty");
+    empty.textContent = "No tasks linked to this note yet.";
+    blockEl.appendChild(empty);
+  } else {
+    const rows = document.createElement("div");
+    rows.setAttribute("class", "ss-note-tasks-rows");
+    tasks.forEach(function (task) {
+      rows.appendChild(buildTaskRowEl(task));
+    });
+    blockEl.appendChild(rows);
+  }
+  /* A locked note (Trash, Archive) is read only: its
+     block still shows the note's tasks, since the link
+     survives there, but it offers no creation into a
+     note that is not live. */
+  if (!note.trashed && !note.archived) {
+    const foot = document.createElement("div");
+    foot.setAttribute("class", "ss-note-tasks-foot");
+    const add = document.createElement("button");
+    add.setAttribute("type", "button");
+    add.setAttribute("class", "btn small ss-note-tasks-add");
+    add.textContent = "Add task";
+    add.addEventListener("click", function () {
+      const current = currentNote();
+      if (!current) { return; }
+      openTaskEditor(null, current.notebook, current.id);
+    });
+    foot.appendChild(add);
+    blockEl.appendChild(foot);
+  }
+}
+
+/* Repaint every tasks block under the body from the
+   note's currently linked tasks. Returns true when the
+   body holds a block at all. The marker carries no note
+   id (it carries nothing), so the caller supplies the
+   note the body belongs to. */
+function refreshNoteTaskBlocks(bodyEl, note) {
+  if (!bodyEl || !bodyEl.querySelectorAll || !note) { return false; }
+  const blocks = bodyEl.querySelectorAll(".ss-note-tasks");
+  if (!blocks.length) { return false; }
+  const linked = tasksLinkedToNote(note.id);
+  const sig = JSON.stringify(linked.map(function (t) {
+    return [t.id, t.title, t.status, t.dueDate, t.dueTime,
+      t.flagged, t.priority];
+  }));
+  blocks.forEach(function (block) {
+    if (noteTaskBlockSignatures.get(block) === sig) { return; }
+    renderNoteTasksBlockContent(block, note);
+    noteTaskBlockSignatures.set(block, sig);
+  });
+  return true;
+}
+
+/* The afterTasksChanged half of the refresh: the open
+   editor's blocks, when a note is what the editor
+   holds. With no note open the body holds nothing a
+   refresh could mean anything to, and it costs nothing. */
+function refreshOpenNoteTaskBlocks() {
+  const note = currentNote();
+  if (!note) { return; }
+  refreshNoteTaskBlocks(document.getElementById("noteBody"), note);
+}
+
+/* The debounced refresh the body's input events feed,
+   mirroring queueTocRefresh: an undo or redo that
+   restores a block, or a paste that lands a copied one,
+   arrives as input events, and once they settle the
+   blocks repaint if the task state moved under them.
+   The block's own control events never reach this
+   listener: the guard in renderNoteTasksBlockContent
+   stops them at the block. */
+const queueNoteTasksRefresh = debounce(function () {
+  refreshOpenNoteTaskBlocks();
+}, 150);
+
+/* Insert, Tasks: a fresh generated block at the caret,
+   built by insertBlockAtCaret like the table of
+   contents block, with the same hoist: a block that
+   landed inside the caret's paragraph is lifted out to
+   just after the top level block that held the caret,
+   with its following paragraph behind it, so a tasks
+   block is always its own top level block. The refresh
+   paints the note's current tasks (or the empty line),
+   and the caret lands in the following paragraph. */
+function insertNoteTasksBlock() {
+  const bodyEl = document.getElementById("noteBody");
+  const note = currentNote();
+  const block = document.createElement("div");
+  block.setAttribute("class", "ss-note-tasks");
+  block.setAttribute("contenteditable", "false");
+  const follow = emptyFollowParagraph();
+  insertBlockAtCaret(block, follow);
+  if (block.parentNode !== bodyEl) {
+    let host = block;
+    while (host.parentNode && host.parentNode !== bodyEl) {
+      host = host.parentNode;
+    }
+    if (host.parentNode === bodyEl) {
+      host.after(block);
+      block.after(follow);
+    }
+  }
+  if (note) { refreshNoteTaskBlocks(bodyEl, note); }
+  placeCaretIn(follow, 0);
+}
+
 /* ----- v2.48.0: collapsible sections -----------------------------------
    Phase 4 release 4 of the Evernote parity program, built to
    Evernote's collapsible sections (its help article "Toggle
@@ -31520,6 +32010,21 @@ function noteBodyToPlainText(html, note) {
       attachmentLine(node);
       return;
     }
+    /* v2.49.0: a tasks block exports as the lines it
+       means, generated from live task state at export
+       time (the saved body holds only the bare marker,
+       which has no text of its own): a Tasks heading and
+       one ballot line per linked task. A block with no
+       linked tasks contributes no lines. */
+    if (node.classList && node.classList.contains("ss-note-tasks")) {
+      const taskLines = noteTaskPlainLines(note.id);
+      if (taskLines.length) {
+        if (cur.trim()) { endLine(); }
+        lines.push("Tasks");
+        taskLines.forEach(function (line) { lines.push(line); });
+      }
+      return;
+    }
     const tag = node.tagName;
     if (tag === "UL" || tag === "OL") { listLines(node, 0); return; }
     if (tag === "TABLE") {
@@ -31770,6 +32275,24 @@ function buildWordDocumentXml(note) {
       attachmentPara(node);
       return;
     }
+    /* v2.49.0: a tasks block becomes the lines it means,
+       generated from live task state like the text
+       export: a bold Tasks paragraph and one paragraph
+       per linked task. A block with no linked tasks
+       contributes no paragraphs. */
+    if (node.classList && node.classList.contains("ss-note-tasks")) {
+      const taskLines = noteTaskPlainLines(note.id);
+      if (taskLines.length) {
+        const plainFmt = { b: false, i: false, u: false,
+          s: false, code: false };
+        blocks.push(docxPara(null, docxRun("Tasks",
+          { b: true, i: false, u: false, s: false, code: false })));
+        taskLines.forEach(function (line) {
+          blocks.push(docxPara(null, docxRun(line, plainFmt)));
+        });
+      }
+      return;
+    }
     const tag = node.tagName;
     if (tag === "P" || tag === "LI") {
       blocks.push(docxPara(null, runsOf(node)));
@@ -32001,6 +32524,33 @@ function buildPrintDocument(note, bodyHtml) {
      paper, so they are stripped (and the originals unwrapped)
      here, leaving the plain anchors, whose own text and address
      are what print has always shown. */
+  /* v2.49.0: a tasks block prints as what it means, not
+     as its screen furniture: the rendered rows, their
+     checkboxes, and the Add button are the editor's
+     window, so the print copy replaces each block with a
+     plain list generated from live task state at print
+     time (a Tasks heading and one ballot line per linked
+     task, the noteTaskPlainLine form). A block with no
+     linked tasks prints as nothing. The note itself is
+     not touched. */
+  printHolder.querySelectorAll(".ss-note-tasks").forEach(function (el) {
+    const lines = noteTaskPlainLines(note.id);
+    if (!lines.length) { el.remove(); return; }
+    const wrap = document.createElement("div");
+    const head = document.createElement("p");
+    const strong = document.createElement("strong");
+    strong.textContent = "Tasks";
+    head.appendChild(strong);
+    wrap.appendChild(head);
+    const list = document.createElement("ul");
+    lines.forEach(function (line) {
+      const li = document.createElement("li");
+      li.textContent = line;
+      list.appendChild(li);
+    });
+    wrap.appendChild(list);
+    el.replaceWith(wrap);
+  });
   stripLinkFaces(printHolder);
   /* v2.11: a Title mode image prints as the image (see
      stripImageTitleFaces); its runtime bar never reaches paper. */
@@ -34301,6 +34851,8 @@ function decorateLinkTooltips(rootEl) {
        be its own fragment address, which tells the reader
        nothing; the pass leaves TOC anchors titleless. */
     if (anchor.closest && anchor.closest(".ss-toc")) { return; }
+    /* v2.49.0: and inside a note tasks block, same rule. */
+    if (anchor.closest && anchor.closest(".ss-note-tasks")) { return; }
     if (noteLinkIdOf(anchor)) { captureNoteLinkDerivation(anchor); }
     const tip = linkTooltipFor(anchor);
     if (tip) { anchor.setAttribute("title", tip); }
@@ -35111,10 +35663,15 @@ function cleanBackgroundsInRoots(roots) {
        an attachment's (it carries no background styles of
        its own; the skip keeps the rule uniform). */
     if (root.closest && root.closest(".ss-toc")) { return; }
+    /* v2.49.0: a note tasks block's subtree is skipped
+       too, on the same rule: generated content, painted
+       live, carrying no background styling of its own. */
+    if (root.closest && root.closest(".ss-note-tasks")) { return; }
     cleanBackgroundFromElement(root);
     root.querySelectorAll("*").forEach(function (el) {
       if (el.closest && el.closest(".ss-attachment")) { return; }
       if (el.closest && el.closest(".ss-toc")) { return; }
+      if (el.closest && el.closest(".ss-note-tasks")) { return; }
       cleanBackgroundFromElement(el);
     });
   });
@@ -35564,6 +36121,10 @@ function clearDeepCleanElement(el) {
      not formatting: the deep clean never unwraps, strips, or
      descends into it, exactly as with an attachment block. */
   if (el.closest && el.closest(".ss-toc")) { return false; }
+  /* v2.49.0: a note tasks block is generated content on
+     the same rule: the deep clean never unwraps, strips,
+     or descends into it or anything inside it. */
+  if (el.closest && el.closest(".ss-note-tasks")) { return false; }
   /* v2.48.0: a fold toggle is editor chrome in the same
      sense: the deep clean never unwraps, strips, or
      descends into it (its chevron span would otherwise
@@ -35714,6 +36275,16 @@ function clearLiftNestedBlocks(bodyEl, host) {
     return null;
   }
   if (host.querySelector && host.querySelector(".ss-toc")) {
+    return null;
+  }
+  /* v2.49.0: a host that IS a note tasks block, or one
+     holding one, is never lifted either, on the same
+     rule: lifting would promote the block's painted rows
+     out of the generated block and destroy it. */
+  if (host.classList && host.classList.contains("ss-note-tasks")) {
+    return null;
+  }
+  if (host.querySelector && host.querySelector(".ss-note-tasks")) {
     return null;
   }
   let hasBlockChild = false;
@@ -36062,6 +36633,12 @@ function clearConversionPlan(bodyEl, range, touched) {
        for conversion either: it is not a paragraph wearing
        formatting, it is generated content. */
     if (block.classList && block.classList.contains("ss-toc")) {
+      return;
+    }
+    /* v2.49.0: a note tasks block is never planned for
+       conversion either: generated content, not a
+       paragraph wearing formatting. */
+    if (block.classList && block.classList.contains("ss-note-tasks")) {
       return;
     }
     const tag = block.tagName;
@@ -36522,6 +37099,11 @@ function runInsertAction(kind) {
     /* v2.37.0: the generated table of contents block (its
        own section below, beside the other block inserts). */
     insertTocBlock();
+  } else if (kind === "noteTasks") {
+    /* v2.49.0: the generated note tasks block (its own
+       section below, beside the table of contents block):
+       the marker that this note shows its linked tasks. */
+    insertNoteTasksBlock();
   } else if (kind === "codeBlock") {
     insertCodeBlock();
   } else if (kind === "inlineCode") {
@@ -45031,8 +45613,9 @@ function wireEvents() {
       if (ev.key === "Escape") { closeTaskEditor(); }
     });
   ["taskTitleInput", "taskDescInput", "taskNotebookSelect",
-   "taskDueDateInput", "taskDueTimeInput", "taskRecurrenceSelect",
-   "taskPrioritySelect", "taskReminderSelect", "taskFlaggedInput"]
+   "taskNoteSelect", "taskDueDateInput", "taskDueTimeInput",
+   "taskRecurrenceSelect", "taskPrioritySelect",
+   "taskReminderSelect", "taskFlaggedInput"]
     .forEach(function (id) {
       const el = document.getElementById(id);
       if (!el) { return; }
@@ -45302,6 +45885,16 @@ function wireEvents() {
      listener; the ones above are untouched. */
   document.getElementById("noteBody").addEventListener("input", function () {
     queueTocRefresh();
+  });
+  /* v2.49.0: the same body input events feed the note
+     tasks blocks' refresh, through its own debounce, so
+     an undo, a redo, or a paste that changes what a
+     block should show repaints it once the events
+     settle. A separate listener; the ones around it are
+     untouched, and the block's own control events never
+     reach it (the block's guard stops them first). */
+  document.getElementById("noteBody").addEventListener("input", function () {
+    queueNoteTasksRefresh();
   });
   /* v2.48.0: the same body events feed collapsible
      sections, through separate listeners, the ones above
