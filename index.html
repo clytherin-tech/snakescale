@@ -40,10 +40,31 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-29-SSN-V2600
-  Version: 2.60.0
+  BUILD STAMP: 2026-10-29-SSN-V2601
+  Version: 2.60.1
 
   Revision history:
+    v2.60.1 2026-10-29 Scratch Pad height capture
+                      redesign. v2.60's capture stood on
+                      one path, a size observer arming a
+                      debounce whose settle measured the
+                      pad again, and on real devices that
+                      chain never saved a dragged size at
+                      all: the stored height survived
+                      waits, view switches, and reloads
+                      untouched. The capture is now one
+                      funnel fed by several routes: the
+                      observer, pointer release on the
+                      Home grid, leaving Home, the page
+                      hiding, and a widget rebuild all
+                      bank the pad's live height into a
+                      pending value, and the settle
+                      persists the banked value, never a
+                      re-measurement. The stored height,
+                      its clamp, the render application,
+                      and the customize session's content
+                      semantics are unchanged from
+                      v2.60.
     v2.60.0 2026-10-29 The Scratch Pad remembers its
                       height. The Home scratch pad's
                       native resize grip set an inline
@@ -9864,8 +9885,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-29-SSN-V2600";
-const APP_VERSION = "2.60.0";
+const APP_BUILD = "2026-10-29-SSN-V2601";
+const APP_VERSION = "2.60.1";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -17536,7 +17557,7 @@ function defaultHomeWidgets() {
    non-finite number) is null, which renders the pad at
    its default height exactly as before. The read path
    (sanitizeHome) and the capture path
-   (settleHomeScratchHeight) both judge through this
+   (captureHomeScratchHeight) both judge through this
    clamp, so a value is treated the same way wherever it
    arrives from. */
 const HOME_SCRATCH_MIN_HEIGHT = 64;
@@ -18618,26 +18639,72 @@ function buildHomeTasksWidget() {
   return parts.widget;
 }
 
-/* v2.60: capturing the pad's height. The native resize
-   grip fires no events, so size changes are detected
-   through a ResizeObserver on the text area (the same
-   browser surface the packing observer uses for widget
-   sizes). Three guards keep the capture honest:
+/* v2.60: capturing the pad's height. The native
+   resize grip fires no events, so the v2.60 capture
+   listened to a ResizeObserver on the text area and,
+   when its debounce landed, measured the pad again
+   and saved what it found. On Chris's real devices
+   that chain never saved a dragged size at all: in
+   three real Chrome sessions (the installed app
+   twice, a signed-in desktop browser once) the stored
+   height stayed untouched through waits, view
+   switches, and full reloads, and after a reload the
+   pad was already at its old size in the first Home
+   view, so the dragged value never reached even the
+   local cache. The harness could not see any of it:
+   it fakes the two surfaces the chain stands on
+   (element heights, and the observer itself, which
+   the scenarios install and fire by hand). Which link
+   failed out there never showed itself, so v2.60.1
+   removes the dependence instead of guessing at it.
+   v2.60.1: one funnel, several feeders, and a bank.
+   Every feeder ends at captureHomeScratchHeight,
+   which reads the live pad's height at the moment it
+   is called, clamps it, and banks it as the pending
+   height; the settle then persists the BANKED value,
+   never a fresh measurement, so nothing downstream
+   (a rebuilt element, a hidden pane, a sync landing)
+   can substitute another size for the one the user
+   made. The feeders:
+   - The observer, as before, rerouted through the
+     funnel: one net among several now.
+   - Pointer release on the Home grid (pointerup and
+     pointercancel, registered once by renderHome
+     through ensureHomeScratchFeeders): a grip drag
+     always ends in one of these, and neither depends
+     on observer delivery.
+   - Leaving: syncTasksPane banks and settles the
+     moment the view stops being Home, while the pane
+     is still laid out, and a visibilitychange to
+     hidden does the same; both skip the debounce, so
+     leaving fast or closing the app cannot lose the
+     size.
+   - A widget rebuild: buildHomeScratchWidget settles
+     any banked height before it resets the baseline,
+     so a drag banked inside its debounce window
+     survives a rebuild landing there.
+   The guards that keep the capture honest:
    - The baseline. The first size seen for a freshly
-     rendered pad only seeds the baseline (that size is
-     the render's own: the stored height applied, or the
-     default), and a render that applies a stored height
-     seeds the baseline with it directly, so applying a
-     remembered size can never trigger a save of itself.
-   - The comparison. A size equal to the baseline, or
-     to the height already stored, writes nothing:
+     rendered pad only seeds the baseline (that size
+     is the render's own: the stored height applied,
+     or the default), and a render that applies a
+     stored height seeds the baseline with it
+     directly, so applying a remembered size can
+     never trigger a save of itself.
+   - The comparisons. A size equal to the baseline,
+     or to the height already stored, banks nothing:
      opening Home is write free in this field, and
-     re-renders and packing passes that leave the pad's
-     height alone stay silent.
-   - The debounce. A changed size only arms a timer;
-     the save lands after the size settles (see
-     HOME_SCRATCH_RESIZE_DEBOUNCE_MS), so a drag writes
-     once, at the size it ended at.
+     re-renders and packing passes that leave the
+     pad's height alone stay silent. A height banked
+     mid-drag that the pad has since come back from
+     (to the stored size, or to the baseline size) is
+     dropped, not saved.
+   - The debounce. A banked size arms the settle
+     timer; the save lands after the size settles
+     (see HOME_SCRATCH_RESIZE_DEBOUNCE_MS), so a drag
+     writes once, at the banked size it ended at.
+     The leave and hide flushes skip the wait by
+     settling at once.
    The height is content, like the pad's text, not
    layout: the save goes through persistHome directly
    (never homeLayoutTouched), so inside a customize
@@ -18650,29 +18717,68 @@ function buildHomeTasksWidget() {
 let homeScratchObserver = null;
 let homeScratchSaveTimer = null;
 let homeScratchBaselineHeight = null;
+let homeScratchPendingHeight = null;
+let homeScratchFeedersReady = false;
 
 function watchHomeScratchSize(area) {
   if (typeof ResizeObserver === "undefined") { return; }
   if (!area) { return; }
   if (!homeScratchObserver) {
     homeScratchObserver = new ResizeObserver(function () {
-      queueHomeScratchSave();
+      captureHomeScratchHeight("observer");
     });
   }
   homeScratchObserver.disconnect();
   homeScratchObserver.observe(area);
 }
 
-function queueHomeScratchSave() {
+/* The capture funnel: every feeder ends here. Reads
+   the pad's height NOW, from the live element while
+   it is laid out, and banks a genuine change as the
+   pending height, arming the settle timer. The
+   source names which feeder called (kept for the
+   call sites' clarity); the guards make any number
+   of feeders firing for one drag harmless. A pad
+   with no measurable height (a hidden pane) banks
+   nothing, and the first sight of a fresh render
+   only seeds the baseline (see the header above). */
+function captureHomeScratchHeight(source) {
   const area = document.getElementById("homeScratchText");
   if (!area) { return; }
-  const measured = area.offsetHeight;
-  if (!measured) { return; }
+  const raw = area.offsetHeight;
+  if (!raw) { return; }
   if (homeScratchBaselineHeight === null) {
-    homeScratchBaselineHeight = measured;
+    homeScratchBaselineHeight = raw;
     return;
   }
-  if (measured === homeScratchBaselineHeight) { return; }
+  const measured = clampHomeScratchHeight(raw);
+  if (measured === null) { return; }
+  const stored = (typeof state.home.scratchHeight ===
+    "number") ? state.home.scratchHeight : null;
+  if (measured === stored ||
+      measured === homeScratchBaselineHeight) {
+    /* The pad stands at a size already accounted
+       for: the stored height itself, or the size
+       this render settled at. There is nothing new
+       to remember, and a height banked mid-drag that
+       the pad has come back from is dropped here,
+       not saved. */
+    if (homeScratchPendingHeight !== null) {
+      homeScratchPendingHeight = null;
+      if (homeScratchSaveTimer !== null) {
+        clearTimeout(homeScratchSaveTimer);
+        homeScratchSaveTimer = null;
+      }
+    }
+    if (measured === stored) {
+      homeScratchBaselineHeight = measured;
+    }
+    return;
+  }
+  if (homeScratchPendingHeight === measured) {
+    return; /* this size is already the banked one */
+  }
+  homeScratchPendingHeight = measured;
   if (homeScratchSaveTimer !== null) {
     clearTimeout(homeScratchSaveTimer);
   }
@@ -18680,27 +18786,59 @@ function queueHomeScratchSave() {
     settleHomeScratchHeight, HOME_SCRATCH_RESIZE_DEBOUNCE_MS);
 }
 
-/* The debounce landed: read the pad's height as it
-   stands now (a render may have replaced the element
-   since the timer armed; the replacement renders at
-   the stored height, which the comparison below then
-   correctly leaves alone), clamp it the way the read
-   path clamps, and persist only a real change. A pad
-   with no measurable height (a hidden pane) has no
-   size to remember. */
+/* The save itself: persists the BANKED height, never
+   a fresh measurement. The bank was clamped when it
+   was taken, from the live pad, at the moment a
+   feeder saw the size; what the element measures now
+   (rebuilt, hidden, mid-drag) cannot substitute for
+   it. Called by the settle timer, by the leave and
+   hide flushes, and by buildHomeScratchWidget before
+   a rebuild resets the baseline. With no bank there
+   is nothing to save, and a bank that already equals
+   the stored height writes nothing. */
 function settleHomeScratchHeight() {
-  homeScratchSaveTimer = null;
-  const area = document.getElementById("homeScratchText");
-  if (!area) { return; }
-  if (!area.offsetHeight) { return; }
-  const measured = clampHomeScratchHeight(
-    area.offsetHeight);
-  if (measured === null) { return; }
-  homeScratchBaselineHeight = measured;
+  if (homeScratchSaveTimer !== null) {
+    clearTimeout(homeScratchSaveTimer);
+    homeScratchSaveTimer = null;
+  }
+  const banked = homeScratchPendingHeight;
+  homeScratchPendingHeight = null;
+  if (banked === null) { return; }
+  homeScratchBaselineHeight = banked;
   if (typeof state.home.scratchHeight === "number" &&
-      measured === state.home.scratchHeight) { return; }
-  state.home.scratchHeight = measured;
+      banked === state.home.scratchHeight) { return; }
+  state.home.scratchHeight = banked;
   persistHome();
+}
+
+/* v2.60.1: the pointer and hide feeders, registered
+   once (renderHome calls this with the grid it is
+   about to fill). The pointer listeners sit on the
+   Home grid itself, so they cannot leak into other
+   views: the grid hides with its pane, and the
+   funnel reads a hidden pad as no size at all
+   besides. The hide listener is the document
+   visibilitychange the app already uses elsewhere,
+   narrowed to the hidden direction: bank and settle
+   at once, while the pad is still laid out. */
+function ensureHomeScratchFeeders(grid) {
+  if (homeScratchFeedersReady) { return; }
+  homeScratchFeedersReady = true;
+  if (grid) {
+    grid.addEventListener("pointerup", function () {
+      captureHomeScratchHeight("pointer");
+    });
+    grid.addEventListener("pointercancel", function () {
+      captureHomeScratchHeight("pointer");
+    });
+  }
+  document.addEventListener("visibilitychange",
+    function () {
+      if (document.visibilityState === "hidden") {
+        captureHomeScratchHeight("hide");
+        settleHomeScratchHeight();
+      }
+    });
 }
 
 /* The Scratch Pad widget: a plain text area whose every
@@ -18716,6 +18854,11 @@ function settleHomeScratchHeight() {
    chosen size and the grid arranges around it from the
    first paint. */
 function buildHomeScratchWidget() {
+  /* v2.60.1: a height banked inside its debounce
+     window belongs to the pad this build replaces;
+     settle it (persist included) before the baseline
+     resets below, so the rebuild cannot strand it. */
+  settleHomeScratchHeight();
   const parts = homeWidgetShell("scratch", "Scratch Pad");
   const area = document.createElement("textarea");
   area.id = "homeScratchText";
@@ -18731,7 +18874,7 @@ function buildHomeScratchWidget() {
      size is never mistaken for a resize. With no
      remembered height the baseline starts empty and
      the observer's first sight of the default size
-     seeds it (see queueHomeScratchSave). */
+     seeds it (see captureHomeScratchHeight). */
   homeScratchBaselineHeight = null;
   if (typeof state.home.scratchHeight === "number") {
     area.style.height = state.home.scratchHeight + "px";
@@ -19461,6 +19604,12 @@ function renderHome() {
   renderHomeCustomize();
   const grid = document.getElementById("homeGrid");
   if (!grid) { return; }
+  /* v2.60.1: the height capture's pointer and hide
+     feeders hang off the grid (see
+     ensureHomeScratchFeeders); registering is a
+     one-time act, done here because the grid is this
+     function's own surface. */
+  ensureHomeScratchFeeders(grid);
   let liveScratch = null;
   const active = document.activeElement;
   const scratchNow = grid.querySelector(
@@ -21741,6 +21890,7 @@ function renderAll() {
    Tasks and back exactly as they were. Called at the top
    of renderAll and renderNoteList, so no view change can
    leave the panes stale. */
+let homeViewWasActive = null;
 function syncTasksPane() {
   const tasksActive = state.view.kind === "tasks";
   /* v2.33: Home is a full main area view like Tasks:
@@ -21748,6 +21898,17 @@ function syncTasksPane() {
      editor panes hide, and the open note survives the
      trip exactly as it does for Tasks. */
   const homeActive = state.view.kind === "home";
+  /* v2.60.1: the moment the view stops being Home,
+     bank and settle the Scratch Pad's height, while
+     the pane is still laid out (the hidden class
+     lands below; after it, the pad has no measurable
+     size). This is the capture's leave feeder; see
+     captureHomeScratchHeight. */
+  if (homeViewWasActive === true && !homeActive) {
+    captureHomeScratchHeight("leave");
+    settleHomeScratchHeight();
+  }
+  homeViewWasActive = homeActive;
   document.body.classList.toggle("tasks-view", tasksActive);
   document.body.classList.toggle("home-view", homeActive);
   const pane = document.getElementById("taskspane");
