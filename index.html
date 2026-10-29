@@ -40,10 +40,65 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-29-SSN-V2460
-  Version: 2.46.0
+  BUILD STAMP: 2026-10-29-SSN-V2470
+  Version: 2.47.0
 
   Revision history:
+    v2.47.0 2026-10-29 Web clipper bookmarklet, Phase 4
+                      release 3 of the Evernote parity
+                      program, the approved substitute
+                      for Evernote's Web Clipper
+                      extension (a true extension with
+                      full page serialization,
+                      screenshot and PDF clipping, and
+                      server side simplification is
+                      impossible in this free,
+                      serverless design). Settings
+                      gains a Web clipper section
+                      holding a bookmarklet the app
+                      generates for its own origin:
+                      drag it to the bookmarks bar, or
+                      copy its code into a bookmark by
+                      hand. On any page the bookmarklet
+                      clips the current selection when
+                      one exists, otherwise a small
+                      self contained article extraction
+                      (headline plus readable
+                      paragraphs, images by absolute
+                      URL), and opens this app in a new
+                      tab with the clip in the URL
+                      fragment (base64url JSON, capped;
+                      see WEBCLIP_MAX_HTML_CHARS in
+                      the code). At boot, before
+                      anything else, the app reads and
+                      strips that fragment, validates
+                      it strictly, sanitizes the HTML
+                      through a strict clip sanitizer
+                      built on the paste cleaning path,
+                      holds it in memory only until
+                      sign in and the store load
+                      complete, then files ONE note:
+                      the page title as the note title,
+                      a source line linking the
+                      original URL at the top of the
+                      body, then the clip, into the
+                      first notebook, with a toast
+                      naming the notebook. Over cap
+                      clips truncate at a block
+                      boundary with a note in the body
+                      saying the clip was shortened.
+                      Named deviations from Evernote:
+                      a bookmarklet instead of an
+                      extension, so no clip mode picker
+                      (Article, Simplified article,
+                      Full page, Bookmark, Screenshot,
+                      PDF), no choosing the notebook
+                      or tags at clip time, no
+                      annotation or highlight before
+                      saving, no screenshot or PDF
+                      clipping, and images stay as
+                      remote links to the source site
+                      rather than downloaded files.
     v2.46.0 2026-10-29 Sketch block, Phase 4 release 2
                       of the Evernote parity program.
                       The Insert menu gains Sketch,
@@ -3676,6 +3731,21 @@ body.dark .merge-order-drag:hover{color:var(--accent);}
   box-shadow:inset 0 0 0 1px var(--primary);
   background:var(--accent-soft);color:var(--text-strong);
   font-weight:600;
+}
+/* v2.47: the Settings Web clipper section. The bookmarklet
+   link rides the .btn shapes as an anchor the user drags to
+   a bookmarks bar; the actions row wraps like the Getting
+   started row; the code box is a themed read only textarea,
+   so it follows both themes (and the per theme color scheme)
+   like every other Settings control, with a real label above
+   it, never flush against it. */
+.webclip-actions{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 10px;align-items:center;}
+.webclip-actions a.btn{text-decoration:none;}
+.webclip-code{
+  width:100%;box-sizing:border-box;min-height:64px;resize:vertical;
+  padding:8px 10px;border:1px solid var(--border);
+  border-radius:var(--radius-button);background:var(--surface);
+  color:var(--text);font-family:monospace;font-size:12px;line-height:1.4;
 }
 /* v2.46: the sketch dialog, in the modal family's shapes.
    The canvas is white paper in both themes (a sketch is a
@@ -8242,6 +8312,32 @@ body.dark .version-date{color:var(--accent);}
       </div>
     </section>
 
+    <!-- v2.47: the Web clipper section. Evernote's clipper is
+         a browser extension; this app's substitute is a
+         bookmarklet the app generates for its own address.
+         The link below is the install: draggable to a
+         bookmarks bar as it stands, and the read only box
+         under it carries the same code for the copy by hand
+         route, filled by renderWebClipSettings on every
+         Settings open. -->
+    <section class="settings-section" aria-labelledby="settingsWebClipTitle">
+      <h3 id="settingsWebClipTitle">Web clipper</h3>
+      <p>Clip web pages into SnakeScale Notes, the way Evernote Web Clipper saves a page as a note with its source page attached. This app has no browser extension, so it uses a bookmarklet instead: a bookmark that runs a small clip script.</p>
+      <div class="settings-help">1. Drag the button below to your bookmarks or favorites bar. In Edge, show the favorites bar first (View, or Ctrl+Shift+B).</div>
+      <div class="settings-help">2. On any page, select text to clip just that selection, or select nothing to clip the page article.</div>
+      <div class="settings-help">3. Click the bookmarklet. SnakeScale Notes opens in a new tab and files the clip as a note in your first notebook, with a link back to the source page at the top.</div>
+      <div class="webclip-actions">
+        <a class="btn" id="webClipBookmarkletLink" href="#">Clip to SnakeScale Notes</a>
+        <button class="btn" id="webClipCopyBtn" type="button">Copy bookmarklet code</button>
+      </div>
+      <div class="field">
+        <label for="webClipBookmarkletText">Bookmarklet code (for a bookmark made by hand)</label>
+        <textarea class="webclip-code" id="webClipBookmarkletText" readonly rows="3"></textarea>
+        <div class="settings-feedback" id="webClipFeedback" aria-live="polite"></div>
+        <div class="settings-help">If dragging does not work in your browser, copy this code and paste it as the URL of a new bookmark named Clip to SnakeScale Notes.</div>
+      </div>
+    </section>
+
     <!-- v2.13: the two first run test paths. Both work on any
          store, however old: the walkthrough replays on demand, and
          the starter note is added (or opened, when it is already
@@ -8684,8 +8780,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-29-SSN-V2460";
-const APP_VERSION = "2.46.0";
+const APP_BUILD = "2026-10-29-SSN-V2470";
+const APP_VERSION = "2.47.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -19208,6 +19304,13 @@ async function connectAndLoad() {
     if (!paintedFromCache) { bootMark("firstPaint"); }
     hideLoading();
     finalizeBootReport();
+    /* v2.47: the store is loaded and signed in here, so a
+       web clip held from this boot's fragment files now,
+       before any starter note opens over it. A clip whose
+       filing fails keeps the create flow's own wording;
+       the held payload is spent either way, so it can
+       never file twice. */
+    await filePendingWebClip();
     if (starter) {
       openNote(starter.id);
       toast("Google Drive connected. Welcome to SnakeScale Notes.");
@@ -24819,6 +24922,9 @@ function syncSettingsControls() {
   renderNotificationSettings();
   /* v2.21: the Last load readout shows this session's boot. */
   renderLastLoadReadout();
+  /* v2.47: the Web clipper section shows this build's
+     bookmarklet for this app's own address. */
+  renderWebClipSettings();
 }
 
 function openSettingsModal() {
@@ -41874,6 +41980,552 @@ async function saveSketchDialog() {
   }
 }
 
+/* ----- v2.47: web clipper bookmarklet -------------------------------------
+   Phase 4 release 3 of the Evernote parity program, the approved
+   substitute for Evernote's Web Clipper. Evernote's clipper is a
+   browser extension: it offers clip modes (Article, Simplified
+   article, Full page, Bookmark, Screenshot, and PDF clipping),
+   lets the user choose the notebook and tags and add a remark
+   at clip time, highlights before saving, and files the result
+   as a note carrying the source URL. A true extension with full
+   page serialization, screenshot and PDF clipping, and server
+   side simplification is impossible in this free, serverless,
+   single file design, so the substitute keeps the shape a
+   bookmarklet honestly allows:
+
+     - Settings holds a "Web clipper" section presenting a
+       bookmarklet link the app generates for its own origin.
+       The user drags it to the bookmarks bar (or copies its
+       code into a bookmark by hand).
+     - The bookmarklet, running on an arbitrary page, clips the
+       current text selection when one exists; otherwise it runs
+       a small self contained article extraction (headline plus
+       readable paragraphs, images referenced by absolute URL).
+       It never sends the whole raw page, chrome included.
+     - It opens this app in a new tab with the clip payload in
+       the URL fragment: base64url encoded JSON, dependency
+       free (btoa over the UTF-8 percent encoding), carrying
+       the payload version, page title, source URL, HTML, the
+       mode (selection or article), and a shortened flag.
+     - The app, at the very start of boot, reads and strips
+       that fragment before anything else can trip over it,
+       validates the payload strictly (it is untrusted input
+       from arbitrary pages), sanitizes the HTML through a
+       strict clip sanitizer built on the paste cleaning path,
+       holds the result in memory only (never localStorage),
+       and once sign in and the store load have completed,
+       files ONE note: the page title as its title, a source
+       line linking the original URL at the top of the body,
+       then the clip, into the first notebook, with a toast
+       naming where it went. A user who never signs in simply
+       loses the held clip; nothing was ever written anywhere.
+
+   Size honesty: fragment payloads have practical limits, so
+   the caps below are named and enforced on BOTH sides.
+   WEBCLIP_MAX_HTML_CHARS caps the clip HTML itself. When a
+   clip exceeds it, the bookmarklet truncates at a block
+   boundary and flags the payload shortened; the app truncates
+   the same way at a top level block boundary when a payload
+   still arrives over the cap, and either way the filed body
+   carries a short note saying the clip was shortened, rather
+   than the clip failing silently. WEBCLIP_MAX_FRAGMENT_CHARS
+   caps the encoded fragment the app will even try to decode.
+
+   Auth sequencing: this app's Google sign in is the GIS token
+   client, a popup flow whose token arrives through a callback,
+   never through a URL fragment, and its notification return
+   trips ride the query string (?task= and ?noteReminder=),
+   never the fragment either. A clip fragment therefore can
+   neither be mistaken for an auth response nor destroy one:
+   the reader below acts only on a fragment beginning with the
+   clip prefix, leaves every other fragment and the whole query
+   string untouched, and strips only the clip fragment, by a
+   history replace that preserves the query string exactly.
+   The read itself runs first in boot(), ahead of the sign in
+   routing, so the payload is safely in memory whatever route
+   the boot then takes, and filing waits for connectAndLoad,
+   the one funnel every signed in arrival passes through.
+   -------------------------------------------------------------------------- */
+const WEBCLIP_FRAGMENT_PREFIX = "clip=";
+const WEBCLIP_PAYLOAD_VERSION = 1;
+const WEBCLIP_MAX_HTML_CHARS = 60000;
+const WEBCLIP_MAX_TITLE_CHARS = 300;
+const WEBCLIP_MAX_URL_CHARS = 2048;
+const WEBCLIP_MAX_FRAGMENT_CHARS = 120000;
+const WEBCLIP_SHORTENED_HTML =
+  "<p><em>This clip was shortened to fit the web clipper " +
+  "size limit.</em></p>";
+
+/* The held clip, memory only by design (see the section
+   head): a parsed, validated payload waiting for the store,
+   or null. webClipFiling is the once only guard that keeps a
+   double call from ever filing two notes for one clip. */
+let pendingWebClip = null;
+let webClipFiling = false;
+
+/* The app's own origin and path, the address the bookmarklet
+   opens. Derived from this page's location, so a fork hosted
+   elsewhere generates a bookmarklet pointing at itself. */
+function webClipAppUrl() {
+  try {
+    return window.location.origin + window.location.pathname;
+  } catch (err) {
+    return "https://clytherin-tech.github.io/snakescale/";
+  }
+}
+
+/* Dependency free UTF-8 safe base64url, the payload encoding
+   both sides speak: the text is percent encoded to its UTF-8
+   bytes, carried through btoa, and made URL safe. The decoder
+   is its exact inverse. */
+function webClipEncodeText(text) {
+  return btoa(unescape(encodeURIComponent(String(text))))
+    .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+function webClipDecodeText(data) {
+  let b64 = String(data).replace(/-/g, "+").replace(/_/g, "/");
+  while (b64.length % 4) { b64 += "="; }
+  return decodeURIComponent(escape(atob(b64)));
+}
+
+/* The bookmarklet's readable source, one line per array entry.
+   This is the maintainable form of the code the Settings link
+   carries: buildWebClipBookmarkletHref joins these lines and
+   percent encodes the result behind "javascript:". The
+   bookmarklet is deliberately small (a bookmarklet must be);
+   everything heavy (validation, sanitizing, filing) lives on
+   the app side below. Its jobs, in order: read the selection;
+   fall back to the article extraction; truncate at a block
+   boundary over the shared cap and flag it; pack the payload;
+   open the app with it in the fragment. */
+function webClipBookmarkletLines(appUrl) {
+  return [
+    "(function () {",
+    "  var APP = " + JSON.stringify(appUrl) + ";",
+    "  var MAX_HTML = " + WEBCLIP_MAX_HTML_CHARS + ";",
+    "  function esc(s) {",
+    "    return String(s).replace(/&/g, '&amp;')",
+    "      .replace(/</g, '&lt;').replace(/>/g, '&gt;')",
+    "      .replace(/\"/g, '&quot;');",
+    "  }",
+    "  function abs(u) {",
+    "    try { return new URL(u, document.baseURI).href; }",
+    "    catch (e) { return ''; }",
+    "  }",
+    "  function selHtml() {",
+    "    var s = window.getSelection && window.getSelection();",
+    "    if (!s || s.isCollapsed || !s.rangeCount) { return ''; }",
+    "    var d = document.createElement('div');",
+    "    for (var i = 0; i < s.rangeCount; i++) {",
+    "      d.appendChild(s.getRangeAt(i).cloneContents());",
+    "    }",
+    "    return d.innerHTML;",
+    "  }",
+    "  function articleHtml() {",
+    "    var root = document.querySelector('article') ||",
+    "      document.querySelector('main') || document.body;",
+    "    if (!root) { return ''; }",
+    "    var out = [];",
+    "    var h = root.querySelector('h1') ||",
+    "      document.querySelector('h1');",
+    "    if (h && h.textContent.trim()) {",
+    "      out.push('<h1>' + esc(h.textContent.trim()) + '</h1>');",
+    "    }",
+    "    var nodes = root.querySelectorAll(",
+    "      'h2,h3,p,li,blockquote,pre,img');",
+    "    for (var i = 0; i < nodes.length; i++) {",
+    "      var n = nodes[i];",
+    "      var tag = n.tagName.toLowerCase();",
+    "      if (tag === 'img') {",
+    "        var src = abs(n.getAttribute('src') ||",
+    "          n.getAttribute('data-src') || '');",
+    "        if (src && /^https?:/i.test(src)) {",
+    "          out.push('<p><img src=\"' + esc(src) + '\" alt=\"' +",
+    "            esc(n.getAttribute('alt') || '') + '\"></p>');",
+    "        }",
+    "        continue;",
+    "      }",
+    "      var t = (n.textContent || '').trim();",
+    "      if (!t) { continue; }",
+    "      if (tag === 'li') { tag = 'p'; }",
+    "      out.push('<' + tag + '>' + esc(t) + '</' + tag + '>');",
+    "    }",
+    "    return out.join('');",
+    "  }",
+    "  var picked = selHtml();",
+    "  var mode = picked ? 'selection' : 'article';",
+    "  var html = picked || articleHtml();",
+    "  if (!html) {",
+    "    html = '<p>' + esc(document.title || location.href) + '</p>';",
+    "  }",
+    "  var shortened = false;",
+    "  if (html.length > MAX_HTML) {",
+    "    var cut = html.slice(0, MAX_HTML);",
+    "    var lt = cut.lastIndexOf('</');",
+    "    var gt = lt >= 0 ? cut.indexOf('>', lt) : -1;",
+    "    if (gt > 0) { cut = cut.slice(0, gt + 1); }",
+    "    html = cut;",
+    "    shortened = true;",
+    "  }",
+    "  var payload = { v: 1, t: document.title || location.href,",
+    "    u: location.href, h: html, m: mode,",
+    "    s: shortened ? 1 : 0 };",
+    "  var data = btoa(unescape(encodeURIComponent(",
+    "    JSON.stringify(payload))))",
+    "    .replace(/\\+/g, '-').replace(/\\//g, '_')",
+    "    .replace(/=+$/, '');",
+    "  window.open(APP + '#clip=' + data, '_blank');",
+    "})();"
+  ];
+}
+
+/* The href the Settings surface presents: the readable source
+   above, joined and percent encoded behind the javascript:
+   scheme, so the anchor can be dragged to a bookmarks bar as
+   it stands, and its value is also what the copy box shows. */
+function buildWebClipBookmarkletHref(appUrl) {
+  const url = appUrl || webClipAppUrl();
+  return "javascript:" +
+    encodeURIComponent(webClipBookmarkletLines(url).join("\n"));
+}
+
+/* Pack a payload object into a clip fragment, the exact shape
+   the bookmarklet emits; the app's own tests and any future
+   in app clip door speak through this one packer, so the
+   format has exactly one writer per side. */
+function buildWebClipFragment(payload) {
+  const obj = {
+    v: WEBCLIP_PAYLOAD_VERSION,
+    t: payload && payload.title != null ? String(payload.title) : "",
+    u: payload && payload.url != null ? String(payload.url) : "",
+    h: payload && payload.html != null ? String(payload.html) : "",
+    m: payload && payload.mode === "selection"
+      ? "selection" : "article",
+    s: payload && payload.shortened ? 1 : 0
+  };
+  return "#" + WEBCLIP_FRAGMENT_PREFIX +
+    webClipEncodeText(JSON.stringify(obj));
+}
+
+/* Validate one encoded payload strictly and return the clip
+   it carries, or null for anything malformed: the fragment
+   is untrusted input from arbitrary pages, so every field is
+   type checked, the URL must be an http or https address
+   within its cap, the title is cut to its cap, and the HTML
+   must be a non empty string (its own cap is applied by the
+   sanitizer at filing time, which is where truncation can be
+   done cleanly). Nothing here touches the DOM or the store. */
+function parseWebClipPayload(data) {
+  if (!data || typeof data !== "string") { return null; }
+  if (data.length > WEBCLIP_MAX_FRAGMENT_CHARS) { return null; }
+  if (!/^[A-Za-z0-9_-]+$/.test(data)) { return null; }
+  let obj = null;
+  try { obj = JSON.parse(webClipDecodeText(data)); }
+  catch (err) { return null; }
+  if (!obj || typeof obj !== "object") { return null; }
+  if (obj.v !== WEBCLIP_PAYLOAD_VERSION) { return null; }
+  if (typeof obj.u !== "string" || !obj.u ||
+      obj.u.length > WEBCLIP_MAX_URL_CHARS) { return null; }
+  if (!/^https?:\/\//i.test(obj.u)) { return null; }
+  if (typeof obj.h !== "string" || !obj.h.trim()) { return null; }
+  const title = typeof obj.t === "string" && obj.t.trim()
+    ? obj.t.trim().slice(0, WEBCLIP_MAX_TITLE_CHARS) : obj.u;
+  return {
+    title: title,
+    url: obj.u,
+    html: obj.h,
+    mode: obj.m === "selection" ? "selection" : "article",
+    shortened: obj.s === 1 || obj.s === true
+  };
+}
+
+/* The strict clip sanitizer's vocabulary: the note body's own
+   readable elements, nothing active, nothing embedded, no
+   forms. Tags outside it are unwrapped (their text survives);
+   the drop list is removed with its contents. Attributes are
+   stripped wholesale except a link's href and an image's src
+   and alt (each address checked http or https) and a table
+   cell's span counts. The cleaned fragment then passes the
+   paste path's background cleaning (stripPastedBackgrounds),
+   so a clip is cleaned the way a paste is, plus this strict
+   vocabulary a paste never needed. */
+const WEBCLIP_ALLOWED_TAGS = {
+  P: 1, DIV: 1, BR: 1, STRONG: 1, B: 1, EM: 1, I: 1, U: 1,
+  S: 1, STRIKE: 1, UL: 1, OL: 1, LI: 1, A: 1, H1: 1, H2: 1,
+  H3: 1, H4: 1, BLOCKQUOTE: 1, PRE: 1, CODE: 1, IMG: 1,
+  TABLE: 1, THEAD: 1, TBODY: 1, TR: 1, TH: 1, TD: 1, HR: 1,
+  FIGURE: 1, FIGCAPTION: 1
+};
+const WEBCLIP_DROP_TAGS = {
+  SCRIPT: 1, STYLE: 1, IFRAME: 1, OBJECT: 1, EMBED: 1,
+  FORM: 1, INPUT: 1, BUTTON: 1, TEXTAREA: 1, SELECT: 1,
+  LINK: 1, META: 1, SVG: 1, VIDEO: 1, AUDIO: 1, CANVAS: 1,
+  NOSCRIPT: 1
+};
+
+function cleanWebClipChildren(parent) {
+  Array.prototype.slice.call(parent.childNodes)
+    .forEach(function (node) {
+      if (node.nodeType === 3) { return; }
+      if (node.nodeType !== 1) { node.remove(); return; }
+      const tag = node.tagName;
+      if (WEBCLIP_DROP_TAGS[tag]) { node.remove(); return; }
+      if (tag === "A") {
+        const href = node.getAttribute("href") || "";
+        cleanWebClipChildren(node);
+        if (!/^https?:\/\//i.test(href)) {
+          unwrapTaskDescElement(node);
+          return;
+        }
+        Array.prototype.slice.call(node.attributes)
+          .forEach(function (attr) {
+            node.removeAttribute(attr.name);
+          });
+        node.setAttribute("href", href);
+        return;
+      }
+      if (tag === "IMG") {
+        const src = node.getAttribute("src") || "";
+        if (!/^https?:\/\//i.test(src)) { node.remove(); return; }
+        const alt = node.getAttribute("alt") || "";
+        Array.prototype.slice.call(node.attributes)
+          .forEach(function (attr) {
+            node.removeAttribute(attr.name);
+          });
+        node.setAttribute("src", src);
+        if (alt) { node.setAttribute("alt", alt); }
+        return;
+      }
+      if (WEBCLIP_ALLOWED_TAGS[tag]) {
+        const keep = {};
+        if (tag === "TD" || tag === "TH") {
+          ["colspan", "rowspan"].forEach(function (name) {
+            const v = node.getAttribute(name);
+            if (v && /^\d{1,2}$/.test(v)) { keep[name] = v; }
+          });
+        }
+        Array.prototype.slice.call(node.attributes)
+          .forEach(function (attr) {
+            node.removeAttribute(attr.name);
+          });
+        Object.keys(keep).forEach(function (name) {
+          node.setAttribute(name, keep[name]);
+        });
+        cleanWebClipChildren(node);
+        return;
+      }
+      cleanWebClipChildren(node);
+      unwrapTaskDescElement(node);
+    });
+}
+
+/* Truncate an already sanitized fragment at a top level block
+   boundary: whole blocks are kept while they fit, so the cut
+   never lands inside a tag or a paragraph, and the shortened
+   note rides at the end. A fragment whose first block alone
+   exceeds the cap falls back to that block's plain text cut
+   to the cap, so something readable always survives. */
+function truncateWebClipHtml(html) {
+  const holder = document.createElement("div");
+  holder.innerHTML = String(html || "");
+  let out = "";
+  const nodes = Array.prototype.slice.call(holder.childNodes);
+  for (let i = 0; i < nodes.length; i++) {
+    const node = nodes[i];
+    const piece = node.nodeType === 1
+      ? node.outerHTML
+      : escapeHtml(node.textContent || "");
+    if (!piece) { continue; }
+    if (out && out.length + piece.length >
+        WEBCLIP_MAX_HTML_CHARS) { break; }
+    out += piece;
+    if (out.length >= WEBCLIP_MAX_HTML_CHARS) { break; }
+  }
+  if (!out) {
+    out = "<p>" + escapeHtml(htmlToText(html)
+      .slice(0, WEBCLIP_MAX_HTML_CHARS)) + "</p>";
+  }
+  return out + WEBCLIP_SHORTENED_HTML;
+}
+
+/* Sanitize one clip's HTML and apply the size cap. Returns
+   { html, shortened }: shortened is true when THIS pass cut
+   the content (the shortened note is already appended then);
+   a payload that arrived flagged shortened keeps its flag on
+   the payload itself, and the body builder adds the note for
+   that case. */
+function sanitizeWebClipHtml(html) {
+  const holder = document.createElement("div");
+  holder.innerHTML = String(html == null ? "" : html);
+  cleanWebClipChildren(holder);
+  let clean = stripPastedBackgrounds(holder.innerHTML);
+  let shortened = false;
+  if (clean.length > WEBCLIP_MAX_HTML_CHARS) {
+    clean = truncateWebClipHtml(clean);
+    shortened = true;
+  }
+  return { html: clean, shortened: shortened };
+}
+
+/* The filed note's body: the source line first (Evernote
+   clips carry their source URL; here it is a real link at
+   the top of the body, where the note itself shows it), then
+   the sanitized clip, then the shortened note when the
+   bookmarklet flagged the clip and this pass did not already
+   append it by truncating. */
+function webClipBodyFor(payload, cleanResult) {
+  const source = "<p>Source: <a href=\"" +
+    escapeHtml(payload.url) + "\">" +
+    escapeHtml(payload.url) + "</a></p>";
+  let body = source + cleanResult.html;
+  if (payload.shortened && !cleanResult.shortened) {
+    body += WEBCLIP_SHORTENED_HTML;
+  }
+  return body;
+}
+
+/* Remove the clip fragment from the address bar without
+   touching anything else in the URL: a history replace to
+   the same path and the same query string, so a ?task= or
+   ?noteReminder= return trip sharing the URL survives the
+   strip exactly. Falls back to clearing the hash where the
+   history call itself is refused. */
+function stripWebClipFragment() {
+  try {
+    window.history.replaceState(null, document.title,
+      window.location.pathname + window.location.search);
+  } catch (err) {
+    try { window.location.hash = ""; } catch (e) { /* no-op */ }
+  }
+}
+
+/* The boot reader, the first thing boot() runs: a fragment
+   that is not a clip fragment is left entirely alone (it is
+   not this reader's business; see the auth note in the
+   section head). A clip fragment is stripped at once, valid
+   or not, so the payload never lingers in the address bar,
+   never replays on a reload, and never reaches any other
+   reader. A malformed payload is refused with a toast and
+   no note and nothing held; a valid one is held in memory
+   (pendingWebClip) for filePendingWebClip, which
+   connectAndLoad calls once the store is in. */
+function readWebClipFromUrl() {
+  let hash = "";
+  try { hash = window.location.hash || ""; }
+  catch (err) { return null; }
+  if (!hash ||
+      hash.indexOf("#" + WEBCLIP_FRAGMENT_PREFIX) !== 0) {
+    return null;
+  }
+  const data = hash.slice(1 + WEBCLIP_FRAGMENT_PREFIX.length);
+  stripWebClipFragment();
+  const payload = data ? parseWebClipPayload(data) : null;
+  if (!payload) {
+    toast("That web clip could not be read, so no note " +
+      "was made.", true);
+    return null;
+  }
+  pendingWebClip = payload;
+  return payload;
+}
+
+/* File the held clip as ONE note, through the instant create
+   pattern of createNoteInRepo and the template apply: the
+   note is in state and cache at once, the write runs through
+   the real save funnel as a fresh note, and the note opens
+   so the user sees what arrived. The notebook is the first
+   notebook (the bookmarklet cannot ask; Evernote's clip time
+   notebook choice is a named deviation), created as Personal
+   first when the store somehow has none, the create flow's
+   own rule. The held payload is spent before the work
+   starts and the filing guard refuses a second run, so no
+   path can file the same clip twice. Returns the note, or
+   null when there is nothing held or a filing is already in
+   flight. Failures keep the app's create wording: the note
+   exists locally and the toast names the save failure. */
+async function filePendingWebClip() {
+  if (!pendingWebClip || webClipFiling) { return null; }
+  webClipFiling = true;
+  const payload = pendingWebClip;
+  pendingWebClip = null;
+  try {
+    if (!state.notebooks.length) {
+      await createNotebook("Personal");
+    }
+    const notebook = state.notebooks[0];
+    const cleanResult = sanitizeWebClipHtml(payload.html);
+    const note = makeNote(notebook.slug, payload.title,
+      canonicalizeAttachmentPlaceholders(
+        webClipBodyFor(payload, cleanResult)));
+    state.notes.unshift(note);
+    saveCache();
+    renderAll();
+    openNote(note.id);
+    await saveNoteToRepo(note,
+      { skipConflictCheck: true, fresh: true })
+      .then(function () { saveCache(); })
+      .catch(function (err) {
+        toast("Web clip created locally; save failed: " +
+          err.message, true);
+      });
+    toast("Web clip saved to " + notebook.name + ": \"" +
+      payload.title + "\"");
+    return note;
+  } finally {
+    webClipFiling = false;
+  }
+}
+
+/* The Settings surface's fill: the bookmarklet link's href
+   and the copy box's value are the generated bookmarklet for
+   this app's own address. Called from syncSettingsControls
+   (so every Settings open shows the current build's link)
+   and once at boot, so the link exists before Settings is
+   ever opened. */
+function renderWebClipSettings() {
+  const href = buildWebClipBookmarkletHref(webClipAppUrl());
+  const link = document.getElementById(
+    "webClipBookmarkletLink");
+  if (link) { link.setAttribute("href", href); }
+  const text = document.getElementById(
+    "webClipBookmarkletText");
+  if (text) { text.value = href; }
+}
+
+/* The copy button: the bookmarklet code to the clipboard
+   through the same clipboard seam the app copies with
+   elsewhere, with the box selection as the fallback where
+   the clipboard write is refused, and the feedback line
+   saying which happened. */
+function copyWebClipBookmarklet() {
+  const text = document.getElementById(
+    "webClipBookmarkletText");
+  const feedback = document.getElementById("webClipFeedback");
+  if (!text) { return; }
+  const done = function () {
+    if (feedback) {
+      feedback.textContent = "Bookmarklet code copied. " +
+        "Paste it as the URL of a new bookmark named " +
+        "Clip to SnakeScale Notes.";
+    }
+  };
+  if (navigator.clipboard &&
+      typeof navigator.clipboard.writeText === "function") {
+    navigator.clipboard.writeText(text.value)
+      .then(done)
+      .catch(function () {
+        text.select();
+        if (feedback) {
+          feedback.textContent = "The code is selected " +
+            "in the box; copy it from there.";
+        }
+      });
+    return;
+  }
+  text.select();
+  done();
+}
+
 /* ----- attach entry point ------------------------------------------------
    v1.3.4: startAttachFlow() is the single entry point for attaching
    files with the picker. The Insert menu's "Attach file or image"
@@ -43731,6 +44383,9 @@ function wireEvents() {
   /* v2.33: the When opening select in Settings Appearance. */
   document.getElementById("settingsStartViewSelect")
     .addEventListener("change", applyStartViewFromSelect);
+  /* v2.47: the Web clipper copy button in Settings. */
+  document.getElementById("webClipCopyBtn")
+    .addEventListener("click", copyWebClipBookmarklet);
 
   /* v2.24: the Settings Notifications controls, and the task
      editor modal, following the Settings modal's own close
@@ -45509,6 +46164,13 @@ function registerServiceWorker() {
    screen to route to.
    -------------------------------------------------------------------------- */
 async function boot() {
+  /* v2.47: a web clip arriving in the fragment is read and
+     stripped before anything else can trip over it (see the
+     web clipper section head for the auth sequencing note:
+     sign in here is a callback flow, never a fragment, so
+     this read cannot disturb it). The held clip files from
+     connectAndLoad once the store is in. */
+  readWebClipFromUrl();
   injectLogos();
   renderAppVersion();
   loadSettings();
@@ -45517,6 +46179,9 @@ async function boot() {
   renderRenewalFailureLine();
   const foundLegacy = cleanupLegacyStorage();
   wireEvents();
+  /* v2.47: the Settings bookmarklet link exists from the
+     start, not only after Settings is first opened. */
+  renderWebClipSettings();
   /* v2.24: a notification click that opened the app cold left
      its task id in the URL; the pending open machinery holds
      it until the first load lands the tasks. The reminder
