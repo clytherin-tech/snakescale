@@ -40,10 +40,41 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-29-SSN-V2540
-  Version: 2.54.0
+  BUILD STAMP: 2026-10-29-SSN-V2550
+  Version: 2.55.0
 
   Revision history:
+    v2.55.0 2026-10-29 Home customize rework: the
+                      Customize text button is a
+                      pencil button now, and pressing
+                      it opens a session instead of
+                      committing each edit at once:
+                      dragging, Move up and down,
+                      and the show and hide toggles
+                      stage in a working copy of the
+                      layout while state.home stays
+                      untouched, so Done persists
+                      exactly once and Cancel writes
+                      nothing at all. The tall widget
+                      list is replaced by a compact
+                      Widgets popover off the Done
+                      and Cancel bar, and every
+                      widget carries its own hide
+                      button during a session.
+                      The drag itself is faster and
+                      no longer flies in: the lifted
+                      widget carries no transition
+                      and is placed at the pointer
+                      with its grab offset in the
+                      lift frame, heights are
+                      measured once at lift, moves
+                      batch to one packing per
+                      frame, and the lifted widget
+                      moves by transform. Content
+                      edits in a session, a task
+                      check or scratch text, behave
+                      exactly as they do outside it
+                      and always survive a Cancel.
     v2.54.0 2026-10-29 Settings tabs: the Settings
                       window's seven sections are
                       seven tab panels under one
@@ -4751,6 +4782,7 @@ body.note-drag-active{touch-action:none;overscroll-behavior:none;}
   display:flex;align-items:center;justify-content:space-between;gap:16px;
   background:linear-gradient(120deg,#0B3D2E,#14532D);
   border-radius:14px;padding:22px 24px;margin-bottom:18px;
+  position:relative;
 }
 .home-head h2{margin:0;font-size:24px;color:#fff;}
 .home-date{margin-top:3px;font-size:13.5px;color:#CFE3D2;}
@@ -4758,9 +4790,20 @@ body.note-drag-active{touch-action:none;overscroll-behavior:none;}
   background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.45);
   color:#fff;flex:0 0 auto;
 }
-#homeCustomizePanel{
+/* v2.55: the customize bar (the pencil, and in its
+   place the session's Widgets, Done, and Cancel) and
+   the widget popover that hangs from the header over
+   the grid, replacing the stacked panel that used to
+   push the page down by nine rows. */
+.home-head-actions{display:flex;gap:8px;align-items:center;flex:0 0 auto;}
+.home-customize-btn svg{display:block;}
+#homeWidgetsPopover{
+  position:absolute;top:calc(100% + 8px);right:24px;z-index:900;
+  width:330px;max-width:calc(100vw - 40px);
+  max-height:min(60vh,480px);overflow-y:auto;
   background:var(--surface);border:1px solid var(--border);
-  border-radius:12px;padding:12px 16px;margin-bottom:18px;
+  border-radius:12px;padding:10px 16px 12px;
+  box-shadow:0 14px 34px rgba(0,0,0,.24);
 }
 .home-cust-head{font-weight:700;color:var(--primary);margin-bottom:8px;}
 body.dark .home-cust-head{color:var(--accent);}
@@ -4769,6 +4812,42 @@ body.dark .home-cust-head{color:var(--accent);}
   border-top:1px solid var(--border);
 }
 .home-cust-label{flex:1;font-weight:600;color:var(--text);}
+/* The row's switch: the shown state is a filled track
+   with the knob right, the hidden state the plain
+   track with the knob left, obvious in both themes. */
+.home-cust-toggle{
+  position:relative;flex:0 0 auto;width:42px;height:24px;padding:0;
+  border-radius:999px;border:1px solid var(--border);
+  background:var(--bg);cursor:pointer;
+  transition:background-color var(--motion),border-color var(--motion);
+}
+.home-cust-toggle::after{
+  content:"";position:absolute;top:2px;left:2px;width:18px;height:18px;
+  border-radius:50%;background:var(--muted);
+  transition:left var(--motion),background-color var(--motion);
+}
+.home-cust-toggle[aria-checked="true"]{
+  background:var(--primary);border-color:var(--primary);
+}
+.home-cust-toggle[aria-checked="true"]::after{left:20px;background:#fff;}
+.home-cust-toggle:focus-visible{
+  outline:2px solid var(--accent);outline-offset:2px;
+}
+/* v2.55: a widget's own hide button, on its header
+   only while a customize session is open, in the drag
+   handle's voice. */
+.home-widget-hide{
+  flex:none;display:inline-flex;align-items:center;
+  justify-content:center;background:none;border:none;
+  border-radius:var(--radius-button);cursor:pointer;padding:0;
+  width:26px;height:26px;color:var(--muted);margin-right:-4px;
+  transition:background-color var(--motion),color var(--motion);
+}
+.home-widget-hide:hover{background:var(--soft);color:var(--primary);}
+body.dark .home-widget-hide:hover{color:var(--accent);}
+.home-widget-hide:focus-visible{
+  outline:2px solid var(--accent);outline-offset:1px;
+}
 /* v2.42: the Home widget drag handle, present on a
    widget's header only while Customize is open (the
    script adds and removes it with the mode), in the
@@ -4805,9 +4884,20 @@ body.dark .home-widget-drag:hover{color:var(--accent);}
 /* While a widget drag is live, the widgets that stay
    behind slide to their candidate packed spots (the
    pass rewrites their left and top as the placeholder
-   moves), on the app's own motion timing. */
+   moves), on the app's own motion timing. The lifted
+   widget itself is excepted, completely: v2.52 let
+   this rule reach it too, so at the lift its packed
+   left and top (grid space) animated over 180ms to
+   the fixed values (viewport space), which read on
+   the owner's phone as the widget flying in from off
+   the page, and every pointermove after was a target
+   it chased a transition behind. It travels by
+   transform now and transitions never. */
 .home-grid.ss-home-dragging .home-widget{
   transition:top 180ms ease,left 180ms ease;
+}
+.home-grid.ss-home-dragging .home-widget.home-widget-floating{
+  transition:none;
 }
 /* The drag placeholder: the candidate slot, held open
    at the dragged widget's own height while the real
@@ -8786,10 +8876,14 @@ body.dark .version-date{color:var(--accent);}
        Tasks view's: while Home is the active view the list
        and editor panes hide (syncTasksPane trades the
        hidden classes). The header is the greeting over
-       the full date on the Deep Forest band; the Customize
-       button opens the panel renderHomeCustomize fills;
-       the grid is renderHome's, one card per widget in
-       the stored layout. -->
+       the full date on the Deep Forest band; v2.55: its
+       right side is the customize bar renderHomeCustomize
+       keeps (a pencil icon button, replaced in place by
+       the session's Widgets, Done, and Cancel buttons
+       while a customize session is open) and the widget
+       popover that hangs from the header; the grid is
+       renderHome's, one card per widget in the layout
+       in play. -->
   <section id="homepane" class="hidden">
     <div class="home-scroll" id="homeScroll">
       <div class="home-inner">
@@ -8798,9 +8892,14 @@ body.dark .version-date{color:var(--accent);}
             <h2 id="homeGreeting">Good day</h2>
             <div class="home-date" id="homeDate"></div>
           </div>
-          <button type="button" class="btn small home-customize-btn" id="homeCustomizeBtn">Customize</button>
+          <div class="home-head-actions" id="homeCustomizeBar">
+            <button type="button" class="btn small home-customize-btn" id="homeCustomizeBtn" aria-label="Customize Home" title="Customize Home"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg></button>
+            <button type="button" class="btn small home-customize-btn hidden" id="homeWidgetsBtn" aria-haspopup="true" aria-expanded="false">Widgets</button>
+            <button type="button" class="btn small home-customize-btn hidden" id="homeCustomizeDoneBtn">Done</button>
+            <button type="button" class="btn small home-customize-btn hidden" id="homeCustomizeCancelBtn">Cancel</button>
+          </div>
+          <div id="homeWidgetsPopover" class="hidden" role="group" aria-label="Choose widgets"></div>
         </header>
-        <div id="homeCustomizePanel" class="hidden"></div>
         <div class="home-grid" id="homeGrid"></div>
         <div id="homeEmpty" class="home-hint hidden">All widgets are hidden. Use Customize to bring some back.</div>
       </div>
@@ -9450,8 +9549,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-29-SSN-V2540";
-const APP_VERSION = "2.54.0";
+const APP_BUILD = "2026-10-29-SSN-V2550";
+const APP_VERSION = "2.55.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -16036,6 +16135,21 @@ const SS_DRAG_GRIP_ICON = "<svg viewBox=\"0 0 12 20\" " +
   "fill=\"currentColor\"/><circle cx=\"8.5\" cy=\"16\" " +
   "r=\"1.6\" fill=\"currentColor\"/></svg>";
 
+/* The eye off a widget's hide button wears (v2.55),
+   in the app icons' stroke voice: an eye under a
+   slash. Drawn at the size the header buttons use. */
+const HOME_HIDE_ICON = "<svg viewBox=\"0 0 24 24\" " +
+  "width=\"15\" height=\"15\" fill=\"none\" " +
+  "stroke=\"currentColor\" stroke-width=\"1.8\" " +
+  "stroke-linecap=\"round\" stroke-linejoin=\"round\" " +
+  "aria-hidden=\"true\" focusable=\"false\">" +
+  "<path d=\"M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8" +
+  "a18.5 18.5 0 0 1-2.16 3.19\"/>" +
+  "<path d=\"M6.61 6.61A13.53 13.53 0 0 0 1 12s4 8 11 8" +
+  "a18.5 18.5 0 0 0 2.16-3.19\"/>" +
+  "<path d=\"M9.88 9.88a3 3 0 1 0 4.24 4.24\"/>" +
+  "<line x1=\"1\" y1=\"1\" x2=\"23\" y2=\"23\"/></svg>";
+
 const SS_REORDER_DRAG_PX = 4;
 let ssReorderDrag = null;   /* the armed or engaged drag */
 
@@ -17171,8 +17285,38 @@ function applyStartView() {
     : { kind: "home", value: null };
 }
 
+/* v2.55: the layout list every Home surface reads and
+   every layout edit mutates. While a customize session
+   is open that is the session's working copy; the rest
+   of the time it is the stored layout itself. */
+function homeActiveWidgets() {
+  return homeCustomSession ? homeCustomSession.work
+    : state.home.widgets;
+}
+
+function homeSetActiveWidgets(list) {
+  if (homeCustomSession) {
+    homeCustomSession.work = list;
+  } else {
+    state.home.widgets = list;
+  }
+}
+
+/* A layout edit landed. Outside a session the stored
+   fact changed: persist and re-render, as it always
+   has. Inside a session only the working copy changed:
+   Home re-renders from it and NOTHING reaches the
+   persist path (the session section below holds that
+   line); the one write of a session happens at Done,
+   in exitHomeCustomize. */
+function homeLayoutTouched() {
+  if (homeCustomSession) { renderHome(); return; }
+  persistHome();
+  renderAll();
+}
+
 function homeWidgetEntry(type) {
-  return state.home.widgets.find(function (e) {
+  return homeActiveWidgets().find(function (e) {
     return e.type === type;
   }) || null;
 }
@@ -17207,43 +17351,42 @@ function setHomeFilteredSearch(id) {
   const entry = homeWidgetEntry("filtered");
   if (!entry) { return; }
   entry.searchId = id || null;
-  persistHome();
-  renderAll();
+  homeLayoutTouched();
 }
 
-/* The Customize operations. Each mutates the stored
-   layout (the single source the grid renders from),
-   persists it, and re-renders, so the panel and the
-   grid can never disagree. */
+/* The Customize operations. Each mutates the layout
+   in play (the session's working copy while a session
+   is open, the stored layout otherwise) through the
+   active list and lands in homeLayoutTouched, so the
+   popover, the per-widget buttons, and the grid can
+   never disagree, and nothing persists mid session. */
 function homeAddWidget(type) {
   if (HOME_WIDGET_TYPES.indexOf(type) < 0) { return; }
   if (homeWidgetEntry(type)) { return; }
-  state.home.widgets.push(type === "filtered"
+  homeActiveWidgets().push(type === "filtered"
     ? { type: "filtered", searchId: null } : { type: type });
-  persistHome();
-  renderAll();
+  homeLayoutTouched();
 }
 
 function homeRemoveWidget(type) {
-  state.home.widgets = state.home.widgets.filter(
-    function (e) { return e.type !== type; });
-  persistHome();
-  renderAll();
+  homeSetActiveWidgets(homeActiveWidgets().filter(
+    function (e) { return e.type !== type; }));
+  homeLayoutTouched();
 }
 
 function homeMoveWidget(type, dir) {
-  const at = state.home.widgets.findIndex(function (e) {
+  const list = homeActiveWidgets();
+  const at = list.findIndex(function (e) {
     return e.type === type;
   });
   const to = at + dir;
-  if (at < 0 || to < 0 || to >= state.home.widgets.length) {
+  if (at < 0 || to < 0 || to >= list.length) {
     return;
   }
-  const entry = state.home.widgets[at];
-  state.home.widgets[at] = state.home.widgets[to];
-  state.home.widgets[to] = entry;
-  persistHome();
-  renderAll();
+  const entry = list[at];
+  list[at] = list[to];
+  list[to] = entry;
+  homeLayoutTouched();
 }
 
 /* v2.42: the Home surface's drag order owner. A widget
@@ -17255,7 +17398,7 @@ function homeMoveWidget(type, dir) {
    the buttons can never disagree. Returns true when
    the order changed. */
 function applyHomeWidgetDragOrder(types) {
-  const current = state.home.widgets;
+  const current = homeActiveWidgets();
   if (types.length !== current.length) { return false; }
   const byType = {};
   current.forEach(function (e) { byType[e.type] = e; });
@@ -17268,9 +17411,8 @@ function applyHomeWidgetDragOrder(types) {
     })) {
     return false;
   }
-  state.home.widgets = seq;
-  persistHome();
-  renderAll();
+  homeSetActiveWidgets(seq);
+  homeLayoutTouched();
   return true;
 }
 
@@ -17330,6 +17472,34 @@ function applyHomeWidgetDragOrder(types) {
    the way the shared helper's does, so a widget can
    still be carried past the fold. Scrolling the page
    with a finger anywhere off a grip is untouched.
+
+   v2.55: the drag's two device faults, diagnosed in
+   this code at the owner's report (very slow, and
+   the widget flies in from off the page at the
+   lift). The fly-in: the slide rule above
+   (.ss-home-dragging .home-widget) transitioned top
+   and left on EVERY widget, the lifted one included;
+   at the lift its left and top changed from the
+   packed grid space values to fixed viewport values
+   in the same style write, so the browser animated
+   the difference over 180ms and the widget arrived
+   from wherever the grid numbers pointed on screen,
+   then chased every later move a transition behind.
+   The slowness: the move handler ran the packing
+   pass synchronously on every pointermove event,
+   and the pass wrote every widget's width and then
+   read every widget's offsetHeight, a forced reflow
+   per widget per event, at event rate rather than
+   frame rate. The fixes: the lifted widget travels
+   by transform and the stylesheet takes its
+   transition off entirely (the one excepted rule in
+   the CSS); it is placed from the engaging event's
+   own coordinates in that event, before any frame;
+   moves only record the latest point and batch the
+   packing to one update per animation frame; and
+   while a drag is engaged the packing pass reads
+   the heights cached at the lift and writes no
+   widths, so a frame costs arithmetic, not layout.
    ------------------------------------------------------------------ */
 
 const HOME_PACK_GAP = 16;
@@ -17428,14 +17598,29 @@ function layoutHomeWidgets() {
           !el.classList.contains("home-widget-floating"));
     });
   if (!items.length) { grid.style.height = ""; return; }
+  /* v2.55: while a widget drag is engaged, the pass
+     packs from the heights the lift measured (the drag
+     session's cache): no width writes (a slide cannot
+     change a column's width) and no offsetHeight reads
+     (the per move reflow that made the drag slow), and
+     the size observer sits the drag out. */
+  const drag = (typeof ssHomeDrag !== "undefined" &&
+    ssHomeDrag && ssHomeDrag.engaged && ssHomeDrag.heights)
+    ? ssHomeDrag : null;
   const probe = homePackCompute(
     items.map(function () { return 0; }), width);
-  items.forEach(function (el) {
-    el.style.width = probe.colWidth + "px";
-  });
+  if (!drag) {
+    items.forEach(function (el) {
+      el.style.width = probe.colWidth + "px";
+    });
+  }
   const heights = items.map(function (el) {
     if (el.classList.contains("home-widget-placeholder")) {
       return parseFloat(el.getAttribute("data-pack-height")) || 0;
+    }
+    if (drag) {
+      return drag.heights[
+        el.getAttribute("data-widget-type")] || 0;
     }
     return el.offsetHeight;
   });
@@ -17445,7 +17630,7 @@ function layoutHomeWidgets() {
     el.style.top = pack.placements[i].top + "px";
   });
   grid.style.height = pack.height + "px";
-  watchHomeWidgetSizes(grid);
+  if (!drag) { watchHomeWidgetSizes(grid); }
 }
 
 /* Repack on the next frame, coalesced: the observer
@@ -17527,7 +17712,11 @@ function startHomeWidgetDrag(ev, handle, widget) {
       return el.getAttribute("data-widget-type");
     }),
     heights: null, grabDX: 0, grabDY: 0,
-    placeholder: null, slot: -1
+    placeholder: null, slot: -1,
+    /* v2.55: the latest pointer point (the frame and
+       the drop read it) and the armed frame's id, 0
+       when no frame is pending. */
+    lastX: ev.clientX, lastY: ev.clientY, frameId: 0
   };
   if (handle.setPointerCapture &&
       ev.pointerId !== undefined) {
@@ -17541,11 +17730,15 @@ function startHomeWidgetDrag(ev, handle, widget) {
 }
 
 /* Lift the widget: measure every widget's height
-   (the packing inputs, taken while the arrangement
-   still stands), put the placeholder in the widget's
-   slot at its height, and send the real widget fixed
-   under the pointer with the grab offset kept, so it
-   does not jump as it lifts. */
+   ONCE (the packing inputs for the whole drag, taken
+   while the arrangement still stands), put the
+   placeholder in the widget's slot at its height, and
+   send the real widget fixed. Its left and top zero
+   here; the caller in the move handler sets its
+   transform from the engaging event's own coordinates
+   in the same event, so the widget is under the
+   pointer in the lift frame itself and no transition
+   or stale coordinate can fly it in (v2.55). */
 function engageHomeDrag(s) {
   const rect = s.widget.getBoundingClientRect();
   s.heights = {};
@@ -17565,8 +17758,8 @@ function engageHomeDrag(s) {
   s.slot = s.items0.indexOf(s.widget);
   s.widget.classList.add("home-widget-floating");
   s.widget.style.width = rect.width + "px";
-  s.widget.style.left = rect.left + "px";
-  s.widget.style.top = rect.top + "px";
+  s.widget.style.left = "0px";
+  s.widget.style.top = "0px";
   s.grid.classList.add("ss-home-dragging");
   document.body.classList.add("ss-home-dragging");
   s.engaged = true;
@@ -17581,19 +17774,75 @@ function onHomeDragMove(ev) {
       return;
     }
     engageHomeDrag(s);
+    /* The widget lands under the pointer in this same
+       event, from this event's own coordinates: no
+       frame and no transition sits between the lift
+       and its first true position. */
+    s.lastX = ev.clientX;
+    s.lastY = ev.clientY;
+    moveHomeDragWidget(s);
   }
   ev.preventDefault();
-  /* The widget travels with the pointer. */
-  s.widget.style.left = (ev.clientX - s.grabDX) + "px";
-  s.widget.style.top = (ev.clientY - s.grabDY) + "px";
-  /* The candidate slot: the packed slot nearest the
-     pointer, recomputed from the heights measured at
-     the lift. When it changes, the placeholder moves
-     in the DOM and the packing pass slides the others
-     to their new spots (the transition CSS above). */
+  /* v2.55: a move records the latest point and arms
+     the frame; the packing itself runs once per
+     frame in stepHomeDrag, however many events
+     arrived inside it. */
+  s.lastX = ev.clientX;
+  s.lastY = ev.clientY;
+  scheduleHomeDragFrame(s);
+}
+
+/* The lifted widget's travel: a transform, never its
+   left and top, so a move costs the compositor a
+   translation instead of the layout a reposition,
+   and the stylesheet's transition can never apply
+   to it (the floating rule takes it off entirely). */
+function moveHomeDragWidget(s) {
+  s.widget.style.transform = "translate(" +
+    (s.lastX - s.grabDX) + "px," +
+    (s.lastY - s.grabDY) + "px)";
+}
+
+/* Arm the one batched frame. A frame already pending
+   absorbs the move; the frame reads the latest
+   recorded point when it runs. */
+function scheduleHomeDragFrame(s) {
+  if (s.frameId) { return; }
+  const run = function () {
+    s.frameId = 0;
+    if (ssHomeDrag !== s || !s.engaged) { return; }
+    stepHomeDrag(s);
+  };
+  if (typeof requestAnimationFrame === "function") {
+    s.frameId = requestAnimationFrame(run);
+  } else {
+    s.frameId = setTimeout(run, 16);
+  }
+}
+
+/* Run a pending batched frame now (the drop path):
+   disarmed first, so it can never run twice. */
+function flushHomeDragFrame(s) {
+  if (!s.frameId) { return; }
+  if (typeof cancelAnimationFrame === "function") {
+    cancelAnimationFrame(s.frameId);
+  } else { clearTimeout(s.frameId); }
+  s.frameId = 0;
+  if (ssHomeDrag === s && s.engaged) { stepHomeDrag(s); }
+}
+
+/* One batched drag step: the widget to the recorded
+   point, the candidate slot recomputed from the
+   heights measured at the lift (the packed slot
+   nearest the pointer), the placeholder to the slot
+   when it changed, and the packing pass, which reads
+   the same cached heights while a drag is engaged
+   and slides the others to their new spots. */
+function stepHomeDrag(s) {
+  moveHomeDragWidget(s);
   const gridRect = s.grid.getBoundingClientRect();
-  const x = ev.clientX - gridRect.left;
-  const y = ev.clientY - gridRect.top;
+  const x = s.lastX - gridRect.left;
+  const y = s.lastY - gridRect.top;
   const others = s.items0.filter(function (el) {
     return el !== s.widget;
   });
@@ -17618,9 +17867,9 @@ function onHomeDragMove(ev) {
   const sc = s.grid.closest(".home-scroll");
   if (sc) {
     const r = sc.getBoundingClientRect();
-    if (ev.clientY < r.top + 40 && sc.scrollTop > 0) {
+    if (s.lastY < r.top + 40 && sc.scrollTop > 0) {
       sc.scrollTop -= 12;
-    } else if (ev.clientY > r.bottom - 40 &&
+    } else if (s.lastY > r.bottom - 40 &&
         sc.scrollTop < sc.scrollHeight - sc.clientHeight) {
       sc.scrollTop += 12;
     }
@@ -17631,6 +17880,16 @@ function finishHomeDrag(commit) {
   const s = ssHomeDrag;
   if (!s) { return; }
   ssHomeDrag = null;
+  /* A batched frame still pending dies with the drag.
+     The drop path flushed its own before calling
+     this, so a frame here belongs to a cancel or an
+     Escape, whose restore does not need it. */
+  if (s.frameId) {
+    if (typeof cancelAnimationFrame === "function") {
+      cancelAnimationFrame(s.frameId);
+    } else { clearTimeout(s.frameId); }
+    s.frameId = 0;
+  }
   window.removeEventListener("pointermove", onHomeDragMove);
   window.removeEventListener("pointerup", onHomeDragUp);
   window.removeEventListener("pointercancel", onHomeDragCancel);
@@ -17653,6 +17912,7 @@ function finishHomeDrag(commit) {
   widget.style.width = "";
   widget.style.left = "";
   widget.style.top = "";
+  widget.style.transform = "";
   s.grid.classList.remove("ss-home-dragging");
   document.body.classList.remove("ss-home-dragging");
   layoutHomeWidgets();
@@ -17669,6 +17929,13 @@ function onHomeDragUp(ev) {
   if (!ssHomeDrag || ev.pointerId !== ssHomeDrag.pointerId) {
     return;
   }
+  /* The drop judges the pointer's final position even
+     when its last move's frame never ran: take the up
+     event's own coordinates and run the pending frame
+     work synchronously before anything commits. */
+  ssHomeDrag.lastX = ev.clientX;
+  ssHomeDrag.lastY = ev.clientY;
+  flushHomeDragFrame(ssHomeDrag);
   finishHomeDrag(true);
 }
 
@@ -17704,6 +17971,8 @@ function syncHomeWidgetDragHandles() {
       let handle = widget.querySelector(".home-widget-drag");
       if (!homeCustomizeOpen) {
         if (handle) { handle.remove(); }
+        const hideOff = widget.querySelector(".home-widget-hide");
+        if (hideOff) { hideOff.remove(); }
         return;
       }
       const head = widget.querySelector(".home-widget-head");
@@ -17724,13 +17993,44 @@ function syncHomeWidgetDragHandles() {
          lift and packed slide above); the commit still
          lands in applyHomeWidgetDragOrder. */
       attachHomeWidgetDrag(handle, widget);
+      /* v2.55: a session also gives every widget a
+         hide button on its header (the owner's ask:
+         hiding must not need the widget list). It
+         stages like every layout edit, into the
+         working copy; the popover re-shows the
+         widget. The render reused element (the
+         focused Scratch Pad) keeps its one button,
+         like its handle. */
+      let hide = widget.querySelector(".home-widget-hide");
+      if (!hide) {
+        hide = document.createElement("button");
+        hide.type = "button";
+        hide.className = "home-widget-hide";
+        const htype = widget.getAttribute("data-widget-type");
+        hide.setAttribute("aria-label",
+          "Hide " + (HOME_WIDGET_LABELS[htype] || "widget"));
+        hide.title = "Hide widget";
+        hide.innerHTML = HOME_HIDE_ICON;
+        hide.addEventListener("click", function () {
+          homeRemoveWidget(htype);
+        });
+        head.appendChild(hide);
+      }
     });
 }
 
-/* Session only Home view state: whether the Customize
-   panel is open, and which of the Recent widget's two
-   lists is showing. Neither is a stored fact. */
+/* Session only Home view state: the customize session
+   (v2.55: null while no session is open; while one is,
+   it carries the snapshot taken at entry and the
+   working copy every layout edit stages into),
+   whether the widget popover is open, and which of
+   the Recent widget's two lists is showing. None is
+   a stored fact. homeCustomizeOpen mirrors the
+   session for the surfaces that only ask whether
+   customizing is live (the drag handles above all). */
+let homeCustomSession = null;
 let homeCustomizeOpen = false;
+let homeWidgetsPopoverOpen = false;
 let homeRecentTab = "updated";
 
 /* Evernote greets by the time of day. */
@@ -18522,37 +18822,165 @@ function buildHomeShortcutsWidget() {
   return parts.widget;
 }
 
-/* The Customize panel: one row per widget. A visible
-   widget's row carries Move up, Move down, and Remove;
-   a hidden widget's row carries Add. The rows are
-   rebuilt on every render while the panel is open, so
-   the panel always describes the layout as it stands. */
+/* ------------------------------------------------------------------
+   v2.55: customize sessions (the owner's direction,
+   2026-10-29: the Customize button becomes a pencil;
+   Done and Cancel replace it in its place, Done
+   saves the widgets and Cancel cancels any changes;
+   and the huge list at the top for choosing widgets
+   needs a more compact way).
+
+   Opening a session snapshots the stored layout as a
+   deep copy, twice over: the snapshot (what Cancel
+   restores and what Done compares against) and the
+   working copy (what every layout edit stages into
+   and what Home renders from while the session is
+   open). state.home itself is never touched by a
+   layout edit during a session, so nothing about the
+   layout can reach the persist path: the coalesced
+   index writer only ever sees state.home, and the
+   one write of a session is Done's, through the same
+   persistHome the single edits used to call. Content
+   is not layout and keeps its own behavior inside a
+   session: a task checked in the Tasks widget still
+   completes through the task funnel, and the Scratch
+   Pad still saves its text through its own write,
+   whose home field carries the pre session layout
+   because state.home's layout has not moved; Cancel
+   reverts arrangement and visibility only, never a
+   completion or a scratch word. If a store load
+   lands mid session and replaces state.home, the
+   session renders on from its working copy (the copy
+   is the session's whole world); Done after it
+   writes the session's layout over the loaded one,
+   the last writer winning as it does between two
+   devices today, and Cancel simply reveals the
+   loaded layout.
+   ------------------------------------------------------------------ */
+
+/* Deep copy a layout entries list. Entries are flat
+   ({ type } or { type, searchId }), so a field by
+   field copy is a true copy: the working copy can be
+   reordered, shrunk, and discarded without ever
+   touching the stored entry objects. */
+function homeCopyLayout(list) {
+  return list.map(function (e) {
+    const copy = { type: e.type };
+    if (e.type === "filtered") {
+      copy.searchId = typeof e.searchId === "string" &&
+        e.searchId ? e.searchId : null;
+    }
+    return copy;
+  });
+}
+
+/* Open a customize session (the pencil). */
+function enterHomeCustomize() {
+  if (homeCustomSession) { return; }
+  homeCustomSession = {
+    snapshot: homeCopyLayout(state.home.widgets),
+    work: homeCopyLayout(state.home.widgets)
+  };
+  homeCustomizeOpen = true;
+  homeWidgetsPopoverOpen = false;
+  renderHome();
+}
+
+/* Whether the working copy differs from the snapshot:
+   the same types in the same order with the same
+   bindings (visibility is membership, so the type
+   sequence carries it). */
+function homeSessionDirty() {
+  const sess = homeCustomSession;
+  if (!sess) { return false; }
+  if (sess.work.length !== sess.snapshot.length) {
+    return true;
+  }
+  return sess.work.some(function (e, i) {
+    const o = sess.snapshot[i];
+    return e.type !== o.type ||
+      (e.type === "filtered" &&
+        (e.searchId || null) !== (o.searchId || null));
+  });
+}
+
+/* Close the session. Done assigns the working copy to
+   the stored layout and persists it, exactly once,
+   through the one home persist path; a session that
+   changed nothing is a no-op even at Done, so the
+   stored layout array is not even replaced. Cancel
+   drops the working copy where it stands. Either way
+   the pencil returns and Home re-renders from the
+   stored layout. */
+function exitHomeCustomize(commit) {
+  if (!homeCustomSession) { return; }
+  const work = homeCustomSession.work;
+  const dirty = homeSessionDirty();
+  homeCustomSession = null;
+  homeCustomizeOpen = false;
+  homeWidgetsPopoverOpen = false;
+  if (commit && dirty) {
+    state.home.widgets = work;
+    persistHome();
+  }
+  renderHome();
+}
+
+/* The customize bar and the widget popover. Outside a
+   session the bar shows the pencil alone; inside one
+   the pencil hides and Widgets, Done, and Cancel show
+   in its place. renderHome calls this on every
+   render, so the bar and the popover always describe
+   the session as it stands. The popover (the compact
+   replacement for the stacked panel) lists every
+   widget type: the visible ones in their working
+   order, carrying the Move up and Move down buttons
+   the panel's rows carried, the hidden ones after,
+   and every row a switch showing its shown or hidden
+   state. Its rows are rebuilt on every render while
+   it is open and not built at all while it is
+   closed. */
 function renderHomeCustomize() {
-  const panel = document.getElementById("homeCustomizePanel");
-  if (!panel) { return; }
-  panel.classList.toggle("hidden", !homeCustomizeOpen);
-  if (!homeCustomizeOpen) { return; }
-  panel.innerHTML = "";
+  const inSession = !!homeCustomSession;
+  const pencil = document.getElementById("homeCustomizeBtn");
+  if (pencil) {
+    pencil.classList.toggle("hidden", inSession);
+  }
+  ["homeWidgetsBtn", "homeCustomizeDoneBtn",
+   "homeCustomizeCancelBtn"].forEach(function (id) {
+    const btn = document.getElementById(id);
+    if (btn) { btn.classList.toggle("hidden", !inSession); }
+  });
+  const widgetsBtn = document.getElementById("homeWidgetsBtn");
+  if (widgetsBtn) {
+    widgetsBtn.setAttribute("aria-expanded",
+      homeWidgetsPopoverOpen ? "true" : "false");
+  }
+  renderHomeWidgetsPopover();
+}
+
+function renderHomeWidgetsPopover() {
+  const pop = document.getElementById("homeWidgetsPopover");
+  if (!pop) { return; }
+  const open = !!homeCustomSession && homeWidgetsPopoverOpen;
+  pop.classList.toggle("hidden", !open);
+  if (!open) { pop.innerHTML = ""; return; }
+  pop.innerHTML = "";
   const head = document.createElement("div");
   head.className = "home-cust-head";
-  head.textContent = "Choose and order your widgets";
-  panel.appendChild(head);
-  const hint = document.createElement("div");
-  hint.className = "home-cust-hint";
-  hint.textContent = "Drag a widget by its handle on the " +
-    "page to reorder it, or use the Move buttons here.";
-  panel.appendChild(hint);
-  state.home.widgets.forEach(function (entry) {
-    panel.appendChild(homeCustomizeRow(entry.type, true));
+  head.textContent = "Choose your widgets";
+  pop.appendChild(head);
+  homeActiveWidgets().forEach(function (entry) {
+    pop.appendChild(homeWidgetsRow(entry.type, true));
   });
   HOME_WIDGET_TYPES.forEach(function (type) {
     if (!homeWidgetEntry(type)) {
-      panel.appendChild(homeCustomizeRow(type, false));
+      pop.appendChild(homeWidgetsRow(type, false));
     }
   });
 }
 
-function homeCustomizeRow(type, isVisible) {
+function homeWidgetsRow(type, isVisible) {
   const row = document.createElement("div");
   row.className = "home-cust-row";
   row.setAttribute("data-widget-type", type);
@@ -18576,15 +19004,36 @@ function homeCustomizeRow(type, isVisible) {
     opBtn("down", "Move down", function () {
       homeMoveWidget(type, 1);
     });
-    opBtn("remove", "Remove", function () {
-      homeRemoveWidget(type);
-    });
-  } else {
-    opBtn("add", "Add", function () {
-      homeAddWidget(type);
-    });
   }
+  const toggle = document.createElement("button");
+  toggle.type = "button";
+  toggle.className = "home-cust-toggle";
+  toggle.setAttribute("data-cust-op", "toggle");
+  toggle.setAttribute("role", "switch");
+  toggle.setAttribute("aria-checked",
+    isVisible ? "true" : "false");
+  toggle.setAttribute("aria-label",
+    (isVisible ? "Hide " : "Show ") +
+      HOME_WIDGET_LABELS[type]);
+  toggle.title = isVisible ? "Hide widget" : "Show widget";
+  toggle.addEventListener("click", function () {
+    if (homeWidgetEntry(type)) { homeRemoveWidget(type); }
+    else { homeAddWidget(type); }
+  });
+  row.appendChild(toggle);
   return row;
+}
+
+function toggleHomeWidgetsPopover() {
+  if (!homeCustomSession) { return; }
+  homeWidgetsPopoverOpen = !homeWidgetsPopoverOpen;
+  renderHomeCustomize();
+}
+
+function closeHomeWidgetsPopover() {
+  if (!homeWidgetsPopoverOpen) { return; }
+  homeWidgetsPopoverOpen = false;
+  renderHomeCustomize();
 }
 
 /* Render Home: the greeting and date over the widget
@@ -18619,7 +19068,7 @@ function renderHome() {
     liveScratch = scratchNow;
   }
   grid.innerHTML = "";
-  state.home.widgets.forEach(function (entry) {
+  homeActiveWidgets().forEach(function (entry) {
     let el = null;
     if (entry.type === "scratch" && liveScratch) {
       el = liveScratch;
@@ -18647,7 +19096,7 @@ function renderHome() {
   const empty = document.getElementById("homeEmpty");
   if (empty) {
     empty.classList.toggle("hidden",
-      state.home.widgets.length > 0);
+      homeActiveWidgets().length > 0);
   }
   /* v2.42: the widgets' drag handles follow the
      Customize mode (see syncHomeWidgetDragHandles). */
@@ -46152,12 +46601,43 @@ function wireEvents() {
     renderAll();
     setMobileView("list");
   });
-  /* v2.33: the Home header's Customize button opens and
-     closes the customize panel; renderHome draws the
-     panel's rows from the stored layout each time. */
+  /* v2.55: the Home header's pencil opens a customize
+     session; Widgets opens the widget popover, and
+     Done and Cancel close the session (see
+     enterHomeCustomize and exitHomeCustomize). The
+     popover closes on an outside click and on
+     Escape, the app menus' own rule; clicks on the
+     popover and on the bar that owns it are its own
+     business (Done and Cancel close it themselves by
+     ending the session). */
   document.getElementById("homeCustomizeBtn").addEventListener("click", function () {
-    homeCustomizeOpen = !homeCustomizeOpen;
-    renderHome();
+    enterHomeCustomize();
+  });
+  document.getElementById("homeWidgetsBtn").addEventListener("click", function () {
+    toggleHomeWidgetsPopover();
+  });
+  document.getElementById("homeCustomizeDoneBtn").addEventListener("click", function () {
+    exitHomeCustomize(true);
+  });
+  document.getElementById("homeCustomizeCancelBtn").addEventListener("click", function () {
+    exitHomeCustomize(false);
+  });
+  document.addEventListener("click", function (ev) {
+    if (!homeWidgetsPopoverOpen) { return; }
+    const t = ev.target;
+    if (!t || !t.closest) { return; }
+    /* A target no longer in the document was replaced
+       by the re-render its own click caused (the
+       popover's rows rebuild on every render): that
+       click was the popover's own business, never an
+       outside one. */
+    if (!document.contains(t)) { return; }
+    if (t.closest("#homeWidgetsPopover") ||
+        t.closest("#homeCustomizeBar")) { return; }
+    closeHomeWidgetsPopover();
+  });
+  document.addEventListener("keydown", function (ev) {
+    if (ev.key === "Escape") { closeHomeWidgetsPopover(); }
   });
   /* v2.24: the Tasks entry under All Notes opens the Tasks
      view, the same one line navigation as its neighbours. */
