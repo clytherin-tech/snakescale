@@ -40,10 +40,30 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-29-SSN-V2580
-  Version: 2.58.0
+  BUILD STAMP: 2026-10-29-SSN-V2590
+  Version: 2.59.0
 
   Revision history:
+    v2.59.0 2026-10-29 Menu text contrast fix. The
+                      sidebar's tag, shortcut, and saved
+                      search menus, the templates
+                      gallery and its menu, the merge
+                      order dialog's strong text, and
+                      the scan dialog's current page
+                      chip all took their text color
+                      from a theme variable, text-strong,
+                      that no theme block ever defined,
+                      so the color fell back to the
+                      always dark sidebar's pale
+                      inheritance and the items washed
+                      out on their white card in light
+                      mode; only the danger items, whose
+                      red is explicit, stayed readable.
+                      The variable is now defined in
+                      both theme blocks: the app's ink
+                      in light mode, white in dark.
+                      No menu, item, or behavior
+                      changes.
     v2.58.0 2026-10-29 Pinned Notes, checkbox-free
                       selection, a note context menu,
                       and Home Tasks widget rows. The
@@ -3647,6 +3667,16 @@
   --selected:#DCE8DC;
   --bg:#F7F8F3;
   --text:#10231A;
+  /* v2.59: the strong text tone a family of menu and
+     row rules name (the sidebar's tag, shortcut, and
+     saved search menus, the templates gallery, the
+     merge dialog, the scan chips). It was referenced
+     since v2.30 but never defined, so those rules fell
+     back to inherited color: the sidebar's pale text on
+     the menus' white card, unreadable in light mode.
+     Here it is the ink itself, the black the items
+     need on the light surface. */
+  --text-strong:#10231A;
   --surface:#FFFFFF;
   --border:#C9D6C9;
   --muted:#5A6E5F;
@@ -3663,6 +3693,12 @@ body.dark{
   --bg:#0A1F18;
   --surface:#14342A;
   --text:#E4EFE6;
+  /* v2.59: the dark theme's strong text tone, for the
+     same family of rules: pure white, brighter than
+     the running text tone, the same value the
+     sidebar's own button hovers use for strong text
+     on the dark surfaces. */
+  --text-strong:#FFFFFF;
   --border:#2A5240;
   /* v1.1 dark contrast pass: this muted tone stays readable on both dark
      palette surfaces, and the soft tone now separates selected content. */
@@ -9808,8 +9844,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-29-SSN-V2580";
-const APP_VERSION = "2.58.0";
+const APP_BUILD = "2026-10-29-SSN-V2590";
+const APP_VERSION = "2.59.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
