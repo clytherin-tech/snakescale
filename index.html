@@ -40,10 +40,39 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-29-SSN-V2550
-  Version: 2.55.0
+  BUILD STAMP: 2026-10-29-SSN-V2560
+  Version: 2.56.0
 
   Revision history:
+    v2.56.0 2026-10-29 Editor breadcrumbs: a slim
+                      trail at the top of the
+                      editor, Notebooks, the
+                      notebook, and the note, so
+                      a note opened from anywhere
+                      is one tap from its
+                      notebook's list, the trip
+                      the phone's Back to list
+                      button cannot make because
+                      it only returns to the
+                      current view. The notebook
+                      segment runs the sidebar
+                      row's own view change and
+                      lands the list on the still
+                      selected note; the Notebooks
+                      segment lands on All Notes,
+                      and a Trash or Archive
+                      note's trail names its
+                      collection instead. The
+                      title segment follows the
+                      title field as it is typed.
+                      The bar is furniture:
+                      rebuilt on every editor
+                      render, never saved, and
+                      its taps change views and
+                      panes only, so they can
+                      never dirty the note or
+                      trigger the note switch
+                      settle.
     v2.55.0 2026-10-29 Home customize rework: the
                       Customize text button is a
                       pencil button now, and pressing
@@ -5221,6 +5250,48 @@ body.dark .modal:hover::-webkit-scrollbar-thumb{
    has a closer positioned ancestor (the toolbar menu wraps, the
    attachment figures), so nothing else moves. */
 .editor-inner{width:100%;max-width:860px;margin:0 auto;position:relative;}
+/* v2.56: the breadcrumb bar at the top of the editor.
+   One slim line in the app's small text scale: links in
+   the notebook link's own treatment (secondary green,
+   underline on hover, accent focus ring), separators
+   muted, and the current note's title in muted text.
+   The row never wraps: the title segment carries
+   min-width:0 and truncates first, since it is the
+   longest and the least needed in full; the notebook
+   link truncates only after it, under a viewport
+   relative cap, because it is the navigation target
+   the bar exists for. Every color is a theme variable,
+   so the bar follows dark and light. */
+.note-breadcrumb{margin:2px 0 4px;}
+.crumb-list{
+  display:flex;align-items:center;gap:2px;
+  list-style:none;margin:0;padding:0;min-width:0;
+}
+.crumb-item{display:flex;align-items:center;min-width:0;}
+.crumb-item-current{flex:1 1 auto;}
+.crumb-link{
+  background:none;border:none;padding:4px 2px;cursor:pointer;
+  font:inherit;font-size:13px;font-weight:600;color:var(--secondary);
+  text-align:left;border-radius:var(--radius-button);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  max-width:38vw;
+}
+.crumb-link:hover{text-decoration:underline;}
+.crumb-link:focus-visible{outline:2px solid var(--accent);outline-offset:1px;}
+.crumb-sep{color:var(--muted);font-size:12px;padding:0 2px;flex:0 0 auto;}
+.crumb-current{
+  font-size:13px;color:var(--muted);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  min-width:0;
+}
+/* v2.56: on the phone the crumb links take the app's
+   touch sizing (the #editorBackBtn treatment in the
+   block below), so a fingertip lands on a segment
+   without catching the title field right under it. */
+@media (max-width:900px){
+  .crumb-link{min-height:44px;padding:10px 6px;display:inline-flex;align-items:center;}
+  .crumb-current{padding:10px 2px;}
+}
 #noteTitle{
   width:100%;border:none;outline:none;background:transparent;
   font-size:26px;line-height:1.2;font-weight:800;color:var(--text);
@@ -8180,6 +8251,25 @@ body.dark .version-date{color:var(--accent);}
     <div id="editorWrap" class="hidden" style="display:flex;flex-direction:column;flex:1;min-height:0;">
       <div class="editor-scroll">
         <div class="editor-inner">
+          <!-- v2.56: the breadcrumb bar. A trail from the
+               collection the open note lives in (Notebooks,
+               Trash, or Archive) through its notebook to the
+               note itself, so a note opened from anywhere
+               (Home, search, a shortcut, a note link, a
+               notification) is one tap from its notebook's
+               list, the trip the phone's Back to list button
+               cannot make because it only returns to whatever
+               view is current. renderBreadcrumb (in the
+               script) rebuilds the segments for the open
+               note on every editor render; the bar is editor
+               furniture: never saved, never serialized, and
+               its taps change views and panes only, so they
+               can never mark the note dirty. It sits at the
+               top of .editor-inner, in the same scroll flow
+               as the title it precedes. -->
+          <nav id="noteBreadcrumb" class="note-breadcrumb" aria-label="Breadcrumb">
+            <ol id="crumbList" class="crumb-list"></ol>
+          </nav>
           <input id="noteTitle" type="text" placeholder="Untitled note" aria-label="Note title">
           <div class="meta-row">
             <!-- v2.5: the notebook dropdown is a text link now. It
@@ -9549,8 +9639,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-29-SSN-V2550";
-const APP_VERSION = "2.55.0";
+const APP_BUILD = "2026-10-29-SSN-V2560";
+const APP_VERSION = "2.56.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -26534,6 +26624,13 @@ function renderEditor() {
      where Restore or Unarchive will put it back; the link is
      inert on those locked notes. See refreshNotebookLink. */
   refreshNotebookLink(note);
+  /* v2.56: the breadcrumb follows the note on the same
+     render, beside the notebook link it echoes: its
+     notebook segment names the same notebook (the live
+     one here, since a locked note's crumb names its
+     collection instead), and its title segment reads
+     the title field as it stands. */
+  renderBreadcrumb(note);
 
   /* Trash mode swaps the action buttons and locks editing. Archive
      mode (v1.5) does the same, with its own pair: Unarchive and Move
@@ -26587,6 +26684,167 @@ function renderEditor() {
   maybeReloadForUpdate();
 }
 renderEditor._forId = null;
+
+/* --------------------------------------------------------------------------
+   v2.56: the editor breadcrumb.
+
+   The owner's report: on the phone there was no way
+   back to the open note's notebook. The editor's Back
+   to list button only flips the pane to the notes list
+   in whatever view happens to be current, and a note
+   opened from Home, search, a shortcut, a note link,
+   or a notification often has some other view standing
+   behind it, so reaching the notebook meant opening
+   the Notebooks section, tapping the notebook, and
+   then finding the note again. The breadcrumb is the
+   direct path: a slim trail at the top of the editor,
+   Notebooks, then the notebook, then the note, each
+   step but the last a link.
+
+   Segments, by where the note lives:
+     live note:    "Notebooks" (link), the owning
+                   notebook's current display name
+                   (link), the note's current title
+                   (plain text, aria-current="page").
+     Trash note:   "Trash" (link), the title.
+     Archive note: "Archive" (link), the title.
+   A locked note shows no notebook segment: its
+   collection is the place it can be navigated back
+   to, and the notebook it came from stays the meta
+   row link's business, exactly as before.
+
+   The taps navigate views and panes only. The notebook
+   segment performs the sidebar notebook row's own
+   state change (state.view to that notebook, renderAll,
+   the phone pane flip to the list), with one addition:
+   the list is scrolled so the note he came from, which
+   stays selected throughout, is on screen. The
+   "Notebooks" segment lands on All Notes, and the
+   Trash and Archive segments land on their views, the
+   sidebar rows' same one line pattern. NOTHING here
+   opens, closes, or switches the open note: the note
+   stays open in the editor behind the list, so the
+   v2.51 note switch settle has nothing to settle, and
+   no path through the bar can mark the note dirty or
+   write anything. On desktop the panes are all visible
+   already, so the same taps simply change the view in
+   place (setMobileView is the app's own no-op there).
+
+   The bar is rebuilt on every editor render beside
+   refreshNotebookLink, so the notebook segment follows
+   renames and notebook moves, and the title segment
+   follows the title field: it reads the field itself,
+   not the note object, so a render landing mid typing
+   still shows what is typed, and an input listener
+   (wired with the editor's buttons) keeps it live
+   between renders, worded "Untitled note" when the
+   field is blank, the app's universal fallback. The
+   bar lives inside .editor-inner, in the title's own
+   scroll flow, and nowhere near collectEditor's field
+   list, so it can never be serialized into a note.
+   -------------------------------------------------------------------------- */
+function breadcrumbTitleText() {
+  const input = document.getElementById("noteTitle");
+  const typed = input ? input.value.trim() : "";
+  return typed || "Untitled note";
+}
+
+function renderBreadcrumb(note) {
+  const list = document.getElementById("crumbList");
+  if (!list || !note) { return; }
+  list.innerHTML = "";
+  function addSeparator() {
+    const li = document.createElement("li");
+    li.className = "crumb-item";
+    const sep = document.createElement("span");
+    sep.className = "crumb-sep";
+    sep.setAttribute("aria-hidden", "true");
+    sep.textContent = "\u203A";
+    li.appendChild(sep);
+    list.appendChild(li);
+  }
+  function addLink(label, nav, slug) {
+    if (list.children.length) { addSeparator(); }
+    const li = document.createElement("li");
+    li.className = "crumb-item";
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "crumb-link";
+    btn.textContent = label;
+    btn.setAttribute("data-crumb-nav", nav);
+    if (slug) { btn.setAttribute("data-crumb-slug", slug); }
+    li.appendChild(btn);
+    list.appendChild(li);
+  }
+  function addCurrent(text) {
+    if (list.children.length) { addSeparator(); }
+    const li = document.createElement("li");
+    li.className = "crumb-item crumb-item-current";
+    const span = document.createElement("span");
+    span.className = "crumb-current";
+    span.id = "crumbCurrent";
+    span.setAttribute("aria-current", "page");
+    span.textContent = text;
+    li.appendChild(span);
+    list.appendChild(li);
+  }
+  if (note.trashed) {
+    addLink("Trash", "trash", null);
+  } else if (note.archived) {
+    addLink("Archive", "archive", null);
+  } else {
+    addLink("Notebooks", "notebooks", null);
+    const nb = state.notebooks.find(function (n) {
+      return n.slug === note.notebook;
+    });
+    addLink(nb ? nb.name : (note.notebook || ""), "notebook",
+      note.notebook);
+  }
+  addCurrent(breadcrumbTitleText());
+}
+
+/* One breadcrumb tap: set the view the segment names,
+   render, flip the phone to the list, and land the
+   list's scroll on the open note's card. The sidebar
+   rows' pattern verbatim, plus the scroll; the open
+   note itself is never touched. */
+function handleBreadcrumbNav(nav, slug) {
+  if (nav === "notebook") {
+    if (!slug) { return; }
+    state.view = { kind: "notebook", value: slug };
+  } else if (nav === "trash") {
+    state.view = { kind: "trash", value: null };
+  } else if (nav === "archive") {
+    state.view = { kind: "archive", value: null };
+  } else {
+    state.view = { kind: "all", value: null };
+  }
+  renderAll();
+  setMobileView("list");
+  scrollSelectedNoteCardIntoView();
+}
+
+/* The list a breadcrumb tap lands on shows the open
+   note selected (state.selectedId never changed), but
+   a long list may hold its card below the fold; bring
+   it into view, nearest edge, so the note he came
+   from is the one under his eye. Guarded the way the
+   app guards its other scrollIntoView call: a host
+   without the method simply skips the scroll. */
+function scrollSelectedNoteCardIntoView() {
+  if (!state.selectedId) { return; }
+  const cards = document.querySelectorAll(
+    "#noteList .note-card");
+  for (let i = 0; i < cards.length; i++) {
+    if (cards[i].getAttribute("data-note-id") ===
+        state.selectedId) {
+      if (typeof cards[i].scrollIntoView === "function") {
+        cards[i].scrollIntoView({ block: "nearest" });
+      }
+      return;
+    }
+  }
+}
 
 /* --------------------------------------------------------------------------
    v2.5: the notebook link and its menu.
@@ -35107,6 +35365,10 @@ function moveNoteToNotebook(note, targetSlug) {
        below re-runs it anyway; this keeps the link right even
        before that render lands.) */
     refreshNotebookLink(note);
+    /* v2.56: the breadcrumb's notebook segment names
+       the same notebook; refresh it to the target too,
+       for the same reason. */
+    renderBreadcrumb(note);
   } else {
     note.notebook = targetSlug;
   }
@@ -47671,6 +47933,29 @@ function wireEvents() {
     document.getElementById("newNoteBtn").click();
   });
   document.getElementById("editorBackBtn").addEventListener("click", function () { setMobileView("list"); });
+  /* v2.56: breadcrumb navigation. One delegated listener
+     on the bar itself, since renderBreadcrumb rebuilds
+     its segments on every editor render; the segments
+     are buttons carrying their destination, and the
+     handler is the one navigation path (see
+     handleBreadcrumbNav). Clicks on separators and on
+     the current segment are not links and do nothing. */
+  document.getElementById("noteBreadcrumb").addEventListener("click", function (ev) {
+    const btn = ev.target && ev.target.closest ?
+      ev.target.closest("[data-crumb-nav]") : null;
+    if (!btn) { return; }
+    handleBreadcrumbNav(btn.getAttribute("data-crumb-nav"),
+      btn.getAttribute("data-crumb-slug"));
+  });
+  /* v2.56: the crumb's title segment follows the title
+     field as it is typed, not only on the next render.
+     (The field's dirty marking listener is wired with
+     the other editor inputs below; this one only
+     mirrors the text into the bar.) */
+  document.getElementById("noteTitle").addEventListener("input", function () {
+    const cur = document.getElementById("crumbCurrent");
+    if (cur) { cur.textContent = breadcrumbTitleText(); }
+  });
   /* v2.24.3: the Things to do page's footer carries the same
      phone affordance in its own footer. */
   document.getElementById("thingsBackBtn").addEventListener("click", function () { setMobileView("list"); });
