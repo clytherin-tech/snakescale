@@ -40,10 +40,60 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-29-SSN-V2520
-  Version: 2.52.0
+  BUILD STAMP: 2026-10-29-SSN-V2530
+  Version: 2.53.0
 
   Revision history:
+    v2.53.0 2026-10-29 Early tasks: the load's tasks
+                      read starts first and lands
+                      when it resolves. Through
+                      v2.52.0 the read started
+                      with the load's batch but
+                      its result was applied only
+                      at the load's tail, behind
+                      the index read, every
+                      folder listing, the catalog
+                      read, and the reconcile, so
+                      on the owner's device the
+                      notes painted from cache at
+                      2.5 s while the tasks stayed
+                      greyed stand-ins until the
+                      6.6 s full sync. The read
+                      now starts at the very top
+                      of loadAllFromRepo, before
+                      the index read (tasks.json
+                      is a root level file and
+                      needs nothing from it), and
+                      one apply path
+                      (applyLoadedTasks) runs the
+                      moment it lands: the stamps
+                      comparison from the list in
+                      memory, the swap, the token
+                      and broken flags, the arm,
+                      the post load pass, a cache
+                      refresh, and a repaint of
+                      the task surfaces only. The
+                      tail awaits the same promise
+                      and calls the same path,
+                      which is a no op once the
+                      early landing ran, so the
+                      post load pass runs exactly
+                      once per load however the
+                      read is timed, and a task
+                      changed in the new window
+                      between the landing and the
+                      load's end survives the
+                      load. A per load generation
+                      refuses a landing from a
+                      read a newer load superseded
+                      or a sign out orphaned. A
+                      failed read still keeps the
+                      tasks in memory, unarmed.
+                      The Last load readout gains
+                      a Tasks ready line ahead of
+                      Fully synced, from a boot
+                      mark recorded when the apply
+                      lands.
     v2.52.0 2026-10-29 Home widgets, live drag and
                       tight packing, directed and
                       confirmed by Chris on
@@ -9251,8 +9301,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-29-SSN-V2520";
-const APP_VERSION = "2.52.0";
+const APP_BUILD = "2026-10-29-SSN-V2530";
+const APP_VERSION = "2.53.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -11798,6 +11848,9 @@ let lastTasksToken = null;       /* token of the tasks file last read or written
 let tasksArmed = false;          /* true once a load completed this session */
 let tasksFileBroken = false;     /* the stored file could not be used */
 let tasksWritable = false;       /* a real mutation has armed overwriting */
+let tasksLoadApplied = false;    /* v2.53: this load's tasks read has landed */
+let tasksLoadGeneration = 0;     /* v2.53: per load stamp; a stale read's
+                                    landing is refused (see applyLoadedTasks) */
 
 /* One stored task, cleaned into the shape above. Entries with
    no usable id are dropped; every other field falls back to
@@ -12165,14 +12218,13 @@ function flushTasksWrites() {
 }
 
 /* The tasks read for a load, lifted out of loadAllFromRepo so
-   the load can start it alongside the catalog read and the
-   folder listings and await it where the rest settle. Returns
-   null on a transport failure (the load keeps the tasks it
-   already holds in memory), and otherwise {tasks, token,
-   broken}: a missing file is an empty list and no token; an
-   unparseable or wrongly shaped file is an empty list, its
-   token kept (so an armed write replaces exactly it), and
-   broken set. */
+   the load can start it on its own and apply the result the
+   moment it lands (applyLoadedTasks, below). Returns null on
+   a transport failure (the load keeps the tasks it already
+   holds in memory), and otherwise {tasks, token, broken}: a
+   missing file is an empty list and no token; an unparseable
+   or wrongly shaped file is an empty list, its token kept
+   (so an armed write replaces exactly it), and broken set. */
 async function readTasksForLoad() {
   let file = null;
   try {
@@ -12196,6 +12248,85 @@ async function readTasksForLoad() {
   }
 }
 
+/* The repaint half of afterTasksChanged, lifted out so the
+   early tasks landing below can repaint the same surfaces
+   without the mutation funnel's persistence and reminder
+   side effects (the writer owns persistence; onTasksLoaded
+   owns the post load reminder look). Every surface that
+   displays tasks is here: the sidebar (the Tasks count),
+   the list pane (the Tasks view renders through
+   renderNoteList, and the Things to do tile rides the
+   notes list), Home, and the Things page, which owns the
+   editor pane while it is open (renderEditor there renders
+   the page and touches no note fields, by its design), so
+   a landing in the middle of a load can never refill a
+   note being edited or move a selection. */
+function repaintTaskSurfaces() {
+  renderSidebar();
+  if (state.view.kind === "tasks" || state.view.kind === "all" ||
+      state.view.kind === "notebook") {
+    renderNoteList();
+  }
+  /* v2.33: an open Home re-renders in place too, like the
+     Things page below: a completion from its Tasks
+     widget's own rows, an edit saved in the task editor
+     over Home, or a sync's task reload lands on the
+     dashboard at once. */
+  if (state.view.kind === "home") { renderHome(); }
+  /* v2.24.3: an open Things to do page re-renders in place,
+     so a completion from its own rows, an edit saved in the
+     task editor, or a quick add lands on the page at once.
+     It also arrives here on a sync's task reload, which is
+     how a remote change reaches the open page. */
+  if (state.thingsNotebook) { renderEditor(); }
+}
+
+/* v2.53: the ONE apply path for a load's tasks read. The
+   load calls it from the landing continuation the moment
+   the read resolves, and again at its tail after awaiting
+   the same promise; the first call wins and every later
+   one is a no op, which is what makes onTasksLoaded run
+   exactly once per load however the read is timed. The
+   generation must still be the current one: a read
+   orphaned by a newer load, or by a sign out while it was
+   in flight, applies nothing. A null read (a transport
+   failure) applies nothing either: the tasks already in
+   memory (the cache paint's display only copy at boot,
+   the live list on a later sync) stay exactly as they
+   were, unarmed if they were unarmed. The previous
+   updated stamps are captured from whatever list is in
+   memory at the moment of landing, the cache copy at
+   boot or the live list on a later sync, which is the
+   honest comparison for the open editor's refresh rule
+   in onTasksLoaded. The landing records the boot
+   report's tasks stage, refreshes the local cache (the
+   snapshot then holds the real tasks even if the rest of
+   the load is still gathering), and repaints the task
+   surfaces; the load around it never touches state.tasks
+   again after this, so a mutation the user makes in the
+   window between the landing and the load's end survives
+   the load, and the load's own cache write at its end
+   snapshots the list as it then stands. */
+function applyLoadedTasks(tasksLoad, generation) {
+  if (!tasksLoad) { return false; }
+  if (generation !== tasksLoadGeneration) { return false; }
+  if (tasksLoadApplied) { return false; }
+  tasksLoadApplied = true;
+  const prevTaskUpdatedById = {};
+  state.tasks.forEach(function (t) {
+    prevTaskUpdatedById[t.id] = t.updated;
+  });
+  state.tasks = tasksLoad.tasks;
+  lastTasksToken = tasksLoad.token;
+  tasksFileBroken = tasksLoad.broken;
+  tasksArmed = true;
+  bootMark("tasksReady");
+  onTasksLoaded(prevTaskUpdatedById);
+  saveCache();
+  repaintTaskSurfaces();
+  return true;
+}
+
 /* Sign out drops the tasks session state, mirroring
    resetCatalogRuntimeState: no token, no armed writer, and no
    fired reminder record may leak into the next sign in on this
@@ -12206,6 +12337,11 @@ function resetTasksRuntimeState() {
     tasksWriteTimer = null;
   }
   tasksWriteDirty = false;
+  /* v2.53: the landing state resets with the rest, and the
+     generation bump orphans any tasks read still in flight
+     from this session, so it can never arm the next one. */
+  tasksLoadApplied = false;
+  tasksLoadGeneration += 1;
   tasksArmed = false;
   tasksWritable = false;
   tasksFileBroken = false;
@@ -12402,23 +12538,9 @@ function afterTasksChanged() {
      loads. saveCache's catalog half stays inert until
      armed, exactly as on the other paths. */
   saveCache();
-  renderSidebar();
-  if (state.view.kind === "tasks" || state.view.kind === "all" ||
-      state.view.kind === "notebook") {
-    renderNoteList();
-  }
-  /* v2.33: an open Home re-renders in place too, like the
-     Things page below: a completion from its Tasks
-     widget's own rows, an edit saved in the task editor
-     over Home, or a sync's task reload lands on the
-     dashboard at once. */
-  if (state.view.kind === "home") { renderHome(); }
-  /* v2.24.3: an open Things to do page re-renders in place,
-     so a completion from its own rows, an edit saved in the
-     task editor, or a quick add lands on the page at once.
-     It also arrives here on a sync's task reload, which is
-     how a remote change reaches the open page. */
-  if (state.thingsNotebook) { renderEditor(); }
+  /* v2.53: the renders live in repaintTaskSurfaces now,
+     shared with the early tasks landing. */
+  repaintTaskSurfaces();
   /* v2.49.0: an open note's tasks blocks are windows onto
      this same task state, so they repaint with every
      change too: a completion from a block itself, an edit
@@ -13275,6 +13397,35 @@ async function readCatalogForLoad() {
 
 async function loadAllFromRepo() {
   attachmentParseWarnings = 0;   /* v1.2: reset the malformed metadata count */
+  /* v2.53: the tasks read starts FIRST, before the index
+     read, and lands the moment it resolves. tasks.json is
+     a root level file and needs nothing from the index, so
+     the read races nothing; until v2.52 its result waited
+     at the load's tail, behind every folder listing and
+     the catalog reconcile, and on the owner's device that
+     was the visible gap between the notes painting from
+     cache (2.5 s) and the tasks turning real at the full
+     sync (6.6 s). The landing continuation applies a fast
+     read while the load below is still gathering; the
+     tail's own apply call (same function, same guard)
+     covers a read so slow it arrives only there, and the
+     per load generation keeps a superseded or signed out
+     read from ever applying. A failure inside the landing
+     is contained and warned about, never allowed to fail
+     the load around it: the tail's apply call is the
+     second chance, and the arming gates stay shut until
+     an apply actually runs. */
+  const tasksGeneration = ++tasksLoadGeneration;
+  tasksLoadApplied = false;
+  const tasksPromise = readTasksForLoad();
+  tasksPromise.then(function (tasksLoad) {
+    try {
+      applyLoadedTasks(tasksLoad, tasksGeneration);
+    } catch (err) {
+      console.warn("Early tasks landing failed: " +
+        (err && err.message));
+    }
+  });
   /* v2.21: the index read and the notebooks listing are
      independent; they run together now. Promise.all keeps the
      old failure surface: a rejection from either fails the
@@ -13385,9 +13536,9 @@ async function loadAllFromRepo() {
     listings.archive = entries;
   }));
   const catalogPromise = readCatalogForLoad();
-  /* v2.24: the tasks file rides along too, read the same way:
-     started with the batch, awaited where the rest settle. */
-  const tasksPromise = readTasksForLoad();
+  /* v2.53: the tasks read is not started here any more; it
+     started at the top of this function and may already
+     have landed (see applyLoadedTasks). */
   /* v2.20: the drop box rides along (creates itself if missing,
      stashes unprocessed contents for syncNow's import step). */
   const incomingPromise = loadIncomingStash();
@@ -13411,24 +13562,22 @@ async function loadAllFromRepo() {
   state.notes = loaded.notes;
   state.trash = loaded.trash;
   state.archive = loaded.archive;
-  /* v2.24: the tasks land with the library. A failed read
-     (tasksLoad null) keeps the tasks already in memory rather
-     than emptying them on a transport hiccup. The previous
-     updated stamps ride along to onTasksLoaded, which owns the
-     open task editor's refresh rule and the post load reminder
-     check (the boot catch up lives there). */
+  /* v2.53: the tasks were applied when their read landed
+     (the top of this function); this await only settles
+     the read before the load finishes, and the apply call
+     is the tail's own landing for a read that arrives
+     only now, a no op in every other run because the
+     early landing already ran it. A failed read (null)
+     keeps the tasks already in memory rather than
+     emptying them on a transport hiccup, exactly as
+     before. From here on the load never touches
+     state.tasks again, so a task the user changed in the
+     window since the early landing (tasks arm early now,
+     so that window is real) survives this load untouched,
+     and the saveCache below snapshots the list as it then
+     stands. */
   const tasksLoad = await tasksPromise;
-  let prevTaskUpdatedById = null;
-  if (tasksLoad) {
-    prevTaskUpdatedById = {};
-    state.tasks.forEach(function (t) {
-      prevTaskUpdatedById[t.id] = t.updated;
-    });
-    state.tasks = tasksLoad.tasks;
-    lastTasksToken = tasksLoad.token;
-    tasksFileBroken = tasksLoad.broken;
-    tasksArmed = true;
-  }
+  applyLoadedTasks(tasksLoad, tasksGeneration);
   /* v2.16: the auto-sync corpus is whatever this load just
      resolved; see rebuildAutoSyncKnownIds. */
   rebuildAutoSyncKnownIds();
@@ -13443,11 +13592,12 @@ async function loadAllFromRepo() {
   /* v2.20: from here on this session may maintain the catalog;
      the saveCache below schedules its first (re)build check. */
   catalogArmed = true;
-  /* v2.24: the tasks settled above get their post load pass
-     (open editor refresh under the untouched rule, the
-     reminder catch up, and any notification click waiting to
-     open its task). */
-  if (tasksLoad) { onTasksLoaded(prevTaskUpdatedById); }
+  /* v2.53: the tasks' post load pass (open editor refresh
+     under the untouched rule, the reminder catch up, and
+     any notification click waiting to open its task) ran
+     inside applyLoadedTasks, at the moment the read
+     landed: early, or at the tail await above for a slow
+     read, exactly once either way. */
   /* v2.35: the note reminders' post load pass: the boot
      catch up for moments missed while the app was closed,
      and any notification click still waiting to open its
@@ -20353,6 +20503,9 @@ async function connectAndLoad() {
      catalogRead   this boot's load read catalog.json
      listingsDone  this boot's load gathered the folder listings
      firstPaint    the list was on screen, the overlay down
+     tasksReady    the tasks armed from the tasks file
+                   (v2.53: lands when the tasks read does,
+                   ahead of the full sync, not with it)
      synced        the boot sync settled
    A stage that did not run (no readable cache to paint, an
    offline boot that never synced) stays null and the readout
@@ -20361,7 +20514,8 @@ async function connectAndLoad() {
 const bootReport = {
   marks: {
     signInReady: null, cachePainted: null, catalogRead: null,
-    listingsDone: null, firstPaint: null, synced: null
+    listingsDone: null, firstPaint: null, tasksReady: null,
+    synced: null
   },
   /* The boot looked for a cache and found none usable, which
      the readout words differently from a stage that simply
@@ -20432,6 +20586,9 @@ function renderLastLoadReadout() {
   lines.push("Folder listings: " + formatBootTime(m.listingsDone));
   lines.push("Note bodies downloaded: " + bootReport.noteDownloads);
   lines.push("Notes on screen: " + formatBootTime(m.firstPaint));
+  /* v2.53: the tasks stage, in the same style, ahead of
+     the synced line it used to hide behind. */
+  lines.push("Tasks ready: " + formatBootTime(m.tasksReady));
   lines.push("Fully synced: " + formatBootTime(m.synced));
   lines.forEach(function (text) {
     const row = document.createElement("div");
