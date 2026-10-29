@@ -40,10 +40,64 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-29-SSN-V2490
-  Version: 2.49.0
+  BUILD STAMP: 2026-10-29-SSN-V2500
+  Version: 2.50.0
 
   Revision history:
+    v2.50.0 2026-10-29 The shell build, three changes
+                      Chris directed and confirmed on
+                      2026-10-29. (1) The latest
+                      version loads itself: the page
+                      asks the service worker
+                      registration for an update check
+                      on boot and again whenever the
+                      tab returns to visible, and when
+                      a new worker takes control of a
+                      page that had a controller at
+                      boot (never on a first install),
+                      the page reloads itself exactly
+                      once for that build, guarded by
+                      a session record keyed to the
+                      running build stamp so it can
+                      never loop. An open note with
+                      unsaved changes is never reloaded
+                      away: a "New version ready" pill
+                      in the sidebar's sync row says
+                      the update is waiting, and the
+                      reload lands as soon as the note
+                      saves or closes. Notification
+                      arrivals (?task=, ?noteReminder=)
+                      survive, because the boot readers
+                      run before any reload can and a
+                      plain reload keeps the query.
+                      The cache first shell and offline
+                      behavior are untouched. (2) The
+                      sidebar moves: the Synced pill
+                      and the three dot menu leave the
+                      sidebar footer for a row at the
+                      top of the sidebar, directly
+                      under the search bar (the menu
+                      now opens downward from it), and
+                      the collapse control moves into
+                      the sidebar head, at the upper
+                      right corner of the logo row
+                      itself; the logo does not move
+                      and no row is added. The rail's
+                      expand control moves to the very
+                      top of the rail, so Hide and Show
+                      sit in the same corner in both
+                      forms. The footer keeps the save
+                      status line and the version
+                      line, nothing else. (3) The
+                      version rides in the title bar:
+                      the document title is set from
+                      APP_VERSION at boot ("SnakeScale
+                      Notes v" plus the version), the
+                      SnakeScale CAD discipline: the
+                      static title in the markup
+                      carries no version, and the
+                      install name still comes from
+                      the manifest, never the title.
     v2.49.0 2026-10-29 Tasks inside notes, the
                       reference model (Phase 5 item 1
                       of the Evernote parity program,
@@ -3392,9 +3446,41 @@ body.dark .gate-brand .wordmark{color:#EAF3EC;}
   width:264px;flex:0 0 264px;background:var(--sidebar);color:#EAF3EC;
   display:flex;flex-direction:column;overflow-y:auto;
 }
-.sidebar-head{display:flex;align-items:center;gap:11px;padding:20px 18px 10px;}
+/* v2.50: the head is the positioning context for the
+   collapse chip in its upper right corner (below). */
+.sidebar-head{position:relative;display:flex;align-items:center;gap:11px;padding:20px 18px 10px;}
 .sidebar-head .logo-slot svg{display:block;width:30px;height:auto;}
-.sidebar-head .wordmark{font-size:19px;font-weight:800;color:#fff;letter-spacing:.2px;}
+.sidebar-head .wordmark{font-size:19px;font-weight:800;color:#fff;letter-spacing:.2px;white-space:nowrap;}
+/* v2.50: the collapse chip sits in the upper right corner
+   of the logo row itself (Chris's confirmed layout: the
+   logo does not move and no row is added). It is placed
+   in the corner, over the head's top padding band, rather
+   than in the flex line: the wordmark nearly fills the
+   264px sidebar's line (logo, gap, and the wordmark's own
+   width leave no room for an in-flow button at any real
+   font), so an in-flow chip would have wrapped the
+   wordmark onto two lines. In the corner it shares the
+   row without touching the logo: its bottom edge stays
+   above the wordmark's ink (the text's cap height begins
+   below the head's padding band), and the wordmark is
+   nowrap above, so the two can never meet. The base chip
+   rule (its colors and border, in the footer block below)
+   is unchanged; this rule sizes the corner placement a
+   little smaller than the footer's room allowed. */
+.sidebar-head .sidebar-collapse-btn{
+  position:absolute;top:4px;right:10px;
+  min-width:34px;min-height:24px;padding:1px 9px;font-size:14px;
+}
+/* At phone widths the sidebar is full width, so the
+   corner has room to spare; the chip takes the finger
+   size the v2.24.4 touch pass gives it there (that pass's
+   own .sidebar-collapse-btn rule now reaches only this
+   chip, and this more specific rule carries its sizes). */
+@media (max-width:900px){
+  .sidebar-head .sidebar-collapse-btn{
+    min-width:44px;min-height:40px;padding:6px 12px;font-size:15px;
+  }
+}
 .sidebar-head .wordmark span{color:var(--accent);}
 #newNoteBtn{
   margin:12px 16px 8px;
@@ -3917,8 +4003,11 @@ body.dark .merge-order-drag:hover{color:var(--accent);}
   margin-top:auto;padding:16px;border-top:1px solid #1D4A38;font-size:13px;
 }
 /* v2.7.1: the .foot-buttons row that held the standalone Sync now
-   button is gone with the button; every footer action now lives in
-   the three dot menu beside the Synced pill. */
+   button is gone with the button; every footer action moved into
+   the three dot menu beside the Synced pill. v2.50: that row
+   itself moved out of the footer to the top of the sidebar
+   (see .sync-row-top), leaving the footer its save status
+   and version lines. */
 /* v1.6: the app version, small and quiet at the very bottom of the
    sidebar. The text is written by the script from APP_VERSION, so it
    can never drift from the build that is actually running. */
@@ -3934,37 +4023,68 @@ body.dark .merge-order-drag:hover{color:var(--accent);}
   transition:border-color var(--motion),color var(--motion);
 }
 /* v2.5 put the sync pill and the save status in one row in the
-   sidebar footer. v2.7 (Chris's layout): the row now holds the
+   sidebar footer. v2.7 (Chris's layout): the row held the
    pill at the left and the footer's three dot menu button at the
    right end, and the save status moved to its own line under the
-   row (.save-state-row). The row is the menu's positioning
-   anchor: the menu opens upward from the row's right end. */
+   row (.save-state-row, still in the footer). The row is the
+   menu's positioning anchor. v2.50 (Chris's layout again): the
+   row moves to the top of the sidebar, directly under the
+   search bar (.sync-row-top below), and the menu opens
+   downward from the row's right end instead of upward. */
 .sync-row{
   display:flex;align-items:center;gap:10px;margin-bottom:6px;
   flex-wrap:wrap;justify-content:space-between;position:relative;
 }
+/* v2.50: the row's top-of-sidebar placement: the search
+   box's own side padding (16px) is matched so the pill
+   lines up with the search input above it, and the row
+   keeps a little air above the navigation section. When
+   the New version pill is showing, the row wraps and the
+   menu button takes a second line at the right; that is
+   a temporary state (it lasts until the open note saves
+   and the update reload lands), and wrapping inside the
+   row is what keeps the search box itself uncrowded. */
+.sync-row-top{padding:0 16px 2px;}
+/* v2.50: the New version ready pill, the visible half of
+   the self update reload (see the v2.50 block at
+   registerServiceWorker). It wears the sync pill's own
+   chip body with the amber of the busy and offline
+   states, since waiting is what it announces; it is a
+   button because clicking it asks for the reload now. */
+.update-pill{
+  display:inline-flex;align-items:center;gap:6px;padding:4px 10px;
+  border-radius:var(--radius-pill);font-size:12px;font-weight:700;
+  background:#0A2E21;color:#FFE1A8;border:1px solid #D9A441;
+  cursor:pointer;transition:border-color var(--motion),color var(--motion);
+}
+.update-pill:hover{border-color:#FFE1A8;}
+.update-pill.hidden{display:none;}
 .save-state-row{margin-bottom:10px;}
 #saveState{font-size:12.5px;color:#9DB8A6;font-weight:600;}
-/* v2.7: the sidebar footer's three dot menu button and its menu.
+/* v2.7: the sidebar's three dot menu button and its menu.
    The button is a quiet dark chip like the footer buttons it
    replaced; the menu is the standard card (the #attMenu look)
-   anchored to the sync row, opening upward so it never runs off
-   the bottom of the sidebar. */
+   anchored to the sync row. Through v2.49 the row sat in the
+   footer and the menu opened upward so it never ran off the
+   bottom of the sidebar; v2.50 moves the row under the
+   search bar and the menu opens downward from it. */
 .sidebar-menu-btn{
   background:#0A2E21;border:1px solid #2A5240;color:#EAF3EC;
   border-radius:var(--radius-button);min-width:30px;min-height:26px;
   padding:1px 7px;font-size:16px;line-height:1;cursor:pointer;
 }
 .sidebar-menu-btn:hover{border-color:var(--accent);}
-/* v2.18: the sidebar's collapse control is a real button at the
-   foot of the expanded sidebar, right aligned under the version
-   line: a small dark rounded chip in the footer's own palette
-   (the sync pill's), carrying the "<" chevron and the tooltip
-   "Click to collapse". The rail's expand control is the same
-   chip in rail form (see the rail rules in the v2.5 block). */
-.sidebar-collapse-row{
-  display:flex;justify-content:flex-end;margin-top:10px;
-}
+/* v2.18: the sidebar's collapse control became a real
+   button, a small dark rounded chip in the footer's own
+   palette (the sync pill's), carrying the "<" chevron and
+   the tooltip "Click to collapse"; it sat at the foot of
+   the expanded sidebar, right aligned under the version
+   line, in a .sidebar-collapse-row of its own. v2.50: the
+   row is gone and the button lives in the sidebar head's
+   upper right corner (the placement rule is with the head
+   rules above); this base rule is its colors and border.
+   The rail's expand control is the same chip in rail form
+   (see the rail rules in the v2.5 block). */
 .sidebar-collapse-btn{
   background:#0A2E21;border:1px solid #2A5240;color:#EAF3EC;
   border-radius:var(--radius-button);min-width:46px;min-height:28px;
@@ -3977,7 +4097,10 @@ body.dark .merge-order-drag:hover{color:var(--accent);}
    action lives in the three dot menu now, as the item under Sync
    now, so its look is the shared .att-menu-item look. */
 #sidebarMenu{
-  position:absolute;z-index:60;right:0;bottom:calc(100% + 6px);
+  /* v2.50: anchored below the row now (top, not bottom):
+     the row lives at the top of the sidebar, so the menu
+     opens downward from it. */
+  position:absolute;z-index:60;right:0;top:calc(100% + 6px);
   min-width:212px;padding:6px;
   background:var(--surface);border:1px solid var(--border);
   border-radius:var(--radius-card);box-shadow:0 10px 28px rgba(6,32,22,.28);
@@ -4331,8 +4454,10 @@ body.note-drag-active{touch-action:none;overscroll-behavior:none;}
   }
   #sidebarRail .rail-btn:hover{background:rgba(87,167,115,.16);}
   /* v2.18: the rail's expand control is the chevron chip, the
-     same dark rounded button the expanded sidebar's footer
-     carries for collapse, showing ">" at the rail's foot. */
+     same dark rounded button the expanded sidebar carries
+     for collapse, showing ">". v2.50: it sits at the very
+     top of the rail, under the rail's logo, where its DOM
+     order (second child of the rail) puts it. */
   #sidebarRail .rail-expand-btn{
     background:#0A2E21;border:1px solid #2A5240;
     font-size:17px;font-weight:700;
@@ -7203,6 +7328,16 @@ body.dark .version-date{color:var(--accent);}
     <div class="sidebar-head">
       <span class="logo-slot"></span>
       <span class="wordmark">Snake<span>Scale</span> Notes</span>
+      <!-- v2.50: the collapse control lives here now, at
+           the upper right corner of the logo row itself
+           (Chris's confirmed layout): the logo does not
+           move, no row is added, and the button shares the
+           wordmark's line, pushed to its right end by the
+           head's flex (see .sidebar-head .sidebar-collapse-btn
+           in the stylesheet). It runs setSidebarRail, the
+           same toggle it has run since v2.18; through
+           v2.49 it sat at the foot of the sidebar. -->
+      <button class="sidebar-collapse-btn" id="sidebarCollapseBtn" type="button" title="Click to collapse" aria-label="Click to collapse">&lt;</button>
     </div>
 
     <button id="newNoteBtn" class="btn accent block" type="button">+ New Note</button>
@@ -7231,6 +7366,51 @@ body.dark .version-date{color:var(--accent);}
           <button type="button" id="savedSearchShortcutBtn" role="menuitem">Add to Shortcuts</button>
           <button type="button" id="savedSearchDeleteBtn" class="danger" role="menuitem">Delete</button>
         </div>
+      </div>
+    </div>
+
+    <!-- v2.50: the sync row lives here now, at the top of
+         the sidebar directly under the search bar (Chris's
+         confirmed layout): the Synced pill, the v2.50 new
+         version pill beside it, and the three dot menu
+         button at the row's right end, with the menu
+         opening downward from this row. Through v2.49 the
+         row sat in the sidebar footer and the menu opened
+         upward from it. The row's own history: v2.7 made
+         the footer's action buttons a three dot menu
+         beside the Synced pill and moved the save status
+         to its own line under the row; v2.7.1 moved Sync
+         now in as the first menu item; v2.8 moved Refresh
+         connection and Dark mode out of the menu into
+         Settings and a Settings item took their place;
+         v2.15 placed a labeled Refresh connection button
+         in the row, and v2.17 removed it again (Chris's
+         call), returning Refresh connection to the menu
+         under Sync now; v2.18 took Collapse sidebar out
+         of the menu for a real button (v2.50 moves that
+         button into the sidebar head, above). The menu
+         is Sync now, Refresh connection, Install app
+         (present only while the browser offers
+         installation), Settings, and Sign out. The icon
+         rail keeps its own sync dot and icon buttons. -->
+    <div class="sync-row sync-row-top">
+      <div class="sync-pill" id="syncPill" data-state="idle"><span class="sync-dot" aria-hidden="true"></span><span class="sync-label">Not synced yet</span></div>
+      <!-- v2.50: the new version pill, the visible half of
+           the self update reload (see the v2.50 block at
+           registerServiceWorker). Hidden unless a new
+           build has taken control while this page had
+           work it must not lose; clicking it asks the
+           reload machinery to try again now. -->
+      <button class="update-pill hidden" id="updateReadyPill" type="button" title="A new version of SnakeScale Notes is ready. It loads as soon as the open note is saved.">New version ready</button>
+      <button class="sidebar-menu-btn" id="sidebarMenuBtn" type="button" aria-haspopup="true" aria-expanded="false" title="More actions" aria-label="More actions">&#8943;</button>
+      <div id="sidebarMenu" class="hidden" role="menu" aria-label="Sidebar actions">
+        <button class="att-menu-item" id="sidebarSyncItem" type="button" role="menuitem">Sync now</button>
+        <button class="att-menu-item" id="sidebarRefreshItem" type="button" role="menuitem">Refresh connection</button>
+        <div class="sidebar-renewal-failure hidden" id="sidebarRenewalFailure" role="note"></div>
+        <button class="att-menu-item hidden" id="sidebarInstallItem" type="button" role="menuitem">Install app</button>
+        <button class="att-menu-item" id="sidebarSettingsItem" type="button" role="menuitem">Settings</button>
+        <div class="att-menu-sep"></div>
+        <button class="att-menu-item" id="sidebarSignOutItem" type="button" role="menuitem">Sign out</button>
       </div>
     </div>
 
@@ -7316,63 +7496,20 @@ body.dark .version-date{color:var(--accent);}
     </div>
 
     <div class="sidebar-foot">
-      <!-- v2.7: the footer's action buttons became a three dot menu
-           beside the Synced pill, and the save status moved to its
-           own line under the pill row (Chris's layout). v2.7.1
-           moved Sync now in as the first item. v2.8: Refresh
-           connection and Dark mode moved out of this menu into
-           the new Settings modal, and a Settings item took their
-           place here. The menu is now Sync now, Refresh
-           connection (v2.17, under Sync now), Install app
-           (present only while the browser offers installation),
-           Settings, Collapse sidebar (the v2.5 rail toggle), and
-           Sign out. The icon rail keeps its own icon buttons;
-           its refresh and theme buttons now call the shared
-           refresh and theme functions directly, while its other
-           leaf buttons still click their counterparts here.
-           v2.15: a labeled Refresh connection button sat in
-           this row, between the pill and the menu button.
-           v2.17: that button is gone again (Chris's call), and
-           Refresh connection is a menu item under Sync now,
-           running the same shared refresh flow; its working
-           feedback is the Synced pill and the closing toast,
-           the way Sync now's has always been.
-           v2.18: Collapse sidebar leaves this menu. The menu
-           is now Sync now, Refresh connection, Install app,
-           Settings, and Sign out, and collapsing is a real
-           button at the foot of the sidebar (below, under the
-           version line): a small dark chevron chip showing
-           "<" with the tooltip "Click to collapse", right
-           aligned after the footer's divider. The rail's
-           expand control is the same chip showing ">" at the
-           rail's foot. On mobile widths the rail never shows
-           and the sidebar is the off canvas pane as always;
-           the footer button rides along in it, harmless, and
-           the pane's own close paths are untouched. -->
-      <div class="sync-row">
-        <div class="sync-pill" id="syncPill" data-state="idle"><span class="sync-dot" aria-hidden="true"></span><span class="sync-label">Not synced yet</span></div>
-        <button class="sidebar-menu-btn" id="sidebarMenuBtn" type="button" aria-haspopup="true" aria-expanded="false" title="More actions" aria-label="More actions">&#8943;</button>
-        <div id="sidebarMenu" class="hidden" role="menu" aria-label="Sidebar actions">
-          <button class="att-menu-item" id="sidebarSyncItem" type="button" role="menuitem">Sync now</button>
-          <button class="att-menu-item" id="sidebarRefreshItem" type="button" role="menuitem">Refresh connection</button>
-          <div class="sidebar-renewal-failure hidden" id="sidebarRenewalFailure" role="note"></div>
-          <button class="att-menu-item hidden" id="sidebarInstallItem" type="button" role="menuitem">Install app</button>
-          <button class="att-menu-item" id="sidebarSettingsItem" type="button" role="menuitem">Settings</button>
-          <div class="att-menu-sep"></div>
-          <button class="att-menu-item" id="sidebarSignOutItem" type="button" role="menuitem">Sign out</button>
-        </div>
-      </div>
+      <!-- v2.50: the footer is down to its two quiet lines.
+           The sync row (the Synced pill, the new version
+           pill, and the three dot menu) moved to the top of
+           the sidebar, directly under the search bar, and
+           the collapse button moved into the sidebar head;
+           both moves are Chris's confirmed layout, and the
+           moved markup carries its own history with it.
+           What stays here is what always lived on its own
+           lines: the save status (here since v2.7 moved it
+           off the pill row) and the version line. -->
       <div class="save-state-row"><span id="saveState">No changes</span></div>
       <!-- v1.6: the running app's version, written from APP_VERSION
            by the script at boot. Never hard code a version here. -->
       <div class="app-version" id="appVersion"></div>
-      <!-- v2.18: the collapse button, at the very bottom of the
-           sidebar under the footer's divider, right aligned. It
-           runs setSidebarRail, the same toggle the menu item
-           ran through v2.17. -->
-      <div class="sidebar-collapse-row">
-        <button class="sidebar-collapse-btn" id="sidebarCollapseBtn" type="button" title="Click to collapse" aria-label="Click to collapse">&lt;</button>
-      </div>
     </div>
   </aside>
 
@@ -7393,6 +7530,18 @@ body.dark .version-date{color:var(--accent);}
        carries .active, maintained by renderRailChrome. -->
   <aside id="sidebarRail" aria-label="Sidebar, collapsed to icons">
     <div class="rail-head"><span class="logo-slot" aria-hidden="true"></span></div>
+    <!-- v2.50: the expand control sits at the very top of
+         the rail now (Chris's confirmed layout), directly
+         under the rail's logo, so Hide and Show live in
+         the same corner in both sidebar forms: the
+         collapse button is at the upper right of the
+         expanded sidebar's logo row, and this button is
+         first under the rail's logo. It is the chevron
+         chip it became in v2.18, showing ">" with the
+         tooltip "Click to expand"; through v2.49 it sat
+         at the rail's foot. It runs setSidebarRail back,
+         as it always has. -->
+    <button class="rail-btn rail-expand-btn" id="railExpandBtn" type="button" title="Click to expand" aria-label="Click to expand">&gt;</button>
     <button class="rail-btn" id="railNewNoteBtn" type="button" title="New Note" aria-label="New Note"><svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true" focusable="false"><path d="M10 3v14M3 10h14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" fill="none"/></svg></button>
     <button class="rail-btn" id="railAllBtn" type="button" title="All Notes" aria-label="All Notes"><svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true" focusable="false"><path d="M3 5.5h14M3 10h14M3 14.5h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" fill="none"/></svg></button>
     <button class="rail-btn" id="railPinnedBtn" type="button" title="Pinned" aria-label="Pinned"><svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true" focusable="false"><rect x="7.2" y="2.2" width="8.6" height="8.6" rx="2.2" transform="rotate(45 11.5 6.5)" fill="currentColor" stroke="none"/><path d="M7.6 10.4L3 17" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" fill="none"/></svg></button>
@@ -7405,12 +7554,6 @@ body.dark .version-date{color:var(--accent);}
     <button class="rail-btn" id="railRefreshBtn" type="button" title="Refresh connection" aria-label="Refresh connection"><svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true" focusable="false"><path d="M16.5 10a6.5 6.5 0 1 1-1.9-4.6M16.7 2.8v3.4h-3.4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg></button>
     <button class="rail-btn" id="railThemeBtn" type="button" title="Dark mode" aria-label="Toggle dark mode"><svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true" focusable="false"><path d="M16.8 12.6A7.5 7.5 0 1 1 7.4 3.2a6 6 0 0 0 9.4 9.4z" fill="currentColor" stroke="none"/></svg></button>
     <button class="rail-btn" id="railLockBtn" type="button" title="Sign out" aria-label="Sign out"><svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true" focusable="false"><path d="M8 3H5.5A1.5 1.5 0 0 0 4 4.5v11A1.5 1.5 0 0 0 5.5 17H8M13 6l4 4-4 4M17 10H7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg></button>
-    <!-- v2.18: the expand control is the chevron chip now, the
-         same dark rounded button as the expanded sidebar's
-         collapse button, showing ">" with the tooltip "Click
-         to expand", in the same bottom of the rail spot this
-         button has always held. -->
-    <button class="rail-btn rail-expand-btn" id="railExpandBtn" type="button" title="Click to expand" aria-label="Click to expand">&gt;</button>
   </aside>
 
   <!-- v2.5: the rail's Notebooks flyout. One instance, app
@@ -8953,8 +9096,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-29-SSN-V2490";
-const APP_VERSION = "2.49.0";
+const APP_BUILD = "2026-10-29-SSN-V2500";
+const APP_VERSION = "2.50.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -19752,10 +19895,21 @@ function hideLoading() {
 
 /* v1.6: write the running version into the sidebar footer from the
    APP_VERSION constant, so the label can never drift from the build
-   that is actually running. Called once from boot. */
+   that is actually running. Called once from boot.
+   v2.50: the same call sets the document title ("SnakeScale
+   Notes v" plus the version), the SnakeScale CAD discipline:
+   the static title in the markup carries no version string,
+   the version lives only in APP_VERSION and APP_BUILD, and
+   the title is derived from it here, so the tab and the
+   installed app's title bar always name the build that is
+   actually running (which is also how Chris can see at a
+   glance whether the self update reload has landed). The
+   install name does NOT come from here: the manifest
+   carries its own name and short_name, untouched. */
 function renderAppVersion() {
   const el = document.getElementById("appVersion");
   if (el) { el.textContent = "Version " + APP_VERSION; }
+  document.title = "SnakeScale Notes v" + APP_VERSION;
 }
 
 function showScreen(name) {
@@ -23984,6 +24138,11 @@ function closeTaskEditor() {
   const modal = document.getElementById("taskModal");
   if (modal) { modal.classList.add("hidden"); }
   taskEditorState = null;
+  /* v2.50: the task editor closing is one of the landing
+     moments for a waiting self update reload (its dirty
+     flag is part of the unsaved work the reload waits
+     for; see updateReloadBlocked). */
+  maybeReloadForUpdate();
   /* v2.28.0: the @ popup's second host dies with the
      modal, and the note editor's styleWithCSS setting
      (on, app wide) is restored. */
@@ -24800,6 +24959,10 @@ function renderEditor() {
     clearCellSelection();
     /* v2.5: and no notebook menu. */
     closeNotebookMenu();
+    /* v2.50: no note on screen is one of the clean states
+       a waiting self update reload waits for; retry it
+       here, where the editor's closing lands. */
+    maybeReloadForUpdate();
     return;
   }
   /* v2.20: a catalog shell has no body on this device yet, so
@@ -25018,6 +25181,12 @@ function renderEditor() {
      Things page, shell) hide #editorWrap, and the bar with
      it. */
   renderBacklinks();
+  /* v2.50: a render that lands with the editor clean (a
+     note switch above all) is a landing moment for a
+     waiting self update reload; the check itself judges
+     the open note's baseline, so a dirty editor simply
+     declines here, on every render, until it is clean. */
+  maybeReloadForUpdate();
 }
 renderEditor._forId = null;
 
@@ -34351,10 +34520,29 @@ function initNoteDragAndDrop() {
 
 const autosave = debounce(async function () {
   const note = currentNote();
-  if (!note || note.trashed || note.archived) { return; }
+  if (!note || note.trashed || note.archived) {
+    /* v2.50: no live note to save: whatever edits were
+       pending belonged to a note the editor has closed
+       (trashed, archived, or deselected through a flow
+       that persisted or discarded them by its own rules),
+       so the unsettled count settles here rather than
+       blocking a waiting update reload forever, and the
+       settle retries the reload itself, since the render
+       that closed the note ran before this settle and
+       found the count still open. */
+    swEditorSettledSeq = swEditorDirtySeq;
+    maybeReloadForUpdate();
+    return;
+  }
   const previousPath = notePath(note);
   const previousNotebook = note.notebook;
   collectEditor(note);
+  /* v2.50: the edit count this save collected. The settle
+     below raises the settled count only to here, so an
+     edit typed while this save was in flight stays
+     unsettled and keeps its own later save (and landing
+     hook) responsible for it. */
+  const seqAtCollect = swEditorDirtySeq;
   /* v2.19: the untouched note gate. When the collected
      content matches the note's last saved baseline in full
      (title, body, tags, attachment records, pin, and
@@ -34382,30 +34570,54 @@ const autosave = debounce(async function () {
   if (notePath(note) === previousPath && noteMatchesLastSaved(note)) {
     setSaveState("Saved " + new Date().toLocaleTimeString([], {
       hour: "numeric", minute: "2-digit" }));
+    /* v2.50: the collected content is the saved baseline,
+       so the edits this save collected are settled (see
+       swEditorUnsettled at the v2.50 block). */
+    swEditorSettledSeq = seqAtCollect;
+    /* v2.50: a waiting self update reload retries at every
+       landing of the save machinery; this no-op landing is
+       one of them (see the v2.50 block at
+       registerServiceWorker). */
+    maybeReloadForUpdate();
     renderSidebar();
     renderNoteList();
     return;
   }
   setSaveState("Saving...");
+  /* v2.50: whether this save settles the edits it
+     collected (see the settle after the catch). A paused
+     or failed save settles nothing: the work is still only
+     on screen, and a waiting update reload keeps waiting. */
+  let saveLanded = false;
   try {
     const result = await saveNoteAndSettleMove(note, previousPath);
     if (result && result.queued) {
       setSaveState("Offline: changes queued");
+      saveLanded = true;
     } else if (result && result.conflict) {
       setSaveState("Conflict saved as a copy");
       state.selectedId = result.copy.id;
       renderEditor._forId = null;
+      saveLanded = true;
     } else if (result && result.paused) {
       /* v2.17.1: the note is diverged; its saves pause until
          Reload. Say so where "Saved" would otherwise lie. */
       setSaveState("Saving paused: this note changed elsewhere");
     } else {
       setSaveState("Saved " + new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }));
+      saveLanded = true;
     }
   } catch (err) {
     setSaveState("Save failed");
     toast("Save failed: " + err.message, true);
   }
+  /* v2.50: settle the collected edits when the save
+     landed, then retry a waiting self update reload at
+     the moment the note becomes clean. */
+  if (saveLanded && seqAtCollect === swEditorDirtySeq) {
+    swEditorSettledSeq = seqAtCollect;
+  }
+  maybeReloadForUpdate();
   /* Refresh counts, ordering, and this note card without touching the
      editor pane. */
   renderSidebar();
@@ -34419,6 +34631,12 @@ function markDirty() {
      dirty and never autosave (the editor fields are disabled for them
      anyway; this is the second lock). */
   if (!note || note.trashed || note.archived) { return; }
+  /* v2.50: count the edit as unsettled, so the self update
+     reload can tell a dirty editor from a clean one by the
+     same contract this line shows the user (see
+     swEditorUnsettled at the v2.50 block). The autosave
+     settles the count when its save lands. */
+  swEditorDirtySeq++;
   setSaveState("Unsaved changes...");
   autosave();
 }
@@ -43564,6 +43782,10 @@ async function filePendingWebClip() {
     return note;
   } finally {
     webClipFiling = false;
+    /* v2.50: a held clip is unsaved state a waiting self
+       update reload waits for; its filing finishing is
+       one of the reload's landing moments. */
+    maybeReloadForUpdate();
   }
 }
 
@@ -45406,6 +45628,13 @@ function wireEvents() {
     ev.stopPropagation();
     toggleSidebarMenu();
   });
+  /* v2.50: the New version ready pill in the sync row.
+     Its click asks the self update machinery to land the
+     waiting reload now; the machinery's own rules decide
+     (see onUpdateReadyPillClick). */
+  document.getElementById("updateReadyPill").addEventListener("click", function () {
+    onUpdateReadyPillClick();
+  });
   document.getElementById("sidebarMenu").addEventListener("click", function (ev) {
     ev.stopPropagation();
   });
@@ -45413,7 +45642,10 @@ function wireEvents() {
     const menu = document.getElementById("sidebarMenu");
     if (!menu || menu.classList.contains("hidden")) { return; }
     const target = ev.target;
-    if (target && target.closest && target.closest(".sidebar-foot")) { return; }
+    /* v2.50: the "inside" test follows the menu's row,
+       which moved to the top of the sidebar with the
+       menu (through v2.49 the row was in .sidebar-foot). */
+    if (target && target.closest && target.closest(".sync-row")) { return; }
     closeSidebarMenu();
   });
   document.addEventListener("keydown", function (ev) {
@@ -45426,10 +45658,12 @@ function wireEvents() {
     closeSidebarMenu();
     signOut().catch(function (err) { toast(err.message, true); });
   });
-  /* v2.18: collapse is the footer's chevron button, not a menu
-     item. It runs the same setSidebarRail toggle the item ran
-     (the rail's expand button below runs it back), with the
-     same settings persistence inside setSidebarRail. */
+  /* v2.18: collapse is a chevron button, not a menu item.
+     v2.50: the button lives in the sidebar head, at the
+     upper right corner of the logo row. It runs the same
+     setSidebarRail toggle it has run since v2.18 (the
+     rail's expand button runs it back), with the same
+     settings persistence inside setSidebarRail. */
   document.getElementById("sidebarCollapseBtn").addEventListener("click", function () {
     setSidebarRail(true);
   });
@@ -47255,12 +47489,267 @@ function registerServiceWorker() {
       if (reg && typeof reg.update === "function") {
         reg.update().catch(function () { /* silent, as below */ });
       }
+      /* v2.50: keep the registration and arm the self update
+         machinery (the v2.50 block below): update checks
+         when the tab returns to visible, and the safe
+         reload when a new worker takes control. */
+      swRegistration = reg || null;
+      armServiceWorkerUpdates();
     }).catch(function () {
       /* Silent by design: the app works the same without the
          worker; it only loses offline shell caching and the
          browser's install offer. */
     });
   } catch (err) { /* silent, same reasoning as above */ }
+}
+
+/* --------------------------------------------------------------------------
+   v2.50: the self update reload.
+
+   Why: the shell is cache first (see sw.js), so a navigation
+   is served the build its controlling worker precached. A
+   new release's worker installs in the background, skips
+   waiting, and claims the open pages, but claiming is not a
+   reload: a page keeps running the build it loaded with
+   until something reloads it, which in practice meant a
+   hard refresh to be sure of being current. This block
+   removes the hard refresh:
+
+   - The registration is asked for an update check on boot
+     (registerServiceWorker, above) and again whenever the
+     document returns to visible, so a tab left open across
+     a release finds the new worker on its own.
+   - When a new worker takes control (controllerchange) and
+     this page HAD a controller when it booted, the new
+     build is the one the next navigation would serve, so
+     the page reloads itself onto it. A first ever install
+     fires the same event when the first worker claims the
+     page; that page is already running the build it just
+     fetched, so the had-a-controller test is what keeps a
+     first install from reloading pointlessly.
+   - The automatic reload happens at most once per running
+     build: before reloading, the page records its own
+     APP_BUILD in sessionStorage under SW_RELOAD_GUARD_KEY,
+     and a page whose build is already recorded never auto
+     reloads again for it. If the browser somehow serves
+     the same build once more (a CDN edge still
+     propagating, say), the guard stops the loop and the
+     waiting update is left to the pill, whose click is
+     the manual route.
+   - Unsaved work is never reloaded away. While the open
+     note, the task editor, or a held web clip carries
+     unsaved state, the reload waits: the New version ready
+     pill shows in the sidebar's sync row, and the reload
+     is retried at the moments work lands (the autosave
+     completing, the editor closing or switching notes, the
+     task editor closing, a clip finishing filing).
+     Clicking the pill asks again at once; it never forces
+     its way past unsaved work or the guard, it only
+     answers, and in the guard's spent case (where the
+     screen is clean and the click is the user's own
+     instruction) it performs the reload itself.
+
+   Notification arrivals survive by construction: a click
+   that opened the app cold leaves its id in the query
+   (?task=, ?noteReminder=); the boot readers lift it into
+   memory synchronously at boot, before any reload can be
+   pending (registration is asynchronous, and the worker
+   still has to be fetched, installed, and activated); the
+   readers never strip the query; and the reload reloads
+   this page's own URL untouched, so a waiting arrival is
+   simply read again by the new build's boot.
+   -------------------------------------------------------------------------- */
+
+/* The registration register() resolved with, kept so the
+   visibility look can ask it for update checks. */
+let swRegistration = null;
+
+/* Whether a new worker has taken control and this page is
+   still running the build it loaded with. Set once per
+   arrival (onSwControllerChange), cleared when the reload
+   is performed. */
+let swUpdatePending = false;
+
+/* The editor's unsettled edit counts. markDirty bumps the
+   dirty count on every edit it announces; the autosave
+   raises the settled count to the count it collected when
+   a save lands (written, queued offline, or preserved
+   through a conflict; a paused or failed save settles
+   nothing). swEditorUnsettled() is the dirty editor test
+   updateReloadBlocked uses. The judgment counts
+   settlements rather than comparing content against the
+   saved baseline for a reason found in testing: a stored
+   body carrying a boolean attribute (every checklist's
+   checked) re-serializes from the editor's DOM in a
+   different string form (checked=""), so a freshly opened
+   note compares unequal to its baseline though the user
+   has typed nothing, and a comparison would make the
+   reload wait on work that does not exist. The counts
+   carry the same contract the save state line shows the
+   user: "Unsaved changes..." from markDirty until the
+   save lands. */
+let swEditorDirtySeq = 0;
+let swEditorSettledSeq = 0;
+function swEditorUnsettled() {
+  return swEditorDirtySeq > swEditorSettledSeq;
+}
+
+/* The sessionStorage key of the reload guard: its value is
+   the APP_BUILD of the page that already spent its one
+   automatic reload (see the block head). */
+const SW_RELOAD_GUARD_KEY = "snakescale.swReloadedFromBuild";
+
+/* Did this page have a controlling worker when it booted?
+   Captured at script evaluation, before any worker this
+   session installs can claim the page and change the
+   answer. */
+const swHadControllerAtBoot = (function () {
+  try {
+    return !!("serviceWorker" in navigator &&
+      navigator.serviceWorker.controller);
+  } catch (err) { return false; }
+})();
+
+/* The one navigation the update machinery performs, kept
+   as a named seam the way the scan and sketch export seams
+   are kept (scanCanvasToBlob, sketchExportToBlob): the
+   decision logic around it is the app's own and runs for
+   real everywhere; the seam is the single line that asks
+   the browser to load this page's URL again, query and
+   all, which is what carries a waiting notification
+   arrival through (see the block head). */
+function reloadForUpdate() {
+  window.location.reload();
+}
+
+/* Has this page's build already spent its automatic
+   reload? Storage can refuse (a private window's quirks);
+   an unreadable guard reads as unspent, and the pending
+   flag's set-once shape still keeps one page from
+   reloading twice for one arrival. */
+function swReloadGuardSpent() {
+  try {
+    return window.sessionStorage.getItem(SW_RELOAD_GUARD_KEY) ===
+      APP_BUILD;
+  } catch (err) { return false; }
+}
+
+function swSpendReloadGuard() {
+  try {
+    window.sessionStorage.setItem(SW_RELOAD_GUARD_KEY,
+      APP_BUILD);
+  } catch (err) { /* the guard's read side treats a failed
+                    write as unspent; see above */ }
+}
+
+/* Is there work on screen a reload would lose? A web clip
+   still held for sign in (or mid filing), the task
+   editor's own dirty flag, and the open note's unsettled
+   edits: the same three classes of unsaved state, each
+   with its own landing hook. With no note open there are
+   no editor fields holding work; a trashed or archived
+   note is read only and never busy (markDirty does not
+   count its edits in the first place). */
+function updateReloadBlocked() {
+  if (pendingWebClip || webClipFiling) { return true; }
+  if (taskEditorState && taskEditorState.dirty) { return true; }
+  const note = currentNote();
+  if (!note || note.trashed || note.archived) { return false; }
+  return swEditorUnsettled();
+}
+
+/* Show or hide the New version ready pill to match the
+   pending flag. The pill lives in the sidebar's sync row;
+   in the icon rail the sidebar is not rendered and the
+   pill simply is not on screen, while the flag and the
+   landing hooks keep working, and the pill is there when
+   the sidebar is shown again. */
+function renderUpdateReadyPill() {
+  const pill = document.getElementById("updateReadyPill");
+  if (pill) { pill.classList.toggle("hidden", !swUpdatePending); }
+}
+
+/* Try to land a waiting update now: the one path every
+   reload decision goes through. Nothing pending, a spent
+   guard, or unsaved work on screen each leave the page
+   exactly as it is; in the guard's case the pill stays up
+   as the manual route (see onUpdateReadyPillClick). */
+function maybeReloadForUpdate() {
+  if (!swUpdatePending) { return; }
+  if (swReloadGuardSpent()) { return; }
+  if (updateReloadBlocked()) { return; }
+  swSpendReloadGuard();
+  swUpdatePending = false;
+  renderUpdateReadyPill();
+  reloadForUpdate();
+}
+
+/* A new worker has taken control of this page. A first
+   install's claim is not an update (see the block head):
+   with no controller at boot there is nothing newer to
+   reload onto. Otherwise the update is pending from this
+   moment: reload at once when the screen is clean, and
+   let the pill and the landing hooks carry it when it is
+   not. The toast fires only on the waiting path, once per
+   arrival (the pending flag is set before it can repeat). */
+function onSwControllerChange() {
+  if (!swHadControllerAtBoot) { return; }
+  if (swUpdatePending) { return; }
+  swUpdatePending = true;
+  renderUpdateReadyPill();
+  if (!swReloadGuardSpent() && updateReloadBlocked()) {
+    toast("A new version of SnakeScale Notes is ready. " +
+      "It will load as soon as your unsaved work is saved.");
+  }
+  maybeReloadForUpdate();
+}
+
+/* Arm the machinery once the registration resolves: the
+   controller listener, and the visibility look that asks
+   for an update check whenever the document comes back to
+   the front (the reminder schedulers take the same look
+   in wireEvents; this one is the worker's). */
+function armServiceWorkerUpdates() {
+  try {
+    if ("serviceWorker" in navigator &&
+        typeof navigator.serviceWorker.addEventListener ===
+          "function") {
+      navigator.serviceWorker.addEventListener(
+        "controllerchange", onSwControllerChange);
+    }
+  } catch (err) { /* no worker events, no self update */ }
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState !== "visible") { return; }
+    if (swRegistration &&
+        typeof swRegistration.update === "function") {
+      swRegistration.update().catch(function () {
+        /* silent, like the boot check */
+      });
+    }
+  });
+}
+
+/* The pill's click: ask for the reload now. The machinery
+   still refuses over unsaved work (and says so, in words
+   that cover every kind of unsaved state); the click's
+   one extra power is the guard's spent case, where the
+   screen is clean and the click is the user's own
+   instruction to reload, so it performs the reload
+   itself. */
+function onUpdateReadyPillClick() {
+  if (!swUpdatePending) { return; }
+  if (updateReloadBlocked()) {
+    toast("The new version loads as soon as your " +
+      "unsaved work is saved.");
+    return;
+  }
+  if (swReloadGuardSpent()) {
+    swUpdatePending = false;
+    renderUpdateReadyPill();
+    reloadForUpdate();
+    return;
+  }
+  maybeReloadForUpdate();
 }
 
 /* The listeners and the registration run at script evaluation: the

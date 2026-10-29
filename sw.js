@@ -2,7 +2,7 @@
   ==========================================================================
   SnakeScale Notes service worker
   ==========================================================================
-  BUILD STAMP: 2026-10-29-SSN-V2490
+  BUILD STAMP: 2026-10-29-SSN-V2500
   Version: 2.11.0
 
   This worker exists for exactly one job: making SnakeScale Notes
@@ -60,12 +60,22 @@
   navigation after that is served the new build from the new
   cache. No version of this worker can strand a user on a stale
   build beyond that one navigation.
+  v2.50 closes even that one navigation from the page side:
+  the page asks this registration for an update check on boot
+  and whenever the tab returns to visible, and when a new
+  worker takes control of a page that had a controller at
+  boot, the page reloads itself onto the new build, at most
+  once per build and never over unsaved work (the page's
+  v2.50 block at registerServiceWorker carries the rules).
+  This worker's own behavior is unchanged: the reload is
+  the page's doing, and it lands on the new cache this
+  worker just installed.
   ==========================================================================
 */
 
 "use strict";
 
-const CACHE_NAME = "snakescale-shell-2026-10-29-SSN-V2490";
+const CACHE_NAME = "snakescale-shell-2026-10-29-SSN-V2500";
 
 /* The shell, as paths relative to this worker's scope (the site
    root). "./" and "./index.html" are both listed: the first is the
