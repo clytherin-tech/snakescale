@@ -40,10 +40,54 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-29-SSN-V2611
-  Version: 2.61.1
+  BUILD STAMP: 2026-10-29-SSN-V2630
+  Version: 2.63.0
 
   Revision history:
+    v2.63.0 2026-10-29 Nested notebooks with drag and
+                      drop. An optional parent field (the
+                      parent notebook's slug) on the flat
+                      notebook records in the index,
+                      sanitized on every load path: a
+                      parent naming a missing notebook,
+                      the notebook itself, or a cycle
+                      degrades to top level, and no
+                      notebook ever vanishes; indexes
+                      written before this release load
+                      unchanged. Drive folders stay flat
+                      per slug and a note's notebook field
+                      never changes when its notebook is
+                      nested or moved. The sidebar renders
+                      the Notebooks section as a tree,
+                      alphabetical within each level,
+                      children indented under their
+                      parent, each row keeping its own
+                      note count; a notebook with children
+                      carries a fold caret in the tag
+                      tree's disclosure style, per device
+                      in settings, default expanded, and
+                      the v2.62.0 section collapse still
+                      works above the tree. Notebooks
+                      nest by mouse drag onto another row
+                      and unnest by dragging onto the
+                      Notebooks section header; self
+                      drops, descendant drops, and drops
+                      on the current parent are refused
+                      with no highlight. The notebook
+                      menu's Move to item opens a panel
+                      of Top level plus every eligible
+                      parent, the current one marked.
+                      Stacks group top level notebooks
+                      only: nesting a stacked notebook
+                      removes it from its stack, and
+                      joining a stack lifts a nested
+                      notebook back to top level.
+                      Deleting a notebook promotes its
+                      sub-notebooks to its own level,
+                      stated in the confirmation; its own
+                      notes trash as always. Notebook
+                      pickers list notebooks in tree
+                      order.
     v2.61.1 2026-10-29 Native context menu suppression,
                       widened. This release ships after
                       v2.62.0 and patches the v2.61.0
@@ -4181,6 +4225,38 @@ body.dark .gate-brand .wordmark{color:#EAF3EC;}
   transform:rotate(90deg);transition:transform var(--motion);
 }
 .nav-tag-row.collapsed .nav-tag-chevron{transform:rotate(0deg);}
+/* v2.63: the notebook tree rows. A notebook with
+   sub-notebooks carries the tag tree's disclosure
+   treatment: a flex row, the caret at the row's own
+   indent, the row button filling the rest. The caret
+   points down (rotated 90) while expanded and right
+   while collapsed, the same geometry as the tag and
+   stack carets, and it uses the sidebar's own fixed
+   palette like they do, so it reads the same in both
+   themes. The nest drag source dims like the reorder
+   drag's item. The section header is the top level
+   drop zone while a nested notebook is dragged: the
+   armed outline (dashed, in the accent token) marks
+   the zone before the pointer arrives, and the hover
+   state fills it with the drop-hover treatment the
+   rows use, so every drag state is themed. */
+.nav-nb-row{display:flex;align-items:center;gap:2px;padding-right:2px;}
+.nav-nb-row .nav-item{flex:1;min-width:0;}
+.nav-nb-chevron{
+  flex:none;width:20px;height:24px;display:inline-flex;
+  align-items:center;justify-content:center;background:none;
+  border:none;color:#AFCDB7;cursor:pointer;padding:0;
+  transform:rotate(90deg);transition:transform var(--motion);
+}
+.nav-nb-row.collapsed .nav-nb-chevron{transform:rotate(0deg);}
+#notebookSection.nb-nest-armed .nav-label{
+  outline:1px dashed var(--accent);outline-offset:2px;
+}
+#notebookSection .nav-label.nb-top-drop-hover{
+  background:var(--secondary);color:#fff;
+}
+.nav-item.nb-nest-source{opacity:.55;}
+body.nb-nest-dragging{cursor:grabbing;user-select:none;}
 .nav-tag-chevron-spacer{flex:none;width:20px;}
 .nav-tag-menu-btn,.nav-shortcut-menu-btn{
   flex:none;width:24px;height:24px;display:inline-flex;
@@ -8519,6 +8595,14 @@ body.dark .version-date{color:var(--accent);}
                  hidden state is set in renderListToolbar). -->
             <button type="button" class="list-menu-item" id="nbAddToStackBtn" role="menuitem">Add to Stack...</button>
             <button type="button" class="list-menu-item hidden" id="nbRemoveFromStackBtn" role="menuitem">Remove from Stack</button>
+            <!-- v2.63: Move to... opens the parent panel
+                 below, the nesting counterpart of the stack
+                 items: it lists Top level and every eligible
+                 parent (never the notebook itself or one of
+                 its own sub-notebooks), the current one
+                 marked. renderListToolbar sets its hidden
+                 and disabled state like Rename's. -->
+            <button type="button" class="list-menu-item" id="nbMoveBtn" role="menuitem">Move to...</button>
             <!-- v2.31: the open notebook's shortcut toggle.
                  It sits with the notebook items and is labelled
                  for its target, because this menu mixes
@@ -8604,6 +8688,12 @@ body.dark .version-date{color:var(--accent);}
                (LIST_PANEL_IDS), so it opens, closes, and
                dismisses with the rest. -->
           <div id="nbStackPanel" class="list-panel hidden" role="menu" aria-label="Add to stack"></div>
+          <!-- v2.63: the parent picker panel, built at open
+               time by buildParentPanel: Top level first,
+               then the eligible parents in tree order with
+               the current one marked. It belongs to the
+               shared list panel family (LIST_PANEL_IDS). -->
+          <div id="nbParentPanel" class="list-panel hidden" role="menu" aria-label="Move notebook to"></div>
         </div>
       </div>
     </div>
@@ -10036,8 +10126,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-29-SSN-V2611";
-const APP_VERSION = "2.61.1";
+const APP_BUILD = "2026-10-29-SSN-V2630";
+const APP_VERSION = "2.63.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -10122,11 +10212,17 @@ const state = {
                             // has run on this device profile
   },
   repoExists: false,        // true after the Drive store is ready
-  notebooks: [],            // [{slug, name, created, stack?}]
+  notebooks: [],            // [{slug, name, created, stack?, parent?}]
                             // v2.29: the optional stack is the
                             // NAME of the notebook's stack, or
                             // absent when ungrouped; it lives
                             // only in index.json.
+                            // v2.63: the optional parent is
+                            // the SLUG of the notebook's
+                            // parent notebook, or absent at
+                            // top level; it lives only in
+                            // index.json too (see
+                            // sanitizeNotebookParents).
   notes: [],                // note objects, see parseNoteFile for the shape
   trash: [],                // note objects with trashed = true
   archive: [],              // v1.5: note objects with archived = true
@@ -10180,6 +10276,15 @@ const state = {
                             // folded must not arrive
                             // folded here. A section not
                             // named here is expanded.
+  collapsedNotebooks: [],   // v2.63: the slugs of the notebooks
+                            // whose sub-notebook subtree is
+                            // folded in the sidebar, remembered
+                            // in settings like the stack and
+                            // tag folds. A notebook not named
+                            // here is expanded; the list is
+                            // pruned of notebooks that no
+                            // longer have sub-notebooks
+                            // whenever it is written.
   tagParents: {},           // v2.30: the nested tag hierarchy as
                             // a map from tag name to parent tag
                             // name. Notes keep flat tag strings;
@@ -10904,6 +11009,17 @@ function loadSettings() {
         return ["shortcuts", "notebooks", "tags"].indexOf(x) >= 0;
       });
   }
+  /* v2.63: the collapsed notebook subtrees, honored only
+     as an array of slug strings; anything else (an absent
+     field from an older build, a damaged value) is
+     dropped, so a bad record can never hide a subtree
+     behind a fold nobody set. */
+  if (Array.isArray(s.collapsedNotebooks)) {
+    state.collapsedNotebooks = s.collapsedNotebooks.filter(
+      function (x) {
+        return typeof x === "string" && x.length > 0;
+      });
+  }
   /* v2.8: the versions per note limit. Only a finite stored number
      is honored, truncated to a whole number and clamped into the
      0 to 100 range the Settings input offers; anything else (an
@@ -10980,6 +11096,7 @@ function saveSettings() {
     collapsedStacks: state.collapsedStacks,   // v2.29: stack folds
     collapsedTags: state.collapsedTags,   // v2.30: tag folds
     collapsedSections: state.collapsedSections,   // v2.62: sidebar section folds
+    collapsedNotebooks: state.collapsedNotebooks,   // v2.63: notebook subtree folds
     versionsLimit: state.versionsLimit,   // v2.8: versions kept per note
     onboardingSeen: state.onboardingSeen,   // v2.13: the walkthrough record
     autoSync: state.autoSync,   // v2.16: the idle auto-sync choice
@@ -11076,6 +11193,13 @@ function cacheSnapshot() {
 
 function applyCacheSnapshot(c) {
   state.notebooks = c.notebooks || [];
+  /* v2.63: the notebook parent fields are sanitized on
+     this adoption like every other load path (see
+     sanitizeNotebookParents); a snapshot written before
+     nesting existed has no parent fields and loads as an
+     all top level sidebar, exactly like an index.json
+     written before v2.63 does. */
+  sanitizeNotebookParents();
   /* v2.30: snapshots written before nested tags existed have
      no map; they load as an all top level hierarchy, exactly
      like an index.json written before v2.30 does. */
@@ -12123,6 +12247,10 @@ let indexFlushWaiters = [];     /* flushIndexWrites() resolvers awaiting idle */
 function buildIndexObject() {
   return {
     version: 1,
+    /* v2.63: the notebook records ride wholesale,
+       parent fields included, on the same reasoning as
+       the tag map below: this is the only writer's
+       shape, so no unrelated save can drop the nesting. */
     notebooks: state.notebooks,
     /* v2.30: the nested tag parent map. It rides every index
        write because buildIndexObject is the only writer's
@@ -14236,6 +14364,12 @@ async function loadAllFromRepo() {
     }
     index = buildIndexFromFolders(folderSlugs);
     state.notebooks = index.notebooks;
+    /* v2.63: the parent fields are sanitized on this
+       adoption like every other load path (the rebuilt
+       records preserve known notebooks whole, parents
+       included, so the sanitize is what stands between
+       a damaged stored parent and the sidebar). */
+    sanitizeNotebookParents();
     state.index = index;
     /* Persist the rebuilt index so the next load is a single GET. */
     try {
@@ -14277,6 +14411,11 @@ async function loadAllFromRepo() {
         state.notebooks.push(buildIndexFromFolders([slug]).notebooks[0]);
       }
     });
+    /* v2.63: the parent fields are sanitized after this
+       adoption like every other load path; a damaged
+       parent degrades to top level here, never a lost
+       notebook (see sanitizeNotebookParents). */
+    sanitizeNotebookParents();
   }
 
   /* v2.20: the listings, gathered once for both load paths.
@@ -16017,6 +16156,18 @@ async function renameNotebook(slug, newName) {
      so it follows the rename to the new slug here, before
      the save below writes the index that carries both. */
   shortcutsFollowRename("notebook", slug, newSlug);
+  /* v2.63: sub-notebooks name their parent by slug, so
+     they follow the rename like the shortcut above, and
+     the fold record (per-device settings) follows too,
+     both before the save below writes the index. */
+  state.notebooks.forEach(function (kid) {
+    if (notebookParentOf(kid) === slug) { kid.parent = newSlug; }
+  });
+  const nci = state.collapsedNotebooks.indexOf(slug);
+  if (nci >= 0) {
+    state.collapsedNotebooks[nci] = newSlug;
+    saveSettings();
+  }
   if (state.view.kind === "notebook" && state.view.value === slug) {
     state.view.value = newSlug;
   }
@@ -16030,7 +16181,27 @@ async function deleteNotebook(slug) {
   for (const note of doomed) {
     await moveNoteToTrash(note, true);
   }
+  /* v2.63: the sub-notebooks are NOT deleted: each is
+     promoted to the deleted notebook's own level (its
+     parent, or top level), alphabetical there as
+     everywhere. Only the notebook's own notes trash,
+     exactly as they always have. */
+  const doomedNb = state.notebooks.find(function (n) {
+    return n.slug === slug; });
+  const promoteTo = doomedNb ? notebookParentOf(doomedNb) : null;
+  state.notebooks.forEach(function (kid) {
+    if (notebookParentOf(kid) === slug) {
+      if (promoteTo) { kid.parent = promoteTo; }
+      else { delete kid.parent; }
+    }
+  });
   state.notebooks = state.notebooks.filter(function (n) { return n.slug !== slug; });
+  /* v2.63: the deleted notebook's own fold record goes
+     with it, and so do folds for notebooks that lost
+     their last child in the promotion (the prune's
+     standing rule). */
+  pruneCollapsedNotebooks();
+  saveSettings();
   /* v2.31: the deleted notebook's shortcut goes with it
      (its notes' shortcuts stay: those notes are in Trash
      now, where a shortcut renders as unavailable). The
@@ -16136,6 +16307,10 @@ async function setNotebookStack(slug, stackName) {
   const nb = state.notebooks.find(function (n) { return n.slug === slug; });
   if (!nb) { return; }
   if (stackName) {
+    /* v2.63: stacks group top level notebooks, so joining
+       a stack lifts a nested notebook back to top level;
+       its own sub-notebooks stay nested under it. */
+    if ("parent" in nb) { delete nb.parent; }
     nb.stack = stackName;
     const ci = state.collapsedStacks.indexOf(stackName);
     if (ci >= 0) { state.collapsedStacks.splice(ci, 1); }
@@ -16191,6 +16366,483 @@ async function deleteStack(name) {
   if (state.online && state.repoExists) { await saveIndex(); }
   saveCache();
   renderAll();
+}
+
+/* --------------------------------------------------------------------------
+   v2.63: nested notebooks
+
+   Evernote's model: notebooks nest inside notebooks, any
+   depth, shown as a tree in the sidebar; a notebook's
+   notes belong to the notebook itself, wherever it sits.
+   Here the nesting is one optional field on the flat
+   notebook record that has always lived in index.json:
+   parent, the SLUG of the parent notebook, absent (or
+   null) at top level. The Drive folders stay flat per
+   slug and a note's notebook field never changes when
+   its notebook is nested or moved; this is organization
+   only, like the tag parent map.
+
+   The field is plumbed and sanitized like tagParents:
+   buildIndexObject writes the records wholesale, and
+   sanitizeNotebookParents runs on every adoption of a
+   notebooks array (the cache snapshot and both store
+   load branches): a parent naming a missing notebook,
+   the notebook itself, or a cycle degrades to top level
+   on load, never a crash or a vanished notebook, and an
+   index written before nesting existed loads unchanged.
+
+   Stacks interplay, the conservative rule: stacks group
+   top level notebooks. Nesting a stacked notebook
+   removes it from its stack (the stack keeps the rest),
+   a nested notebook appears in no stack listing, and
+   unnesting does not restore any old membership. The
+   mirror also holds, in setNotebookStack: joining a
+   stack lifts a nested notebook back to top level, its
+   own sub-notebooks still nested under it.
+
+   The sidebar renders the tree depth-first, alphabetical
+   within each level, each row keeping its own note
+   count. A notebook with children carries a fold caret
+   in the tag tree's disclosure style; folds are the
+   per-device settings list collapsedNotebooks, default
+   expanded. Notebooks nest by mouse drag onto a row
+   and unnest by dragging onto the Notebooks section
+   header; the notebook menu's Move to panel offers the
+   same moves without a drag. Deleting a notebook
+   promotes its sub-notebooks to its own level.
+   -------------------------------------------------------------------------- */
+
+/* The normalized parent slug of a notebook record: the
+   stored string, trimmed, or null when the field is
+   absent, blank, not a string, or names the notebook
+   itself. Existence is the sanitizer's concern, not this
+   reader's; every render and write path below works
+   through this one normalization, so a damaged value is
+   read as top level everywhere consistently. */
+function notebookParentOf(nb) {
+  if (!nb || typeof nb.parent !== "string") { return null; }
+  const p = nb.parent.trim();
+  if (!p || p === nb.slug) { return null; }
+  return p;
+}
+
+/* A notebook's direct sub-notebooks, in the sidebar's
+   alphabetical order (compareSidebarNames), the order
+   every level of the tree renders in. */
+function notebookChildrenOf(slug) {
+  return state.notebooks.filter(function (nb) {
+    return notebookParentOf(nb) === slug;
+  }).sort(function (x, y) {
+    return compareSidebarNames(x.name, y.name);
+  });
+}
+
+/* Every notebook below a slug in its subtree, breadth
+   first and cycle safe (the visited set does the safety,
+   the same shape as tagDescendantsOf): the set a move
+   must never target and a delete promotes as a group. */
+function notebookDescendantsOf(slug) {
+  const out = [];
+  const seen = {};
+  seen[slug] = true;
+  const queue = [slug];
+  while (queue.length) {
+    const cur = queue.shift();
+    notebookChildrenOf(cur).forEach(function (kid) {
+      if (seen[kid.slug]) { return; }
+      seen[kid.slug] = true;
+      out.push(kid.slug);
+      queue.push(kid.slug);
+    });
+  }
+  return out;
+}
+
+/* A notebook's depth in the tree (0 at top level), by
+   walking its parents; the visited set and the missing
+   parent break keep a damaged chain from looping or
+   inflating the count. The Move to panel indents by it. */
+function notebookDepthOf(nb) {
+  let depth = 0;
+  const seen = {};
+  let cur = nb;
+  while (cur && notebookParentOf(cur) !== null) {
+    const p = notebookParentOf(cur);
+    if (seen[p]) { break; }
+    seen[p] = true;
+    const parent = notebookForSlug(p);
+    if (!parent) { break; }
+    depth += 1;
+    cur = parent;
+  }
+  return depth;
+}
+
+/* Bring the parent fields on state.notebooks to a safe
+   shape, in place, on every load path (the tag parent
+   sanitizer's discipline): a parent that is not a string,
+   is blank, names the notebook itself, or names a
+   notebook that does not exist is dropped, so the
+   notebook sits at top level; a parent and a stack
+   cannot both stand (stacks group top level notebooks),
+   and the parent wins because it is the field this pass
+   is responsible for; where parents form a cycle, every
+   notebook in the loop drops its parent and goes to top
+   level. Nothing is ever removed from the array: a
+   damaged parent costs a notebook its nesting, never
+   the notebook. */
+function sanitizeNotebookParents() {
+  const bySlug = {};
+  state.notebooks.forEach(function (nb) {
+    if (nb && typeof nb.slug === "string") { bySlug[nb.slug] = nb; }
+  });
+  state.notebooks.forEach(function (nb) {
+    if (!nb) { return; }
+    if (typeof nb.parent !== "string" || !nb.parent.trim() ||
+        nb.parent.trim() === nb.slug || !bySlug[nb.parent.trim()]) {
+      if ("parent" in nb) { delete nb.parent; }
+    } else if (nb.parent !== nb.parent.trim()) {
+      nb.parent = nb.parent.trim();
+    }
+  });
+  state.notebooks.forEach(function (nb) {
+    if (nb && notebookParentOf(nb) !== null && notebookStackOf(nb)) {
+      delete nb.stack;
+    }
+  });
+  state.notebooks.forEach(function (nb) {
+    if (!nb || notebookParentOf(nb) === null) { return; }
+    const chain = [];
+    let cur = nb;
+    while (cur && notebookParentOf(cur) !== null) {
+      const pSlug = notebookParentOf(cur);
+      const at = chain.indexOf(pSlug);
+      if (at >= 0) {
+        const loop = chain.slice(at);
+        if (loop.indexOf(cur.slug) < 0) { loop.push(cur.slug); }
+        loop.forEach(function (s) {
+          const member = bySlug[s];
+          if (member) { delete member.parent; }
+        });
+        break;
+      }
+      chain.push(cur.slug);
+      cur = bySlug[pSlug] || null;
+    }
+  });
+}
+
+/* Drop fold records for notebooks that no longer have
+   sub-notebooks (or no longer exist), the stack and tag
+   prunes' rule, run before the settings record is
+   written from a flow that changed the tree. */
+function pruneCollapsedNotebooks() {
+  state.collapsedNotebooks = state.collapsedNotebooks.filter(
+    function (slug) {
+      const nb = notebookForSlug(slug);
+      return !!nb && notebookChildrenOf(slug).length > 0;
+    });
+}
+
+/* Fold or unfold one notebook's subtree in the sidebar.
+   The fold is per-device view state, so it saves
+   settings and re-renders the sidebar only, the tag
+   fold's exact shape. */
+function toggleNotebookCollapsed(slug) {
+  const i = state.collapsedNotebooks.indexOf(slug);
+  if (i >= 0) { state.collapsedNotebooks.splice(i, 1); }
+  else { state.collapsedNotebooks.push(slug); }
+  saveSettings();
+  renderSidebar();
+}
+
+/* The one write path for nesting, shared by the drag and
+   the Move to panel: nest slug under parentSlug, or move
+   it to top level when parentSlug is null. Refusals are
+   plain toasts and a false return (a notebook inside
+   itself, inside one of its own sub-notebooks, or under
+   a notebook that is gone); a move to the parent it
+   already has is a no-op false, so callers never write
+   the index for nothing. Nesting clears any stack
+   membership (stacks group top level notebooks) and
+   expands the new parent, so the moved notebook lands
+   visible. Persistence is the notebook operations'
+   standing shape: prune the folds, save settings, save
+   the index, save the cache, re-render. */
+async function setNotebookParent(slug, parentSlug) {
+  const nb = notebookForSlug(slug);
+  if (!nb) { return false; }
+  const target = (typeof parentSlug === "string" && parentSlug.trim())
+    ? parentSlug.trim() : null;
+  if (target !== null) {
+    if (target === slug) {
+      toast("A notebook cannot be nested inside itself.", true);
+      return false;
+    }
+    if (!notebookForSlug(target)) {
+      toast("That notebook no longer exists.", true);
+      return false;
+    }
+    if (notebookDescendantsOf(slug).indexOf(target) >= 0) {
+      toast("A notebook cannot be nested inside one of its " +
+        "own sub-notebooks.", true);
+      return false;
+    }
+  }
+  if (notebookParentOf(nb) === target) { return false; }
+  if (target === null) {
+    delete nb.parent;
+  } else {
+    nb.parent = target;
+    delete nb.stack;
+    const ci = state.collapsedNotebooks.indexOf(target);
+    if (ci >= 0) { state.collapsedNotebooks.splice(ci, 1); }
+  }
+  pruneCollapsedNotebooks();
+  saveSettings();
+  if (state.online && state.repoExists) { await saveIndex(); }
+  saveCache();
+  renderAll();
+  return true;
+}
+
+/* Notebook nest drag (mouse, Pointer Events, the app's
+   drag idiom from the note drag): a press on a notebook
+   row arms a potential drag; movement past the threshold
+   engages it (the row dims, the section header shows its
+   armed outline as the top level drop zone); moving over
+   another row highlights it as the nest target in the
+   note drag's drop-hover style, and moving over the
+   section header highlights that as the move to top
+   level. Self drops, descendant drops, and drops on the
+   current parent are never offered (no highlight, and
+   the target scan returns nothing there), so a release
+   on them simply ends the drag. Touch never arms: the
+   app's notebook interactions are mouse drags, and a
+   touch press on a row stays a tap. The finished drag
+   swallows its tail click exactly like the note drag,
+   so the drop's own release cannot also navigate. */
+const NB_NEST_DRAG_PX = 6;   /* movement before a press is a drag */
+let nbNestDrag = null;       /* {slug, pointerId, startX, startY,
+                                engaged, target, rowEl} or null;
+                                target is {kind:"row", slug},
+                                {kind:"top"}, or null */
+let nbNestDragClickBlock = false;
+
+function nbNestTargetOk(dragSlug, targetSlug) {
+  if (!targetSlug || targetSlug === dragSlug) { return false; }
+  const dragNb = notebookForSlug(dragSlug);
+  const target = notebookForSlug(targetSlug);
+  if (!dragNb || !target) { return false; }
+  if (notebookParentOf(dragNb) === targetSlug) { return false; }
+  return notebookDescendantsOf(dragSlug).indexOf(targetSlug) < 0;
+}
+
+function nbNestTargetAt(x, y) {
+  if (!nbNestDrag) { return null; }
+  const rows = document.querySelectorAll(
+    "#notebookNav [data-nb-slug]");
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i].getBoundingClientRect();
+    if (r.width > 0 && r.height > 0 &&
+        x >= r.left && x <= r.right &&
+        y >= r.top && y <= r.bottom) {
+      const slug = rows[i].getAttribute("data-nb-slug");
+      return nbNestTargetOk(nbNestDrag.slug, slug)
+        ? { kind: "row", slug: slug } : null;
+    }
+  }
+  const dragNb = notebookForSlug(nbNestDrag.slug);
+  if (dragNb && notebookParentOf(dragNb) !== null) {
+    const section = document.getElementById("notebookSection");
+    const label = section
+      ? section.querySelector(".nav-label") : null;
+    if (label) {
+      const lr = label.getBoundingClientRect();
+      if (lr.width > 0 && lr.height > 0 &&
+          x >= lr.left && x <= lr.right &&
+          y >= lr.top && y <= lr.bottom) {
+        return { kind: "top" };
+      }
+    }
+  }
+  return null;
+}
+
+function clearNbNestTarget() {
+  document.querySelectorAll("#notebookNav .nav-item.drop-hover")
+    .forEach(function (el) { el.classList.remove("drop-hover"); });
+  const section = document.getElementById("notebookSection");
+  const label = section
+    ? section.querySelector(".nav-label") : null;
+  if (label) { label.classList.remove("nb-top-drop-hover"); }
+}
+
+function updateNbNestTarget(x, y) {
+  const next = nbNestTargetAt(x, y);
+  const prev = nbNestDrag.target;
+  const same = (!next && !prev) ||
+    (!!next && !!prev && next.kind === prev.kind &&
+      next.slug === prev.slug);
+  if (same) { return; }
+  clearNbNestTarget();
+  nbNestDrag.target = next;
+  if (!next) { return; }
+  if (next.kind === "row") {
+    const rows = document.querySelectorAll(
+      "#notebookNav [data-nb-slug]");
+    for (let i = 0; i < rows.length; i++) {
+      if (rows[i].getAttribute("data-nb-slug") === next.slug) {
+        rows[i].classList.add("drop-hover");
+      }
+    }
+  } else {
+    const section = document.getElementById("notebookSection");
+    const label = section
+      ? section.querySelector(".nav-label") : null;
+    if (label) { label.classList.add("nb-top-drop-hover"); }
+  }
+}
+
+/* One edge auto scroll step for the sidebar while a nest
+   drag is held at its edge, with the note drag's own
+   edge band and step (the sidebar is the scroll
+   container here; the drop overlay path of the note
+   drag does not exist for this drag). */
+function nbNestAutoScroll(clientY) {
+  const container = document.getElementById("sidebar");
+  if (!container) { return; }
+  const rect = container.getBoundingClientRect();
+  if (clientY < rect.top + NOTE_DRAG_EDGE_PX &&
+      container.scrollTop > 0) {
+    container.scrollTop -= NOTE_DRAG_EDGE_STEP_PX;
+  } else if (clientY > rect.bottom - NOTE_DRAG_EDGE_PX &&
+      container.scrollTop <
+        container.scrollHeight - container.clientHeight) {
+    container.scrollTop += NOTE_DRAG_EDGE_STEP_PX;
+  }
+}
+
+function engageNbNestDrag() {
+  nbNestDrag.engaged = true;
+  if (nbNestDrag.rowEl) {
+    nbNestDrag.rowEl.classList.add("nb-nest-source");
+  }
+  document.body.classList.add("nb-nest-dragging");
+  const section = document.getElementById("notebookSection");
+  if (section) { section.classList.add("nb-nest-armed"); }
+}
+
+function endNbNestDrag(commit) {
+  if (!nbNestDrag) { return; }
+  const drag = nbNestDrag;
+  nbNestDrag = null;
+  window.removeEventListener("pointermove",
+    onNbNestPointerMove, true);
+  window.removeEventListener("pointerup",
+    onNbNestPointerUp, true);
+  window.removeEventListener("pointercancel",
+    onNbNestPointerCancel, true);
+  window.removeEventListener("keydown", onNbNestKeydown, true);
+  clearNbNestTarget();
+  if (drag.rowEl) { drag.rowEl.classList.remove("nb-nest-source"); }
+  document.body.classList.remove("nb-nest-dragging");
+  const section = document.getElementById("notebookSection");
+  if (section) { section.classList.remove("nb-nest-armed"); }
+  if (!drag.engaged) { return; }
+  /* An engaged drag, landed or cancelled, swallows the
+     click its release would otherwise deliver to the
+     row, the note drag's standing rule. */
+  nbNestDragClickBlock = true;
+  if (commit && drag.target) {
+    setNotebookParent(drag.slug,
+      drag.target.kind === "top" ? null : drag.target.slug)
+      .catch(function (err) {
+        toast("Move failed: " + err.message, true);
+      });
+  }
+}
+
+function onNbNestPointerMove(ev) {
+  if (!nbNestDrag || ev.pointerId !== nbNestDrag.pointerId) {
+    return;
+  }
+  if (!nbNestDrag.engaged) {
+    const moved = Math.max(
+      Math.abs(ev.clientX - nbNestDrag.startX),
+      Math.abs(ev.clientY - nbNestDrag.startY));
+    if (moved > NB_NEST_DRAG_PX) { engageNbNestDrag(); }
+    else { return; }
+  }
+  updateNbNestTarget(ev.clientX, ev.clientY);
+  nbNestAutoScroll(ev.clientY);
+}
+
+function onNbNestPointerUp(ev) {
+  if (!nbNestDrag || ev.pointerId !== nbNestDrag.pointerId) {
+    return;
+  }
+  endNbNestDrag(true);
+}
+
+function onNbNestPointerCancel(ev) {
+  if (!nbNestDrag || ev.pointerId !== nbNestDrag.pointerId) {
+    return;
+  }
+  endNbNestDrag(false);
+}
+
+function onNbNestKeydown(ev) {
+  if (ev.key === "Escape") { endNbNestDrag(false); }
+}
+
+function onNbNavPointerDown(ev) {
+  /* Mouse only: touch presses stay taps (the app has no
+     touch drag for notebooks, and none is invented
+     here). */
+  if (ev.pointerType && ev.pointerType !== "mouse") { return; }
+  if (ev.button !== undefined && ev.button !== 0) { return; }
+  if (nbNestDrag) { return; }
+  const row = (ev.target && ev.target.closest)
+    ? ev.target.closest("#notebookNav [data-nb-slug]") : null;
+  if (!row) { return; }
+  nbNestDrag = {
+    slug: row.getAttribute("data-nb-slug"),
+    pointerId: ev.pointerId,
+    startX: ev.clientX,
+    startY: ev.clientY,
+    engaged: false,
+    target: null,
+    rowEl: row
+  };
+  window.addEventListener("pointermove",
+    onNbNestPointerMove, true);
+  window.addEventListener("pointerup",
+    onNbNestPointerUp, true);
+  window.addEventListener("pointercancel",
+    onNbNestPointerCancel, true);
+  window.addEventListener("keydown", onNbNestKeydown, true);
+}
+
+function initNbNestDrag() {
+  const nav = document.getElementById("notebookNav");
+  if (nav) {
+    nav.addEventListener("pointerdown", onNbNavPointerDown);
+  }
+  /* The finished drag click suppression, in the note
+     drag's exact shape: the block lapses on the next
+     press, and one capture click is swallowed while it
+     stands. */
+  document.addEventListener("pointerdown", function () {
+    if (!nbNestDrag) { nbNestDragClickBlock = false; }
+  }, true);
+  document.addEventListener("click", function (ev) {
+    if (nbNestDragClickBlock) {
+      nbNestDragClickBlock = false;
+      ev.stopPropagation();
+      ev.preventDefault();
+    }
+  }, true);
 }
 
 /* --------------------------------------------------------------------------
@@ -22157,6 +22809,14 @@ function sidebarNotebookPlan() {
   const entries = [];
   const seenStacks = {};
   state.notebooks.forEach(function (nb) {
+    /* v2.63: a nested notebook is not a top level entry;
+       it renders under its parent (see
+       appendNotebookWithSubtree in the sidebar render).
+       The existence check keeps a damaged in-memory
+       parent (unreachable after the load sanitization)
+       from hiding the notebook here. */
+    const parent = notebookParentOf(nb);
+    if (parent !== null && notebookForSlug(parent)) { return; }
     const stack = notebookStackOf(nb);
     if (!stack) {
       entries.push({ key: nb.name, stack: null, nb: nb, members: null });
@@ -22183,20 +22843,47 @@ function sidebarNotebookPlan() {
    present this order, the same one the sidebar shows. */
 function notebooksInSidebarOrder() {
   const out = [];
+  const seen = {};
+  /* v2.63: the flattening is depth-first over the tree:
+     each notebook is followed by its sub-notebooks,
+     recursively, so a picker in this order reads exactly
+     like the sidebar. The visited set keeps a damaged
+     in-memory cycle from looping. */
+  function pushSubtree(nb) {
+    if (!nb || seen[nb.slug]) { return; }
+    seen[nb.slug] = true;
+    out.push(nb);
+    notebookChildrenOf(nb.slug).forEach(pushSubtree);
+  }
   sidebarNotebookPlan().forEach(function (entry) {
     if (entry.stack) {
-      entry.members.forEach(function (nb) { out.push(nb); });
+      entry.members.forEach(pushSubtree);
     } else {
-      out.push(entry.nb);
+      pushSubtree(entry.nb);
     }
+  });
+  /* Insurance: a notebook the plan could not place (only
+     a damaged in-memory state could produce one) still
+     lists, at the end, rather than vanishing from the
+     pickers. */
+  state.notebooks.forEach(function (nb) {
+    if (!seen[nb.slug]) { pushSubtree(nb); }
   });
   return out;
 }
 
 /* v2.29: one sidebar notebook row, shared by the ungrouped list
    and by stack groups so a notebook looks and behaves the same in
-   both. inStack only adds the indent class. */
-function buildNotebookNavRow(nb, inStack) {
+   both. inStack only adds the indent class.
+   v2.63: depth is the row's tree depth; the indent is the
+   stack class's 16px where it applies plus 14px per level,
+   the tag tree's step. A notebook with sub-notebooks is
+   wrapped in a flex row carrying a fold caret in the tag
+   tree's disclosure style; the wrapper takes the whole
+   indent and the button's own in-stack class comes off,
+   so the caret sits at the indent and the button fills
+   the rest of the row. */
+function buildNotebookNavRow(nb, inStack, depth) {
   const btn = document.createElement("button");
   btn.type = "button";
   btn.className = "nav-item" + (inStack ? " in-stack" : "") +
@@ -22211,12 +22898,59 @@ function buildNotebookNavRow(nb, inStack) {
   /* v2.4: the slug rides on the row so the drag and drop hit
      test can name the notebook under the pointer. */
   btn.setAttribute("data-nb-slug", nb.slug);
+  /* v2.63: the tree depth rides on the row beside the
+     slug, so the rendered depth is readable from the row
+     itself, like the slug is. */
+  btn.setAttribute("data-nb-depth", String(depth || 0));
   btn.addEventListener("click", function () {
     state.view = { kind: "notebook", value: nb.slug };
     renderAll();
     setMobileView("list");
   });
-  return btn;
+  const kids = notebookChildrenOf(nb.slug);
+  const indent = (inStack ? 16 : 0) + (depth || 0) * 14;
+  if (!kids.length) {
+    /* The stack class already supplies the 16px at depth
+       0 in a stack; an inline indent is set only where
+       the class does not already say it. */
+    if (indent > 0 && !(inStack && !depth)) {
+      btn.style.marginLeft = indent + "px";
+    }
+    return btn;
+  }
+  btn.classList.remove("in-stack");
+  const collapsed = state.collapsedNotebooks.indexOf(nb.slug) >= 0;
+  const wrap = document.createElement("div");
+  wrap.className = "nav-nb-row" + (collapsed ? " collapsed" : "");
+  if (indent > 0) { wrap.style.marginLeft = indent + "px"; }
+  const chev = document.createElement("button");
+  chev.type = "button";
+  chev.className = "nav-nb-chevron";
+  chev.innerHTML = STACK_CHEVRON_ICON;
+  chev.setAttribute("aria-expanded", collapsed ? "false" : "true");
+  chev.setAttribute("aria-label",
+    (collapsed ? "Expand" : "Collapse") +
+    " sub-notebooks of " + nb.name);
+  chev.addEventListener("click", function () {
+    toggleNotebookCollapsed(nb.slug);
+  });
+  wrap.appendChild(chev);
+  wrap.appendChild(btn);
+  return wrap;
+}
+
+/* v2.63: append one notebook row and, unless it is
+   folded, its whole subtree after it, depth first: the
+   tree the plan's top level entries and stack members
+   root. inStack rides down the subtree, so a stacked
+   notebook's descendants keep the stack's extra indent
+   at every level below it. */
+function appendNotebookWithSubtree(nav, nb, inStack, depth) {
+  nav.appendChild(buildNotebookNavRow(nb, inStack, depth));
+  if (state.collapsedNotebooks.indexOf(nb.slug) >= 0) { return; }
+  notebookChildrenOf(nb.slug).forEach(function (kid) {
+    appendNotebookWithSubtree(nav, kid, inStack, depth + 1);
+  });
 }
 
 const STACK_CHEVRON_ICON =
@@ -22624,13 +23358,13 @@ function renderSidebar() {
   }
   sidebarNotebookPlan().forEach(function (entry) {
     if (!entry.stack) {
-      nav.appendChild(buildNotebookNavRow(entry.nb, false));
+      appendNotebookWithSubtree(nav, entry.nb, false, 0);
       return;
     }
     nav.appendChild(buildStackNavHead(entry.stack));
     if (state.collapsedStacks.indexOf(entry.stack) < 0) {
       entry.members.forEach(function (member) {
-        nav.appendChild(buildNotebookNavRow(member, true));
+        appendNotebookWithSubtree(nav, member, true, 0);
       });
     }
   });
@@ -23010,7 +23744,7 @@ function compareNotesByListSort(a, b) {
    renderNoteList closes all of them when the view changes. The
    document level outside click and Escape closers are wired with the
    rest of the toolbar events. */
-const LIST_PANEL_IDS = ["filterPanel", "sortMenu", "nbActionMenu", "nbStackPanel"];
+const LIST_PANEL_IDS = ["filterPanel", "sortMenu", "nbActionMenu", "nbStackPanel", "nbParentPanel"];
 function closeListPanels() {
   LIST_PANEL_IDS.forEach(function (id) {
     const panel = document.getElementById(id);
@@ -23040,6 +23774,11 @@ function toggleListPanel(panelId) {
        the panel is rebuilt at every open, like the filter tag
        list above. */
     if (panelId === "nbStackPanel") { buildStackPanel(); }
+    /* v2.63: the parent panel's items depend on the tree
+       right now (the eligible parents, the current one),
+       so it is rebuilt at every open, like the stack
+       panel above. */
+    if (panelId === "nbParentPanel") { buildParentPanel(); }
     panel.classList.remove("hidden");
   }
 }
@@ -23087,6 +23826,59 @@ function buildStackPanel() {
       });
     });
     panel.appendChild(item);
+  });
+}
+
+/* v2.63: build the Move to panel for the open notebook:
+   "Top level" first, then every eligible parent in tree
+   order (notebooksInSidebarOrder, indented by depth so
+   the panel reads like the sidebar), the current parent
+   (or Top level) marked "(current)" so re-picking it is
+   a visible no-op rather than a mystery. The notebook
+   itself and its whole subtree are excluded: neither can
+   ever be its parent (setNotebookParent refuses them
+   too, so the panel and the write path agree). Picking
+   an item runs the move and the shared panel closer
+   dismisses the panel. */
+function buildParentPanel() {
+  const panel = document.getElementById("nbParentPanel");
+  if (!panel) { return; }
+  panel.innerHTML = "";
+  if (state.view.kind !== "notebook") { return; }
+  const slug = state.view.value;
+  const nb = notebookForSlug(slug);
+  if (!nb) { return; }
+  const current = notebookParentOf(nb);
+  const excluded = {};
+  excluded[slug] = true;
+  notebookDescendantsOf(slug).forEach(function (s) {
+    excluded[s] = true;
+  });
+  function addItem(value, label, depth) {
+    const item = document.createElement("button");
+    item.type = "button";
+    item.className = "list-menu-item";
+    item.setAttribute("role", "menuitem");
+    item.setAttribute("data-nb-parent", value);
+    if (depth > 0) {
+      item.style.paddingLeft = (9 + depth * 16) + "px";
+    }
+    item.textContent = label;
+    item.addEventListener("click", function () {
+      closeListPanels();
+      setNotebookParent(slug, value === "" ? null : value)
+        .catch(function (err) {
+          toast("Move failed: " + err.message, true);
+        });
+    });
+    panel.appendChild(item);
+  }
+  addItem("", "Top level" + (current === null ? " (current)" : ""), 0);
+  notebooksInSidebarOrder().forEach(function (cand) {
+    if (excluded[cand.slug]) { return; }
+    addItem(cand.slug,
+      cand.name + (cand.slug === current ? " (current)" : ""),
+      notebookDepthOf(cand));
   });
 }
 
@@ -23260,6 +24052,15 @@ function renderListToolbar() {
       ? "Remove from Stack (" + openStack + ")"
       : "Remove from Stack";
   }
+  /* v2.63: Move to... follows Rename's rules exactly
+     (hidden in Trash and Archive, enabled only in a
+     notebook view); it opens the parent panel below. */
+  const moveBtn = document.getElementById("nbMoveBtn");
+  if (moveBtn) {
+    moveBtn.classList.toggle("hidden",
+      kind === "trash" || kind === "archive");
+    moveBtn.disabled = !inNotebook;
+  }
   /* v2.31: the notebook shortcut item sits with the notebook
      items and follows their rules exactly (shown and enabled
      like Rename). Its label names its target, because this
@@ -23431,8 +24232,22 @@ function confirmDeleteNotebook(slug) {
   const nb = state.notebooks.find(function (n) { return n.slug === slug; });
   if (!nb) { return; }
   const count = notebookCount(nb.slug);
-  const ok = confirm("Delete the notebook \"" + nb.name + "\"? Its " +
-    count + " note(s) will be moved to Trash, not deleted.");
+  /* v2.63: with sub-notebooks present, the copy says what
+     happens to them: they move up a level (to this
+     notebook's own parent, or top level) and are NOT
+     deleted. Only this notebook's own notes trash. */
+  const kids = notebookChildrenOf(nb.slug);
+  let msg = "Delete the notebook \"" + nb.name + "\"? Its " +
+    count + " note(s) will be moved to Trash, not deleted.";
+  if (kids.length) {
+    const parentSlug = notebookParentOf(nb);
+    const parentNb = parentSlug ? notebookForSlug(parentSlug) : null;
+    msg += " Its " + kids.length + " sub-notebook(s) will NOT" +
+      " be deleted; they will move up to " +
+      (parentNb ? "\"" + parentNb.name + "\"" : "the top level") +
+      ".";
+  }
+  const ok = confirm(msg);
   if (ok) {
     deleteNotebook(nb.slug).catch(function (err) {
       toast("Delete failed: " + err.message, true);
@@ -48800,6 +49615,13 @@ function wireEvents() {
       toast("Remove from stack failed: " + err.message, true);
     });
   });
+  /* v2.63: Move to... opens the parent panel (the shared
+     toggle closes the action menu as it opens the panel,
+     exactly like Add to Stack). */
+  document.getElementById("nbMoveBtn").addEventListener("click", function () {
+    if (state.view.kind !== "notebook") { return; }
+    toggleListPanel("nbParentPanel");
+  });
   /* v2.29: the stack header menu's items act on the stack the
      menu was opened for (stackMenuFor), captured before the menu
      closes so the flow functions read a settled name. */
@@ -49693,6 +50515,7 @@ function wireEvents() {
      pointerdown on the note list, the drop overlay's Cancel
      button, and the finished drag click suppression. */
   initNoteDragAndDrop();
+  initNbNestDrag();
   initNoteContextMenu();
   initNativeMenuSuppression();
 
