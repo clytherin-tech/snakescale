@@ -40,10 +40,104 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-30-SSN-V2700
-  Version: 2.70.0
+  BUILD STAMP: 2026-10-30-SSN-V2710
+  Version: 2.71.0
 
   Revision history:
+    v2.71.0 2026-10-30 Sign in popup closed at a
+                      single choke point. Chris
+                      still saw Google's sign in
+                      window open on its own on
+                      the v2.68.0 gate's watch,
+                      against the v2.24.8 silent
+                      only rule. Diagnosis
+                      first, with a GIS spy in
+                      the real Chromium rig
+                      recording every token
+                      request's prompt while
+                      silent renewal was forced
+                      to fail: each automatic
+                      trigger (the boot
+                      background attempt, the
+                      proactive renewal timer,
+                      the backoff ladder, the
+                      tab return, gesture
+                      healing, and 401 recovery)
+                      issued exactly one
+                      request, every one with
+                      the GIS prompt none, and
+                      the only UI capable
+                      requests in the record
+                      belonged to the deliberate
+                      gate click and Refresh
+                      connection's consent
+                      fallback. No automatic
+                      call site in the shipped
+                      code asks for a window;
+                      the flag gate's weakness
+                      is structural, in that any
+                      caller passing the
+                      interactive flag received
+                      a UI capable prompt with
+                      nothing at the request
+                      itself proving a
+                      deliberate gesture stood
+                      behind it, and whether
+                      Google honors none is
+                      decided in Google's served
+                      client, outside these
+                      bytes. The fix makes the
+                      proof physical: a one shot
+                      UI gesture token, minted
+                      only inside the gate Sign
+                      in click handler and at
+                      the start of a Refresh
+                      connection run, and
+                      consumed by the first
+                      flagged request that
+                      reaches the request line
+                      in googleConnect. A
+                      flagged request with no
+                      live token is forced to
+                      none at that line,
+                      whatever its caller
+                      passed; the token is spent
+                      by one use and cleared
+                      whenever the renewal cycle
+                      resets, so it cannot be
+                      saved up or inherited by a
+                      later session. Silent
+                      renewal, the deliberate
+                      sign in and Refresh flows,
+                      the sync queue's expired
+                      token behavior, and the
+                      conflict rules are
+                      unchanged. The
+                      google.accounts.id surface
+                      (One Tap, auto select)
+                      remains absent from the
+                      app, as before; this token
+                      client is the only Google
+                      prompt there is.
+                      Added item, Chris's same
+                      day ask: the move
+                      operations' top center
+                      toasts now wear the save
+                      pill's own form. The
+                      pill's shape, colors, and
+                      dot indicator live in one
+                      shared style source
+                      (.pill-form) that the save
+                      state pill and the move
+                      toasts both wear, so the
+                      two cannot drift apart:
+                      Archiving and its kin run
+                      in the saving tone with
+                      the dot pulsing, and land
+                      in the saved tone. Through
+                      v2.70.0 those toasts wore
+                      the generic toast card
+                      instead.
     v2.70.0 2026-10-30 Polish from Chris's live
                       feedback on the v2.67.0 to
                       v2.69.0 builds. (1) The
@@ -8468,9 +8562,10 @@ body.dark .version-date{color:var(--accent);}
    center of the screen (Chris's placement for the
    archive, trash, restore, and unarchive progress:
    the wait should read where the eye already is, not
-   down in the corner). It reuses the .toast styling
-   whole, so both themes already cover it; only the
-   box's placement is its own. The toasts it carries
+   down in the corner). Since v2.71.0 its toasts wear
+   the shared pill form (.pill-form, the save pill's
+   own styling source, below); only the box's
+   placement is its own. The toasts it carries
    are display only, so the box never takes events. */
 #toastBoxTop{
   position:fixed;top:14px;left:50%;transform:translateX(-50%);
@@ -8496,39 +8591,55 @@ body.dark .version-date{color:var(--accent);}
    sticky tones take pointer events, for the tap that
    dismisses them; a transient pill lets every click
    through to the work underneath. */
-#savePill{
-  position:fixed;left:50%;transform:translateX(-50%);bottom:68px;z-index:65;
+/* v2.71.0: the pill form, shared. The save pill's
+   shape, colors, and dot indicator live here, in one
+   place, and the move operations' top center toasts
+   (the .move-progress and .move-done elements in
+   #toastBoxTop) wear the same class, so the two
+   surfaces are the same form by construction and
+   cannot drift apart: the deep green body, the pill
+   radius, the tone carried by border, text, and dot
+   (saving amber with the dot pulsing, saved green,
+   warn amber, bad red). What stays the save pill's
+   own is only its placement and its tap to dismiss
+   on the sticky tones, in the #savePill rules below;
+   the move toasts are display only inside their
+   eventless box. */
+.pill-form{
   display:inline-flex;align-items:center;gap:7px;padding:5px 12px;
   border-radius:var(--radius-pill);font-size:12.5px;font-weight:700;
   background:#0A2E21;color:#EAF3EC;border:1px solid #2A5240;
-  box-shadow:var(--shadow);pointer-events:none;cursor:default;
+  box-shadow:var(--shadow);
+}
+.pill-form .save-pill-dot{
+  width:8px;height:8px;border-radius:50%;background:var(--accent);flex:none;
+}
+.pill-form[data-state="saving"]{color:#FFE1A8;border-color:#8A6D2F;}
+.pill-form[data-state="saving"] .save-pill-dot{
+  background:#D9A441;animation:savePillPulse 1s ease-in-out infinite;
+}
+.pill-form[data-state="saved"]{color:#BEE3C8;border-color:var(--secondary);}
+.pill-form[data-state="saved"] .save-pill-dot{background:var(--accent);}
+.pill-form[data-state="warn"]{color:#FFE1A8;border-color:#D9A441;}
+.pill-form[data-state="warn"] .save-pill-dot{background:#D9A441;}
+.pill-form[data-state="bad"]{color:#FFC4BC;border-color:var(--danger);}
+.pill-form[data-state="bad"] .save-pill-dot{background:#C0392B;}
+#savePill{
+  position:fixed;left:50%;transform:translateX(-50%);bottom:68px;z-index:65;
+  pointer-events:none;cursor:default;
   transition:opacity .25s ease;
 }
 #savePill.hidden{display:none;}
 #savePill.fading{opacity:0;}
-#savePill .save-pill-dot{
-  width:8px;height:8px;border-radius:50%;background:var(--accent);flex:none;
+#savePill[data-state="warn"],#savePill[data-state="bad"]{
+  pointer-events:auto;cursor:pointer;
 }
-#savePill[data-state="saving"]{color:#FFE1A8;border-color:#8A6D2F;}
-#savePill[data-state="saving"] .save-pill-dot{
-  background:#D9A441;animation:savePillPulse 1s ease-in-out infinite;
-}
-#savePill[data-state="saved"]{color:#BEE3C8;border-color:var(--secondary);}
-#savePill[data-state="saved"] .save-pill-dot{background:var(--accent);}
-#savePill[data-state="warn"]{
-  color:#FFE1A8;border-color:#D9A441;pointer-events:auto;cursor:pointer;
-}
-#savePill[data-state="warn"] .save-pill-dot{background:#D9A441;}
-#savePill[data-state="bad"]{
-  color:#FFC4BC;border-color:var(--danger);pointer-events:auto;cursor:pointer;
-}
-#savePill[data-state="bad"] .save-pill-dot{background:#C0392B;}
 @keyframes savePillPulse{
   0%,100%{opacity:1;}50%{opacity:.35;}
 }
 @media (prefers-reduced-motion: reduce){
   #savePill{transition:none;}
-  #savePill[data-state="saving"] .save-pill-dot{animation:none;}
+  .pill-form[data-state="saving"] .save-pill-dot{animation:none;}
 }
 /* v1.7: the attachment undo toasts live in their own box at the TOP
    center of the window, above the app but below the modal dialogs
@@ -10107,7 +10218,7 @@ body.dark .version-date{color:var(--accent);}
        loading overlay. Its second span is the same save
        status text setSaveState has always written; the
        rail flyout keeps its own mirror line, as before. -->
-  <div id="savePill" class="hidden" data-state="off"><span class="save-pill-dot" aria-hidden="true"></span><span id="saveState">No changes</span></div>
+  <div id="savePill" class="hidden pill-form" data-state="off"><span class="save-pill-dot" aria-hidden="true"></span><span id="saveState">No changes</span></div>
 </div>
 
 <!-- ==========================================================================
@@ -10776,8 +10887,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-30-SSN-V2700";
-const APP_VERSION = "2.70.0";
+const APP_BUILD = "2026-10-30-SSN-V2710";
+const APP_VERSION = "2.71.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -11320,12 +11431,30 @@ function toast(message, isError) {
    v2.70: an optional box carries the toast into another
    toast container; the move operations' surface below
    passes the top center box, the duplicate keeps the
-   default bottom box. */
-function showProgressToast(message, box) {
+   default bottom box.
+   v2.71.0: an optional form argument builds the element
+   in the shared pill form instead (the .pill-form rules,
+   the save pill's own styling source): the move
+   operations' progress asks for it, wearing the saving
+   tone and its pulsing dot while the work runs. The
+   default toast form is unchanged. */
+function showProgressToast(message, box, form) {
   const target = box || document.getElementById("toastBox");
   const el = document.createElement("div");
-  el.className = "toast progress";
-  el.textContent = message;
+  if (form === "pill") {
+    el.className = "pill-form move-progress";
+    el.setAttribute("data-state", "saving");
+    const dot = document.createElement("span");
+    dot.className = "save-pill-dot";
+    dot.setAttribute("aria-hidden", "true");
+    el.appendChild(dot);
+    const label = document.createElement("span");
+    label.textContent = message;
+    el.appendChild(label);
+  } else {
+    el.className = "toast progress";
+    el.textContent = message;
+  }
   target.appendChild(el);
   return {
     dismiss: function () {
@@ -11334,16 +11463,31 @@ function showProgressToast(message, box) {
   };
 }
 
-/* v2.70: an ordinary toast in the top center box (see the
+/* v2.70: a toast in the top center box (see the
    #toastBoxTop rule): the move operations' completion
    lands where their progress ran. Falls back to the
-   ordinary toast if the box is somehow absent. */
+   ordinary toast if the box is somehow absent.
+   v2.71.0: the element is built in the shared pill
+   form (see showProgressToast's pill form and the
+   .pill-form rules), not the .toast form. */
 function toastTopCenter(message, isError) {
   const box = document.getElementById("toastBoxTop");
   if (!box) { toast(message, isError); return; }
   const el = document.createElement("div");
-  el.className = "toast" + (isError ? " error" : "");
-  el.textContent = message;
+  /* v2.71.0: the completion wears the pill form too,
+     from the same shared source as the save pill and
+     the progress it replaces: the saved tone and its
+     green dot when the move lands, the bad tone when
+     this surface ever carries an error. */
+  el.className = "pill-form move-done";
+  el.setAttribute("data-state", isError ? "bad" : "saved");
+  const dot = document.createElement("span");
+  dot.className = "save-pill-dot";
+  dot.setAttribute("aria-hidden", "true");
+  el.appendChild(dot);
+  const label = document.createElement("span");
+  label.textContent = message;
+  el.appendChild(label);
   box.appendChild(el);
   setTimeout(function () {
     if (el.parentNode) { el.parentNode.removeChild(el); }
@@ -11394,7 +11538,7 @@ async function withMoveProgressToast(present, past, count, work) {
   const show = function () {
     if (progress) { return; }
     progress = showProgressToast(present + "... " + count + noun,
-      document.getElementById("toastBoxTop"));
+      document.getElementById("toastBoxTop"), "pill");
   };
   if (count >= 2) { show(); }
   else { timer = setTimeout(show, MOVE_PROGRESS_DELAY_MS); }
@@ -44640,6 +44784,37 @@ function effectiveGoogleClientId() {
   return override || PUBLISHER_GOOGLE_CLIENT_ID;
 }
 
+/* v2.71.0: the one shot UI gesture token. A UI capable
+   token request (the gate Sign in ask, Refresh
+   connection's consent fallback) must prove a deliberate
+   gesture stands behind it, at the request itself. The
+   token is minted only in those two places: inside the
+   gate Sign in button's click handler, and at the start
+   of a Refresh connection run (whose only callers are
+   its three deliberate click handlers). googleConnect
+   consumes it at the request line: the first flagged
+   request spends it, and a flagged request that finds
+   no live token is forced to the silent prompt there,
+   whatever its caller passed. The token is also
+   cleared whenever the renewal cycle resets (every
+   successful connect, every sign out), so it can never
+   be saved up across actions or inherited by a later
+   session. It carries a serial and a mint time for the
+   test record; only its presence is ever consulted. */
+let googleUiGestureToken = null;
+let googleUiGestureSerial = 0;
+function mintGoogleUiGesture() {
+  googleUiGestureSerial += 1;
+  googleUiGestureToken = {
+    n: googleUiGestureSerial, at: Date.now()
+  };
+}
+function consumeGoogleUiGesture() {
+  const token = googleUiGestureToken;
+  googleUiGestureToken = null;
+  return token !== null;
+}
+
 async function googleConnect(options) {
   /* The options argument carries the prompt the token request should
      use. googleTrySilentSignIn passes {silent: true}, which maps to
@@ -44655,6 +44830,13 @@ async function googleConnect(options) {
      explicit interactive: true flag and otherwise asks with the
      GIS prompt "none", so no automatic path can raise Google's
      window (see the gate comment at the request itself).
+     v2.71.0: the flag is no longer the whole proof: the
+     request also consumes the one shot UI gesture token
+     (see above), minted only by the gate Sign in click
+     and by Refresh connection at the start of its run,
+     so a flagged request with no deliberate gesture
+     behind it is forced to "none" at the same line (see
+     the choke point comment at the request itself).
      v1.4.2: every GIS token client in the app is created here (the
      notes sign in, the silent renewal, and the attachments
      provider all funnel through googleConnect), and the client ID
@@ -44709,7 +44891,32 @@ async function googleConnect(options) {
        with no UI at all or fails the request through
        error_callback, and the app lands on its signed out
        or Refresh state quietly. */
-    const interactive = !!(options && options.interactive === true);
+    /* v2.71.0: the choke point. The v2.68.0 flag alone
+       was a convention: any caller passing interactive:
+       true received a UI capable prompt, and nothing at
+       the request itself proved a deliberate gesture
+       stood behind the call. (The v2.71.0 diagnosis, a
+       GIS spy in the real browser rig driving every
+       automatic trigger with silent renewal forced to
+       fail, found every automatic request already
+       asking "none"; what the flag could not do is
+       PROVE that of the next caller, or of a regression
+       in this one.) From here on a UI capable prompt
+       must also consume the one shot UI gesture token
+       (minted only inside the gate Sign in click
+       handler and at the start of a Refresh connection
+       run; see the token block above). A flagged
+       request with no live token is forced to "none"
+       at this line, exactly like an unflagged one, so
+       the silent only rule is enforced at the one
+       place that can ask Google for a window instead
+       of resting on every call site's memory. The
+       google.accounts.id surface (One Tap, auto
+       select) is not used anywhere in this app and
+       must not be added: this token client is the
+       only Google prompt there is. */
+    const wantsInteractive = !!(options && options.interactive === true);
+    const interactive = wantsInteractive && consumeGoogleUiGesture();
     client.requestAccessToken({
       prompt: interactive ? promptValue : "none"
     });
@@ -44935,6 +45142,15 @@ function resetGoogleRenewalRecovery() {
   googleRenewalRetryStep = 0;
   googleRenewalEpisode = null;
   disarmGoogleRenewalGesture();
+  /* v2.71.0: a fresh cycle never inherits a UI gesture
+     token either: an unspent mint belongs to the action
+     that minted it, and that action's flagged request
+     (the only consumer) runs before any success here
+     could land. Clearing with the cycle means a token
+     minted by a Refresh run whose silent attempt then
+     succeeded (so its fallback never ran) cannot linger
+     into a later, unrelated flagged request. */
+  googleUiGestureToken = null;
 }
 
 /* The one silent renewal every automatic trigger shares. A
@@ -45455,6 +45671,15 @@ let refreshConnectionRunning = false;
 async function refreshGoogleConnection() {
   if (refreshConnectionRunning) { return; }
   refreshConnectionRunning = true;
+  /* v2.71.0: this run begins inside a deliberate Refresh
+     click (the sidebar menu item, the Settings button,
+     and the rail button are its only callers), so it
+     mints the one shot UI gesture token here, at the top
+     of the run, synchronously within that click (see the
+     choke point in googleConnect). The silent attempt
+     below does not consume it; the consent fallback
+     spends it, if the fallback is reached. */
+  mintGoogleUiGesture();
   const busyControls = [
     { btn: document.getElementById("settingsRefreshBtn"),
       label: document.getElementById("settingsRefreshLabel"),
@@ -51819,6 +52044,11 @@ function wireEvents() {
      connect flow runs: first run seeding for a brand new Drive
      root, or a normal load. */
   document.getElementById("googleBackendConnectBtn").addEventListener("click", async function () {
+    /* v2.71.0: this click is one of the two deliberate
+       gestures that may mint the one shot UI gesture
+       token (see the choke point in googleConnect); the
+       connect below consumes it at its request line. */
+    mintGoogleUiGesture();
     const errEl = document.getElementById("repoError");
     errEl.textContent = "";
     const btn = document.getElementById("googleBackendConnectBtn");
