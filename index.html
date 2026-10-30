@@ -40,10 +40,48 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-29-SSN-V2640
-  Version: 2.64.0
+  BUILD STAMP: 2026-10-29-SSN-V2650
+  Version: 2.65.0
 
   Revision history:
+    v2.65.0 2026-10-29 The orphaned attachments scan.
+                      A button in Settings Connection
+                      checks the attachments folder
+                      against every attachment reference
+                      in the store: the records of every
+                      note in every collection (Trash
+                      and Archive protect their files,
+                      because a restored note needs
+                      them), the records carried by
+                      saved versions, and any catalog
+                      shell's card attachment. A shell's
+                      records are parsed from its file;
+                      no note body is loaded to answer.
+                      Files nothing references are
+                      listed with name, size, date, and
+                      an image preview, each with Keep
+                      (dismisses the row for this scan
+                      only) and Delete (confirmed, then
+                      removed through the attachment
+                      provider's own delete, the Remove
+                      flow's path), plus one Delete All
+                      behind a single confirmation
+                      naming the count and total size.
+                      A failed delete keeps its row and
+                      its reason; an unreadable store
+                      shows an error instead of an empty
+                      list; the zero result names the
+                      counts it checked. The scan runs
+                      only on the press, never at
+                      startup, on a timer, or inside a
+                      sync, and its results clear when
+                      Settings closes; nothing about it
+                      is stored. The legacy pre-v2.0
+                      attachments folder is not scanned;
+                      its files keep working by id, and
+                      the one time consolidation moves
+                      them into the current folder, where
+                      later scans see them.
     v2.64.0 2026-10-29 Tag drag nesting. Tags nest by
                       mouse drag on the v2.30 parent map,
                       in the notebook nest drag's idiom:
@@ -7204,6 +7242,40 @@ body.dark .settings-section h3{color:var(--accent);}
   width:17px;height:17px;margin:0;cursor:pointer;
   accent-color:var(--primary);flex:none;
 }
+/* v2.65: the orphaned attachments scan results in Settings
+   Connection. A row wears the task row's card shape
+   (surface, border, card radius), so the list reads as
+   part of the app in both themes; every color comes from
+   the theme tokens. The thumbnail is a fixed square, so a
+   missing or slow preview never moves the text beside
+   it, and the name ellipsizes inside its own column. */
+#settingsOrphanScanBtn:disabled{opacity:.55;cursor:default;}
+.orphan-summary{
+  display:flex;align-items:center;gap:10px;margin:12px 0 4px;
+  font-size:13.5px;color:var(--text);
+}
+.orphan-summary .btn{margin-left:auto;flex:none;}
+.orphan-list{margin-top:8px;}
+.orphan-row{
+  display:flex;align-items:center;gap:10px;padding:8px 10px;
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius-card);margin-bottom:6px;
+}
+.orphan-thumb{
+  width:44px;height:44px;flex:none;object-fit:cover;
+  border:1px solid var(--border);border-radius:6px;
+  background:var(--soft);
+}
+.orphan-main{flex:1;min-width:0;}
+.orphan-name{
+  font-weight:600;font-size:14px;color:var(--text);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.orphan-meta{font-size:12.5px;color:var(--muted);}
+.orphan-error{font-size:12.5px;color:var(--danger);font-weight:600;}
+.orphan-scan-error{margin-top:12px;}
+.orphan-actions{display:flex;gap:6px;flex:none;}
+.orphan-actions .btn:disabled{opacity:.45;cursor:default;}
 .theme-segmented{
   display:inline-flex;gap:3px;padding:3px;border:1px solid var(--border);
   border-radius:999px;background:var(--soft);
@@ -9628,6 +9700,18 @@ body.dark .version-date{color:var(--accent);}
         <div class="settings-help">Last load</div>
         <div class="settings-help" id="settingsLastLoad">No load has finished yet in this session.</div>
       </div>
+      <!-- v2.65: the orphaned attachments scan. On demand
+           only: nothing runs at startup, on a timer, or
+           inside a sync; the scan runs when the button is
+           pressed, and its results live only in this
+           section until Settings closes. -->
+      <div class="settings-autosync">
+        <div class="settings-help">Orphaned attachments</div>
+        <div class="settings-help">Files in the attachments folder that no note, and no saved version of a note, still uses. Removing an image from a note can leave its file behind; this check finds those files so you can decide, one by one, what to keep. It runs only when you press the button.</div>
+        <button class="btn" id="settingsOrphanScanBtn" type="button"><span id="settingsOrphanScanLabel">Scan for orphaned attachments</span></button>
+        <div class="settings-help" id="settingsOrphanStatus" aria-live="polite"></div>
+        <div id="settingsOrphanResults"></div>
+      </div>
     </section>
 
     <!-- v2.24: task reminder notifications. The status line
@@ -10168,8 +10252,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-29-SSN-V2640";
-const APP_VERSION = "2.64.0";
+const APP_BUILD = "2026-10-29-SSN-V2650";
+const APP_VERSION = "2.65.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -29809,6 +29893,9 @@ function syncSettingsControls() {
   /* v2.47: the Web clipper section shows this build's
      bookmarklet for this app's own address. */
   renderWebClipSettings();
+  /* v2.65: the orphan scan section starts empty on every
+     open; its results never outlive the modal. */
+  clearOrphanScanResults();
 }
 
 function openSettingsModal() {
@@ -29881,8 +29968,469 @@ function applyStartViewFromSelect() {
 }
 
 function closeSettingsModal() {
+  /* v2.65: closing Settings clears the orphan scan's
+     results with the modal; they are never left standing
+     for the next visit. */
+  clearOrphanScanResults();
   const modal = document.getElementById("settingsModal");
   if (modal) { modal.classList.add("hidden"); }
+}
+
+/* --------------------------------------------------------------------------
+   v2.65: the orphaned attachments scan (Settings, Connection)
+
+   Chris's ask (2026-10-29): removing an image from a note can
+   leave its file behind in the attachments folder, and he
+   wants a check that finds those files and lets him decide,
+   one by one, what to keep. The scan is a button in Settings
+   Connection and it is on demand only: nothing in this section
+   runs at startup, on a timer, or inside a sync. It runs when
+   the button is pressed, and its results live only in this
+   section's DOM and the module state below until Settings
+   closes (closeSettingsModal and syncSettingsControls both
+   clear them); nothing about a scan is written to the index,
+   the catalog, or settings.
+
+   What counts as a reference: the union of attachment record
+   fileIds from every note in every collection (live, Trash,
+   and Archive alike; restoring a note must find its files
+   exactly where they were), every attachment record carried
+   by a saved version (a version snapshot holds the note's
+   records from its moment, and restoring it points at the
+   same files), and the card attachment on any catalog shell.
+   A loaded note answers from its records in memory. A
+   shell's records live only in its file's front matter, so
+   the scan parses that file's text; parsing never loads a
+   body into state, so no note object is touched, nothing
+   renders differently, and the editor never hears about it.
+   A note file that cannot be read stops the scan with an
+   error rather than letting its files look orphaned.
+
+   A file in the attachments folder whose Drive id is in no
+   reference is an orphan. The id is the identity: it is the
+   value every attachment read and delete in this app
+   resolves by, so a file that merely shares a referenced
+   file's name is still a stranger. The scan covers the
+   store's current attachments subfolder only. The legacy
+   pre-v2.0 top level folder ("SnakeScale Notes
+   Attachments") is deliberately not scanned: its files keep
+   working by id wherever they sit, and the one time
+   consolidation moves them into the current folder, after
+   which this scan sees them like any other file.
+
+   Delete runs through the attachment provider's own delete
+   (providers.google.delete, the same call the attachment
+   Remove flow fires when its undo window closes), so an
+   orphan leaves exactly the way an attachment leaves.
+   -------------------------------------------------------------------------- */
+let orphanScanRunning = false;
+let orphanDeleteAllRunning = false;
+/* The last scan's shape: {filesChecked, references,
+   foundCount, orphans: [{fileId, name, mime, size,
+   modifiedTime, error, deleting}]}. Memory only. */
+let orphanScanState = null;
+const orphanThumbUrls = {};   /* fileId -> preview object URL */
+
+/* Empty the section: results, status, preview URLs, and the
+   remembered scan. Called when Settings opens (through
+   syncSettingsControls) and when it closes, so results from
+   one visit never greet the next. */
+function clearOrphanScanResults() {
+  orphanScanState = null;
+  Object.keys(orphanThumbUrls).forEach(function (id) {
+    try { URL.revokeObjectURL(orphanThumbUrls[id]); } catch (e) {}
+    delete orphanThumbUrls[id];
+  });
+  const results = document.getElementById("settingsOrphanResults");
+  if (results) { results.innerHTML = ""; }
+  const status = document.getElementById("settingsOrphanStatus");
+  if (status) { status.textContent = ""; }
+}
+
+/* The reference union, as the section comment lays out.
+   Throws on any store read failure: a partial union would
+   call live files orphaned, so the scan fails closed. */
+async function collectOrphanReferences() {
+  const refs = new Set();
+  function addRecords(records) {
+    (records || []).forEach(function (a) {
+      if (a && a.fileId) { refs.add(String(a.fileId)); }
+    });
+  }
+  const lists = [state.notes, state.trash, state.archive];
+  for (const list of lists) {
+    for (const note of (list || [])) {
+      addRecords(note.attachments);
+      if (note.shellCardAtt && note.shellCardAtt.fileId) {
+        refs.add(String(note.shellCardAtt.fileId));
+      }
+      if (note.bodyLoaded === false) {
+        const file = await storeGetFile(notePath(note));
+        if (!file) {
+          throw new Error("A note file could not be read (" +
+            notePath(note) + "), so the scan stopped rather " +
+            "than guess at its attachments.");
+        }
+        const parsed = parseNoteFile(file.text, file.token, note.id,
+          note.trashed, note.archived);
+        addRecords(parsed.attachments);
+      }
+    }
+  }
+  const ventries = (await storeListDir(VERSIONS_FOLDER_NAME)) || [];
+  for (const entry of ventries) {
+    if (entry.isDir || !/\.json$/i.test(entry.name)) { continue; }
+    const vpath = VERSIONS_FOLDER_NAME + "/" + entry.name;
+    const file = await storeGetFile(vpath);
+    if (!file) {
+      throw new Error("A saved versions file could not be read (" +
+        vpath + "), so the scan stopped rather than guess at " +
+        "its attachments.");
+    }
+    let data = null;
+    try { data = JSON.parse(file.text); } catch (err) {
+      throw new Error("A saved versions file could not be " +
+        "understood (" + vpath + "), so the scan stopped " +
+        "rather than guess at its attachments.");
+    }
+    ((data && data.versions) || []).forEach(function (v) {
+      addRecords(v && v.attachments);
+    });
+  }
+  return refs;
+}
+
+/* The attachments folder's files, folders themselves aside:
+   the store's one read only folder resolution
+   (create = false, so a missing folder reads as an empty
+   one and the scan never makes a folder by looking), then
+   the shared children listing, which carries each file's
+   size and modified time. */
+async function listOrphanCandidates() {
+  const folderId = await driveResolveFolder(ATTACH_SUBFOLDER_NAME,
+    false);
+  if (!folderId) { return []; }
+  const children = await driveListChildren(folderId);
+  return children.filter(function (c) {
+    return c.mimeType !== DRIVE_FOLDER_MIME;
+  });
+}
+
+/* The button's one job. The running flag and the disabled
+   button are the same guard twice (a caller that invokes
+   the function directly meets the flag), the label says
+   Scanning while the work is in flight, and the finally
+   restores both whatever the outcome was. */
+async function runOrphanAttachmentScan() {
+  if (orphanScanRunning) { return; }
+  const btn = document.getElementById("settingsOrphanScanBtn");
+  const label = document.getElementById("settingsOrphanScanLabel");
+  const status = document.getElementById("settingsOrphanStatus");
+  orphanScanRunning = true;
+  if (btn) { btn.disabled = true; }
+  if (label) { label.textContent = "Scanning..."; }
+  clearOrphanScanResults();
+  if (status) { status.textContent = "Scanning the attachments folder..."; }
+  try {
+    if (!state.repoExists) {
+      throw new Error("The notes store is not connected on " +
+        "this device yet. Connect to Google Drive, then run " +
+        "the scan.");
+    }
+    const refs = await collectOrphanReferences();
+    const files = await listOrphanCandidates();
+    const orphans = files.filter(function (f) {
+      return !refs.has(String(f.id));
+    }).map(function (f) {
+      return {
+        fileId: String(f.id),
+        name: f.name || "Untitled file",
+        mime: f.mimeType || "",
+        size: Number(f.size) || 0,
+        modifiedTime: f.modifiedTime || "",
+        error: "",
+        deleting: false
+      };
+    });
+    orphanScanState = {
+      filesChecked: files.length,
+      references: refs.size,
+      foundCount: orphans.length,
+      orphans: orphans
+    };
+    if (status) { status.textContent = ""; }
+    renderOrphanScanResults();
+  } catch (err) {
+    orphanScanState = null;
+    if (status) { status.textContent = ""; }
+    renderOrphanScanError(err);
+  } finally {
+    orphanScanRunning = false;
+    if (btn) { btn.disabled = false; }
+    if (label) { label.textContent = "Scan for orphaned attachments"; }
+  }
+}
+
+/* The honest failure shape: an error in the results area, in
+   place of any list, saying the store could not be read and
+   that nothing was changed. It never wears the zero result's
+   wording, so a broken scan can never pass for a clean one. */
+function renderOrphanScanError(err) {
+  const host = document.getElementById("settingsOrphanResults");
+  if (!host) { return; }
+  host.innerHTML = "";
+  const div = document.createElement("div");
+  div.className = "orphan-error orphan-scan-error";
+  div.textContent = "The scan could not read your store: " +
+    (err && err.message ? err.message : String(err)) +
+    " Nothing was changed. Check the connection and try again.";
+  host.appendChild(div);
+}
+
+/* Render the remembered scan. The summary always carries
+   the counts (files checked, references counted), so a
+   working scan is distinguishable from a broken one even
+   when it finds nothing; the found-nothing wording is
+   reserved for a scan that found nothing, with a separate
+   wording once every found orphan has been kept or
+   deleted from the list. */
+function renderOrphanScanResults() {
+  const host = document.getElementById("settingsOrphanResults");
+  if (!host) { return; }
+  host.innerHTML = "";
+  const scan = orphanScanState;
+  if (!scan) { return; }
+  const summary = document.createElement("div");
+  summary.className = "orphan-summary";
+  const msg = document.createElement("span");
+  if (!scan.orphans.length) {
+    msg.textContent = scan.foundCount > 0
+      ? "Nothing is left in this scan: every orphaned " +
+        "attachment it found was kept or deleted (" +
+        scan.foundCount + " found, of " + scan.filesChecked +
+        " files checked against " + scan.references +
+        " attachment references)."
+      : "No orphaned attachments. Checked " + scan.filesChecked +
+        " file" + (scan.filesChecked === 1 ? "" : "s") +
+        " in the attachments folder against " + scan.references +
+        " attachment reference" + (scan.references === 1 ? "" : "s") +
+        " from your notes and their saved versions.";
+    summary.appendChild(msg);
+    host.appendChild(summary);
+    return;
+  }
+  const total = scan.orphans.reduce(function (sum, o) {
+    return sum + (o.size || 0);
+  }, 0);
+  msg.textContent = scan.orphans.length + " orphaned attachment" +
+    (scan.orphans.length === 1 ? "" : "s") + ", " +
+    humanSize(total) + " total, of " + scan.filesChecked +
+    " files checked against " + scan.references +
+    " attachment references.";
+  summary.appendChild(msg);
+  const delAll = document.createElement("button");
+  delAll.className = "btn small danger";
+  delAll.type = "button";
+  delAll.textContent = "Delete all";
+  delAll.disabled = orphanDeleteAllRunning;
+  delAll.addEventListener("click", function () {
+    deleteAllOrphans().catch(function () {});
+  });
+  summary.appendChild(delAll);
+  host.appendChild(summary);
+  const list = document.createElement("div");
+  list.className = "orphan-list";
+  scan.orphans.forEach(function (orphan) {
+    list.appendChild(buildOrphanRow(orphan));
+  });
+  host.appendChild(list);
+}
+
+/* One orphan's row: the preview square for an image, the
+   name, the size and date line, any delete failure riding
+   the row itself, and the Keep and Delete buttons. */
+function buildOrphanRow(orphan) {
+  const row = document.createElement("div");
+  row.className = "orphan-row";
+  row.setAttribute("data-orphan-id", orphan.fileId);
+  if (orphan.mime.indexOf("image/") === 0) {
+    const img = document.createElement("img");
+    img.className = "orphan-thumb";
+    img.alt = "";
+    row.appendChild(img);
+    loadOrphanThumb(orphan, img);
+  }
+  const main = document.createElement("div");
+  main.className = "orphan-main";
+  const name = document.createElement("div");
+  name.className = "orphan-name";
+  name.textContent = orphan.name;
+  name.title = orphan.name;
+  main.appendChild(name);
+  const meta = document.createElement("div");
+  meta.className = "orphan-meta";
+  meta.textContent = humanSize(orphan.size) +
+    (orphan.modifiedTime
+      ? " - " + formatDate(orphan.modifiedTime) : "");
+  main.appendChild(meta);
+  if (orphan.error) {
+    const err = document.createElement("div");
+    err.className = "orphan-error";
+    err.textContent = orphan.error;
+    main.appendChild(err);
+  }
+  row.appendChild(main);
+  const actions = document.createElement("div");
+  actions.className = "orphan-actions";
+  const busy = orphan.deleting || orphanDeleteAllRunning;
+  const keep = document.createElement("button");
+  keep.className = "btn small";
+  keep.type = "button";
+  keep.textContent = "Keep";
+  keep.disabled = busy;
+  keep.addEventListener("click", function () {
+    keepOrphan(orphan.fileId);
+  });
+  actions.appendChild(keep);
+  const del = document.createElement("button");
+  del.className = "btn small danger";
+  del.type = "button";
+  del.textContent = "Delete";
+  del.disabled = busy;
+  del.addEventListener("click", function () {
+    deleteOrphan(orphan.fileId).catch(function () {});
+  });
+  actions.appendChild(del);
+  row.appendChild(actions);
+  return row;
+}
+
+/* The preview: the file's bytes through the attachment
+   provider's own download, the same read hydration uses,
+   held as an object URL until the results clear. Any
+   failure (offline, a file that will not decode) removes
+   the square and leaves the name to speak for the file,
+   per the section's degrade rule. A download that lands
+   after its row was kept, deleted, or cleared revokes its
+   URL instead of pinning it. */
+async function loadOrphanThumb(orphan, img) {
+  try {
+    let url = orphanThumbUrls[orphan.fileId];
+    if (!url) {
+      const driver = providers.google;
+      if (!driver || !driver.download) { img.remove(); return; }
+      const blob = await driver.download(orphan.fileId);
+      url = URL.createObjectURL(blob);
+      if (!orphanScanState ||
+          orphanScanState.orphans.indexOf(orphan) < 0) {
+        try { URL.revokeObjectURL(url); } catch (e) {}
+        return;
+      }
+      orphanThumbUrls[orphan.fileId] = url;
+    }
+    img.src = url;
+  } catch (err) {
+    img.remove();
+  }
+}
+
+/* Keep: the row leaves this scan's results and that is
+   all. The file is untouched, and nothing is remembered:
+   a fresh scan lists the file again, which is what makes
+   Keep a dismissal rather than a pardon. */
+function keepOrphan(fileId) {
+  const scan = orphanScanState;
+  if (!scan) { return; }
+  scan.orphans = scan.orphans.filter(function (o) {
+    return o.fileId !== fileId;
+  });
+  renderOrphanScanResults();
+}
+
+/* One delete, confirmed first, through the provider's own
+   delete. The row stays while the call is in flight; a
+   success drops it, and a failure keeps it with the reason
+   written on the row, so one bad file never stops the
+   rest of the list from being worked through. */
+async function deleteOrphan(fileId) {
+  const scan = orphanScanState;
+  if (!scan) { return; }
+  const orphan = scan.orphans.find(function (o) {
+    return o.fileId === fileId;
+  });
+  if (!orphan || orphan.deleting) { return; }
+  const ok = confirm("Delete \"" + orphan.name + "\" (" +
+    humanSize(orphan.size) + ") from the attachments folder? " +
+    "No note and no saved version uses this file.");
+  if (!ok) { return; }
+  orphan.error = "";
+  orphan.deleting = true;
+  renderOrphanScanResults();
+  try {
+    const driver = providers.google;
+    if (!driver || !driver.delete) {
+      throw new Error("Google Drive is not available.");
+    }
+    await driver.delete(fileId);
+    scan.orphans = scan.orphans.filter(function (o) {
+      return o.fileId !== fileId;
+    });
+    if (orphanThumbUrls[fileId]) {
+      try { URL.revokeObjectURL(orphanThumbUrls[fileId]); } catch (e) {}
+      delete orphanThumbUrls[fileId];
+    }
+  } catch (err) {
+    orphan.error = "Delete failed: " +
+      (err && err.message ? err.message : String(err));
+  }
+  orphan.deleting = false;
+  renderOrphanScanResults();
+}
+
+/* Delete All: ONE confirmation naming the count and the
+   total size, then the same provider delete per file in
+   turn. Successes drop as they land; each failure keeps
+   its row and its reason, so the list that remains is
+   exactly the work that is left. */
+async function deleteAllOrphans() {
+  const scan = orphanScanState;
+  if (!scan || !scan.orphans.length || orphanDeleteAllRunning) {
+    return;
+  }
+  const total = scan.orphans.reduce(function (sum, o) {
+    return sum + (o.size || 0);
+  }, 0);
+  const ok = confirm("Delete all " + scan.orphans.length +
+    " orphaned attachment" + (scan.orphans.length === 1 ? "" : "s") +
+    " (" + humanSize(total) + " total)? No note and no saved " +
+    "version uses these files.");
+  if (!ok) { return; }
+  const driver = providers.google;
+  if (!driver || !driver.delete) {
+    toast("Google Drive is not available.", true);
+    return;
+  }
+  orphanDeleteAllRunning = true;
+  renderOrphanScanResults();
+  const snapshot = scan.orphans.slice();
+  for (const orphan of snapshot) {
+    try {
+      await driver.delete(orphan.fileId);
+      scan.orphans = scan.orphans.filter(function (o) {
+        return o.fileId !== orphan.fileId;
+      });
+      if (orphanThumbUrls[orphan.fileId]) {
+        try { URL.revokeObjectURL(orphanThumbUrls[orphan.fileId]); }
+        catch (e) {}
+        delete orphanThumbUrls[orphan.fileId];
+      }
+    } catch (err) {
+      orphan.error = "Delete failed: " +
+        (err && err.message ? err.message : String(err));
+    }
+  }
+  orphanDeleteAllRunning = false;
+  renderOrphanScanResults();
 }
 
 /* v2.16: the auto-sync checkbox's change handler. The choice
@@ -43864,7 +44412,7 @@ async function driveListChildren(parentId) {
     const q = "'" + parentId + "' in parents and trashed = false";
     let url = "https://www.googleapis.com/drive/v3/files?q=" +
       encodeURIComponent(q) + "&fields=" + encodeURIComponent(
-        "nextPageToken,files(id,name,mimeType,headRevisionId,modifiedTime,trashed)") +
+        "nextPageToken,files(id,name,mimeType,size,headRevisionId,modifiedTime,trashed)") +
       "&pageSize=1000";
     if (pageToken) { url += "&pageToken=" + encodeURIComponent(pageToken); }
     const data = await gdriveJson(url);
@@ -50572,6 +51120,13 @@ function wireEvents() {
   });
   document.getElementById("settingsRefreshBtn").addEventListener("click", function () {
     refreshGoogleConnection().catch(function (err) { toast(err.message, true); });
+  });
+  /* v2.65: the orphaned attachments scan button. The scan
+     runs only from this press; the function's own guard
+     and its error state carry the outcomes, so the catch
+     here is a last resort toast like the refresh above. */
+  document.getElementById("settingsOrphanScanBtn").addEventListener("click", function () {
+    runOrphanAttachmentScan().catch(function (err) { toast(err.message, true); });
   });
   /* v2.15's sidebarRefreshBtn wiring lived here; v2.17 removed
      that button, and its flow is run from the sidebar menu's
