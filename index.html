@@ -40,10 +40,49 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-29-SSN-V2620
-  Version: 2.62.0
+  BUILD STAMP: 2026-10-29-SSN-V2611
+  Version: 2.61.1
 
   Revision history:
+    v2.61.1 2026-10-29 Native context menu suppression,
+                      widened. This release ships after
+                      v2.62.0 and patches the v2.61.0
+                      feature, and is numbered for it.
+                      v2.61.0 kept the browser's own
+                      right click menu off the task
+                      rows of a notebook's Things to do
+                      page only; the menu still answered
+                      on tasks elsewhere, and it
+                      answered everywhere in the
+                      sidebar. One delegated listener
+                      on the document now covers both:
+                      a right click (or the touch long
+                      press that surfaces as one) on a
+                      task row anywhere (the Things
+                      page, the Tasks view's list and
+                      calendar entries, the Home Tasks
+                      widget, and the Tasks block
+                      inside a note) opens nothing, and
+                      a right click anywhere in the
+                      sidebar (the full sidebar, its
+                      icon rail form, and the rail's
+                      notebooks flyout) opens nothing;
+                      no app menu replaces it in either
+                      place. The sidebar blanket rests
+                      on an audit: nothing in the
+                      sidebar answers a right click or
+                      a long press with a menu of its
+                      own, every sidebar menu opens
+                      from a click, and the sidebar's
+                      drag paths run on Pointer Events,
+                      which the suppression never
+                      touches. The listener is in the
+                      bubble phase, so the note list's
+                      own handler still runs first on a
+                      note card and opens the app menu,
+                      and the editor body keeps the
+                      browser's menu, exactly as
+                      before.
     v2.62.0 2026-10-29 Collapsible sidebar sections.
                       The Shortcuts, Notebooks, and
                       Tags sections each fold under
@@ -9997,8 +10036,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-29-SSN-V2620";
-const APP_VERSION = "2.62.0";
+const APP_BUILD = "2026-10-29-SSN-V2611";
+const APP_VERSION = "2.61.1";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -24253,27 +24292,66 @@ function initNoteContextMenu() {
   }
 }
 
-/* v2.61: the Things to do page's task rows keep the
-   browser's own right click menu out: a right click
-   (or the touch long press that surfaces as one) on a
-   task row in a notebook's task list opens nothing, at
-   Chris's word, and no app menu replaces it; the rows
-   simply do not answer a right click. The suppression
-   is delegated on the page's inner container, which
-   renderThingsView refills in place, and it is scoped
-   to the rows themselves: the rest of the page (the
-   quick add, the headings) keeps the browser's
-   behavior, note cards keep their own context menu,
-   and the Tasks view and Home task rows are untouched.
-   Called once from wireEvents. */
-function initThingsNativeMenuSuppression() {
-  const inner = document.getElementById("thingsInner");
-  if (!inner) { return; }
-  inner.addEventListener("contextmenu", function (ev) {
-    const row = ev.target && ev.target.closest
-      ? ev.target.closest(".task-row") : null;
-    if (!row) { return; }
-    ev.preventDefault();
+/* v2.61: the Things to do page's task rows first kept
+   the browser's own right click menu out, through a
+   guard delegated on that page's container alone.
+   v2.61.1 widens the same word to every task row and
+   to the whole sidebar, in one delegated listener on
+   the document, called once from wireEvents.
+
+   The task branch follows the rows, not a page: the
+   shared row builder serves the Things to do page,
+   the Tasks view's list, the Home Tasks widget, and
+   the Tasks block inside a note, and the calendar
+   surfaces build their entries with the same shape
+   under their own class; a right click (or the touch
+   long press that surfaces as one) on any of them
+   opens nothing, at Chris's word, and no app menu
+   replaces it. Rows are rebuilt on every render, so
+   only delegation survives; keyed on the two row
+   classes, the one listener covers surfaces that did
+   not exist when it was written, too.
+
+   The sidebar branch is a blanket, and the audit
+   behind it is short: besides this one, the app
+   registers exactly one other contextmenu listener
+   (the note list's, below), and nothing in the
+   sidebar answers a right click or a long press with
+   a menu of its own. Every sidebar menu (the three
+   dot menus for tags, shortcuts, saved searches,
+   templates, and the sidebar itself) opens from a
+   click, and the sidebar's drag paths (note drops,
+   shortcut reorder) run on Pointer Events, which a
+   contextmenu preventDefault never touches. So the
+   blanket replaces nothing and breaks nothing: the
+   full sidebar, its collapsed icon rail form, and
+   the rail's notebooks flyout (the rail form's own
+   panel) simply never show the browser's menu.
+
+   The listener sits in the bubble phase on purpose.
+   The note list's own handler is on the list element,
+   so on a note card it runs first, suppresses the
+   native menu itself, and opens the app menu; this
+   guard then matches neither branch (a card is no
+   task row, and the list is not the sidebar) and
+   leaves the press alone. A press matching neither
+   branch anywhere else (the editor body above all)
+   keeps the browser's own behavior, exactly as
+   before. Ordinary clicks, the rows' checkbox
+   completion through the one completion path, and
+   every sidebar button and drag are untouched,
+   because the guard only ever answers contextmenu. */
+function initNativeMenuSuppression() {
+  document.addEventListener("contextmenu", function (ev) {
+    const target = ev.target;
+    if (!target || !target.closest) { return; }
+    if (target.closest("#sidebar, #sidebarRail, #railFlyout")) {
+      ev.preventDefault();
+      return;
+    }
+    if (target.closest(".task-row, .task-cal-entry")) {
+      ev.preventDefault();
+    }
   });
 }
 
@@ -49616,7 +49694,7 @@ function wireEvents() {
      button, and the finished drag click suppression. */
   initNoteDragAndDrop();
   initNoteContextMenu();
-  initThingsNativeMenuSuppression();
+  initNativeMenuSuppression();
 
   /* Mobile bar. */
   document.getElementById("mobileNavBtn").addEventListener("click", function () { setMobileView("nav"); });
