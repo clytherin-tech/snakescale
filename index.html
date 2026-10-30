@@ -40,10 +40,39 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-29-SSN-V2610
-  Version: 2.61.0
+  BUILD STAMP: 2026-10-29-SSN-V2620
+  Version: 2.62.0
 
   Revision history:
+    v2.62.0 2026-10-29 Collapsible sidebar sections.
+                      The Shortcuts, Notebooks, and
+                      Tags sections each fold under
+                      their header from a toggle in
+                      the label row, in the stack and
+                      tag rows' disclosure style: a
+                      real button carrying the shared
+                      chevron, its expanded state and
+                      name following the fold, wired
+                      to the body it folds. Folding
+                      hides exactly the body, so the
+                      header, its title, and the
+                      Notebooks add button stay on
+                      screen and nothing inside is
+                      rebuilt differently: shortcut
+                      order, notebook selection and
+                      stack folds, tag folds and
+                      counts all render as they did.
+                      The fold is per device view
+                      state, a collapsedSections
+                      record in settings beside the
+                      stack and tag fold records it
+                      mirrors, sanitized on load to
+                      the three section keys; it
+                      never enters the synced index
+                      and never rides the Home
+                      layout, and a record written
+                      before the feature shows every
+                      section open.
     v2.61.0 2026-10-29 Menu polish. The tag menu's
                       items now hover like the note
                       context menu's items do: the
@@ -3989,6 +4018,35 @@ body.dark .gate-brand .wordmark{color:#EAF3EC;}
   transition:background-color var(--motion),color var(--motion);
 }
 .nav-label button:hover{background:rgba(87,167,115,.18);color:#fff;}
+/* v2.62: collapsible sidebar sections. The label row
+   gains a left group (the fold toggle and the section
+   name) so the row's space-between keeps the Notebooks
+   add button at the right, where it has always sat.
+   The toggle takes the stack and tag chevrons' own
+   treatment: quiet until hovered, the chevron pointing
+   down while the section is open and right once it
+   folds, the standard disclosure cue those rows set.
+   Folding hides exactly the section's body container;
+   the header row is never a fold target, so a folded
+   section leaves its title and actions on screen and
+   no empty region behind. */
+.nav-label-main{display:flex;align-items:center;gap:6px;min-width:0;}
+.nav-label .nav-section-toggle{
+  flex:none;width:22px;height:22px;display:inline-flex;
+  align-items:center;justify-content:center;padding:0;
+  background:none;border:none;color:#AFCDB7;cursor:pointer;
+  font-size:12px;line-height:1;
+  transition:background-color var(--motion),color var(--motion);
+}
+.nav-label .nav-section-toggle:hover{background:rgba(87,167,115,.25);color:#fff;}
+.nav-section-chevron{
+  display:inline-flex;transform:rotate(90deg);
+  transition:transform var(--motion);
+}
+.nav-section.folded .nav-section-chevron{transform:rotate(0deg);}
+#shortcutSection.folded #shortcutNav{display:none;}
+#notebookSection.folded #notebookNav{display:none;}
+#tagSection.folded #tagNav{display:none;}
 .nav-item{
   position:relative;display:flex;align-items:center;gap:8px;width:100%;
   text-align:left;background:none;border:none;color:#EAF3EC;
@@ -8205,8 +8263,16 @@ body.dark .version-date{color:var(--accent);}
          is the row menu the tag rows established: it removes
          the shortcut it was opened for (shortcutMenuFor) and
          nothing else; the target is never touched. -->
+    <!-- v2.62: the three labeled sections (Shortcuts,
+         Notebooks, Tags) each carry a fold toggle in
+         their label row: the chevron button at the left
+         of the label group, wired in the bindings to
+         toggleSidebarSection, its state kept in step by
+         applySidebarSectionFolds. The Notebooks add
+         button stays in the label row, outside the body
+         the fold hides. -->
     <div class="nav-section" id="shortcutSection">
-      <div class="nav-label">Shortcuts</div>
+      <div class="nav-label"><span class="nav-label-main"><button class="nav-section-toggle" id="shortcutSectionToggle" type="button" aria-expanded="true" aria-controls="shortcutNav" aria-label="Collapse Shortcuts section" title="Collapse section"><span class="nav-section-chevron" aria-hidden="true"><svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M6 3l5 5-5 5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg></span></button><span>Shortcuts</span></span></div>
       <div id="shortcutNav"></div>
       <div id="shortcutMenu" class="hidden" role="menu" aria-label="Shortcut actions">
         <button type="button" id="shortcutRemoveBtn" role="menuitem">Remove from Shortcuts</button>
@@ -8214,7 +8280,7 @@ body.dark .version-date{color:var(--accent);}
     </div>
 
     <div class="nav-section" id="notebookSection">
-      <div class="nav-label">Notebooks <button id="addNotebookBtn" type="button" title="Add notebook">+</button></div>
+      <div class="nav-label"><span class="nav-label-main"><button class="nav-section-toggle" id="notebookSectionToggle" type="button" aria-expanded="true" aria-controls="notebookNav" aria-label="Collapse Notebooks section" title="Collapse section"><span class="nav-section-chevron" aria-hidden="true"><svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M6 3l5 5-5 5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg></span></button><span>Notebooks</span></span> <button id="addNotebookBtn" type="button" title="Add notebook">+</button></div>
       <div id="notebookNav"></div>
       <!-- v2.29: the stack header menu, one shared element the
            sidebar positions under the header it was opened from
@@ -8228,7 +8294,7 @@ body.dark .version-date{color:var(--accent);}
     </div>
 
     <div class="nav-section" id="tagSection">
-      <div class="nav-label">Tags</div>
+      <div class="nav-label"><span class="nav-label-main"><button class="nav-section-toggle" id="tagSectionToggle" type="button" aria-expanded="true" aria-controls="tagNav" aria-label="Collapse Tags section" title="Collapse section"><span class="nav-section-chevron" aria-hidden="true"><svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M6 3l5 5-5 5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg></span></button><span>Tags</span></span></div>
       <div id="tagNav"></div>
       <!-- v2.30 (Evernote parity, phase 1 release 2): the tag
            menu, the card the tag rows' three dot buttons open,
@@ -9931,8 +9997,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-29-SSN-V2610";
-const APP_VERSION = "2.61.0";
+const APP_BUILD = "2026-10-29-SSN-V2620";
+const APP_VERSION = "2.62.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -10060,6 +10126,21 @@ const state = {
                             // is expanded; the list is pruned of
                             // tags that no longer have sub-tags
                             // whenever it is written.
+  collapsedSections: [],    // v2.62: the sidebar sections
+                            // ("shortcuts", "notebooks",
+                            // "tags") whose body is folded
+                            // under its header, remembered
+                            // in settings like the stack
+                            // and tag folds. It lives in
+                            // settings, NOT in index.json
+                            // (see buildIndexObject), for
+                            // the mirror reason the tag
+                            // parent map lives there: a
+                            // fold is one device's view,
+                            // and a section another device
+                            // folded must not arrive
+                            // folded here. A section not
+                            // named here is expanded.
   tagParents: {},           // v2.30: the nested tag hierarchy as
                             // a map from tag name to parent tag
                             // name. Notes keep flat tag strings;
@@ -10771,6 +10852,19 @@ function loadSettings() {
       return typeof x === "string" && x !== "";
     });
   }
+  /* v2.62: the collapsed sidebar sections, honored only
+     as an array naming the sections the sidebar has (the
+     fixed vocabulary the section table in the sidebar
+     code uses); anything else (an absent field from an
+     older build, a damaged value, a name nothing
+     carries) is dropped, so a bad record can never hide
+     a section behind a fold nobody set. */
+  if (Array.isArray(s.collapsedSections)) {
+    state.collapsedSections = s.collapsedSections.filter(
+      function (x) {
+        return ["shortcuts", "notebooks", "tags"].indexOf(x) >= 0;
+      });
+  }
   /* v2.8: the versions per note limit. Only a finite stored number
      is honored, truncated to a whole number and clamped into the
      0 to 100 range the Settings input offers; anything else (an
@@ -10846,6 +10940,7 @@ function saveSettings() {
     sidebarRail: state.sidebarRail,   // v2.5: the icon rail choice
     collapsedStacks: state.collapsedStacks,   // v2.29: stack folds
     collapsedTags: state.collapsedTags,   // v2.30: tag folds
+    collapsedSections: state.collapsedSections,   // v2.62: sidebar section folds
     versionsLimit: state.versionsLimit,   // v2.8: versions kept per note
     onboardingSeen: state.onboardingSeen,   // v2.13: the walkthrough record
     autoSync: state.autoSync,   // v2.16: the idle auto-sync choice
@@ -22145,6 +22240,75 @@ function toggleStackCollapsed(name) {
   renderSidebar();
 }
 
+/* --------------------------------------------------------------------------
+   v2.62: collapsible sidebar sections. Each of the
+   Shortcuts, Notebooks, and Tags sections folds under
+   its header from a toggle in the label row, in the
+   stack and tag rows' disclosure style. The fold is
+   per device view state, remembered in settings like
+   the stack and tag folds: state.collapsedSections
+   names the folded sections, a section not named is
+   expanded, and buildIndexObject never carries the
+   record, so a fold set on one device never syncs to
+   another and never rides the Home layout.
+   -------------------------------------------------------------------------- */
+const SIDEBAR_SECTIONS = [
+  { key: "shortcuts", name: "Shortcuts",
+    sectionId: "shortcutSection", bodyId: "shortcutNav",
+    toggleId: "shortcutSectionToggle" },
+  { key: "notebooks", name: "Notebooks",
+    sectionId: "notebookSection", bodyId: "notebookNav",
+    toggleId: "notebookSectionToggle" },
+  { key: "tags", name: "Tags",
+    sectionId: "tagSection", bodyId: "tagNav",
+    toggleId: "tagSectionToggle" }
+];
+
+function isSidebarSectionCollapsed(key) {
+  return state.collapsedSections.indexOf(key) >= 0;
+}
+
+/* Fold or unfold one sidebar section. The fold is
+   remembered in settings, like the stack folds, and
+   only re-renders the sidebar: what lives inside the
+   section (shortcut order, notebook selection and
+   stack folds, tag folds and counts) renders exactly
+   as it did, because the render builds it the same way
+   whether the section stands folded or open. */
+function toggleSidebarSection(key) {
+  const i = state.collapsedSections.indexOf(key);
+  if (i >= 0) { state.collapsedSections.splice(i, 1); }
+  else { state.collapsedSections.push(key); }
+  saveSettings();
+  renderSidebar();
+}
+
+/* Bring the three section headers in step with the
+   remembered folds: the folded class on the section
+   (the stylesheet folds the body and turns the
+   chevron off it) and the toggle's expanded state and
+   name. renderSidebar runs this on every pass, so a
+   fold from any route (the toggle, the settings load
+   at boot) shows the same way, and the header itself
+   is never hidden: only the body folds away. */
+function applySidebarSectionFolds() {
+  SIDEBAR_SECTIONS.forEach(function (spec) {
+    const section = document.getElementById(spec.sectionId);
+    if (!section) { return; }
+    const collapsed = isSidebarSectionCollapsed(spec.key);
+    section.classList.toggle("folded", collapsed);
+    const toggle = document.getElementById(spec.toggleId);
+    if (toggle) {
+      toggle.setAttribute("aria-expanded",
+        collapsed ? "false" : "true");
+      const verb = collapsed ? "Expand" : "Collapse";
+      toggle.setAttribute("aria-label",
+        verb + " " + spec.name + " section");
+      toggle.title = verb + " section";
+    }
+  });
+}
+
 /* The stack header menu (Rename Stack, Delete Stack). One shared
    element parked in the notebooks section; stackMenuFor names the
    stack it was opened for. Positioned under its header at open
@@ -22472,6 +22636,9 @@ function renderSidebar() {
      in the markup. (v2.0's rule stands behind the item: it is Sign
      out for everyone; there is no lock screen and no app
      password anymore.) */
+  /* v2.62: the section folds render in step with the
+     sidebar, like the rail chrome below. */
+  applySidebarSectionFolds();
   /* v2.5: the icon rail's chrome (toggle label, active marks,
      flyout contents) renders in step with the sidebar. */
   renderRailChrome();
@@ -48463,6 +48630,13 @@ function wireEvents() {
         toast("Could not create notebook: " + err.message, true);
       });
     }
+  });
+
+  /* v2.62: the sidebar section fold toggles, one per
+     section in the table, each folding its own section. */
+  SIDEBAR_SECTIONS.forEach(function (spec) {
+    document.getElementById(spec.toggleId).addEventListener(
+      "click", function () { toggleSidebarSection(spec.key); });
   });
 
   document.getElementById("newNoteBtn").addEventListener("click", function () {
