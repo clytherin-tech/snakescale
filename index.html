@@ -40,10 +40,106 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-30-SSN-V2670
-  Version: 2.67.0
+  BUILD STAMP: 2026-10-30-SSN-V2680
+  Version: 2.68.0
 
   Revision history:
+    v2.68.0 2026-10-30 Correctness fixes from the
+                      Testing Checklist verdicts.
+                      (1) New Note on the phone no
+                      longer lands on a blank white
+                      screen: while the Home or Tasks
+                      view is active, the editor pane
+                      sits under the hidden class, and
+                      a note created or opened from
+                      there rendered into that hidden
+                      pane, so on the phone every pane
+                      ended up display none under the
+                      mobile bar (reproduced in a
+                      real Chromium rig at a phone
+                      viewport). Opening a note now
+                      leaves the Home and Tasks views
+                      for the All Notes view first,
+                      the rule openNoteFromHome
+                      already used, applied at the
+                      one switch point every open
+                      passes through. (2) The Google
+                      sign in popup can no longer
+                      appear on its own: the silent
+                      token path asked with an empty
+                      GIS prompt, which lets Google
+                      decide whether to show an
+                      interaction, so automatic
+                      requests could raise the popup
+                      with no gesture behind them.
+                      googleConnect now honors a UI
+                      capable prompt only behind an
+                      explicit interactive flag,
+                      passed by the gate Sign in
+                      button and Refresh connection's
+                      consent fallback (both real
+                      clicks); every automatic caller
+                      asks with the GIS prompt none
+                      and fails quietly into the
+                      signed out or Refresh state.
+                      (3) A touch long press on a note
+                      no longer starts selecting text
+                      in the note menu it opens: the
+                      menu and the note cards carry
+                      user-select none and no touch
+                      callout, and a selectstart
+                      guard scoped to the menu
+                      element prevents any selection
+                      that would begin there. Editor
+                      selection is untouched.
+                      (4) The Tasks month calendar's
+                      day cell cards fit their cells
+                      at phone width: the full agenda
+                      card in a roughly 46 px cell
+                      wrapped its title a letter per
+                      line into towers hundreds of
+                      pixels tall (rig measured);
+                      inside day cells at 700 px and
+                      under, an entry is now a
+                      compact one line chip, title
+                      truncated, overdue bar and
+                      completed strike intact, tap
+                      still opening the task editor.
+                      The Home calendar agenda and
+                      the desktop grid keep the full
+                      card. (5) The Bullet and
+                      Numbered toolbar buttons work
+                      on checklist lines: they used
+                      to toggle the list off and
+                      strand the checkbox in a
+                      paragraph (the extra space
+                      above and below the line);
+                      they now convert the checklist
+                      into the requested plain list
+                      where it stands, checkboxes,
+                      done marks, and separator
+                      spaces removed, the mirror of
+                      the Checklist command's own
+                      whole list conversion. (6) The
+                      Settings tab strip wraps
+                      instead of clipping, so the
+                      Getting started title is never
+                      cut off, and Settings gains a
+                      version readout at the foot of
+                      that tab, rendered from the
+                      single APP_VERSION source.
+                      (7) The sidebar 3 dot menu
+                      leads with Settings, divider
+                      directly under it. (8) Home
+                      stays hidden until its first
+                      packed layout has been
+                      applied, then reveals for the
+                      session: no more widgets
+                      flashing grouped in a corner
+                      on load, and the hold never
+                      delays the pack itself, which
+                      measures the held pane at
+                      full geometry.
     v2.67.0 2026-10-30 The nest drags, fixed for real
                       pointer input. The notebook nest
                       drag (v2.63) and the tag nest drag
@@ -5068,6 +5164,15 @@ body.dark .filter-group-title{color:var(--accent);}
   border-left:3px solid transparent;border-radius:var(--radius-card);
   padding:12px 13px;margin-bottom:10px;cursor:pointer;box-shadow:none;
   display:flex;gap:12px;align-items:flex-start;
+  /* v2.68.0: a touch long press on a card opens the note
+     context menu; without this the same press also starts
+     selecting the card's text (and raises the touch
+     callout), which then fights the tap on a menu item.
+     Cards are navigation, not text, so selection never
+     belongs on them. The editor body keeps normal
+     selection; nothing there changes. */
+  user-select:none;-webkit-user-select:none;
+  -webkit-touch-callout:none;
   transition:background-color var(--motion),border-color var(--motion),
     box-shadow var(--motion);
 }
@@ -5155,6 +5260,12 @@ body.dark .tag-chip{color:var(--accent);}
   background:var(--surface);border:1px solid var(--border);
   border-radius:var(--radius-card);box-shadow:var(--shadow);
   padding:6px;display:flex;flex-direction:column;gap:2px;
+  /* v2.68.0: the menu is a control surface, never text:
+     no selection and no touch callout anywhere inside it
+     (items inherit), so a long press or a drag across an
+     item can never start selecting its label. */
+  user-select:none;-webkit-user-select:none;
+  -webkit-touch-callout:none;
 }
 .note-ctx-menu.hidden{display:none;}
 .note-ctx-head{
@@ -5361,6 +5472,16 @@ body.note-drag-active{touch-action:none;overscroll-behavior:none;}
    the app already has one (the Tasks widget's rows are
    the shared task row builder's own). */
 #homepane{flex:1;display:flex;flex-direction:column;overflow:hidden;background:var(--bg);}
+/* v2.68.0: the Home hold. Until the first packed layout
+   has actually been applied (see layoutHomeWidgets), the
+   pane is visibility hidden: its geometry stays fully
+   measurable, so the pack can measure and place the
+   widgets while held, but nothing paints in the unpaced
+   corner grouped state Chris saw flash on load. The
+   class comes off at the first successful pack and the
+   session latch never puts it back, so Customize passes
+   and every later render paint normally. */
+#homepane.home-hold{visibility:hidden;}
 .home-scroll{overflow-y:auto;overflow-x:hidden;flex:1;padding:22px 26px 40px;}
 .home-inner{width:100%;max-width:1120px;margin:0 auto;}
 .home-head{
@@ -7433,9 +7554,19 @@ body.dark .settings-card>.settings-section:hover::-webkit-scrollbar-thumb{
 }
 .settings-tabs{
   display:flex;gap:3px;padding:3px;margin:0 0 10px;flex:none;
-  border:1px solid var(--border);border-radius:999px;
+  /* v2.68.0: the strip WRAPS instead of clipping. Through
+     v2.67.0 it was a single row in a hidden scrollbar
+     overflow container, so on Chris's screen the last
+     tab, Getting started, sat cut off at the edge with
+     no visible way to reach it. The tabs keep their
+     order and their arrow key behavior (both are DOM
+     order driven); they simply take a second row when
+     one row is not wide enough. The radius drops from a
+     full pill to 20px, which reads as the same pill on
+     one row and stays sane on two. */
+  flex-wrap:wrap;
+  border:1px solid var(--border);border-radius:20px;
   background:var(--soft);
-  overflow-x:auto;scrollbar-width:none;
 }
 .settings-tabs::-webkit-scrollbar{display:none;}
 .settings-tab{
@@ -7451,6 +7582,12 @@ body.dark .settings-card>.settings-section:hover::-webkit-scrollbar-thumb{
 .settings-tab[aria-selected="true"]{
   background:var(--primary);border-color:var(--primary);color:#fff;
   box-shadow:0 1px 5px rgba(11,61,46,.25);
+}
+/* v2.68.0: the version readout at the foot of the Getting
+   started settings panel. Muted like the dialog's other
+   secondary text, in both themes. */
+.settings-version{
+  margin:14px 0 0;font-size:13px;font-weight:600;color:var(--muted);
 }
 /* v2.54 settings tabs: end */
 .modal input[type="number"]{
@@ -7760,6 +7897,31 @@ body.dark .task-cal-more{color:var(--accent);}
 @media (max-width:700px){
   .task-cal-day{min-height:64px;padding:4px 3px 5px;}
   .task-cal-entry-main{font-size:11px;}
+  /* v2.68.0: inside a month grid day cell at phone width
+     (about 46px at 390px) the full agenda card cannot fit:
+     its checkbox, time, flag, and priority pill leave the
+     title a measure of a few pixels, and overflow-wrap
+     anywhere wrapped it a letter per line into towers
+     hundreds of pixels tall that stretched the whole week
+     row (reproduced and measured in the real Chromium
+     rig: entries 214 to 422px tall in a 46px cell). In
+     cells only, the entry becomes the compact chip every
+     phone month calendar uses: one line, the title
+     truncated with an ellipsis, the overdue inset bar and
+     the completed strike still carrying the state, and a
+     tap still opens the task editor through the entry's
+     own click handler. The Home calendar agenda (its
+     entries are not inside a day cell) and the desktop
+     grid keep the full card untouched. */
+  .task-cal-day .task-cal-entry{padding:2px 4px;gap:0;}
+  .task-cal-day .task-cal-entry .task-check,
+  .task-cal-day .task-cal-entry .task-flag,
+  .task-cal-day .task-cal-entry .priority-pill,
+  .task-cal-day .task-cal-entry-time{display:none;}
+  .task-cal-day .task-cal-entry-main{
+    white-space:nowrap;overflow:hidden;
+    text-overflow:ellipsis;overflow-wrap:normal;
+  }
 }
 /* v2.24.4: phone form for the Tasks pane rows. The three
    column table cannot carry its own Title cell at phone
@@ -8540,12 +8702,19 @@ body.dark .version-date{color:var(--accent);}
       <button class="update-pill hidden" id="updateReadyPill" type="button" title="A new version of SnakeScale Notes is ready. It loads as soon as the open note is saved.">New version ready</button>
       <button class="sidebar-menu-btn" id="sidebarMenuBtn" type="button" aria-haspopup="true" aria-expanded="false" title="More actions" aria-label="More actions">&#8943;</button>
       <div id="sidebarMenu" class="hidden" role="menu" aria-label="Sidebar actions">
+        <!-- v2.68.0: Settings leads the menu, with the
+             divider directly under it, as Chris asked.
+             Every other entry keeps its content and its
+             relative order (the renewal failure line stays
+             attached under Refresh connection, its anchor);
+             clicks are delegated by element id, so the
+             reorder is markup only. -->
+        <button class="att-menu-item" id="sidebarSettingsItem" type="button" role="menuitem">Settings</button>
+        <div class="att-menu-sep"></div>
         <button class="att-menu-item" id="sidebarSyncItem" type="button" role="menuitem">Sync now</button>
         <button class="att-menu-item" id="sidebarRefreshItem" type="button" role="menuitem">Refresh connection</button>
         <div class="sidebar-renewal-failure hidden" id="sidebarRenewalFailure" role="note"></div>
         <button class="att-menu-item hidden" id="sidebarInstallItem" type="button" role="menuitem">Install app</button>
-        <button class="att-menu-item" id="sidebarSettingsItem" type="button" role="menuitem">Settings</button>
-        <div class="att-menu-sep"></div>
         <button class="att-menu-item" id="sidebarSignOutItem" type="button" role="menuitem">Sign out</button>
       </div>
     </div>
@@ -9899,6 +10068,12 @@ body.dark .version-date{color:var(--accent);}
         <button class="btn" id="settingsWalkthroughBtn" type="button">Replay the walkthrough</button>
         <button class="btn" id="settingsStarterNoteBtn" type="button">Add the starter note</button>
       </div>
+      <!-- v2.68.0: the app version inside Settings, where
+           Chris looked for one and could not find it (it
+           lived only in the sidebar footer). Filled by
+           renderAppVersion from the single APP_VERSION
+           source, never a second hardcoded string. -->
+      <p class="settings-version" id="settingsVersion"></p>
     </section>
 
     <div class="modal-foot">
@@ -10340,8 +10515,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-30-SSN-V2670";
-const APP_VERSION = "2.67.0";
+const APP_BUILD = "2026-10-30-SSN-V2680";
+const APP_VERSION = "2.68.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -19462,6 +19637,22 @@ function homePackDropIndex(otherHeights, dragHeight, width, x, y) {
 let homePackObserver = null;
 let homePackQueued = false;
 
+/* v2.68.0: the Home hold latch (see the #homepane.home-hold
+   style). renderHome arms the hold on the pane until the
+   first packed layout has actually been applied;
+   releaseHomeHold runs inside the first layoutHomeWidgets
+   pass that places items (or settles the zero widget
+   case), and the latch then stays off for the session, so
+   Customize passes and every later pack paint exactly as
+   they always have. */
+let homeHoldReleased = false;
+function releaseHomeHold() {
+  if (homeHoldReleased) { return; }
+  homeHoldReleased = true;
+  const pane = document.getElementById("homepane");
+  if (pane) { pane.classList.remove("home-hold"); }
+}
+
 function layoutHomeWidgets() {
   const grid = document.getElementById("homeGrid");
   if (!grid) { return; }
@@ -19473,7 +19664,13 @@ function layoutHomeWidgets() {
         (el.classList.contains("home-widget") &&
           !el.classList.contains("home-widget-floating"));
     });
-  if (!items.length) { grid.style.height = ""; return; }
+  if (!items.length) {
+    grid.style.height = "";
+    /* v2.68.0: no widgets is a settled layout too; the
+       pane's own chrome (greeting, Customize) must show. */
+    releaseHomeHold();
+    return;
+  }
   /* v2.55: while a widget drag is engaged, the pass
      packs from the heights the lift measured (the drag
      session's cache): no width writes (a slide cannot
@@ -19507,6 +19704,8 @@ function layoutHomeWidgets() {
   });
   grid.style.height = pack.height + "px";
   if (!drag) { watchHomeWidgetSizes(grid); }
+  /* v2.68.0: the pack has been applied; reveal Home. */
+  releaseHomeHold();
 }
 
 /* Repack on the next frame, coalesced: the observer
@@ -21091,6 +21290,11 @@ function closeHomeWidgetsPopover() {
 function renderHome() {
   const pane = document.getElementById("homepane");
   if (!pane) { return; }
+  /* v2.68.0: hold the pane's visibility until the first
+     packed layout lands (see releaseHomeHold); visibility
+     hidden keeps every widget measurable, so the pack
+     below runs at full speed while held. */
+  if (!homeHoldReleased) { pane.classList.add("home-hold"); }
   const greet = document.getElementById("homeGreeting");
   if (greet) {
     greet.textContent = homeGreetingText(new Date());
@@ -23357,6 +23561,12 @@ function hideLoading() {
 function renderAppVersion() {
   const el = document.getElementById("appVersion");
   if (el) { el.textContent = "Version " + APP_VERSION; }
+  /* v2.68.0: the same readout inside Settings (the foot of
+     the Getting started tab), from the same single source. */
+  const settingsEl = document.getElementById("settingsVersion");
+  if (settingsEl) {
+    settingsEl.textContent = "SnakeScale Notes, version " + APP_VERSION;
+  }
   document.title = "SnakeScale Notes v" + APP_VERSION;
 }
 
@@ -25685,6 +25895,18 @@ async function deleteSelectionForever() {
 function initNoteContextMenu() {
   const listEl = document.getElementById("noteList");
   if (!listEl) { return; }
+  /* v2.68.0: selection never starts inside the note menu.
+     The CSS on .note-ctx-menu and .note-card covers the
+     rendering side; this is the event half, scoped to the
+     menu element alone, so a selection that would begin
+     on a menu item is prevented while selection everywhere
+     else (the editor body above all) is untouched. */
+  const ctxMenuEl = document.getElementById("noteCtxMenu");
+  if (ctxMenuEl) {
+    ctxMenuEl.addEventListener("selectstart", function (ev) {
+      ev.preventDefault();
+    });
+  }
   listEl.addEventListener("contextmenu", function (ev) {
     const card = ev.target && ev.target.closest
       ? ev.target.closest(".note-card") : null;
@@ -29464,6 +29686,24 @@ function openNote(id) {
    v2.50. Kept separate so the settle gate above can defer
    it without duplicating it. */
 function openNoteNow(id) {
+  /* v2.68.0: a note opening leaves the Home and Tasks
+     full area views first. While either is active,
+     syncTasksPane holds the editor pane under the
+     hidden class (display none !important), so a note
+     created or opened from there rendered into a pane
+     nothing could show: on the phone every pane ended
+     up display none under the mobile bar, a blank white
+     screen, which is what Chris hit with New Note from
+     Home (reproduced in the real Chromium rig at a
+     phone viewport: body view-editor, the editor pane
+     still hidden). This is openNoteFromHome's own rule
+     (the note opens in the All Notes view) generalized
+     to the one switch point every open passes through;
+     the list and notebook views do not hide the editor
+     and are untouched. */
+  if (state.view.kind === "home" || state.view.kind === "tasks") {
+    state.view = { kind: "all", value: null };
+  }
   state.selectedId = id;
   /* v2.24.3: a note opening replaces any Things to do page. */
   state.thingsNotebook = null;
@@ -31559,6 +31799,17 @@ function setMobileView(which) {
   if (window.innerWidth > 900) { return; }
   document.body.classList.remove("view-nav", "view-list", "view-editor");
   document.body.classList.add("view-" + which);
+  /* v2.68.0: showing the list side is also the moment the
+     Home pane becomes displayed on the phone (its own
+     render packed too early, while the pane was still
+     display none under the editor's body class, and no
+     size observer is armed before the first successful
+     pack). Queue the pack for the next frame, when the
+     pane has its real width: it places the widgets and,
+     on the first run, releases the Home hold. */
+  if (which === "list" && state.view && state.view.kind === "home") {
+    queueHomePack();
+  }
 }
 
 /* --------------------------------------------------------------------------
@@ -40310,10 +40561,28 @@ function runToolbarCommand(cmd) {
     document.execCommand("formatBlock", false, "H1");
   } else if (cmd === "h2") {
     document.execCommand("formatBlock", false, "H2");
-  } else if (cmd === "ul") {
-    document.execCommand("insertUnorderedList", false, null);
-  } else if (cmd === "ol") {
-    document.execCommand("insertOrderedList", false, null);
+  } else if (cmd === "ul" || cmd === "ol") {
+    /* v2.68.0: on a checklist line, the raw list primitive
+       toggled the list OFF instead, leaving the item's
+       checkbox stranded in a paragraph with the
+       paragraph's spacing around it: the bullet button
+       appeared to just add space above and below the line
+       (Chris's checklist report). A list in this editor
+       has exactly one type, so the command now converts
+       the checklist into the requested plain list where
+       it stands (convertChecklistToPlainList, with the
+       checklist machinery below), exactly as the
+       Checklist command converts a plain list the other
+       way. Anywhere else the primitives run as before. */
+    const listCtx = checklistCaretContext();
+    if (listCtx && listCtx.li && isChecklistList(listCtx.list)) {
+      convertChecklistToPlainList(listCtx.list, cmd === "ol",
+        listCtx.li);
+    } else if (cmd === "ul") {
+      document.execCommand("insertUnorderedList", false, null);
+    } else {
+      document.execCommand("insertOrderedList", false, null);
+    }
   } else if (cmd === "checklist") {
     toggleChecklistAtCaret();
   } else if (cmd === "clear") {
@@ -40607,6 +40876,59 @@ function toggleChecklistAtCaret() {
     }
   }
   convertBlockToChecklistItem(ctx.block, range);
+}
+
+/* v2.68.0: turn a checklist into a plain bullet or numbered
+   list where it stands, the Bullet and Numbered commands'
+   answer to the Checklist command's makeListChecklist (which
+   converts a whole plain list the other way). The items keep
+   their text and inline formatting; what made the list a
+   checklist goes away: the ss-checklist class, each item's
+   leading checkbox, each item's done class (the note body
+   stylesheet strikes any li.done, and a plain item has no
+   done state to carry), and the one separator space older
+   versions wrote after a checkbox, stripped per item exactly
+   as checklistItemToParagraph strips it on the paragraph
+   path. For the numbered form the list element itself is
+   swapped UL for OL with the same children, the reverse of
+   the swap toggleChecklistAtCaret performs. The caret is
+   restored into its own item at its own text offset. */
+function convertChecklistToPlainList(list, ordered, caretLi) {
+  const sel = window.getSelection();
+  const range = sel && sel.rangeCount ? sel.getRangeAt(0) : null;
+  let offset = range && caretLi
+    ? caretTextOffsetWithin(caretLi, range) : 0;
+  let target = list;
+  if (ordered && list.tagName === "UL") {
+    target = document.createElement("ol");
+    while (list.firstChild) { target.appendChild(list.firstChild); }
+    list.replaceWith(target);
+  }
+  target.classList.remove("ss-checklist");
+  /* An emptied class attribute does not ride into the
+     saved body; the attribute itself goes too. */
+  if (!target.classList.length) {
+    target.removeAttribute("class");
+  }
+  for (let i = 0; i < target.children.length; i++) {
+    const li = target.children[i];
+    if (li.tagName !== "LI") { continue; }
+    li.classList.remove("done");
+    if (!li.classList.length) { li.removeAttribute("class"); }
+    const head = li.firstElementChild;
+    if (head && head.tagName === "INPUT" && head.type === "checkbox") {
+      head.remove();
+    }
+    const walker = document.createTreeWalker(li, NodeFilter.SHOW_TEXT, null);
+    const firstText = walker.nextNode();
+    if (firstText && firstText.nodeValue.charAt(0) === " ") {
+      firstText.nodeValue = firstText.nodeValue.slice(1);
+      if (li === caretLi && offset > 0) { offset -= 1; }
+    }
+  }
+  if (caretLi) {
+    placeCaretAtTextOffset(caretLi, Math.max(0, offset));
+  }
 }
 
 /* --------------------------------------------------------------------------
@@ -43449,6 +43771,11 @@ async function googleConnect(options) {
      for the interactive consent prompt explicitly, so the silent
      attempt and the interactive attempt share this one function and
      its token recording, with no duplicated token logic anywhere.
+     v2.68.0: the empty prompt default above is historical: the
+     request below now honors a caller prompt only behind an
+     explicit interactive: true flag and otherwise asks with the
+     GIS prompt "none", so no automatic path can raise Google's
+     window (see the gate comment at the request itself).
      v1.4.2: every GIS token client in the app is created here (the
      notes sign in, the silent renewal, and the attachments
      provider all funnel through googleConnect), and the client ID
@@ -43486,7 +43813,27 @@ async function googleConnect(options) {
     });
     const promptValue = options && typeof options.prompt === "string"
       ? options.prompt : "";
-    client.requestAccessToken({ prompt: promptValue });
+    /* v2.68.0: the interactive gate. Through v2.67.0 the
+       silent path asked with an EMPTY prompt, which does
+       not mean "no UI": it lets Google decide, and when
+       Google wants an interaction the token request itself
+       raises the sign in popup with no user gesture behind
+       it, the recurring popup Chris kept seeing against
+       the v2.24.8 silent only rule. From here on, only a
+       caller passing interactive: true (the gate Sign in
+       button's click handler and Refresh connection's
+       consent fallback, both deliberate gestures) may use
+       a UI capable prompt. Every other caller, the renewal
+       timer, the visibility return, 401 recovery, the
+       gesture ladder, auto sync retries, asks with the
+       GIS prompt "none": Google either issues the token
+       with no UI at all or fails the request through
+       error_callback, and the app lands on its signed out
+       or Refresh state quietly. */
+    const interactive = !!(options && options.interactive === true);
+    client.requestAccessToken({
+      prompt: interactive ? promptValue : "none"
+    });
   });
   state.attach.googleExpiresAt =
     Date.now() + (Number(resp.expires_in) || 3600) * 1000;
@@ -44284,7 +44631,7 @@ async function refreshGoogleConnection() {
     let connected = await googleTrySilentSignIn();
     if (!connected) {
       try {
-        await googleConnect({ prompt: "consent" });
+        await googleConnect({ prompt: "consent", interactive: true });
         connected = true;
       } catch (err) {
         connected = false;
@@ -50599,7 +50946,7 @@ function wireEvents() {
     btn.disabled = true;
     btn.textContent = "Signing in...";
     try {
-      await providers.google.connect();
+      await providers.google.connect({ interactive: true });
       await connectAndLoad();
     } catch (err) {
       errEl.textContent = err.message;
