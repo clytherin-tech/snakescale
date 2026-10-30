@@ -40,10 +40,101 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-30-SSN-V2690
-  Version: 2.69.0
+  BUILD STAMP: 2026-10-30-SSN-V2700
+  Version: 2.70.0
 
   Revision history:
+    v2.70.0 2026-10-30 Polish from Chris's live
+                      feedback on the v2.67.0 to
+                      v2.69.0 builds. (1) The
+                      notebook and tag nest
+                      drags carry a ghost: a
+                      floating copy of the
+                      dragged row or chip
+                      follows the pointer while
+                      the drag is engaged, on
+                      the full sidebar and in
+                      the rail flyout, for
+                      mouse, pen, and touch (on
+                      touch it rides above the
+                      fingertip, so the finger
+                      never hides the item being
+                      carried), and the grabbing
+                      cursor now reaches the
+                      pointer app wide during a
+                      nest drag; the source row
+                      keeps its dim, and the
+                      coordinate target scan,
+                      the refusals, the edge
+                      auto scroll, and the tail
+                      click rule are untouched.
+                      (2) The Templates button
+                      takes the New Note
+                      button's own side margins,
+                      so the two sidebar doors
+                      render the same size. (3)
+                      The Tasks month calendar
+                      entry stacks at every
+                      width: a head row carries
+                      the picker, the time
+                      (never wrapped mid token),
+                      the flag, and the High
+                      priority pill, and the
+                      title wraps at word
+                      boundaries across the
+                      card's full width under
+                      it, capped at three lines
+                      with an ellipsis; the
+                      phone day cell chips keep
+                      their one line form on the
+                      new structure. Through
+                      v2.69.0 the desktop card
+                      shared one flex row among
+                      all of it and crushed a
+                      flagged High task's title
+                      into a one letter wide
+                      tower, its time broken mid
+                      token. (4) The move
+                      operations (archive,
+                      Trash, restore, unarchive;
+                      bulk and single alike) run
+                      behind a progress toast at
+                      the top center of the
+                      screen: 'Archiving... N
+                      notes' while the work
+                      runs, replaced there by
+                      'Archived N notes' when it
+                      lands, with Trash in
+                      Chris's wording
+                      ('Deleting...' /
+                      'Deleted'). It shows at
+                      once for two or more
+                      notes, and for a single
+                      note only when the
+                      operation is still running
+                      350 ms in, so a genuinely
+                      instant move keeps today's
+                      feedback exactly; a
+                      failure keeps the move
+                      chain's own error surface,
+                      with no completion wording
+                      over it. The Archive
+                      view's Restore Selected,
+                      the one bulk move the
+                      v2.69.0 pooling passed by
+                      (it ran one at a time with
+                      a full render per note),
+                      now runs the same pooled
+                      quiet form with one render
+                      at the end. What slowness
+                      remains in the moves is
+                      the store's own round
+                      trips: each note's file is
+                      written to its new home,
+                      read at the old one, and
+                      deleted there, three calls
+                      the path based store
+                      cannot fold into one.
     v2.69.0 2026-10-30 Performance. The Testing
                       Checklist verdicts said every
                       operation in this release
@@ -4391,6 +4482,14 @@ body.dark .gate-brand .wordmark{color:#EAF3EC;}
      width:100%. */
   width:auto;
 }
+/* v2.70: the Templates button takes the New Note
+   button's own measure (Chris's ask: the two sidebar
+   doors the same size). It carried no side margins of
+   its own, so its block width ran the sidebar's full
+   264px, 32px wider than New Note's margined 232px and
+   flush to the sidebar's edges; the same margins and
+   width:auto line it up exactly. */
+#templatesBtn{margin:0 16px 8px;width:auto;}
 /* v2.32: the search wrap is also the positioning context for
    the saved searches panel that opens under the box. */
 .sidebar-search{position:relative;padding:6px 16px 10px;}
@@ -4580,6 +4679,37 @@ body.dark .gate-brand .wordmark{color:#EAF3EC;}
 .rail-fly-row.nb-nest-source{opacity:.55;}
 .nav-item.nb-nest-source{opacity:.55;}
 body.nb-nest-dragging{cursor:grabbing;user-select:none;}
+/* v2.70: the grabbing cursor has to reach the pointer.
+   Every button carries cursor:pointer from the button
+   element rule, and the cursor a browser shows is the
+   hovered element's own, so the body rule above never
+   reached the pointer while a nest drag ran over the
+   rows (Chris, device testing v2.67.0: "I just see the
+   pointer cursor"). While either nest drag is engaged,
+   the fist wins on every element under it. */
+body.nb-nest-dragging *{cursor:grabbing !important;}
+body.tag-nest-dragging *{cursor:grabbing !important;}
+/* v2.70: the nest drags' ghost, the note drag ghost's
+   sibling (see .note-drag-ghost): a floating copy of
+   the dragged notebook row or tag chip that rides the
+   pointer while the drag is engaged, so the item in
+   the hand is visible being carried, not just dimmed
+   at its source. The clones are transparent backed
+   sidebar rows, which would vanish over the light
+   list pane, so the ghost wears the sidebar's own
+   green with an accent edge and the lifted shadow.
+   It never takes events, and its data attributes are
+   stripped at creation, so the drags' coordinate
+   target scans never see it. The body child selector
+   is deliberate: the row rules it must beat (.nav-item,
+   .rail-fly-row) sit later in this sheet at the same
+   class weight, and the extra element lifts the
+   ghost's rule above them wherever it lives. */
+body>.nest-drag-ghost{
+  position:fixed;z-index:200;pointer-events:none;margin:0;
+  background:var(--sidebar);border:1px solid var(--accent);
+  opacity:.96;box-shadow:var(--shadow);
+}
 /* v2.64: the tag nest drag's own states, the notebook
    nest drag's treatment carried to the Tags section:
    the section header is the top level drop zone while
@@ -7922,8 +8052,21 @@ body.dark .task-cal-title{color:var(--accent);}
 .task-cal-day.today .task-cal-daynum{
   background:var(--accent);color:#0B3D2E;
 }
+/* v2.70: the entry stacks: a head row carries the
+   header elements (the picker, the time, the flag, the
+   priority pill), and the title stands under it at the
+   card's full width. Through v2.69 the title shared
+   one flex row with the flag and the pill, on whatever
+   width they left it, and overflow-wrap anywhere broke
+   it a letter per line whenever that width ran small:
+   Chris's screenshot of the desktop month grid showed
+   a flagged High task at 7:00 AM crushed into a
+   17 line tower in a 119px cell, its time itself
+   broken mid token. The head keeps the markers at the
+   card's right, as they sat in the old row, over the
+   title's own full width row. */
 .task-cal-entry{
-  display:flex;align-items:flex-start;gap:4px;
+  display:flex;flex-direction:column;gap:2px;
   background:var(--soft);border-radius:6px;
   padding:3px 5px;cursor:pointer;min-width:0;
 }
@@ -7939,16 +8082,38 @@ body.dark .task-cal-title{color:var(--accent);}
   width:14px;height:14px;margin:0;cursor:pointer;
   accent-color:var(--primary);
 }
-.task-cal-entry-main{
-  flex:1;min-width:0;font-size:12px;line-height:1.35;
-  color:var(--text);overflow-wrap:anywhere;
+.task-cal-entry-head{
+  display:flex;align-items:center;gap:4px;min-width:0;
+  font-size:12px;flex-wrap:wrap;
 }
-.task-cal-entry-time{font-weight:700;color:var(--primary);}
+.task-cal-entry-time{
+  font-weight:700;color:var(--primary);white-space:nowrap;
+}
 body.dark .task-cal-entry-time{color:var(--accent);}
+/* The flag and the pill ride in one marks group at the
+   head's right. The head wraps: in a month cell too
+   narrow for picker, time, and marks on one line
+   (Chris's 119px cell: 121px of head in 97px of card),
+   the group drops whole to a second line at the right
+   instead of running off the card's edge. */
+.task-cal-entry-marks{
+  display:flex;align-items:center;gap:4px;margin-left:auto;
+}
+.task-cal-entry .task-flag{flex:none;}
+/* The title wraps at word boundaries across the full
+   card width and caps at three lines with an ellipsis
+   (the card's tooltip carries the whole title, and a
+   tap opens the task): the cap is what keeps a long
+   title from towering over its day. */
+.task-cal-entry-title{
+  font-size:12px;line-height:1.35;color:var(--text);min-width:0;
+  overflow-wrap:break-word;
+  display:-webkit-box;-webkit-box-orient:vertical;
+  -webkit-line-clamp:3;overflow:hidden;text-overflow:ellipsis;
+}
 .task-cal-entry.completed .task-cal-entry-title{
   text-decoration:line-through;color:var(--muted);
 }
-.task-cal-entry .task-flag{flex:none;padding-top:1px;}
 .task-cal-entry .priority-pill{
   flex:none;font-size:10px;padding:1px 5px;
 }
@@ -7974,7 +8139,7 @@ body.dark .task-cal-more{color:var(--accent);}
 }
 @media (max-width:700px){
   .task-cal-day{min-height:64px;padding:4px 3px 5px;}
-  .task-cal-entry-main{font-size:11px;}
+  .task-cal-entry-title{font-size:11px;}
   /* v2.68.0: inside a month grid day cell at phone width
      (about 46px at 390px) the full agenda card cannot fit:
      its checkbox, time, flag, and priority pill leave the
@@ -7989,16 +8154,19 @@ body.dark .task-cal-more{color:var(--accent);}
      the completed strike still carrying the state, and a
      tap still opens the task editor through the entry's
      own click handler. The Home calendar agenda (its
-     entries are not inside a day cell) and the desktop
-     grid keep the full card untouched. */
+     entries are not inside a day cell) keeps the full
+     card untouched.
+     v2.70: the chip rides the entry's new stacked
+     structure: the whole head row hides (the picker,
+     the time, the flag, and the pill live there now),
+     and the title drops its three line cap for the
+     chip's single truncated line. */
   .task-cal-day .task-cal-entry{padding:2px 4px;gap:0;}
-  .task-cal-day .task-cal-entry .task-check,
-  .task-cal-day .task-cal-entry .task-flag,
-  .task-cal-day .task-cal-entry .priority-pill,
-  .task-cal-day .task-cal-entry-time{display:none;}
-  .task-cal-day .task-cal-entry-main{
+  .task-cal-day .task-cal-entry-head{display:none;}
+  .task-cal-day .task-cal-entry-title{
     white-space:nowrap;overflow:hidden;
     text-overflow:ellipsis;overflow-wrap:normal;
+    display:block;-webkit-line-clamp:none;
   }
 }
 /* v2.24.4: phone form for the Tasks pane rows. The three
@@ -8296,6 +8464,19 @@ body.dark .version-date{color:var(--accent);}
    The mobile layout keeps the same footer height (padding 10px 14px),
    so one value serves both: bottom:68px is the full footer plus 16px
    of clear space above it. */
+/* v2.70: the move operations' toast box, at the top
+   center of the screen (Chris's placement for the
+   archive, trash, restore, and unarchive progress:
+   the wait should read where the eye already is, not
+   down in the corner). It reuses the .toast styling
+   whole, so both themes already cover it; only the
+   box's placement is its own. The toasts it carries
+   are display only, so the box never takes events. */
+#toastBoxTop{
+  position:fixed;top:14px;left:50%;transform:translateX(-50%);
+  z-index:60;display:flex;flex-direction:column;align-items:center;
+  gap:8px;max-width:min(92vw,380px);pointer-events:none;
+}
 #toastBox{position:fixed;right:14px;bottom:68px;z-index:60;display:flex;flex-direction:column;gap:8px;max-width:min(92vw,380px);}
 /* v2.57: the save state as a floating pill. Through v2.56.0
    the status was a quiet line in the sidebar footer, which
@@ -8483,6 +8664,7 @@ body.dark .version-date{color:var(--accent);}
   #thingsBackBtn,#editorBackBtn{min-height:44px;padding:9px 14px;}
   .undo-toast-btn{min-height:36px;padding:7px 14px;}
   #toastBox{bottom:calc(68px + env(safe-area-inset-bottom));}
+  #toastBoxTop{top:calc(60px + env(safe-area-inset-top));}
   #savePill{bottom:calc(68px + env(safe-area-inset-bottom));}
   #attMenu,#attCardMenu,#attAlignMenu,#tableMenu,#cellMenu,
   #linkViewMenu{max-width:calc(100vw - 16px);}
@@ -10528,6 +10710,7 @@ body.dark .version-date{color:var(--accent);}
 
 <!-- Toasts land here (bottom right). -->
 <div id="toastBox" aria-live="polite"></div>
+<div id="toastBoxTop" aria-live="polite"></div>
 
 <!-- v1.7: attachment undo toasts land here (top center). Each item
      carries the deleted file's name and an Undo button, and lives
@@ -10593,8 +10776,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-30-SSN-V2690";
-const APP_VERSION = "2.69.0";
+const APP_BUILD = "2026-10-30-SSN-V2700";
+const APP_VERSION = "2.70.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -11126,17 +11309,126 @@ function toast(message, isError) {
    follows replaces it. The bulk duplicate is the user: even
    running concurrently, copying many notes' files can take
    long enough that a silent wait reads as a hang. */
-function showProgressToast(message) {
-  const box = document.getElementById("toastBox");
+/* v2.69: a progress toast for work that takes long enough to
+   watch: the same element and styling as an ordinary toast
+   (so both themes already cover it), but it carries no auto
+   dismiss timer; it stays until the returned handle's
+   dismiss runs, and the completion or failure toast that
+   follows replaces it. The bulk duplicate is the user: even
+   running concurrently, copying many notes' files can take
+   long enough that a silent wait reads as a hang.
+   v2.70: an optional box carries the toast into another
+   toast container; the move operations' surface below
+   passes the top center box, the duplicate keeps the
+   default bottom box. */
+function showProgressToast(message, box) {
+  const target = box || document.getElementById("toastBox");
   const el = document.createElement("div");
   el.className = "toast progress";
   el.textContent = message;
-  box.appendChild(el);
+  target.appendChild(el);
   return {
     dismiss: function () {
       if (el.parentNode) { el.parentNode.removeChild(el); }
     }
   };
+}
+
+/* v2.70: an ordinary toast in the top center box (see the
+   #toastBoxTop rule): the move operations' completion
+   lands where their progress ran. Falls back to the
+   ordinary toast if the box is somehow absent. */
+function toastTopCenter(message, isError) {
+  const box = document.getElementById("toastBoxTop");
+  if (!box) { toast(message, isError); return; }
+  const el = document.createElement("div");
+  el.className = "toast" + (isError ? " error" : "");
+  el.textContent = message;
+  box.appendChild(el);
+  setTimeout(function () {
+    if (el.parentNode) { el.parentNode.removeChild(el); }
+  }, isError ? 7000 : 4200);
+}
+
+/* v2.70: the move operations' progress surface. On his
+   real Drive, Chris finds archiving and moving to Trash
+   still slow enough to watch, so the four moves
+   (archive, trash, restore, unarchive; bulk and single
+   alike) run behind a progress toast at the top center
+   of the screen: "Archiving... N notes" while the work
+   runs, replaced there by "Archived N notes" when it
+   lands. The surface shows only when there is something
+   to watch: at once for two or more notes, and for a
+   single note only if the operation is still running
+   350 ms in, so a genuinely instant move never flashes
+   it. When it never showed, the caller keeps today's
+   feedback exactly (the outcome's shown flag says so);
+   when it showed, the completion here replaces it and
+   the caller stays silent. Failures keep the move
+   chain's own error toasts: if any error toast landed
+   in the ordinary box while the work ran, no completion
+   wording is shown over it. Returns {shown, failed}. */
+const MOVE_PROGRESS_DELAY_MS = 350;
+
+async function withMoveProgressToast(present, past, count, work) {
+  const noun = count === 1 ? " note" : " notes";
+  let progress = null;
+  let timer = null;
+  let failed = false;
+  let shown = false;
+  let observer = null;
+  const box = document.getElementById("toastBox");
+  if (box && typeof MutationObserver !== "undefined") {
+    observer = new MutationObserver(function (records) {
+      records.forEach(function (rec) {
+        rec.addedNodes.forEach(function (node) {
+          if (node.classList &&
+              node.classList.contains("error")) {
+            failed = true;
+          }
+        });
+      });
+    });
+    observer.observe(box, { childList: true });
+  }
+  const show = function () {
+    if (progress) { return; }
+    progress = showProgressToast(present + "... " + count + noun,
+      document.getElementById("toastBoxTop"));
+  };
+  if (count >= 2) { show(); }
+  else { timer = setTimeout(show, MOVE_PROGRESS_DELAY_MS); }
+  try {
+    await work();
+  } finally {
+    if (timer) { clearTimeout(timer); timer = null; }
+    shown = !!progress;
+    /* Let a queued observer record land before the
+       failure verdict is read: the chain's error toast
+       is appended ahead of the work's own resolution,
+       and one macrotask guarantees its delivery. */
+    await new Promise(function (res) { setTimeout(res, 0); });
+    if (observer) { observer.disconnect(); observer = null; }
+    if (progress) { progress.dismiss(); progress = null; }
+  }
+  if (shown && !failed) {
+    toastTopCenter(past + " " + count + noun);
+  }
+  return { shown: shown, failed: failed };
+}
+
+/* v2.70: one note's move behind the same surface, for the
+   single actions: the note context menu's items, the
+   editor footer buttons, and the note drag's two fixed
+   destinations, which run these very functions with these
+   very toasts. legacyToast is the caller's own completion
+   toast, kept for the runs the progress surface never
+   showed on; pass null when the caller has none. */
+function moveNoteWithProgress(present, past, legacyToast, work) {
+  return withMoveProgressToast(present, past, 1, work)
+    .then(function (outcome) {
+      if (!outcome.shown && legacyToast) { toast(legacyToast); }
+    });
 }
 
 /* The sync status pill in the sidebar footer. Allowed states per spec:
@@ -17423,6 +17715,75 @@ function onNestTouchMoveGuard(ev) {
   }
 }
 
+/* v2.70: the nest drags' ghost (Chris, device testing
+   v2.67.0: "I want to see the item I am dragging. Right
+   now I just see the pointer cursor."). Modeled on the
+   note drag's ghost (see positionNoteDragGhost): a
+   clone of the dragged row or chip, following the
+   pointer until the drag ends. Sidebar rows differ
+   from note cards in one way that matters here: they
+   are transparent backed with light text, styled to
+   sit on the sidebar's green, so the clone wears the
+   .nest-drag-ghost backdrop to stay visible over the
+   list pane and the editor. The ghost is a plain clone
+   on the body with its data attributes stripped, so
+   the drags' coordinate target scans never see it,
+   and it never takes events (pointer-events none in
+   its rule). For mouse and pen it rides at the same
+   grab point the source row was taken by, like the
+   note ghost; for touch it rides centered above the
+   fingertip, so the finger itself never hides the
+   item being carried. */
+function showNestDragGhost(drag, sourceEl) {
+  hideNestDragGhost(drag);
+  if (!drag || !sourceEl) { return; }
+  const rect = sourceEl.getBoundingClientRect();
+  if (!rect.width || !rect.height) { return; }
+  const ghost = sourceEl.cloneNode(true);
+  ghost.removeAttribute("id");
+  ghost.removeAttribute("data-nb-slug");
+  ghost.removeAttribute("data-tag");
+  ghost.classList.remove("drop-hover");
+  ghost.classList.remove("active");
+  ghost.classList.add("nest-drag-ghost");
+  ghost.style.width = rect.width + "px";
+  ghost.setAttribute("aria-hidden", "true");
+  document.body.appendChild(ghost);
+  drag.ghost = ghost;
+  drag.ghostOffX = drag.startX - rect.left;
+  drag.ghostOffY = drag.startY - rect.top;
+  positionNestDragGhost(drag, drag.lastX, drag.lastY);
+}
+
+function positionNestDragGhost(drag, x, y) {
+  const ghost = drag && drag.ghost;
+  if (!ghost || !ghost.isConnected) { return; }
+  const w = ghost.offsetWidth;
+  const h = ghost.offsetHeight;
+  let left;
+  let top;
+  if (drag.pointerType === "touch") {
+    left = x - w / 2;
+    top = y - h - 18;
+  } else {
+    left = x - drag.ghostOffX;
+    top = y - drag.ghostOffY;
+  }
+  left = Math.max(4, Math.min(left,
+    window.innerWidth - w - 4));
+  top = Math.max(4, Math.min(top,
+    window.innerHeight - h - 4));
+  ghost.style.left = left + "px";
+  ghost.style.top = top + "px";
+}
+
+function hideNestDragGhost(drag) {
+  if (drag && drag.ghost) {
+    drag.ghost.remove();
+    drag.ghost = null;
+  }
+}
+
 function engageNbNestDrag() {
   nbNestDrag.engaged = true;
   if (nbNestDrag.rowEl) {
@@ -17433,6 +17794,8 @@ function engageNbNestDrag() {
   if (section) { section.classList.add("nb-nest-armed"); }
   const flyout = document.getElementById("railFlyout");
   if (flyout) { flyout.classList.add("nb-nest-armed"); }
+  /* v2.70: the dragged row's ghost joins the drag. */
+  showNestDragGhost(nbNestDrag, nbNestDrag.rowEl);
 }
 
 function endNbNestDrag(commit) {
@@ -17450,6 +17813,7 @@ function endNbNestDrag(commit) {
     onNbNestPointerCancel, true);
   window.removeEventListener("keydown", onNbNestKeydown, true);
   clearNbNestTarget();
+  hideNestDragGhost(drag);
   if (drag.rowEl) { drag.rowEl.classList.remove("nb-nest-source"); }
   document.body.classList.remove("nb-nest-dragging");
   const section = document.getElementById("notebookSection");
@@ -17501,6 +17865,7 @@ function onNbNestPointerMove(ev) {
   }
   updateNbNestTarget(ev.clientX, ev.clientY);
   nbNestAutoScroll(ev.clientY);
+  positionNestDragGhost(nbNestDrag, ev.clientX, ev.clientY);
 }
 
 function onNbNestPointerUp(ev) {
@@ -17745,6 +18110,12 @@ function engageTagNestDrag() {
   document.body.classList.add("tag-nest-dragging");
   const section = document.getElementById("tagSection");
   if (section) { section.classList.add("tag-nest-armed"); }
+  /* v2.70: the dragged chip's ghost joins the drag: the
+     chip, not its row wrapper, is the item in the hand. */
+  const chip = tagNestDrag.rowEl
+    ? tagNestDrag.rowEl.querySelector(".tag-chip-nav")
+    : null;
+  showNestDragGhost(tagNestDrag, chip || tagNestDrag.rowEl);
 }
 
 function endTagNestDrag(commit) {
@@ -17762,6 +18133,7 @@ function endTagNestDrag(commit) {
     onTagNestPointerCancel, true);
   window.removeEventListener("keydown", onTagNestKeydown, true);
   clearTagNestTarget();
+  hideNestDragGhost(drag);
   if (drag.rowEl) { drag.rowEl.classList.remove("tag-nest-source"); }
   document.body.classList.remove("tag-nest-dragging");
   const section = document.getElementById("tagSection");
@@ -17811,6 +18183,7 @@ function onTagNestPointerMove(ev) {
   }
   updateTagNestTarget(ev.clientX, ev.clientY);
   tagNestAutoScroll(ev.clientY);
+  positionNestDragGhost(tagNestDrag, ev.clientX, ev.clientY);
 }
 
 function onTagNestPointerUp(ev) {
@@ -26014,18 +26387,20 @@ function buildNoteContextItems(menu, note, targetIds, pointerType) {
 function buildSingleNoteContextItems(menu, note, kind, pointerType) {
   if (kind === "trash") {
     noteCtxItem(menu, "Restore", function () {
-      return restoreNote(note).then(function () {
-        toast("Note restored.");
-      });
+      return moveNoteWithProgress("Restoring", "Restored",
+        "Note restored.", function () {
+          return restoreNote(note);
+        });
     });
     noteCtxItem(menu, "Delete Forever", function () {
       return confirmDeleteNoteForever(note);
     }, true);
   } else if (kind === "archive") {
     noteCtxItem(menu, "Unarchive", function () {
-      return unarchiveNote(note).then(function () {
-        toast("Note unarchived.");
-      });
+      return moveNoteWithProgress("Unarchiving", "Unarchived",
+        "Note unarchived.", function () {
+          return unarchiveNote(note);
+        });
     });
   } else {
     noteCtxItem(menu, note.pinned ? "Unpin note" : "Pin note",
@@ -26045,14 +26420,16 @@ function buildSingleNoteContextItems(menu, note, kind, pointerType) {
       return duplicateNote(note);
     });
     noteCtxItem(menu, "Archive", function () {
-      return archiveNote(note).then(function () {
-        toast("Note archived.");
-      });
+      return moveNoteWithProgress("Archiving", "Archived",
+        "Note archived.", function () {
+          return archiveNote(note);
+        });
     });
     noteCtxItem(menu, "Move to Trash", function () {
-      return moveNoteToTrash(note, false).then(function () {
-        toast("Moved to Trash.");
-      });
+      return moveNoteWithProgress("Deleting", "Deleted",
+        "Moved to Trash.", function () {
+          return moveNoteToTrash(note, false);
+        });
     });
   }
   noteCtxItem(menu, "Select", function () {
@@ -26217,7 +26594,11 @@ async function duplicateSelectedNotes() {
    each. A move that fails on the store still surfaces
    through the move chain's own toast, as it always
    has. One summary toast stands in for the per-note
-   ones. */
+   ones. v2.70: the run rides the move progress surface
+   (see withMoveProgressToast): "Archiving... N notes"
+   at the top center while it runs, "Archived N notes"
+   there when it lands; the summary toast below is the
+   surface's silent case, kept exactly as it was. */
 async function archiveSelectedNotes() {
   const targets = selectedNotesInView();
   const count = targets.length;
@@ -26225,16 +26606,22 @@ async function archiveSelectedNotes() {
   if (!count) { return; }
   const pool = makeBulkPool(BULK_OP_CONCURRENCY);
   holdCatalogWrites();
+  let outcome = { shown: false };
   try {
-    await runPooledOutcomes(pool, targets, function (note) {
-      return archiveNote(note, true);
-    });
+    outcome = await withMoveProgressToast("Archiving", "Archived",
+      count, function () {
+        return runPooledOutcomes(pool, targets, function (note) {
+          return archiveNote(note, true);
+        });
+      });
   } finally {
     releaseCatalogWrites();
   }
   renderAll();
-  toast("Archived " + count +
-    (count === 1 ? " note." : " notes."));
+  if (!outcome.shown) {
+    toast("Archived " + count +
+      (count === 1 ? " note." : " notes."));
+  }
 }
 
 /* Bulk trash: moveNoteToTrash per note, in its quiet
@@ -26242,7 +26629,11 @@ async function archiveSelectedNotes() {
    settle-first wrapper as the single action. v2.69
    runs the moves concurrently under the bulk pool and
    holds the catalog and index writes across the run,
-   as in the bulk archive above. */
+   as in the bulk archive above. v2.70: the run rides
+   the move progress surface, in Chris's own wording
+   for this one: "Deleting... N notes" while it runs,
+   "Deleted N notes" when it lands; the summary toast
+   below is the surface's silent case, kept as it was. */
 async function trashSelectedNotes() {
   const targets = selectedNotesInView();
   const count = targets.length;
@@ -26250,15 +26641,21 @@ async function trashSelectedNotes() {
   if (!count) { return; }
   const pool = makeBulkPool(BULK_OP_CONCURRENCY);
   holdCatalogWrites();
+  let outcome = { shown: false };
   try {
-    await runPooledOutcomes(pool, targets, function (note) {
-      return moveNoteToTrash(note, true);
-    });
+    outcome = await withMoveProgressToast("Deleting", "Deleted",
+      count, function () {
+        return runPooledOutcomes(pool, targets, function (note) {
+          return moveNoteToTrash(note, true);
+        });
+      });
   } finally {
     releaseCatalogWrites();
   }
   renderAll();
-  toast("Moved " + count + " notes to Trash.");
+  if (!outcome.shown) {
+    toast("Moved " + count + " notes to Trash.");
+  }
 }
 
 /* Restore all: Trash restores through restoreNote, the
@@ -26268,7 +26665,11 @@ async function trashSelectedNotes() {
    v2.69 runs the moves concurrently under the bulk
    pool, in the wrappers' quiet form with one render
    at the end, and holds the catalog and index writes
-   across the run, as in the bulk archive above. */
+   across the run, as in the bulk archive above.
+   v2.70: the run rides the move progress surface,
+   named for its own side: "Restoring" from the Trash,
+   "Unarchiving" from the Archive; the summary toast
+   below is the surface's silent case, kept as it was. */
 async function restoreSelectedNotes() {
   const targets = selectedNotesInView();
   const count = targets.length;
@@ -26277,16 +26678,24 @@ async function restoreSelectedNotes() {
   if (!count) { return; }
   const pool = makeBulkPool(BULK_OP_CONCURRENCY);
   holdCatalogWrites();
+  let outcome = { shown: false };
   try {
-    await runPooledOutcomes(pool, targets, function (note) {
-      return fromTrash ? restoreNote(note, true)
-        : unarchiveNote(note, true);
-    });
+    outcome = await withMoveProgressToast(
+      fromTrash ? "Restoring" : "Unarchiving",
+      fromTrash ? "Restored" : "Unarchived",
+      count, function () {
+        return runPooledOutcomes(pool, targets, function (note) {
+          return fromTrash ? restoreNote(note, true)
+            : unarchiveNote(note, true);
+        });
+      });
   } finally {
     releaseCatalogWrites();
   }
   renderAll();
-  toast("Restored " + count + " notes.");
+  if (!outcome.shown) {
+    toast("Restored " + count + " notes.");
+  }
 }
 
 /* Delete Forever for a Trash or Archive selection: the
@@ -26585,18 +26994,40 @@ async function emptyTrash() {
    the existing unarchive path, which returns it to the notebook it
    was archived from (with that path's usual fallback when the
    notebook is gone). No confirmation: restoring is reversible by
-   archiving again, like the single Unarchive button. */
+   archiving again, like the single Unarchive button.
+   v2.70: through v2.69 this one still ran the unarchives
+   one at a time in their loud form, a full render per
+   note (measured in the rig at ten renders for ten
+   notes), the one bulk move the v2.69 pooling passed
+   by. It now runs the same pooled quiet form as the
+   context menu's restore, one render at the end, and
+   rides the move progress surface as an unarchive;
+   its summary toast below is the silent case, kept. */
 async function restoreSelectedArchiveNotes() {
   const chosen = state.archive.filter(function (n) {
     return state.archiveSelection.indexOf(n.id) >= 0;
   });
   if (!chosen.length) { return; }
   state.archiveSelection = [];
-  for (const note of chosen) {
-    await unarchiveNote(note);
+  const count = chosen.length;
+  const pool = makeBulkPool(BULK_OP_CONCURRENCY);
+  holdCatalogWrites();
+  let outcome = { shown: false };
+  try {
+    outcome = await withMoveProgressToast("Unarchiving",
+      "Unarchived", count, function () {
+        return runPooledOutcomes(pool, chosen, function (note) {
+          return unarchiveNote(note, true);
+        });
+      });
+  } finally {
+    releaseCatalogWrites();
   }
-  toast("Restored " + chosen.length + " note" +
-    (chosen.length === 1 ? "" : "s") + " from the Archive.");
+  renderAll();
+  if (!outcome.shown) {
+    toast("Restored " + count + " note" +
+      (count === 1 ? "" : "s") + " from the Archive.");
+  }
 }
 
 /* --------------------------------------------------------------------------
@@ -28630,15 +29061,16 @@ function shiftCalendarMonth(delta) {
   fillTasksBody();
 }
 
-/* One task's calendar entry: the completion checkbox
-   (the rows' own picker, so a check runs the rows' own
-   toggleTaskComplete and can never fall through to the
-   entry's editor opening click), the time when the task
-   carries one, the title, and the list's own markers,
-   the flag and the High priority pill (the compact
-   calendar form of the chips the column rows wear). A
-   completed task strikes and checks, the rows' form; an
-   open task whose day has passed wears the overdue bar. */
+/* One task's calendar entry: a head row (the completion
+   checkbox, the rows' own picker, so a check runs the
+   rows' own toggleTaskComplete and can never fall
+   through to the entry's editor opening click; the time
+   when the task carries one; and the list's own markers,
+   the flag and the High priority pill, the compact
+   calendar form of the chips the column rows wear) over
+   the title at the card's full width. A completed task
+   strikes and checks, the rows' form; an open task whose
+   day has passed wears the overdue bar. */
 function buildTaskCalEntryEl(task) {
   const el = document.createElement("div");
   el.className = "task-cal-entry" +
@@ -28669,36 +29101,56 @@ function buildTaskCalEntryEl(task) {
     toggleTaskComplete(task.id);
   });
   picker.appendChild(box);
-  el.appendChild(picker);
 
-  const main = document.createElement("span");
-  main.className = "task-cal-entry-main";
+  /* v2.70: the entry stacks (see the .task-cal-entry
+     rules): a head row carries the header elements
+     (the picker, the time, the flag, the priority
+     pill), and the title stands under it at the card's
+     full width. Through v2.69 the title shared a flex
+     row with the flag and the pill on whatever width
+     they left it, and overflow-wrap anywhere wrapped
+     it a letter per line whenever that width ran
+     small: Chris's screenshot of the desktop month
+     grid showed a flagged High task at 7:00 AM crushed
+     into a 17 line tower, its time broken mid token. */
+  const head = document.createElement("span");
+  head.className = "task-cal-entry-head";
+  head.appendChild(picker);
   if (task.dueTime) {
     const time = document.createElement("span");
     time.className = "task-cal-entry-time";
     time.textContent = taskTimeLabel(task.dueTime);
-    main.appendChild(time);
-    main.appendChild(document.createTextNode(" "));
+    head.appendChild(time);
   }
+  if (task.flagged || task.priority === "high") {
+    /* The markers travel as one group at the head's
+       right: in a cell too narrow for the whole head
+       on one line, the group wraps under the picker
+       and the time whole, never clipped and never
+       split (see the head's flex-wrap rule). */
+    const marks = document.createElement("span");
+    marks.className = "task-cal-entry-marks";
+    if (task.flagged) {
+      const flag = document.createElement("span");
+      flag.className = "task-flag";
+      flag.title = "Flagged";
+      flag.innerHTML = TASK_FLAG_SVG;
+      marks.appendChild(flag);
+    }
+    if (task.priority === "high") {
+      const pill = document.createElement("span");
+      pill.className = "priority-pill high";
+      pill.textContent = "High";
+      marks.appendChild(pill);
+    }
+    head.appendChild(marks);
+  }
+  el.appendChild(head);
+
   const title = document.createElement("span");
   title.className = "task-cal-entry-title";
   title.textContent = task.title;
-  main.appendChild(title);
-  el.appendChild(main);
-
-  if (task.flagged) {
-    const flag = document.createElement("span");
-    flag.className = "task-flag";
-    flag.title = "Flagged";
-    flag.innerHTML = TASK_FLAG_SVG;
-    el.appendChild(flag);
-  }
-  if (task.priority === "high") {
-    const pill = document.createElement("span");
-    pill.className = "priority-pill high";
-    pill.textContent = "High";
-    el.appendChild(pill);
-  }
+  el.appendChild(title);
   el.addEventListener("click", function () {
     openTaskEditor(task.id);
   });
@@ -40573,13 +41025,15 @@ function endNoteDrag(commit) {
      Archive cards never start one), so no already-there case
      exists for either. */
   if (action === "trash") {
-    moveNoteToTrash(note, false).then(function () {
-      toast("Moved to Trash.");
-    }).catch(function (err) { toast(err.message, true); });
+    moveNoteWithProgress("Deleting", "Deleted",
+      "Moved to Trash.", function () {
+        return moveNoteToTrash(note, false);
+      }).catch(function (err) { toast(err.message, true); });
   } else if (action === "archive") {
-    archiveNote(note).then(function () {
-      toast("Note archived.");
-    }).catch(function (err) { toast(err.message, true); });
+    moveNoteWithProgress("Archiving", "Archived",
+      "Note archived.", function () {
+        return archiveNote(note);
+      }).catch(function (err) { toast(err.message, true); });
   }
 }
 
@@ -53816,16 +54270,19 @@ function wireEvents() {
   document.getElementById("trashBtn").addEventListener("click", function () {
     const note = currentNote();
     if (note) {
-      moveNoteToTrash(note, false).then(function () {
-        toast("Moved to Trash.");
-      }).catch(function (err) { toast(err.message, true); });
+      moveNoteWithProgress("Deleting", "Deleted",
+        "Moved to Trash.", function () {
+          return moveNoteToTrash(note, false);
+        }).catch(function (err) { toast(err.message, true); });
     }
   });
   document.getElementById("restoreBtn").addEventListener("click", function () {
     const note = currentNote();
     if (note) {
-      restoreNote(note).then(function () {
-        toast("Note restored.");
+      moveNoteWithProgress("Restoring", "Restored",
+        "Note restored.", function () {
+          return restoreNote(note);
+        }).then(function () {
         state.view = { kind: "notebook", value: note.notebook };
         renderAll();
         openNote(note.id);
@@ -53836,16 +54293,19 @@ function wireEvents() {
   document.getElementById("archiveBtn").addEventListener("click", function () {
     const note = currentNote();
     if (note) {
-      archiveNote(note).then(function () {
-        toast("Note archived.");
-      }).catch(function (err) { toast(err.message, true); });
+      moveNoteWithProgress("Archiving", "Archived",
+        "Note archived.", function () {
+          return archiveNote(note);
+        }).catch(function (err) { toast(err.message, true); });
     }
   });
   document.getElementById("unarchiveBtn").addEventListener("click", function () {
     const note = currentNote();
     if (note) {
-      unarchiveNote(note).then(function () {
-        toast("Note unarchived.");
+      moveNoteWithProgress("Unarchiving", "Unarchived",
+        "Note unarchived.", function () {
+          return unarchiveNote(note);
+        }).then(function () {
         state.view = { kind: "notebook", value: note.notebook };
         renderAll();
         openNote(note.id);
