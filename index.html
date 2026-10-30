@@ -40,10 +40,39 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-29-SSN-V2650
-  Version: 2.65.0
+  BUILD STAMP: 2026-10-30-SSN-V2660
+  Version: 2.66.0
 
   Revision history:
+    v2.66.0 2026-10-30 Attachment deletes go to Drive
+                      trash. Until now, removing an
+                      attachment deleted its file from
+                      Drive permanently: the Remove flow
+                      when its undo window closed, the
+                      Delete Forever helper, the orphan
+                      scan's Delete and Delete All, and
+                      the note copy rollback all ran the
+                      provider's delete. The provider
+                      now offers a trash operation (a
+                      Drive metadata update setting
+                      trashed), and every attachment
+                      deletion routes through it, so a
+                      removed attachment's file lands
+                      in the owner's Drive trash,
+                      recoverable until the owner
+                      empties it. Failure behavior is
+                      unchanged: a trash that fails
+                      keeps the attachment, or names the
+                      file in the Delete Forever
+                      warning, exactly as a failed
+                      delete did. Note files are
+                      untouched by this: they still
+                      delete permanently through the
+                      store. Trashed files keep their
+                      ids but leave every listing, the
+                      orphan scan's included, so a file
+                      trashed by any of these flows
+                      never shows up as an orphan.
     v2.65.0 2026-10-29 The orphaned attachments scan.
                       A button in Settings Connection
                       checks the attachments folder
@@ -10252,8 +10281,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-29-SSN-V2650";
-const APP_VERSION = "2.65.0";
+const APP_BUILD = "2026-10-30-SSN-V2660";
+const APP_VERSION = "2.66.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -21685,7 +21714,7 @@ async function copyAttachmentsForNewNote(source, bodyHtml) {
   } catch (err) {
     for (const up of uploaded) {
       try {
-        await up.driver.delete(up.fileId);
+        await up.driver.trash(up.fileId);
       } catch (e) { /* best effort, like every attachment cleanup */ }
     }
     throw err;
@@ -30018,10 +30047,13 @@ function closeSettingsModal() {
    consolidation moves them into the current folder, after
    which this scan sees them like any other file.
 
-   Delete runs through the attachment provider's own delete
-   (providers.google.delete, the same call the attachment
+   Delete runs through the attachment provider's trash
+   (providers.google.trash, the same call the attachment
    Remove flow fires when its undo window closes), so an
-   orphan leaves exactly the way an attachment leaves.
+   orphan leaves exactly the way an attachment leaves:
+   into Drive trash, recoverable by the owner. v2.66
+   routed every attachment deletion this way; before
+   it, these same calls deleted permanently.
    -------------------------------------------------------------------------- */
 let orphanScanRunning = false;
 let orphanDeleteAllRunning = false;
@@ -30348,7 +30380,8 @@ function keepOrphan(fileId) {
 }
 
 /* One delete, confirmed first, through the provider's own
-   delete. The row stays while the call is in flight; a
+   trash (v2.66: the file moves to Drive trash and stays
+   recoverable). The row stays while the call is in flight; a
    success drops it, and a failure keeps it with the reason
    written on the row, so one bad file never stops the
    rest of the list from being worked through. */
@@ -30368,10 +30401,10 @@ async function deleteOrphan(fileId) {
   renderOrphanScanResults();
   try {
     const driver = providers.google;
-    if (!driver || !driver.delete) {
+    if (!driver || !driver.trash) {
       throw new Error("Google Drive is not available.");
     }
-    await driver.delete(fileId);
+    await driver.trash(fileId);
     scan.orphans = scan.orphans.filter(function (o) {
       return o.fileId !== fileId;
     });
@@ -30388,8 +30421,10 @@ async function deleteOrphan(fileId) {
 }
 
 /* Delete All: ONE confirmation naming the count and the
-   total size, then the same provider delete per file in
-   turn. Successes drop as they land; each failure keeps
+   total size, then the same provider trash per file in
+   turn (v2.66: Drive trash, recoverable, like every
+   attachment removal). Successes drop as they land;
+   each failure keeps
    its row and its reason, so the list that remains is
    exactly the work that is left. */
 async function deleteAllOrphans() {
@@ -30406,7 +30441,7 @@ async function deleteAllOrphans() {
     "version uses these files.");
   if (!ok) { return; }
   const driver = providers.google;
-  if (!driver || !driver.delete) {
+  if (!driver || !driver.trash) {
     toast("Google Drive is not available.", true);
     return;
   }
@@ -30415,7 +30450,7 @@ async function deleteAllOrphans() {
   const snapshot = scan.orphans.slice();
   for (const orphan of snapshot) {
     try {
-      await driver.delete(orphan.fileId);
+      await driver.trash(orphan.fileId);
       scan.orphans = scan.orphans.filter(function (o) {
         return o.fileId !== orphan.fileId;
       });
@@ -44313,6 +44348,36 @@ async function googleDelete(fileId) {
   }
 }
 
+/* v2.66: move one Drive file into the owner's Drive
+   trash instead of deleting it outright: a metadata
+   update that sets trashed, the Drive API's own
+   recoverable removal. The file keeps its id but
+   leaves every listing (this app's listings all ask
+   for trashed = false, the orphan scan's included),
+   and the owner can restore it, or delete it for
+   good, from Drive's own trash. A 404 answers the
+   way googleDelete's does: the file is already gone,
+   which is the state the caller wants, so it counts
+   as success. Every other failure throws, so the
+   callers' failure handling is unchanged. Attachment
+   deletions route here (see the provider registry);
+   note files never do: they keep the permanent
+   delete through the store. */
+async function googleTrash(fileId) {
+  const res = await gdriveFetch(
+    "https://www.googleapis.com/drive/v3/files/" +
+    encodeURIComponent(fileId) + "?fields=id,trashed", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json; charset=UTF-8" },
+      body: JSON.stringify({ trashed: true })
+    });
+  if (res.status === 404) { return; }
+  if (!res.ok) {
+    throw new Error(await gdriveErrorMessage(res,
+      "Google Drive trash failed with status " + res.status));
+  }
+}
+
 /* v2.11: rename one Drive file through its metadata. The name set
    here is the file's storage name (the attId__name form uploads
    create), so a rename from the image menu keeps the Drive file's
@@ -44691,6 +44756,7 @@ const providers = {
     upload: googleUpload,
     download: googleDownload,
     delete: googleDelete,
+    trash: googleTrash,   /* v2.66 */
     rename: googleRename   /* v2.11 */
   }
 };
@@ -47145,7 +47211,12 @@ function stripAttachmentFromBodyText(note, attId) {
    used to run before the old immediate delete (the provider must
    exist, the app must be online, the provider must be signed in)
    run here instead, at firing time, so the removal itself always
-   feels instant. */
+   feels instant.
+   v2.66: the firing runs the provider's trash, not its
+   delete, so the file moves to Drive trash and stays
+   recoverable by the owner. The failure paths are
+   unchanged: a trash that fails restores the block and
+   keeps the record, exactly as a failed delete did. */
 async function firePendingAttachmentDelete(key) {
   const entry = pendingAttachmentDeletes.get(key);
   if (!entry) { return; }
@@ -47177,7 +47248,7 @@ async function firePendingAttachmentDelete(key) {
     return;
   }
   try {
-    await driver.delete(att.fileId);
+    await driver.trash(att.fileId);
   } catch (err) {
     restoreWithError("The cloud file could not be deleted, so the attachment was kept: " +
       err.message);
@@ -47358,7 +47429,13 @@ async function insertRestoredAttachments(note) {
 /* Delete Forever helper: best effort deletion of a note's cloud files.
    Returns the names of files that could NOT be deleted (provider signed
    out, offline, or an API failure), so the caller can warn the user
-   that those files remain in their cloud accounts. */
+   that those files remain in their cloud accounts.
+   v2.66: each file goes through the provider's trash
+   rather than its delete, so a Delete Forever's
+   attachment files land in Drive trash, recoverable
+   by the owner. The note's own file still deletes
+   permanently through the store, and the failure
+   contract here is unchanged. */
 async function deleteAttachmentsBestEffort(note) {
   const failed = [];
   const atts = note.attachments || [];
@@ -47368,7 +47445,7 @@ async function deleteAttachmentsBestEffort(note) {
     try {
       const status = await driver.getStatus();
       if (!status.connected) { failed.push(att.name); continue; }
-      await driver.delete(att.fileId);
+      await driver.trash(att.fileId);
     } catch (e) {
       failed.push(att.name);
     }
