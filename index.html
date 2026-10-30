@@ -40,10 +40,88 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-30-SSN-V2680
-  Version: 2.68.0
+  BUILD STAMP: 2026-10-30-SSN-V2690
+  Version: 2.69.0
 
   Revision history:
+    v2.69.0 2026-10-30 Performance. The Testing
+                      Checklist verdicts said every
+                      operation in this release
+                      works; the complaint was only
+                      speed, because each one waited
+                      on the network one item at a
+                      time. The waiting is what
+                      changed. (1) Bulk archive,
+                      Trash, restore, and unarchive
+                      run their per note moves
+                      concurrently under a bounded
+                      pool (four in flight), through
+                      the same settle first wrappers
+                      in their quiet form, with one
+                      render at the end; a store
+                      write hold spans each run, so
+                      the catalog (and the index,
+                      when the run changes anything
+                      it carries) lands as one
+                      coalesced write instead of
+                      one write per note. The single
+                      actions are untouched, the
+                      open note in a selection still
+                      settles first, and a move that
+                      fails on the store still
+                      surfaces through its chain's
+                      own toast. (2) Duplicate: a
+                      single target still runs the
+                      single duplicate whole. Two or
+                      more are built concurrently
+                      (shell loads and attachment
+                      true copies are the pooled
+                      leaves; the files inside one
+                      note copy in parallel too, and
+                      a failure still throws the
+                      earliest failing file's error
+                      and rolls back what it
+                      uploaded), then placed together
+                      in target order, each title
+                      judged at placement time, then
+                      saved concurrently; the last
+                      target's copy opens once the
+                      saves have landed, the end
+                      state the serial flow left,
+                      reached without the editor
+                      ever sitting on a note whose
+                      first save is still in flight.
+                      A progress toast shows while
+                      the copies are being made and
+                      a completion toast with the
+                      count replaces it; a build or
+                      save that fails names itself in
+                      the single duplicate's own
+                      words, and the copies that
+                      succeeded stand. (3) Merge: the
+                      body loads and the per source
+                      attachment copy passes run
+                      concurrently and assemble in
+                      the chosen order, so a stopped
+                      merge names the same source
+                      the serial passes named; the
+                      merged note's own save still
+                      completes before any original
+                      moves, and the originals then
+                      move to Trash concurrently
+                      under the catalog hold. (4) The
+                      table of contents note opens
+                      the moment it exists, the
+                      create flow's shape; its save
+                      completes behind it and the
+                      success toast fires from the
+                      completion. Creating a note
+                      already opened instantly and
+                      is unchanged, as are the note
+                      switch autosave rules and the
+                      conflict rules. Delete Forever
+                      was not in the slow list and
+                      is unchanged.
     v2.68.0 2026-10-30 Correctness fixes from the
                       Testing Checklist verdicts.
                       (1) New Note on the phone no
@@ -10515,8 +10593,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-30-SSN-V2680";
-const APP_VERSION = "2.68.0";
+const APP_BUILD = "2026-10-30-SSN-V2690";
+const APP_VERSION = "2.69.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -11038,6 +11116,27 @@ function toast(message, isError) {
   setTimeout(function () {
     if (el.parentNode) { el.parentNode.removeChild(el); }
   }, isError ? 7000 : 4200);
+}
+
+/* v2.69: a progress toast for work that takes long enough to
+   watch: the same element and styling as an ordinary toast
+   (so both themes already cover it), but it carries no auto
+   dismiss timer; it stays until the returned handle's
+   dismiss runs, and the completion or failure toast that
+   follows replaces it. The bulk duplicate is the user: even
+   running concurrently, copying many notes' files can take
+   long enough that a silent wait reads as a hang. */
+function showProgressToast(message) {
+  const box = document.getElementById("toastBox");
+  const el = document.createElement("div");
+  el.className = "toast progress";
+  el.textContent = message;
+  box.appendChild(el);
+  return {
+    dismiss: function () {
+      if (el.parentNode) { el.parentNode.removeChild(el); }
+    }
+  };
 }
 
 /* The sync status pill in the sidebar footer. Allowed states per spec:
@@ -12672,6 +12771,10 @@ function saveIndex() {
   state.index = buildIndexObject();
   saveCache();
   indexWriteDirty = true;
+  /* v2.69: under a bulk operation's store write hold, the
+     dirty flag is all that happens here; the hold's release
+     arms the debounce (see holdCatalogWrites). */
+  if (storeWriteHoldDepth > 0) { return Promise.resolve(); }
   if (indexWritePromise) {
     /* A write is already running. It snapshots state when it starts,
        so this call owes one follow up write; the running loop sees
@@ -12983,6 +13086,10 @@ function buildCatalogObject() {
 function saveCatalog() {
   if (!state.repoExists || !catalogArmed) { return; }
   catalogWriteDirty = true;
+  /* v2.69: under a bulk operation's store write hold, the
+     dirty flag is all that happens here; the hold's release
+     arms the debounce (see holdCatalogWrites). */
+  if (storeWriteHoldDepth > 0) { return; }
   if (catalogWritePromise) { return; }
   if (catalogWriteTimer !== null) { return; }
   catalogWriteTimer = setTimeout(function () {
@@ -13059,6 +13166,52 @@ function flushCatalogWrites() {
   return new Promise(function (resolve) {
     catalogFlushWaiters.push(resolve);
   });
+}
+
+/* --------------------------------------------------------------------------
+   v2.69: the bulk operations' store write hold. While a bulk
+   operation runs, the per-item saveCache and saveIndex calls
+   along its paths still mark their writes dirty, but neither
+   scheduler arms its debounce timer; when the last hold
+   releases, each scheduler that went dirty arms its usual
+   debounce through its own entry point, so the whole
+   operation lands exactly one coalesced catalog write (and
+   one index write, when the operation changed anything the
+   index carries) instead of one write per item plus whatever
+   the debounce happened to split a long operation into.
+   Taking the first hold also cancels a debounce armed just
+   before the operation started, for the same reason: its
+   write would otherwise land mid operation. A write loop
+   already running is left alone; it snapshots current state
+   per write and the dirty flag still owes it a follow up.
+   flushCatalogWrites and flushIndexWrites keep their
+   contract and ignore the hold: a sync that flushes mid
+   operation still writes, exactly as a flush landing mid
+   burst could before. The hold is a depth counter, so an
+   operation nested inside another's hold (a merge's trash
+   phase inside the merge's own hold, say) releases only its
+   own level. ------------------------------------------------------------------------ */
+let storeWriteHoldDepth = 0;
+
+function holdCatalogWrites() {
+  if (storeWriteHoldDepth === 0) {
+    if (catalogWriteTimer !== null) {
+      clearTimeout(catalogWriteTimer);
+      catalogWriteTimer = null;
+    }
+    if (indexWriteTimer !== null) {
+      clearTimeout(indexWriteTimer);
+      indexWriteTimer = null;
+    }
+  }
+  storeWriteHoldDepth++;
+}
+
+function releaseCatalogWrites() {
+  if (storeWriteHoldDepth > 0) { storeWriteHoldDepth--; }
+  if (storeWriteHoldDepth > 0) { return; }
+  if (catalogWriteDirty) { saveCatalog(); }
+  if (indexWriteDirty) { saveIndex(); }
 }
 
 /* --------------------------------------------------------------------------
@@ -15076,6 +15229,76 @@ function saveNoteToRepo(note, options) {
   return chainNoteOp(note, function () {
     return saveNoteToRepoNow(note, options);
   });
+}
+
+/* --------------------------------------------------------------------------
+   v2.69: bounded concurrency for the bulk operations.
+
+   BULK_OP_CONCURRENCY is the stated bound: at most this many
+   leaf operations (one note's move chain, one attachment
+   copy, one note save, one body load) are in flight at once
+   while a bulk operation runs. makeBulkPool is a counting
+   semaphore: leaf work runs inside pool.run and never
+   acquires a second slot, so the bound is a hard ceiling on
+   the operation's simultaneous store requests, and no slot
+   holder can deadlock waiting for another slot. Work that
+   does no store requests of its own (assembling a duplicate
+   from its copied parts, collecting a merge's sections)
+   runs outside the pool and draws on it only through the
+   leaves. The per note operation chains above are untouched:
+   operations on the SAME note still serialize exactly as
+   they always have; the pool only lets DIFFERENT notes'
+   chains run side by side, which the chain discipline
+   already allowed any caller to do.
+
+   runPooledOutcomes runs a worker over items with the
+   worker itself holding a slot, and resolves with every
+   item's outcome in input order: a failure comes back as
+   data the caller surfaces, never a silent drop.
+   ------------------------------------------------------------------------ */
+const BULK_OP_CONCURRENCY = 4;
+
+function makeBulkPool(limit) {
+  let active = 0;
+  const waiters = [];
+  function acquire() {
+    if (active < limit) {
+      active++;
+      return Promise.resolve();
+    }
+    return new Promise(function (resolve) {
+      waiters.push(function () {
+        active++;
+        resolve();
+      });
+    });
+  }
+  function release() {
+    active--;
+    const next = waiters.shift();
+    if (next) { next(); }
+  }
+  return {
+    run: async function (fn) {
+      await acquire();
+      try {
+        return await fn();
+      } finally {
+        release();
+      }
+    }
+  };
+}
+
+async function runPooledOutcomes(pool, items, worker) {
+  return Promise.all(items.map(function (item, index) {
+    return pool.run(function () { return worker(item, index); })
+      .then(function (value) {
+        return { status: "fulfilled", value: value };
+      }, function (reason) {
+        return { status: "rejected", reason: reason };
+      });
+  }));
 }
 
 /* --------------------------------------------------------------------------
@@ -22078,22 +22301,106 @@ function duplicateCopyTitle(source) {
   return candidate;
 }
 
-/* Copy every attachment a body references as a true copy: for
-   each record on source whose id appears among the body's
-   attachment placeholders, download its file and re-upload
-   the bytes as a new file under a new record, through the
-   same provider driver the original upload used. Records the
-   body does not reference are not copied: the save funnel's
-   reconciliation drops a record with no block on the note's
-   first save anyway, so copying one would only orphan its
-   new file.
+/* Copy one attachment record as a true copy (the per file
+   half of copyAttachmentsForNewNote below): download its
+   file and re-upload the bytes as a new file under a new
+   record, through the same provider driver the original
+   upload used. Resolves to { record, uploaded } (uploaded:
+   the { driver, fileId } pair a rollback needs). Throws an
+   Error naming the file when any step cannot run (a
+   provider that is unavailable or signed out, offline, a
+   failed download or upload). */
+async function copyOneAttachment(source, att) {
+  const providerName = att.provider || state.attach.defaultProvider;
+  const driver = providers[providerName];
+  if (!driver) {
+    throw new Error("the file \"" + att.name + "\" could not be " +
+      "copied because its storage provider is not available.");
+  }
+  if (!state.online) {
+    throw new Error("the file \"" + att.name + "\" could not be " +
+      "copied because you appear to be offline.");
+  }
+  const status = await driver.getStatus();
+  if (!status || !status.connected) {
+    throw new Error("the file \"" + att.name + "\" could not be " +
+      "copied because " + providerLabel(providerName) +
+      " is not signed in.");
+  }
+  /* The copy is fed from the downloaded BYTES, read
+     through the app's own blob reader, never from the
+     blob object itself: the upload then carries exactly
+     the bytes the download produced, in any browser (and
+     in the test harness, whose cross realm blobs a File
+     constructor would otherwise stringify). */
+  let bytes;
+  try {
+    const blob = await driver.download(att.fileId);
+    bytes = new Uint8Array(await readBlobArrayBuffer(blob));
+  } catch (e) {
+    throw new Error("the file \"" + att.name + "\" could not " +
+      "be copied: " + e.message);
+  }
+  const newId = newNoteId() + "a";
+  const storageName = newId + "__" + sanitizeFileName(att.name);
+  const file = new File([bytes], att.name,
+    { type: att.mime || "application/octet-stream" });
+  let result;
+  try {
+    result = await driver.upload(file, storageName,
+      function () { });
+  } catch (e) {
+    throw new Error("the file \"" + att.name + "\" could not " +
+      "be copied: " + e.message);
+  }
+  if (!result || !result.fileId) {
+    throw new Error("the file \"" + att.name +
+      "\" could not be copied.");
+  }
+  const newRec = {
+    id: newId,
+    provider: providerName,
+    fileId: String(result.fileId),
+    name: att.name,
+    storageName: storageName,
+    mime: att.mime || "application/octet-stream",
+    size: bytes.length,
+    created: new Date().toISOString()
+  };
+  /* v2.46: a copied sketch stays a sketch: the marking
+     rides to the new record, and the placeholder
+     attribute rides the copied body, so the copy's
+     image menu offers Edit sketch like the original's. */
+  if (att.sketch === true) { newRec.sketch = true; }
+  return {
+    record: newRec,
+    uploaded: { driver: driver, fileId: String(result.fileId) }
+  };
+}
+
+/* Copy every attachment a body references as a true copy:
+   for each record on source whose id appears among the
+   body's attachment placeholders, a copyOneAttachment runs.
+   Records the body does not reference are not copied: the
+   save funnel's reconciliation drops a record with no block
+   on the note's first save anyway, so copying one would
+   only orphan its new file.
    Resolves to { records, idMap } (idMap: source record id to
-   new record id). Throws an Error naming the file when any
-   step cannot run (a provider that is unavailable or signed
-   out, offline, a failed download or upload); files already
-   uploaded for this copy are deleted again best effort, so a
-   stopped copy leaves behind nothing that it made. */
-async function copyAttachmentsForNewNote(source, bodyHtml) {
+   new record id), the records in the source's own order.
+   Throws an Error naming the file when any step cannot run;
+   files already uploaded for this copy are deleted again
+   best effort, so a stopped copy leaves behind nothing that
+   it made.
+   v2.69: the per file copies run concurrently under the
+   bulk pool (a fresh one bounds this call on its own when
+   the caller passes none). Each copy resolves to an outcome
+   instead of throwing, so one failure cannot strand the
+   others mid flight, and a copy that has not started when a
+   failure lands copies nothing. The error thrown is the
+   earliest failing file's in the source's order, word for
+   word what the one at a time copy threw, so every caller's
+   message is unchanged. */
+async function copyAttachmentsForNewNote(source, bodyHtml, pool) {
   const referenced = {};
   const holder = document.createElement("div");
   holder.innerHTML = bodyHtml || "";
@@ -22107,81 +22414,37 @@ async function copyAttachmentsForNewNote(source, bodyHtml) {
   const records = [];
   const idMap = {};
   if (!wanted.length) { return { records: records, idMap: idMap }; }
+  const usePool = pool || makeBulkPool(BULK_OP_CONCURRENCY);
+  let failureSeen = false;
+  const outcomes = await Promise.all(wanted.map(function (att) {
+    return usePool.run(async function () {
+      if (failureSeen) { return { skipped: true }; }
+      try {
+        return await copyOneAttachment(source, att);
+      } catch (err) {
+        failureSeen = true;
+        return { error: err };
+      }
+    });
+  }));
   const uploaded = [];   /* { driver, fileId }, for the cleanup below */
-  try {
-    for (const att of wanted) {
-      const providerName = att.provider || state.attach.defaultProvider;
-      const driver = providers[providerName];
-      if (!driver) {
-        throw new Error("the file \"" + att.name + "\" could not be " +
-          "copied because its storage provider is not available.");
-      }
-      if (!state.online) {
-        throw new Error("the file \"" + att.name + "\" could not be " +
-          "copied because you appear to be offline.");
-      }
-      const status = await driver.getStatus();
-      if (!status || !status.connected) {
-        throw new Error("the file \"" + att.name + "\" could not be " +
-          "copied because " + providerLabel(providerName) +
-          " is not signed in.");
-      }
-      /* The copy is fed from the downloaded BYTES, read
-         through the app's own blob reader, never from the
-         blob object itself: the upload then carries exactly
-         the bytes the download produced, in any browser (and
-         in the test harness, whose cross realm blobs a File
-         constructor would otherwise stringify). */
-      let bytes;
-      try {
-        const blob = await driver.download(att.fileId);
-        bytes = new Uint8Array(await readBlobArrayBuffer(blob));
-      } catch (e) {
-        throw new Error("the file \"" + att.name + "\" could not " +
-          "be copied: " + e.message);
-      }
-      const newId = newNoteId() + "a";
-      const storageName = newId + "__" + sanitizeFileName(att.name);
-      const file = new File([bytes], att.name,
-        { type: att.mime || "application/octet-stream" });
-      let result;
-      try {
-        result = await driver.upload(file, storageName,
-          function () { });
-      } catch (e) {
-        throw new Error("the file \"" + att.name + "\" could not " +
-          "be copied: " + e.message);
-      }
-      if (!result || !result.fileId) {
-        throw new Error("the file \"" + att.name +
-          "\" could not be copied.");
-      }
-      uploaded.push({ driver: driver, fileId: String(result.fileId) });
-      const newRec = {
-        id: newId,
-        provider: providerName,
-        fileId: String(result.fileId),
-        name: att.name,
-        storageName: storageName,
-        mime: att.mime || "application/octet-stream",
-        size: bytes.length,
-        created: new Date().toISOString()
-      };
-      /* v2.46: a copied sketch stays a sketch: the marking
-         rides to the new record, and the placeholder
-         attribute rides the copied body, so the copy's
-         image menu offers Edit sketch like the original's. */
-      if (att.sketch === true) { newRec.sketch = true; }
-      records.push(newRec);
-      idMap[att.id] = newId;
+  let firstError = null;
+  outcomes.forEach(function (outcome, i) {
+    if (outcome.record) {
+      uploaded.push(outcome.uploaded);
+      records.push(outcome.record);
+      idMap[wanted[i].id] = outcome.record.id;
+    } else if (outcome.error && !firstError) {
+      firstError = outcome.error;
     }
-  } catch (err) {
+  });
+  if (firstError) {
     for (const up of uploaded) {
       try {
         await up.driver.trash(up.fileId);
       } catch (e) { /* best effort, like every attachment cleanup */ }
     }
-    throw err;
+    throw firstError;
   }
   return { records: records, idMap: idMap };
 }
@@ -22205,6 +22468,45 @@ function remapBodyAttachmentIds(bodyHtml, idMap) {
   return holder.innerHTML;
 }
 
+/* Build a duplicate of source without placing it (v2.69
+   splits this out of duplicateNote so the bulk duplicate
+   can build its copies concurrently and place them
+   together): load the body if source is a shell, collect
+   the editor if source is the open note, and make the
+   attachment true copies under the given pool. Resolves to
+   { copy } (still titleless: the title is judged against
+   state at placement time, as it was when the build and
+   the placement were one flow) or { error } carrying the
+   exact message the single duplicate toasts, so the bulk
+   path reports a copy it could not build in the same
+   words. A stopped build changes nothing. */
+async function tryBuildDuplicateCopy(source, pool) {
+  if (source.bodyLoaded === false) {
+    await ensureNoteBodyLoaded(source);
+    if (source.bodyLoaded === false) {
+      return { error: "That note is not loaded on this device " +
+        "yet, so it could not be duplicated." };
+    }
+  }
+  collectIfOpen(source);
+  let copied;
+  try {
+    copied = await copyAttachmentsForNewNote(source,
+      source.body || "", pool);
+  } catch (err) {
+    return { error: "Duplicate stopped: " + err.message };
+  }
+  const copy = makeNote(source.notebook, "", "");
+  copy.tags = (source.tags || []).slice();
+  copy.attachments = copied.records;
+  copy.body = canonicalizeAttachmentPlaceholders(
+    remapBodyAttachmentIds(source.body || "", copied.idMap));
+  if (source.thumbnail && copied.idMap[source.thumbnail]) {
+    copy.thumbnail = copied.idMap[source.thumbnail];
+  }
+  return { copy: copy };
+}
+
 /* Duplicate the live note source in its own notebook (see the
    section header for the full rule). The copy is built
    detached and only joins state once its attachment copies
@@ -22215,30 +22517,13 @@ function remapBodyAttachmentIds(bodyHtml, idMap) {
    ordinary note creation, never a shared twin. */
 async function duplicateNote(source) {
   if (!source || state.notes.indexOf(source) < 0) { return null; }
-  if (source.bodyLoaded === false) {
-    await ensureNoteBodyLoaded(source);
-    if (source.bodyLoaded === false) {
-      toast("That note is not loaded on this device yet, so it " +
-        "could not be duplicated.", true);
-      return null;
-    }
-  }
-  collectIfOpen(source);
-  let copied;
-  try {
-    copied = await copyAttachmentsForNewNote(source, source.body || "");
-  } catch (err) {
-    toast("Duplicate stopped: " + err.message, true);
+  const built = await tryBuildDuplicateCopy(source, null);
+  if (!built.copy) {
+    toast(built.error, true);
     return null;
   }
-  const copy = makeNote(source.notebook, duplicateCopyTitle(source), "");
-  copy.tags = (source.tags || []).slice();
-  copy.attachments = copied.records;
-  copy.body = canonicalizeAttachmentPlaceholders(
-    remapBodyAttachmentIds(source.body || "", copied.idMap));
-  if (source.thumbnail && copied.idMap[source.thumbnail]) {
-    copy.thumbnail = copied.idMap[source.thumbnail];
-  }
+  const copy = built.copy;
+  copy.title = duplicateCopyTitle(source);
   state.notes.unshift(copy);
   saveCache();
   renderAll();
@@ -22427,15 +22712,20 @@ async function mergeSelectedNotes() {
   sources.forEach(function (n) {
     if (chosen.indexOf(n) < 0) { chosen.push(n); }
   });
+  /* v2.69: the body loads run concurrently under the bulk
+     pool instead of one at a time; the verdict below is
+     still read in the chosen order, so the note a stopped
+     merge names is the same one the serial loads named. */
+  const mergeLoadPool = makeBulkPool(BULK_OP_CONCURRENCY);
+  await runPooledOutcomes(mergeLoadPool, chosen, function (note) {
+    return ensureNoteBodyLoaded(note);
+  });
   for (const note of chosen) {
     if (note.bodyLoaded === false) {
-      await ensureNoteBodyLoaded(note);
-      if (note.bodyLoaded === false) {
-        toast("Merge stopped: \"" + (note.title || "Untitled note") +
-          "\" could not be loaded on this device, so nothing was " +
-          "merged and no notes were moved.", true);
-        return null;
-      }
+      toast("Merge stopped: \"" + (note.title || "Untitled note") +
+        "\" could not be loaded on this device, so nothing was " +
+        "merged and no notes were moved.", true);
+      return null;
     }
   }
   chosen.forEach(function (note) { collectIfOpen(note); });
@@ -22450,23 +22740,34 @@ async function mergeSelectedNotes() {
   chosen = ordered;
   /* One copy pass per source into one shared map, so every
      placeholder in every section can be remapped below; the
-     same records list carries all of them. */
+     same records list carries all of them. v2.69: the passes
+     run concurrently, every source's copies drawing on one
+     bulk pool; the results still assemble in the chosen
+     order, and the failure a stopped merge reports is the
+     earliest failing source's in that order, the one the
+     serial passes reported. */
   const records = [];
   const idMap = {};
-  try {
-    for (const note of chosen) {
-      const copied = await copyAttachmentsForNewNote(note,
-        note.body || "");
-      copied.records.forEach(function (r) { records.push(r); });
-      Object.keys(copied.idMap).forEach(function (k) {
-        idMap[k] = copied.idMap[k];
-      });
-    }
-  } catch (err) {
-    toast("Merge stopped: " + err.message + " Nothing was changed.",
-      true);
+  const pool = makeBulkPool(BULK_OP_CONCURRENCY);
+  const copyOutcomes = await Promise.all(chosen.map(function (note) {
+    return copyAttachmentsForNewNote(note, note.body || "", pool)
+      .then(function (copied) { return { copied: copied }; },
+        function (err) { return { error: err }; });
+  }));
+  const copyFailure = copyOutcomes.find(function (outcome) {
+    return outcome.error;
+  });
+  if (copyFailure) {
+    toast("Merge stopped: " + copyFailure.error.message +
+      " Nothing was changed.", true);
     return null;
   }
+  copyOutcomes.forEach(function (outcome) {
+    outcome.copied.records.forEach(function (r) { records.push(r); });
+    Object.keys(outcome.copied.idMap).forEach(function (k) {
+      idMap[k] = outcome.copied.idMap[k];
+    });
+  });
   /* Point of no return: the selection empties, the merged
      note is created, and the originals move to Trash. */
   state.listSelection = [];
@@ -22495,6 +22796,12 @@ async function mergeSelectedNotes() {
   if (first.thumbnail && idMap[first.thumbnail]) {
     merged.thumbnail = idMap[first.thumbnail];
   }
+  /* v2.69: the catalog hold spans the landing (the merged
+     note's arrival and the originals' moves), so it lands
+     as one coalesced catalog write. The merged note's own
+     save still completes before any original moves: that
+     dependency is the merge's safety, and it stays serial. */
+  holdCatalogWrites();
   state.notes.unshift(merged);
   saveCache();
   renderAll();
@@ -22509,14 +22816,16 @@ async function mergeSelectedNotes() {
     toast("The merged note was created locally, but its save " +
       "failed: " + err.message + " The original notes were left " +
       "where they were.", true);
+    releaseCatalogWrites();
     openNote(merged.id);
     return merged;
   }
   saveCache();
-  for (const note of chosen) {
-    await moveNoteToTrash(note, true);
-  }
+  await runPooledOutcomes(pool, chosen, function (note) {
+    return moveNoteToTrash(note, true);
+  });
   saveCache();
+  releaseCatalogWrites();
   openNote(merged.id);
   toast("Merged " + chosen.length + " notes into \"" +
     (merged.title || "Untitled note") +
@@ -22583,9 +22892,9 @@ function tocNoteLinkParagraph(note) {
    stands between the validation and the creation: the note
    needs no source body and copies no file, so once the
    selection resolves to two or more live notes the note is
-   made, saved through the real funnel, and opened; a failed
-   save keeps the local note and names itself, the duplicate
-   flow's shape. */
+   made and opened at once, its save running through the
+   real funnel behind it; a failed save keeps the local
+   note and names itself, the create flow's shape. */
 async function createTableOfContentsNote() {
   const ids = state.listSelection.slice();
   if (ids.length < 2) {
@@ -22626,6 +22935,12 @@ async function createTableOfContentsNote() {
   state.notes.unshift(toc);
   saveCache();
   renderAll();
+  /* v2.69: the note opens the moment it exists, the create
+     flow's shape (through v2.68 the open waited on the
+     save); the save completes behind it and the success
+     toast fires from its completion, so what the toast
+     reports is still a landed save. */
+  openNote(toc.id);
   try {
     await saveNoteToRepo(toc, { skipConflictCheck: true, fresh: true });
   } catch (err) {
@@ -22634,11 +22949,9 @@ async function createTableOfContentsNote() {
        no source note was ever touched. */
     toast("The table of contents note was created locally, " +
       "but its save failed: " + err.message, true);
-    openNote(toc.id);
     return toc;
   }
   saveCache();
-  openNote(toc.id);
   toast("Created \"Table of Contents\" linking " + chosen.length +
     " notes." + (leftOut > 0
       ? " " + leftOut + " selected " +
@@ -22690,7 +23003,7 @@ function moveNoteToTrash(note, quiet) {
   return moveNoteToTrashNow(note, quiet);
 }
 
-function restoreNote(note) {
+function restoreNote(note, quiet) {
   if (note && note.bodyLoaded === false) {
     return ensureNoteBodyLoaded(note).then(function () {
       if (note.bodyLoaded === false) {
@@ -22698,13 +23011,13 @@ function restoreNote(note) {
           "could not be restored.", true);
         return null;
       }
-      return restoreNoteNow(note);
+      return restoreNoteNow(note, quiet);
     });
   }
-  return restoreNoteNow(note);
+  return restoreNoteNow(note, quiet);
 }
 
-function archiveNote(note) {
+function archiveNote(note, quiet) {
   if (note && note.bodyLoaded === false) {
     return ensureNoteBodyLoaded(note).then(function () {
       if (note.bodyLoaded === false) {
@@ -22712,7 +23025,7 @@ function archiveNote(note) {
           "could not be archived.", true);
         return null;
       }
-      return archiveNoteNow(note);
+      return archiveNoteNow(note, quiet);
     });
   }
   /* v2.51: the archive move serializes the note object
@@ -22724,13 +23037,13 @@ function archiveNote(note) {
      whatever the settle's verdict. */
   if (note && state.selectedId === note.id && swEditorUnsettled()) {
     return settleOpenNoteEdits().then(function () {
-      return archiveNoteNow(note);
+      return archiveNoteNow(note, quiet);
     });
   }
-  return archiveNoteNow(note);
+  return archiveNoteNow(note, quiet);
 }
 
-function unarchiveNote(note) {
+function unarchiveNote(note, quiet) {
   if (note && note.bodyLoaded === false) {
     return ensureNoteBodyLoaded(note).then(function () {
       if (note.bodyLoaded === false) {
@@ -22738,10 +23051,10 @@ function unarchiveNote(note) {
           "could not be unarchived.", true);
         return null;
       }
-      return unarchiveNoteNow(note);
+      return unarchiveNoteNow(note, quiet);
     });
   }
-  return unarchiveNoteNow(note);
+  return unarchiveNoteNow(note, quiet);
 }
 
 /* Move a note to Trash. quiet=true is used by deleteNotebook, which moves
@@ -22806,7 +23119,7 @@ function moveNoteToTrashNow(note, quiet) {
    v1.5: same instant pattern as moveNoteToTrash. The target notebook
    is settled synchronously: createNotebook updates state before it
    returns its promise, so the fallback below never has to wait. */
-function restoreNoteNow(note) {
+function restoreNoteNow(note, quiet) {
   const oldPath = notePath(note);
   const online = state.online && state.repoExists;
   let target = note.trashedFrom || note.notebook || "personal";
@@ -22833,7 +23146,7 @@ function restoreNoteNow(note) {
     note.sha = null;
   }
   saveCache();
-  renderAll();
+  if (!quiet) { renderAll(); }
   if (!online) { return Promise.resolve(); }
   return chainNoteOp(note, async function () {
     try {
@@ -22967,7 +23280,7 @@ async function confirmDeleteNoteForever(note) {
    file move finishes in the background through the operation chain.
    archivedFrom remembers the notebook, so Unarchive is a plain
    restore under another name. Pinned is cleared, as with Trash. */
-function archiveNoteNow(note) {
+function archiveNoteNow(note, quiet) {
   const oldPath = notePath(note);
   const online = state.online && state.repoExists;
   note.archived = true;
@@ -22988,7 +23301,7 @@ function archiveNoteNow(note) {
     note.sha = null;
   }
   saveCache();
-  renderAll();
+  if (!quiet) { renderAll(); }
   if (!online) { return Promise.resolve(); }
   return chainNoteOp(note, async function () {
     try {
@@ -23005,7 +23318,7 @@ function archiveNoteNow(note) {
 /* Unarchive a note (v1.5): return it to the notebook it was archived
    from, with restoreNote's fallback when that notebook is gone (the
    first notebook that exists, creating Personal if there are none). */
-function unarchiveNoteNow(note) {
+function unarchiveNoteNow(note, quiet) {
   const oldPath = notePath(note);
   const online = state.online && state.repoExists;
   let target = note.archivedFrom || note.notebook || "personal";
@@ -23030,7 +23343,7 @@ function unarchiveNoteNow(note) {
     note.sha = null;
   }
   saveCache();
-  renderAll();
+  if (!quiet) { renderAll(); }
   if (!online) { return Promise.resolve(); }
   return chainNoteOp(note, async function () {
     try {
@@ -25795,73 +26108,185 @@ async function pinSelectedNotes(pinned) {
   renderAll();
 }
 
-/* Bulk duplicate: the single duplicate, per note, in
-   order. There is no separate bulk duplicate path in
-   the app to call; each copy opens as it is made,
-   exactly as duplicating the notes one at a time would
-   leave things, the last copy open, each with its own
-   "Note duplicated." toast. */
+/* Bulk duplicate. Through v2.68 this ran the single
+   duplicate per note in order, each copy opening as it
+   was made, so a many note duplicate waited on every
+   note's file copies one at a time. v2.69 keeps the end
+   state contract (the copies exist in the targets'
+   order, the last target's copy left open) and changes
+   only the waiting: the copies are BUILT concurrently
+   under the bulk pool (body loads and attachment copies
+   are the leaves), then placed together in target order,
+   each title judged at placement time exactly as the
+   serial flow judged it after its own copies landed,
+   then saved concurrently under the same pool. A single
+   target still delegates to the single duplicate whole,
+   its flow and toasts untouched. While two or more
+   copies are being made, a progress toast says so
+   (Chris's ask: the wait should be visible), and a
+   completion toast with the count replaces it. A build
+   that stops names itself in the single duplicate's own
+   words when the work is done, and a save that fails
+   names itself the same way; the copies that succeeded
+   stand either way. The catalog hold spans the run, so
+   the whole operation lands one coalesced catalog
+   write. */
 async function duplicateSelectedNotes() {
   const targets = selectedNotesInView();
+  const count = targets.length;
   clearListSelections();
-  for (const note of targets) {
-    await duplicateNote(note);
+  if (!count) { return; }
+  if (count === 1) {
+    await duplicateNote(targets[0]);
+    return;
+  }
+  const pool = makeBulkPool(BULK_OP_CONCURRENCY);
+  holdCatalogWrites();
+  const progress = showProgressToast("Duplicating " + count +
+    " notes...");
+  const failures = [];
+  let copies = [];
+  try {
+    /* Shells complete first, as pooled leaves, so the
+       builds below read bodies instead of fetching them
+       one at a time. */
+    await runPooledOutcomes(pool, targets, function (note) {
+      return ensureNoteBodyLoaded(note);
+    });
+    const built = await Promise.all(targets.map(function (source) {
+      return tryBuildDuplicateCopy(source, pool);
+    }));
+    /* Placement is synchronous and in target order, each
+       unshift the serial flow's own, so the copies land
+       in state in the same layout the serial flow left,
+       and title judging sees exactly the copies placed
+       before each one, as it did when each copy was
+       judged right after its own build. */
+    built.forEach(function (outcome, i) {
+      if (outcome.copy) {
+        outcome.copy.title = duplicateCopyTitle(targets[i]);
+        state.notes.unshift(outcome.copy);
+        copies.push(outcome.copy);
+      } else {
+        failures.push(outcome.error);
+      }
+    });
+    if (copies.length) {
+      saveCache();
+      renderAll();
+      const saves = await runPooledOutcomes(pool, copies,
+        function (copy) {
+          return saveNoteToRepo(copy,
+            { skipConflictCheck: true, fresh: true });
+        });
+      saves.forEach(function (outcome) {
+        if (outcome.status === "rejected") {
+          failures.push("Note created locally; save failed: " +
+            outcome.reason.message);
+        }
+      });
+      saveCache();
+      /* The last copy opens once the saves have landed, not
+         before them as the serial flow's per copy open did:
+         the end state is the same (the last target's copy
+         open), and the editor never sits on a note whose
+         first save is still in flight under it. The
+         progress toast covers the whole wait. */
+      openNote(copies[copies.length - 1].id);
+    }
+  } finally {
+    releaseCatalogWrites();
+    progress.dismiss();
+  }
+  failures.forEach(function (message) { toast(message, true); });
+  if (copies.length) {
+    toast("Duplicated " + copies.length +
+      (copies.length === 1 ? " note." : " notes."));
   }
 }
 
-/* Bulk archive: archiveNote per note, sequentially,
-   through the settle-first wrapper the single action
-   uses, so an open note among the targets is settled
-   first and the result matches doing them one at a
-   time. One summary toast stands in for the per-note
+/* Bulk archive: archiveNote per note through the
+   settle-first wrapper the single action uses, so an
+   open note among the targets is settled first and the
+   result matches doing them one at a time. v2.69 runs
+   the moves concurrently under the bulk pool (through
+   v2.68 they waited on the network one at a time) in
+   the wrapper's quiet form, renders once at the end,
+   and holds the catalog and index writes across the
+   run so the operation lands one coalesced write of
+   each. A move that fails on the store still surfaces
+   through the move chain's own toast, as it always
+   has. One summary toast stands in for the per-note
    ones. */
 async function archiveSelectedNotes() {
   const targets = selectedNotesInView();
   const count = targets.length;
   clearListSelections();
-  for (const note of targets) {
-    await archiveNote(note);
+  if (!count) { return; }
+  const pool = makeBulkPool(BULK_OP_CONCURRENCY);
+  holdCatalogWrites();
+  try {
+    await runPooledOutcomes(pool, targets, function (note) {
+      return archiveNote(note, true);
+    });
+  } finally {
+    releaseCatalogWrites();
   }
   renderAll();
-  if (count) {
-    toast("Archived " + count +
-      (count === 1 ? " note." : " notes."));
-  }
+  toast("Archived " + count +
+    (count === 1 ? " note." : " notes."));
 }
 
-/* Bulk trash: moveNoteToTrash per note, sequentially,
-   in its quiet (render once at the end) form, through
-   the same settle-first wrapper as the single action. */
+/* Bulk trash: moveNoteToTrash per note, in its quiet
+   (render once at the end) form, through the same
+   settle-first wrapper as the single action. v2.69
+   runs the moves concurrently under the bulk pool and
+   holds the catalog and index writes across the run,
+   as in the bulk archive above. */
 async function trashSelectedNotes() {
   const targets = selectedNotesInView();
   const count = targets.length;
   clearListSelections();
-  for (const note of targets) {
-    await moveNoteToTrash(note, true);
+  if (!count) { return; }
+  const pool = makeBulkPool(BULK_OP_CONCURRENCY);
+  holdCatalogWrites();
+  try {
+    await runPooledOutcomes(pool, targets, function (note) {
+      return moveNoteToTrash(note, true);
+    });
+  } finally {
+    releaseCatalogWrites();
   }
   renderAll();
-  if (count) {
-    toast("Moved " + count + " notes to Trash.");
-  }
+  toast("Moved " + count + " notes to Trash.");
 }
 
 /* Restore all: Trash restores through restoreNote, the
    Archive through unarchiveNote, per note: the same
    operations their single actions run, and the same
-   pair the Archive's Restore Selected item runs. */
+   pair the Archive's Restore Selected item runs.
+   v2.69 runs the moves concurrently under the bulk
+   pool, in the wrappers' quiet form with one render
+   at the end, and holds the catalog and index writes
+   across the run, as in the bulk archive above. */
 async function restoreSelectedNotes() {
   const targets = selectedNotesInView();
   const count = targets.length;
   const fromTrash = state.view.kind === "trash";
   clearListSelections();
-  for (const note of targets) {
-    if (fromTrash) { await restoreNote(note); }
-    else { await unarchiveNote(note); }
+  if (!count) { return; }
+  const pool = makeBulkPool(BULK_OP_CONCURRENCY);
+  holdCatalogWrites();
+  try {
+    await runPooledOutcomes(pool, targets, function (note) {
+      return fromTrash ? restoreNote(note, true)
+        : unarchiveNote(note, true);
+    });
+  } finally {
+    releaseCatalogWrites();
   }
   renderAll();
-  if (count) {
-    toast("Restored " + count + " notes.");
-  }
+  toast("Restored " + count + " notes.");
 }
 
 /* Delete Forever for a Trash or Archive selection: the
