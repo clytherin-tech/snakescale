@@ -40,10 +40,39 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-29-SSN-V2601
-  Version: 2.60.1
+  BUILD STAMP: 2026-10-29-SSN-V2610
+  Version: 2.61.0
 
   Revision history:
+    v2.61.0 2026-10-29 Menu polish. The tag menu's
+                      items now hover like the note
+                      context menu's items do: the
+                      sidebar menu family's hover wash
+                      token, accent-soft, was named by
+                      its hover rules since the phase 1
+                      menus but never defined in either
+                      theme, so those hovers painted
+                      nothing; it is defined now, in
+                      both themes, with the soft tone's
+                      own values, the context menu
+                      hover's wash. The tag, tag parent,
+                      shortcut, saved search, and
+                      template menus all answer the
+                      pointer with it, and the saved
+                      search and template rows and the
+                      scan dialog's current page chip,
+                      which name the same token for
+                      their washes, gain theirs with the
+                      definition. No hover rule changes.
+                      And a right click on a task row
+                      of a notebook's Things to do page
+                      no longer raises the browser's
+                      own menu; nothing replaces it.
+                      Note cards keep their app menu,
+                      the rest of the page keeps the
+                      browser's behavior, and the Tasks
+                      view and Home task rows are
+                      unchanged.
     v2.60.1 2026-10-29 Scratch Pad height capture
                       redesign. v2.60's capture stood on
                       one path, a size observer arming a
@@ -3717,6 +3746,20 @@
      Here it is the ink itself, the black the items
      need on the light surface. */
   --text-strong:#10231A;
+  /* v2.61: the soft accent wash the sidebar menu
+     family's hover rules name (the tag, tag parent,
+     shortcut, saved search, and template menus), and
+     with them the saved search and template rows and
+     the scan dialog's current page chip. Like
+     text-strong above, the token was referenced for
+     releases without ever being defined, so those
+     hovers painted nothing at all: a tag menu item
+     sat still under the pointer while the note
+     context menu's items answer with the soft wash.
+     It is defined now with that hover's own value,
+     the soft tone, so the tag menu's items hover
+     exactly like the context menu's do. */
+  --accent-soft:#DCE8DC;
   --surface:#FFFFFF;
   --border:#C9D6C9;
   --muted:#5A6E5F;
@@ -3739,6 +3782,9 @@ body.dark{
      sidebar's own button hovers use for strong text
      on the dark surfaces. */
   --text-strong:#FFFFFF;
+  /* v2.61: the dark theme's accent-soft, the soft
+     tone's dark value here (see :root). */
+  --accent-soft:#1D4A38;
   --border:#2A5240;
   /* v1.1 dark contrast pass: this muted tone stays readable on both dark
      palette surfaces, and the soft tone now separates selected content. */
@@ -9885,8 +9931,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-29-SSN-V2601";
-const APP_VERSION = "2.60.1";
+const APP_BUILD = "2026-10-29-SSN-V2610";
+const APP_VERSION = "2.61.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -24038,6 +24084,30 @@ function initNoteContextMenu() {
       exitNoteSelectMode();
     });
   }
+}
+
+/* v2.61: the Things to do page's task rows keep the
+   browser's own right click menu out: a right click
+   (or the touch long press that surfaces as one) on a
+   task row in a notebook's task list opens nothing, at
+   Chris's word, and no app menu replaces it; the rows
+   simply do not answer a right click. The suppression
+   is delegated on the page's inner container, which
+   renderThingsView refills in place, and it is scoped
+   to the rows themselves: the rest of the page (the
+   quick add, the headings) keeps the browser's
+   behavior, note cards keep their own context menu,
+   and the Tasks view and Home task rows are untouched.
+   Called once from wireEvents. */
+function initThingsNativeMenuSuppression() {
+  const inner = document.getElementById("thingsInner");
+  if (!inner) { return; }
+  inner.addEventListener("contextmenu", function (ev) {
+    const row = ev.target && ev.target.closest
+      ? ev.target.closest(".task-row") : null;
+    if (!row) { return; }
+    ev.preventDefault();
+  });
 }
 
 /* Permanently delete several trashed notes, one at a time. Each
@@ -49372,6 +49442,7 @@ function wireEvents() {
      button, and the finished drag click suppression. */
   initNoteDragAndDrop();
   initNoteContextMenu();
+  initThingsNativeMenuSuppression();
 
   /* Mobile bar. */
   document.getElementById("mobileNavBtn").addEventListener("click", function () { setMobileView("nav"); });
