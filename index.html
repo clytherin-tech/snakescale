@@ -40,10 +40,57 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-30-SSN-V2660
-  Version: 2.66.0
+  BUILD STAMP: 2026-10-30-SSN-V2670
+  Version: 2.67.0
 
   Revision history:
+    v2.67.0 2026-10-30 The nest drags, fixed for real
+                      pointer input. The notebook nest
+                      drag (v2.63) and the tag nest drag
+                      (v2.64) passed the suite's
+                      fabricated events, but the
+                      notebook drag was bound only to
+                      the sidebar's notebook list and
+                      scanned only its rows, and both
+                      drags admitted only the mouse.
+                      In the icon rail, where the
+                      notebooks live in the rail
+                      flyout and the sidebar sits
+                      hidden, a press on a notebook
+                      row could never arm the drag at
+                      all (reproduced in a real
+                      Chromium browser on the shipped
+                      build: the press produced no
+                      drag state, no target scan, and
+                      no write), and pen and touch
+                      presses were refused at the
+                      same guard. The notebook drag
+                      now binds and scans both
+                      surfaces: flyout rows highlight
+                      and take drops, and the flyout's
+                      head is the top level zone
+                      there, with the section label's
+                      own armed outline and hover fill.
+                      The pen arms on the mouse's
+                      terms in both drags. Touch arms
+                      on a long press (about 400 ms):
+                      a press that lifts early stays a
+                      tap, one that wanders early
+                      stays a scroll, and once the hold
+                      engages the drag, a window
+                      touchmove guard defaults the
+                      gesture's moves so the browser
+                      cannot take the gesture over for
+                      scrolling (a gesture's touch
+                      action is sampled before a press
+                      handler can change it, so the
+                      hold and the guard are what hold
+                      the scroll off; the rig proved
+                      the takeover happens without
+                      them). Mouse behavior is
+                      otherwise unchanged: same
+                      threshold, same refusals, same
+                      tail click rule, same writes.
     v2.66.0 2026-10-30 Attachment deletes go to Drive
                       trash. Until now, removing an
                       attachment deleted its file from
@@ -4345,6 +4392,18 @@ body.dark .gate-brand .wordmark{color:#EAF3EC;}
 #notebookSection .nav-label.nb-top-drop-hover{
   background:var(--secondary);color:#fff;
 }
+/* v2.67: the rail flyout's share of the notebook
+   nest drag: its head is the top level drop zone on
+   that surface, with the same armed outline and
+   hover fill as the section label, and the dragged
+   flyout row dims like the sidebar's source row. */
+#railFlyout.nb-nest-armed .rail-fly-head{
+  outline:1px dashed var(--accent);outline-offset:2px;
+}
+#railFlyout .rail-fly-head.nb-top-drop-hover{
+  background:var(--secondary);color:#fff;
+}
+.rail-fly-row.nb-nest-source{opacity:.55;}
 .nav-item.nb-nest-source{opacity:.55;}
 body.nb-nest-dragging{cursor:grabbing;user-select:none;}
 /* v2.64: the tag nest drag's own states, the notebook
@@ -10281,8 +10340,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-30-SSN-V2660";
-const APP_VERSION = "2.66.0";
+const APP_BUILD = "2026-10-30-SSN-V2670";
+const APP_VERSION = "2.67.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -16560,10 +16619,12 @@ async function deleteStack(name) {
    count. A notebook with children carries a fold caret
    in the tag tree's disclosure style; folds are the
    per-device settings list collapsedNotebooks, default
-   expanded. Notebooks nest by mouse drag onto a row
-   and unnest by dragging onto the Notebooks section
-   header; the notebook menu's Move to panel offers the
-   same moves without a drag. Deleting a notebook
+   expanded. Notebooks nest by dragging a row onto
+   another (mouse or pen by movement, touch by long
+   press; in rail mode the flyout's rows and head run
+   the same drag, v2.67) and unnest by dragging onto
+   the Notebooks section header; the notebook menu's
+   Move to panel offers the same moves without a drag. Deleting a notebook
    promotes its sub-notebooks to its own level.
    -------------------------------------------------------------------------- */
 
@@ -16761,26 +16822,62 @@ async function setNotebookParent(slug, parentSlug) {
   return true;
 }
 
-/* Notebook nest drag (mouse, Pointer Events, the app's
-   drag idiom from the note drag): a press on a notebook
-   row arms a potential drag; movement past the threshold
-   engages it (the row dims, the section header shows its
-   armed outline as the top level drop zone); moving over
-   another row highlights it as the nest target in the
-   note drag's drop-hover style, and moving over the
-   section header highlights that as the move to top
-   level. Self drops, descendant drops, and drops on the
-   current parent are never offered (no highlight, and
-   the target scan returns nothing there), so a release
-   on them simply ends the drag. Touch never arms: the
-   app's notebook interactions are mouse drags, and a
-   touch press on a row stays a tap. The finished drag
-   swallows its tail click exactly like the note drag,
-   so the drop's own release cannot also navigate. */
+/* Notebook nest drag (Pointer Events, the app's drag
+   idiom from the note drag), as widened by v2.67. What
+   v2.67 fixed: as shipped in v2.63 the drag was bound
+   only to the sidebar's #notebookNav and scanned only
+   its rows, and its press guard admitted only the
+   mouse. In the icon rail the notebooks live in the
+   rail flyout (#railFlyoutList) while #notebookNav
+   sits inside the hidden sidebar, so a press on a
+   flyout row never armed anything (proven in a real
+   Chromium rig on the v2.66.0 build: trusted presses
+   on flyout rows produced no drag state, no target
+   scan, and no write, and the gesture ended as a
+   plain click), and pen and touch presses were
+   refused before they could arm. The drag now binds
+   and scans both notebook surfaces, admits the pen on
+   the mouse's terms, and arms for touch on a long
+   press (below).
+
+   A press on a notebook row (either surface) arms a
+   potential drag. For mouse and pen, movement past
+   the threshold engages it (the row dims, the section
+   header shows its armed outline as the top level
+   drop zone, and so does the flyout's head on that
+   surface); moving over another row highlights it as
+   the nest target in the note drag's drop-hover
+   style, and moving over the section header (or the
+   flyout's head) highlights that as the move to top
+   level. Self drops, descendant drops, and drops on
+   the current parent are never offered (no highlight,
+   and the target scan returns nothing there), so a
+   release on them simply ends the drag. The finished
+   drag swallows its tail click exactly like the note
+   drag, so the drop's own release cannot also
+   navigate.
+
+   Touch (v2.67): a press on a row starts a hold
+   timer. A release before the timer is a plain tap:
+   nothing is blocked and the row's click navigates as
+   always. Movement past the slop before the timer
+   cancels the candidate, so a scroll that starts on a
+   row still scrolls. When the timer fires, the drag
+   engages where the finger rests; from then on the
+   move handler prevents the default, so the sidebar
+   cannot scroll under the drag, and the release
+   commits or cancels exactly as a mouse drop does,
+   tail click swallowed included. The native context
+   menu a long press would summon stays suppressed
+   across the sidebar (v2.61.1). */
 const NB_NEST_DRAG_PX = 6;   /* movement before a press is a drag */
-let nbNestDrag = null;       /* {slug, pointerId, startX, startY,
-                                engaged, target, rowEl} or null;
-                                target is {kind:"row", slug},
+const NB_NEST_HOLD_MS = 400; /* v2.67: the touch long press that arms */
+const NB_NEST_SLOP_PX = 10;  /* v2.67: a held touch may wander this far */
+let nbNestDrag = null;       /* {slug, pointerId, pointerType,
+                                startX, startY, lastX, lastY,
+                                engaged, target, rowEl,
+                                holdTimer} or null; target is
+                                {kind:"row", slug},
                                 {kind:"top"}, or null */
 let nbNestDragClickBlock = false;
 
@@ -16793,10 +16890,29 @@ function nbNestTargetOk(dragSlug, targetSlug) {
   return notebookDescendantsOf(dragSlug).indexOf(targetSlug) < 0;
 }
 
+/* v2.67: the two top level drop zones, the Notebooks
+   section label in the sidebar and the flyout's head
+   in rail mode. A hidden surface's label has a zero
+   rect, and the containment tests skip zero rects, so
+   only the surface on screen can offer the zone. */
+function nbNestTopLabels() {
+  const out = [];
+  const section = document.getElementById("notebookSection");
+  const label = section
+    ? section.querySelector(".nav-label") : null;
+  if (label) { out.push(label); }
+  const flyout = document.getElementById("railFlyout");
+  const head = flyout
+    ? flyout.querySelector(".rail-fly-head") : null;
+  if (head) { out.push(head); }
+  return out;
+}
+
 function nbNestTargetAt(x, y) {
   if (!nbNestDrag) { return null; }
   const rows = document.querySelectorAll(
-    "#notebookNav [data-nb-slug]");
+    "#notebookNav [data-nb-slug], " +
+    "#railFlyoutList [data-nb-slug]");
   for (let i = 0; i < rows.length; i++) {
     const r = rows[i].getBoundingClientRect();
     if (r.width > 0 && r.height > 0 &&
@@ -16809,11 +16925,9 @@ function nbNestTargetAt(x, y) {
   }
   const dragNb = notebookForSlug(nbNestDrag.slug);
   if (dragNb && notebookParentOf(dragNb) !== null) {
-    const section = document.getElementById("notebookSection");
-    const label = section
-      ? section.querySelector(".nav-label") : null;
-    if (label) {
-      const lr = label.getBoundingClientRect();
+    const labels = nbNestTopLabels();
+    for (let i = 0; i < labels.length; i++) {
+      const lr = labels[i].getBoundingClientRect();
       if (lr.width > 0 && lr.height > 0 &&
           x >= lr.left && x <= lr.right &&
           y >= lr.top && y <= lr.bottom) {
@@ -16825,12 +16939,12 @@ function nbNestTargetAt(x, y) {
 }
 
 function clearNbNestTarget() {
-  document.querySelectorAll("#notebookNav .nav-item.drop-hover")
+  document.querySelectorAll(
+    "#notebookNav .drop-hover, #railFlyoutList .drop-hover")
     .forEach(function (el) { el.classList.remove("drop-hover"); });
-  const section = document.getElementById("notebookSection");
-  const label = section
-    ? section.querySelector(".nav-label") : null;
-  if (label) { label.classList.remove("nb-top-drop-hover"); }
+  nbNestTopLabels().forEach(function (el) {
+    el.classList.remove("nb-top-drop-hover");
+  });
 }
 
 function updateNbNestTarget(x, y) {
@@ -16845,17 +16959,22 @@ function updateNbNestTarget(x, y) {
   if (!next) { return; }
   if (next.kind === "row") {
     const rows = document.querySelectorAll(
-      "#notebookNav [data-nb-slug]");
+      "#notebookNav [data-nb-slug], " +
+      "#railFlyoutList [data-nb-slug]");
     for (let i = 0; i < rows.length; i++) {
       if (rows[i].getAttribute("data-nb-slug") === next.slug) {
         rows[i].classList.add("drop-hover");
       }
     }
   } else {
-    const section = document.getElementById("notebookSection");
-    const label = section
-      ? section.querySelector(".nav-label") : null;
-    if (label) { label.classList.add("nb-top-drop-hover"); }
+    nbNestTopLabels().forEach(function (el) {
+      const lr = el.getBoundingClientRect();
+      if (lr.width > 0 && lr.height > 0 &&
+          x >= lr.left && x <= lr.right &&
+          y >= lr.top && y <= lr.bottom) {
+        el.classList.add("nb-top-drop-hover");
+      }
+    });
   }
 }
 
@@ -16878,6 +16997,34 @@ function nbNestAutoScroll(clientY) {
   }
 }
 
+/* v2.67: while either nest drag is engaged for a
+   touch pointer, the gesture's touch moves are
+   defaulted at the window, so the browser cannot
+   turn the drag into a scroll of the sidebar (a
+   takeover would end the drag with a pointercancel
+   before the drop). Each drag registers this guard
+   with its own listeners and removes it with them;
+   it acts only while a touch drag is engaged, so
+   ordinary touch scrolling is untouched. It has to
+   be a touchmove listener: a real browser samples
+   a gesture's touch action before a press handler's
+   changes can apply, so claiming touch-action at
+   press time cannot hold a scroll off, but a
+   still finger starts no scroll during the hold,
+   and once the drag is engaged this guard covers
+   every move that follows. */
+function onNestTouchMoveGuard(ev) {
+  if (nbNestDrag && nbNestDrag.engaged &&
+      nbNestDrag.pointerType === "touch") {
+    ev.preventDefault();
+    return;
+  }
+  if (tagNestDrag && tagNestDrag.engaged &&
+      tagNestDrag.pointerType === "touch") {
+    ev.preventDefault();
+  }
+}
+
 function engageNbNestDrag() {
   nbNestDrag.engaged = true;
   if (nbNestDrag.rowEl) {
@@ -16886,14 +17033,19 @@ function engageNbNestDrag() {
   document.body.classList.add("nb-nest-dragging");
   const section = document.getElementById("notebookSection");
   if (section) { section.classList.add("nb-nest-armed"); }
+  const flyout = document.getElementById("railFlyout");
+  if (flyout) { flyout.classList.add("nb-nest-armed"); }
 }
 
 function endNbNestDrag(commit) {
   if (!nbNestDrag) { return; }
   const drag = nbNestDrag;
   nbNestDrag = null;
+  if (drag.holdTimer) { clearTimeout(drag.holdTimer); }
   window.removeEventListener("pointermove",
     onNbNestPointerMove, true);
+  window.removeEventListener("touchmove",
+    onNestTouchMoveGuard, true);
   window.removeEventListener("pointerup",
     onNbNestPointerUp, true);
   window.removeEventListener("pointercancel",
@@ -16904,10 +17056,14 @@ function endNbNestDrag(commit) {
   document.body.classList.remove("nb-nest-dragging");
   const section = document.getElementById("notebookSection");
   if (section) { section.classList.remove("nb-nest-armed"); }
+  const flyout = document.getElementById("railFlyout");
+  if (flyout) { flyout.classList.remove("nb-nest-armed"); }
   if (!drag.engaged) { return; }
   /* An engaged drag, landed or cancelled, swallows the
      click its release would otherwise deliver to the
-     row, the note drag's standing rule. */
+     row, the note drag's standing rule. A press that
+     never engaged (a plain tap, a touch scroll) reaches
+     the early return above and blocks nothing. */
   nbNestDragClickBlock = true;
   if (commit && drag.target) {
     setNotebookParent(drag.slug,
@@ -16922,12 +17078,28 @@ function onNbNestPointerMove(ev) {
   if (!nbNestDrag || ev.pointerId !== nbNestDrag.pointerId) {
     return;
   }
+  nbNestDrag.lastX = ev.clientX;
+  nbNestDrag.lastY = ev.clientY;
   if (!nbNestDrag.engaged) {
     const moved = Math.max(
       Math.abs(ev.clientX - nbNestDrag.startX),
       Math.abs(ev.clientY - nbNestDrag.startY));
+    if (nbNestDrag.pointerType === "touch") {
+      /* v2.67: a held touch that wanders past the slop
+         before the hold fires was a scroll starting,
+         not a drag: the candidate dies quietly and the
+         gesture belongs to the scroller from here. */
+      if (moved > NB_NEST_SLOP_PX) { endNbNestDrag(false); }
+      return;
+    }
     if (moved > NB_NEST_DRAG_PX) { engageNbNestDrag(); }
     else { return; }
+  }
+  /* v2.67: an engaged touch drag owns its moves, so the
+     sidebar cannot scroll underneath it. Mouse and pen
+     moves are never defaulted, exactly as before. */
+  if (nbNestDrag.pointerType === "touch") {
+    ev.preventDefault();
   }
   updateNbNestTarget(ev.clientX, ev.clientY);
   nbNestAutoScroll(ev.clientY);
@@ -16952,26 +17124,50 @@ function onNbNestKeydown(ev) {
 }
 
 function onNbNavPointerDown(ev) {
-  /* Mouse only: touch presses stay taps (the app has no
-     touch drag for notebooks, and none is invented
-     here). */
-  if (ev.pointerType && ev.pointerType !== "mouse") { return; }
-  if (ev.button !== undefined && ev.button !== 0) { return; }
+  /* Mouse and pen arm on movement past the threshold,
+     as the mouse always has. Touch arms on the long
+     press instead (see the section comment): a touch
+     press that lifts early stays a tap, and one that
+     moves early stays a scroll. */
+  const pt = ev.pointerType || "mouse";
+  if (pt === "touch") {
+    if (ev.button !== undefined && ev.button > 0) { return; }
+  } else if (ev.button !== undefined && ev.button !== 0) {
+    return;
+  }
   if (nbNestDrag) { return; }
   const row = (ev.target && ev.target.closest)
-    ? ev.target.closest("#notebookNav [data-nb-slug]") : null;
+    ? ev.target.closest("[data-nb-slug]") : null;
   if (!row) { return; }
-  nbNestDrag = {
+  const drag = {
     slug: row.getAttribute("data-nb-slug"),
     pointerId: ev.pointerId,
+    pointerType: pt,
     startX: ev.clientX,
     startY: ev.clientY,
+    lastX: ev.clientX,
+    lastY: ev.clientY,
     engaged: false,
     target: null,
-    rowEl: row
+    rowEl: row,
+    holdTimer: null
   };
+  nbNestDrag = drag;
+  if (pt === "touch") {
+    /* The hold timer engages the drag where the finger
+       rests if the press is still down by then; the
+       engaged drag's moves are covered by the
+       touchmove guard (onNestTouchMoveGuard). */
+    drag.holdTimer = setTimeout(function () {
+      if (nbNestDrag !== drag || drag.engaged) { return; }
+      engageNbNestDrag();
+      updateNbNestTarget(drag.lastX, drag.lastY);
+    }, NB_NEST_HOLD_MS);
+  }
   window.addEventListener("pointermove",
-    onNbNestPointerMove, true);
+    onNbNestPointerMove, { capture: true, passive: false });
+  window.addEventListener("touchmove",
+    onNestTouchMoveGuard, { capture: true, passive: false });
   window.addEventListener("pointerup",
     onNbNestPointerUp, true);
   window.addEventListener("pointercancel",
@@ -16983,6 +17179,13 @@ function initNbNestDrag() {
   const nav = document.getElementById("notebookNav");
   if (nav) {
     nav.addEventListener("pointerdown", onNbNavPointerDown);
+  }
+  /* v2.67: the rail flyout renders the same rows on the
+     rail surface, so the same press arms there too. */
+  const flyoutList = document.getElementById("railFlyoutList");
+  if (flyoutList) {
+    flyoutList.addEventListener("pointerdown",
+      onNbNavPointerDown);
   }
   /* The finished drag click suppression, in the note
      drag's exact shape: the block lapses on the next
@@ -17005,33 +17208,44 @@ function initNbNestDrag() {
 
    The drag the v2.30 section below shipped without
    ("there is no drag and drop nesting this release"),
-   built on the notebook nest drag's idiom (v2.63),
-   which is the app's drag idiom throughout: a press on
-   a tag row's chip arms a potential drag, movement
-   past the threshold engages it (the row dims, the
-   Tags section header shows its armed outline as the
-   top level drop zone), moving over another row
-   highlights its chip as the nest target in the shared
-   drop-hover style, and moving over the section header
-   highlights that as the move to top level. The drop
-   runs setTagParent, the one write path the Move Tag
-   panel already uses, so persistence is the existing
-   index save, the target expands the way a menu move
-   expands it, and the subtree rides along because
-   sub-tags point at their parent by name. Self drops,
-   descendant drops, and drops on the current parent
-   are never offered (no highlight, and the target scan
-   returns nothing there), so a release on them simply
-   ends the drag. Touch never arms: the app's sidebar
-   interactions are mouse drags, and a touch press on a
-   row stays a tap. The finished drag swallows its tail
-   click exactly like the notebook drag, so the drop's
-   own release cannot also toggle the tag filter. */
+   built on the notebook nest drag's idiom, which is
+   the app's drag idiom throughout: a press on a tag
+   row's chip arms a potential drag, movement past the
+   threshold engages it (the row dims, the Tags section
+   header shows its armed outline as the top level drop
+   zone), moving over another row highlights its chip as
+   the nest target in the shared drop-hover style, and
+   moving over the section header highlights that as the
+   move to top level. The drop runs setTagParent, the
+   one write path the Move Tag panel already uses, so
+   persistence is the existing index save, the target
+   expands the way a menu move expands it, and the
+   subtree rides along because sub-tags point at their
+   parent by name. Self drops, descendant drops, and
+   drops on the current parent are never offered (no
+   highlight, and the target scan returns nothing
+   there), so a release on them simply ends the drag.
+   The finished drag swallows its tail click exactly
+   like the notebook drag, so the drop's own release
+   cannot also toggle the tag filter.
 
+   v2.67: the press guard admits the pen on the mouse's
+   terms now, and touch arms on the same long press as
+   the notebook drag: a touch press on the chip starts
+   the hold timer; a release before the timer is a plain tap
+   (the filter toggles as always), movement past the
+   slop before the timer cancels the candidate so a
+   scroll still scrolls, and once the hold engages the
+   drag, its moves prevent the default so the sidebar
+   cannot scroll under it. */
 const TAG_NEST_DRAG_PX = 6;  /* movement before a press is a drag */
-let tagNestDrag = null;      /* {tag, pointerId, startX, startY,
-                                engaged, target, rowEl} or null;
-                                target is {kind:"row", tag},
+const TAG_NEST_HOLD_MS = 400; /* v2.67: the touch long press that arms */
+const TAG_NEST_SLOP_PX = 10;  /* v2.67: a held touch may wander this far */
+let tagNestDrag = null;      /* {tag, pointerId, pointerType,
+                                startX, startY, lastX, lastY,
+                                engaged, target, rowEl,
+                                holdTimer} or null; target is
+                                {kind:"row", tag},
                                 {kind:"top"}, or null */
 let tagNestDragClickBlock = false;
 
@@ -17139,8 +17353,11 @@ function endTagNestDrag(commit) {
   if (!tagNestDrag) { return; }
   const drag = tagNestDrag;
   tagNestDrag = null;
+  if (drag.holdTimer) { clearTimeout(drag.holdTimer); }
   window.removeEventListener("pointermove",
     onTagNestPointerMove, true);
+  window.removeEventListener("touchmove",
+    onNestTouchMoveGuard, true);
   window.removeEventListener("pointerup",
     onTagNestPointerUp, true);
   window.removeEventListener("pointercancel",
@@ -17154,7 +17371,9 @@ function endTagNestDrag(commit) {
   if (!drag.engaged) { return; }
   /* An engaged drag, landed or cancelled, swallows the
      click its release would otherwise deliver to the
-     row, the notebook drag's standing rule. */
+     row, the notebook drag's standing rule. A press
+     that never engaged (a plain tap, a touch scroll)
+     reaches the early return above and blocks nothing. */
   tagNestDragClickBlock = true;
   if (commit && drag.target) {
     setTagParent(drag.tag,
@@ -17169,12 +17388,28 @@ function onTagNestPointerMove(ev) {
   if (!tagNestDrag || ev.pointerId !== tagNestDrag.pointerId) {
     return;
   }
+  tagNestDrag.lastX = ev.clientX;
+  tagNestDrag.lastY = ev.clientY;
   if (!tagNestDrag.engaged) {
     const moved = Math.max(
       Math.abs(ev.clientX - tagNestDrag.startX),
       Math.abs(ev.clientY - tagNestDrag.startY));
+    if (tagNestDrag.pointerType === "touch") {
+      /* v2.67: a held touch that wanders past the slop
+         before the hold fires was a scroll starting,
+         not a drag: the candidate dies quietly and the
+         gesture belongs to the scroller from here. */
+      if (moved > TAG_NEST_SLOP_PX) { endTagNestDrag(false); }
+      return;
+    }
     if (moved > TAG_NEST_DRAG_PX) { engageTagNestDrag(); }
     else { return; }
+  }
+  /* v2.67: an engaged touch drag owns its moves, so the
+     sidebar cannot scroll underneath it. Mouse and pen
+     moves are never defaulted, exactly as before. */
+  if (tagNestDrag.pointerType === "touch") {
+    ev.preventDefault();
   }
   updateTagNestTarget(ev.clientX, ev.clientY);
   tagNestAutoScroll(ev.clientY);
@@ -17199,10 +17434,17 @@ function onTagNestKeydown(ev) {
 }
 
 function onTagNavPointerDown(ev) {
-  /* Mouse only: touch presses stay taps (the app has no
-     touch drag for tags, and none is invented here). */
-  if (ev.pointerType && ev.pointerType !== "mouse") { return; }
-  if (ev.button !== undefined && ev.button !== 0) { return; }
+  /* Mouse and pen arm on movement past the threshold,
+     as the mouse always has. Touch arms on the long
+     press instead: a touch press that lifts early
+     stays a tap, and one that moves early stays a
+     scroll. */
+  const pt = ev.pointerType || "mouse";
+  if (pt === "touch") {
+    if (ev.button !== undefined && ev.button > 0) { return; }
+  } else if (ev.button !== undefined && ev.button !== 0) {
+    return;
+  }
   if (tagNestDrag) { return; }
   /* The press arms from the row's chip, the tag row's
      main element, the way the notebook press arms from
@@ -17213,17 +17455,35 @@ function onTagNavPointerDown(ev) {
   if (!chip) { return; }
   const row = chip.closest("[data-tag]");
   if (!row) { return; }
-  tagNestDrag = {
+  const drag = {
     tag: row.getAttribute("data-tag"),
     pointerId: ev.pointerId,
+    pointerType: pt,
     startX: ev.clientX,
     startY: ev.clientY,
+    lastX: ev.clientX,
+    lastY: ev.clientY,
     engaged: false,
     target: null,
-    rowEl: row
+    rowEl: row,
+    holdTimer: null
   };
+  tagNestDrag = drag;
+  if (pt === "touch") {
+    /* The hold timer engages the drag where the finger
+       rests if the press is still down by then; the
+       engaged drag's moves are covered by the
+       touchmove guard (onNestTouchMoveGuard). */
+    drag.holdTimer = setTimeout(function () {
+      if (tagNestDrag !== drag || drag.engaged) { return; }
+      engageTagNestDrag();
+      updateTagNestTarget(drag.lastX, drag.lastY);
+    }, TAG_NEST_HOLD_MS);
+  }
   window.addEventListener("pointermove",
-    onTagNestPointerMove, true);
+    onTagNestPointerMove, { capture: true, passive: false });
+  window.addEventListener("touchmove",
+    onNestTouchMoveGuard, { capture: true, passive: false });
   window.addEventListener("pointerup",
     onTagNestPointerUp, true);
   window.addEventListener("pointercancel",
