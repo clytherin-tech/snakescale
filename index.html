@@ -40,10 +40,33 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-29-SSN-V2630
-  Version: 2.63.0
+  BUILD STAMP: 2026-10-29-SSN-V2640
+  Version: 2.64.0
 
   Revision history:
+    v2.64.0 2026-10-29 Tag drag nesting. Tags nest by
+                      mouse drag on the v2.30 parent map,
+                      in the notebook nest drag's idiom:
+                      a press on a tag row's chip arms
+                      the drag, movement past the
+                      threshold engages it, the target
+                      row's chip takes the shared
+                      drop-hover highlight, and the Tags
+                      section header is the top level
+                      drop zone while a nested tag is
+                      dragged. Self drops, descendant
+                      drops, and drops on the current
+                      parent are never offered, so a
+                      release there just ends the drag.
+                      The drop runs setTagParent, the
+                      same write path the Move Tag panel
+                      uses, so the map persists through
+                      the existing index save, sub-tags
+                      ride along by name, counts stay
+                      the exact-tag counts, and folds
+                      are untouched. Touch never arms
+                      the drag; a touch press on a tag
+                      row stays a tap.
     v2.63.0 2026-10-29 Nested notebooks with drag and
                       drop. An optional parent field (the
                       parent notebook's slug) on the flat
@@ -4257,6 +4280,25 @@ body.dark .gate-brand .wordmark{color:#EAF3EC;}
 }
 .nav-item.nb-nest-source{opacity:.55;}
 body.nb-nest-dragging{cursor:grabbing;user-select:none;}
+/* v2.64: the tag nest drag's own states, the notebook
+   nest drag's treatment carried to the Tags section:
+   the section header is the top level drop zone while
+   a nested tag is dragged (the armed outline in the
+   accent token before the pointer arrives, the
+   drop-hover fill while it is over the zone), the
+   dragged row dims, and the body carries the grabbing
+   cursor for the drag's duration. The row drop
+   highlight itself is the shared nav-item drop-hover
+   rule the notebook rows use, carried by the tag
+   row's chip button, so both trees light the same. */
+#tagSection.tag-nest-armed .nav-label{
+  outline:1px dashed var(--accent);outline-offset:2px;
+}
+#tagSection .nav-label.tag-top-drop-hover{
+  background:var(--secondary);color:#fff;
+}
+.nav-tag-row.tag-nest-source{opacity:.55;}
+body.tag-nest-dragging{cursor:grabbing;user-select:none;}
 .nav-tag-chevron-spacer{flex:none;width:20px;}
 .nav-tag-menu-btn,.nav-shortcut-menu-btn{
   flex:none;width:24px;height:24px;display:inline-flex;
@@ -10126,8 +10168,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-29-SSN-V2630";
-const APP_VERSION = "2.63.0";
+const APP_BUILD = "2026-10-29-SSN-V2640";
+const APP_VERSION = "2.64.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -16844,6 +16886,259 @@ function initNbNestDrag() {
     }
   }, true);
 }
+
+/* --------------------------------------------------------------------------
+   v2.64: tag drag nesting
+
+   The drag the v2.30 section below shipped without
+   ("there is no drag and drop nesting this release"),
+   built on the notebook nest drag's idiom (v2.63),
+   which is the app's drag idiom throughout: a press on
+   a tag row's chip arms a potential drag, movement
+   past the threshold engages it (the row dims, the
+   Tags section header shows its armed outline as the
+   top level drop zone), moving over another row
+   highlights its chip as the nest target in the shared
+   drop-hover style, and moving over the section header
+   highlights that as the move to top level. The drop
+   runs setTagParent, the one write path the Move Tag
+   panel already uses, so persistence is the existing
+   index save, the target expands the way a menu move
+   expands it, and the subtree rides along because
+   sub-tags point at their parent by name. Self drops,
+   descendant drops, and drops on the current parent
+   are never offered (no highlight, and the target scan
+   returns nothing there), so a release on them simply
+   ends the drag. Touch never arms: the app's sidebar
+   interactions are mouse drags, and a touch press on a
+   row stays a tap. The finished drag swallows its tail
+   click exactly like the notebook drag, so the drop's
+   own release cannot also toggle the tag filter. */
+
+const TAG_NEST_DRAG_PX = 6;  /* movement before a press is a drag */
+let tagNestDrag = null;      /* {tag, pointerId, startX, startY,
+                                engaged, target, rowEl} or null;
+                                target is {kind:"row", tag},
+                                {kind:"top"}, or null */
+let tagNestDragClickBlock = false;
+
+function tagNestTargetOk(dragTag, targetTag) {
+  if (!targetTag || targetTag === dragTag) { return false; }
+  if (!tagExists(dragTag) || !tagExists(targetTag)) {
+    return false;
+  }
+  if (tagParentOf(dragTag) === targetTag) { return false; }
+  return tagDescendantsOf(dragTag).indexOf(targetTag) < 0;
+}
+
+function tagNestTargetAt(x, y) {
+  if (!tagNestDrag) { return null; }
+  const rows = document.querySelectorAll("#tagNav [data-tag]");
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i].getBoundingClientRect();
+    if (r.width > 0 && r.height > 0 &&
+        x >= r.left && x <= r.right &&
+        y >= r.top && y <= r.bottom) {
+      const tag = rows[i].getAttribute("data-tag");
+      return tagNestTargetOk(tagNestDrag.tag, tag)
+        ? { kind: "row", tag: tag } : null;
+    }
+  }
+  if (tagParentOf(tagNestDrag.tag) !== null) {
+    const section = document.getElementById("tagSection");
+    const label = section
+      ? section.querySelector(".nav-label") : null;
+    if (label) {
+      const lr = label.getBoundingClientRect();
+      if (lr.width > 0 && lr.height > 0 &&
+          x >= lr.left && x <= lr.right &&
+          y >= lr.top && y <= lr.bottom) {
+        return { kind: "top" };
+      }
+    }
+  }
+  return null;
+}
+
+function clearTagNestTarget() {
+  document.querySelectorAll("#tagNav .drop-hover")
+    .forEach(function (el) { el.classList.remove("drop-hover"); });
+  const section = document.getElementById("tagSection");
+  const label = section
+    ? section.querySelector(".nav-label") : null;
+  if (label) { label.classList.remove("tag-top-drop-hover"); }
+}
+
+function updateTagNestTarget(x, y) {
+  const next = tagNestTargetAt(x, y);
+  const prev = tagNestDrag.target;
+  const same = (!next && !prev) ||
+    (!!next && !!prev && next.kind === prev.kind &&
+      next.tag === prev.tag);
+  if (same) { return; }
+  clearTagNestTarget();
+  tagNestDrag.target = next;
+  if (!next) { return; }
+  if (next.kind === "row") {
+    const rows = document.querySelectorAll("#tagNav [data-tag]");
+    for (let i = 0; i < rows.length; i++) {
+      if (rows[i].getAttribute("data-tag") === next.tag) {
+        const chip = rows[i].querySelector(".tag-chip-nav");
+        if (chip) { chip.classList.add("drop-hover"); }
+      }
+    }
+  } else {
+    const section = document.getElementById("tagSection");
+    const label = section
+      ? section.querySelector(".nav-label") : null;
+    if (label) { label.classList.add("tag-top-drop-hover"); }
+  }
+}
+
+/* One edge auto scroll step for the sidebar while a
+   tag nest drag is held at its edge, with the same
+   edge band and step the notebook nest drag uses. */
+function tagNestAutoScroll(clientY) {
+  const container = document.getElementById("sidebar");
+  if (!container) { return; }
+  const rect = container.getBoundingClientRect();
+  if (clientY < rect.top + NOTE_DRAG_EDGE_PX &&
+      container.scrollTop > 0) {
+    container.scrollTop -= NOTE_DRAG_EDGE_STEP_PX;
+  } else if (clientY > rect.bottom - NOTE_DRAG_EDGE_PX &&
+      container.scrollTop <
+        container.scrollHeight - container.clientHeight) {
+    container.scrollTop += NOTE_DRAG_EDGE_STEP_PX;
+  }
+}
+
+function engageTagNestDrag() {
+  tagNestDrag.engaged = true;
+  if (tagNestDrag.rowEl) {
+    tagNestDrag.rowEl.classList.add("tag-nest-source");
+  }
+  document.body.classList.add("tag-nest-dragging");
+  const section = document.getElementById("tagSection");
+  if (section) { section.classList.add("tag-nest-armed"); }
+}
+
+function endTagNestDrag(commit) {
+  if (!tagNestDrag) { return; }
+  const drag = tagNestDrag;
+  tagNestDrag = null;
+  window.removeEventListener("pointermove",
+    onTagNestPointerMove, true);
+  window.removeEventListener("pointerup",
+    onTagNestPointerUp, true);
+  window.removeEventListener("pointercancel",
+    onTagNestPointerCancel, true);
+  window.removeEventListener("keydown", onTagNestKeydown, true);
+  clearTagNestTarget();
+  if (drag.rowEl) { drag.rowEl.classList.remove("tag-nest-source"); }
+  document.body.classList.remove("tag-nest-dragging");
+  const section = document.getElementById("tagSection");
+  if (section) { section.classList.remove("tag-nest-armed"); }
+  if (!drag.engaged) { return; }
+  /* An engaged drag, landed or cancelled, swallows the
+     click its release would otherwise deliver to the
+     row, the notebook drag's standing rule. */
+  tagNestDragClickBlock = true;
+  if (commit && drag.target) {
+    setTagParent(drag.tag,
+      drag.target.kind === "top" ? null : drag.target.tag)
+      .catch(function (err) {
+        toast("Move failed: " + err.message, true);
+      });
+  }
+}
+
+function onTagNestPointerMove(ev) {
+  if (!tagNestDrag || ev.pointerId !== tagNestDrag.pointerId) {
+    return;
+  }
+  if (!tagNestDrag.engaged) {
+    const moved = Math.max(
+      Math.abs(ev.clientX - tagNestDrag.startX),
+      Math.abs(ev.clientY - tagNestDrag.startY));
+    if (moved > TAG_NEST_DRAG_PX) { engageTagNestDrag(); }
+    else { return; }
+  }
+  updateTagNestTarget(ev.clientX, ev.clientY);
+  tagNestAutoScroll(ev.clientY);
+}
+
+function onTagNestPointerUp(ev) {
+  if (!tagNestDrag || ev.pointerId !== tagNestDrag.pointerId) {
+    return;
+  }
+  endTagNestDrag(true);
+}
+
+function onTagNestPointerCancel(ev) {
+  if (!tagNestDrag || ev.pointerId !== tagNestDrag.pointerId) {
+    return;
+  }
+  endTagNestDrag(false);
+}
+
+function onTagNestKeydown(ev) {
+  if (ev.key === "Escape") { endTagNestDrag(false); }
+}
+
+function onTagNavPointerDown(ev) {
+  /* Mouse only: touch presses stay taps (the app has no
+     touch drag for tags, and none is invented here). */
+  if (ev.pointerType && ev.pointerType !== "mouse") { return; }
+  if (ev.button !== undefined && ev.button !== 0) { return; }
+  if (tagNestDrag) { return; }
+  /* The press arms from the row's chip, the tag row's
+     main element, the way the notebook press arms from
+     its row button: the fold caret and the three dot
+     menu button sit outside the chip and never arm. */
+  const chip = (ev.target && ev.target.closest)
+    ? ev.target.closest("#tagNav .tag-chip-nav") : null;
+  if (!chip) { return; }
+  const row = chip.closest("[data-tag]");
+  if (!row) { return; }
+  tagNestDrag = {
+    tag: row.getAttribute("data-tag"),
+    pointerId: ev.pointerId,
+    startX: ev.clientX,
+    startY: ev.clientY,
+    engaged: false,
+    target: null,
+    rowEl: row
+  };
+  window.addEventListener("pointermove",
+    onTagNestPointerMove, true);
+  window.addEventListener("pointerup",
+    onTagNestPointerUp, true);
+  window.addEventListener("pointercancel",
+    onTagNestPointerCancel, true);
+  window.addEventListener("keydown", onTagNestKeydown, true);
+}
+
+function initTagNestDrag() {
+  const nav = document.getElementById("tagNav");
+  if (nav) {
+    nav.addEventListener("pointerdown", onTagNavPointerDown);
+  }
+  /* The finished drag click suppression, in the notebook
+     drag's exact shape: the block lapses on the next
+     press, and one capture click is swallowed while it
+     stands. */
+  document.addEventListener("pointerdown", function () {
+    if (!tagNestDrag) { tagNestDragClickBlock = false; }
+  }, true);
+  document.addEventListener("click", function (ev) {
+    if (tagNestDragClickBlock) {
+      tagNestDragClickBlock = false;
+      ev.stopPropagation();
+      ev.preventDefault();
+    }
+  }, true);
+}
+
 
 /* --------------------------------------------------------------------------
    v2.30: nested tags (Evernote parity, phase 1 release 2)
@@ -50516,6 +50811,7 @@ function wireEvents() {
      button, and the finished drag click suppression. */
   initNoteDragAndDrop();
   initNbNestDrag();
+  initTagNestDrag();
   initNoteContextMenu();
   initNativeMenuSuppression();
 
