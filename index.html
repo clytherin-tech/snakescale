@@ -40,10 +40,55 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-30-SSN-V2740
-  Version: 2.74.0
+  BUILD STAMP: 2026-10-30-SSN-V2750
+  Version: 2.75.0
 
   Revision history:
+    v2.75.0 2026-10-30 Fix for attachment
+                      deletes that announced
+                      success without removing
+                      anything. A card's three
+                      dot menu and a file card's
+                      Remove button hold the
+                      note and the record as
+                      they were when the card
+                      was drawn, and every sync
+                      replaces the note objects
+                      wholesale while the open
+                      editor is left as it
+                      stands, so after any sync
+                      the held references named
+                      a note the app no longer
+                      held. The deletion engine
+                      trusted them and skipped
+                      the one step that takes
+                      the block out of the open
+                      note, yet still showed its
+                      Attachment deleted toast;
+                      the deletion then finished
+                      against the replaced
+                      object, trashing the file
+                      and updating a stored copy
+                      while the note on screen
+                      kept its attachment,
+                      repeatable as often as it
+                      was tried. The engine now
+                      resolves the live note and
+                      record by id before it
+                      acts, again when the undo
+                      window closes, and when a
+                      block is restored, so
+                      Delete takes the card out
+                      of the editor at once,
+                      drops the record from the
+                      note being shown, and
+                      trashes the file exactly
+                      once, and Undo puts
+                      everything back. When no
+                      sync has intervened, the
+                      resolved pair is the pair
+                      that was passed and
+                      nothing changes.
     v2.74.0 2026-10-30 Scan fixes. The flattened
                       page no longer carries a
                       faint grid: the
@@ -11154,8 +11199,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-30-SSN-V2740";
-const APP_VERSION = "2.74.0";
+const APP_BUILD = "2026-10-30-SSN-V2750";
+const APP_VERSION = "2.75.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -49896,6 +49941,37 @@ function pendingDeleteKey(note, att) {
   return note.id + "|" + att.id;
 }
 
+/* v2.75: the live pair for an attachment deletion. A library
+   load (Sync now, an auto sync, the sign in sync) replaces
+   every note object wholesale, and the open editor is
+   deliberately left unfilled when the note did not change
+   remotely, so a reference captured earlier can name a note
+   object the app no longer holds: a card's three dot menu
+   button and a file card's Remove button both close over
+   the note and the record from hydration time. The deletion
+   engine's live branch tests identity against currentNote(),
+   so a stale pair silently skipped the block's removal and
+   the dirty mark while the undo toast still announced the
+   deletion, and the firing then completed against the dead
+   object (the file trashed, the dead object's copy saved),
+   leaving the live note with its record, its body block,
+   and its card, ready to repeat the announcement forever.
+   The engine therefore resolves the pair by id before it
+   acts: the note the app holds now (findNoteById searches
+   the library, Trash, and Archive), and that note's record
+   for the attachment. When nothing has been swapped, the
+   resolved pair IS the passed pair and behaviour is
+   unchanged; when the note or the record can no longer be
+   found, the passed pair stands, exactly as before. */
+function liveAttachmentPair(note, att) {
+  if (!note || !att) { return { note: note, att: att }; }
+  const liveNote = findNoteById(note.id) || note;
+  const liveAtt = (liveNote.attachments || []).find(function (a) {
+    return a.id === att.id;
+  }) || att;
+  return { note: liveNote, att: liveAtt };
+}
+
 /* The attachment id of the NEXT placeholder still in the body after
    the given element, so a restore can go back in front of the same
    neighbor it sat in front of when it was removed. */
@@ -49948,6 +50024,12 @@ function attachmentElementFromHtml(html, att) {
    finishNoteOpenAttachments. */
 function restoreAttachmentPlaceholder(note, entry) {
   const att = entry.att;
+  /* v2.75: the restore (Undo, or a firing that failed)
+     belongs to the live note object too, for the same
+     reason: a swapped object would take the stash
+     branch and put the block back nowhere the user
+     can see. */
+  note = liveAttachmentPair(note, att).note;
   if (currentNote() !== note || note.trashed || note.archived) {
     note._restoredAttachmentHtml = note._restoredAttachmentHtml || {};
     note._restoredAttachmentHtml[att.id] = entry.html || null;
@@ -50020,6 +50102,11 @@ function dismissUndoToast(entry) {
    HTML for a block that is already out of the DOM). The record stays
    in note.attachments until the timer fires. */
 function scheduleAttachmentDelete(note, att, captured) {
+  /* v2.75: act on the live pair, never a stale capture
+     (see liveAttachmentPair). */
+  const livePair = liveAttachmentPair(note, att);
+  note = livePair.note;
+  att = livePair.att;
   const key = pendingDeleteKey(note, att);
   if (pendingAttachmentDeletes.has(key)) {
     return pendingAttachmentDeletes.get(key);
@@ -50118,8 +50205,12 @@ async function firePendingAttachmentDelete(key) {
   if (!entry) { return; }
   pendingAttachmentDeletes.delete(key);
   dismissUndoToast(entry);
-  const note = entry.note;
-  const att = entry.att;
+  /* v2.75: a load can swap the objects again inside the
+     undo window, so the firing resolves the live pair
+     the same way the scheduling did. */
+  const livePair = liveAttachmentPair(entry.note, entry.att);
+  const note = livePair.note;
+  const att = livePair.att;
   const driver = providers[att.provider];
   function restoreWithError(message) {
     restoreAttachmentPlaceholder(note, entry);
