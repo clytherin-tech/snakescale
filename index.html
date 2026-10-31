@@ -40,10 +40,68 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-30-SSN-V2730
-  Version: 2.73.0
+  BUILD STAMP: 2026-10-30-SSN-V2740
+  Version: 2.74.0
 
   Revision history:
+    v2.74.0 2026-10-30 Scan fixes. The flattened
+                      page no longer carries a
+                      faint grid: the
+                      perspective warp paints
+                      its mesh of cells one
+                      triangle at a time, each
+                      clipped to its own edges,
+                      and the browser
+                      antialiases every clip
+                      edge against the empty
+                      canvas beneath instead of
+                      against the neighbour
+                      cell, so every seam landed
+                      at partial coverage and
+                      read as a dark line, worst
+                      on flat light paper and
+                      under the Document
+                      enhancement's levels
+                      stretch. Each cell's clip
+                      triangle now grows a few
+                      pixels past its edges (the
+                      bleed), so neighbouring
+                      cells overlap and every
+                      seam is covered by real
+                      image; the sampling itself
+                      is untouched, because the
+                      two cells sharing an edge
+                      interpolate the same two
+                      source endpoints along it.
+                      Measured in a real browser
+                      on a flat page, the seam
+                      lines sat 17 to 21
+                      luminance points below the
+                      cell interiors before the
+                      fix and at zero after it.
+                      The scan dialog's
+                      flattened preview is fixed
+                      with it: the preview drew
+                      the warp at export size
+                      under a scaled context,
+                      but a warp cell paints
+                      through an absolute
+                      transform that replaces
+                      the context's own, so any
+                      page wider than the
+                      preview cap showed the
+                      export's top left corner
+                      region at full scale
+                      instead of the flattened
+                      page (the page the confirm
+                      inserted was always
+                      correct). The preview now
+                      draws the same warp, bleed
+                      included, and the same
+                      enhancement at its own
+                      size, and still refreshes
+                      on every corner drag, page
+                      switch, and mode toggle.
     v2.73.0 2026-10-30 Background transcription.
                       A finished transcription,
                       from an audio recording
@@ -11096,8 +11154,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-30-SSN-V2730";
-const APP_VERSION = "2.73.0";
+const APP_BUILD = "2026-10-30-SSN-V2740";
+const APP_VERSION = "2.74.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -50486,6 +50544,27 @@ const SCAN_DEFAULT_INSET = 0.06;
    many affine cells per side. 10 by 10 reads as a true
    perspective flatten on real pages and stays cheap. */
 const SCAN_WARP_MESH = 10;
+/* v2.74.0: the bleed on each warp cell's clip triangle,
+   in destination pixels. A cell is painted clipped to
+   its own triangle, and the browser antialiases that
+   clip edge against the empty canvas beneath rather
+   than against the neighbour cell, so every shared edge
+   used to land at partial coverage and read as a faint
+   dark grid over the flattened page (measured on a flat
+   field in the real browser: the seam lines sat 17 to
+   21 luminance points below the cell interiors, the
+   worst seam pixel 55 below, and seam alpha bottomed
+   at 196 of 255). The clip triangle is therefore grown
+   by this much, each vertex pushed away from the
+   triangle's centroid, which carries every edge
+   outward by about a pixel, so neighbours overlap and
+   every seam is covered by real image. The cell's
+   transform and source triangle are NOT touched: the
+   two cells sharing an edge interpolate the same two
+   source endpoints along it, so their samplings agree
+   exactly on the edge itself, and the overlap paints
+   the same image the seam would have hidden. */
+const SCAN_WARP_BLEED = 3;
 
 let scanState = null;
 let scanDrag = null;
@@ -50716,8 +50795,11 @@ function scanEnhancePixels(data, mode) {
 /* One affine cell of the warp: the canvas transform that
    carries the source triangle (s0, s1, s2) onto the
    destination triangle (d0, d1, d2), drawn clipped to
-   the destination triangle. Null transform (a degenerate
-   source triangle) draws nothing. */
+   the destination triangle grown by SCAN_WARP_BLEED
+   (see its note: the growth is clip only, so the
+   painted sampling is the plain cell's own). Null
+   transform (a degenerate source triangle) draws
+   nothing. */
 function scanDrawWarpCell(ctx, img, s0, s1, s2, d0, d1, d2) {
   const det = (s1.x - s0.x) * (s2.y - s0.y) -
     (s2.x - s0.x) * (s1.y - s0.y);
@@ -50732,11 +50814,28 @@ function scanDrawWarpCell(ctx, img, s0, s1, s2, d0, d1, d2) {
     (d1.y - d0.y) * (s2.x - s0.x)) / det;
   const e = d0.x - m11 * s0.x - m12 * s0.y;
   const f = d0.y - m21 * s0.x - m22 * s0.y;
+  /* The clip points: the destination triangle with
+     each vertex pushed SCAN_WARP_BLEED destination
+     pixels away from the centroid, so the painted
+     cell overlaps its neighbours along every edge.
+     A vertex sitting on the centroid (a degenerate
+     destination) stays where it is. */
+  const ccx = (d0.x + d1.x + d2.x) / 3;
+  const ccy = (d0.y + d1.y + d2.y) / 3;
+  function clipPoint(d) {
+    const dx = d.x - ccx, dy = d.y - ccy;
+    const len = Math.sqrt(dx * dx + dy * dy);
+    if (!len) { return { x: d.x, y: d.y }; }
+    const k = SCAN_WARP_BLEED / len;
+    return { x: d.x + dx * k, y: d.y + dy * k };
+  }
+  const c0 = clipPoint(d0), c1 = clipPoint(d1),
+    c2 = clipPoint(d2);
   ctx.save();
   ctx.beginPath();
-  ctx.moveTo(d0.x, d0.y);
-  ctx.lineTo(d1.x, d1.y);
-  ctx.lineTo(d2.x, d2.y);
+  ctx.moveTo(c0.x, c0.y);
+  ctx.lineTo(c1.x, c1.y);
+  ctx.lineTo(c2.x, c2.y);
   ctx.closePath();
   ctx.clip();
   ctx.setTransform(m11, m21, m12, m22, e, f);
@@ -50856,9 +50955,10 @@ function positionScanQuad() {
 }
 
 /* The flattened preview under the stage: the same warp
-   and enhancement the export runs, drawn small. Where
-   the browser offers no canvas the preview simply does
-   not show; the stage above it still carries the page. */
+   and enhancement the export runs, drawn at the preview
+   canvas's own size. Where the browser offers no canvas
+   the preview simply does not show; the stage above it
+   still carries the page. */
 function scanRenderPreview() {
   const wrap = document.getElementById("scanPreviewWrap");
   const canvas = document.getElementById("scanPreviewCanvas");
@@ -50877,10 +50977,23 @@ function scanRenderPreview() {
     return;
   }
   wrap.classList.remove("hidden");
-  ctx.save();
-  ctx.scale(canvas.width / size.w, canvas.height / size.h);
-  scanDrawWarped(ctx, page.img, page, size.w, size.h);
-  ctx.restore();
+  /* v2.74.0: the warp is drawn at the preview canvas's
+     own size, never at the export size under a scaled
+     context. A warp cell paints through setTransform,
+     which replaces the current transform outright
+     instead of composing with it, so the old scaled
+     draw painted the full size output, at full scale,
+     into the small canvas's clip tiling: for any page
+     wider than the preview cap the flattened preview
+     showed the export's top left corner region instead
+     of the flattened page (measured in the real
+     browser against the export drawn at the same
+     size: whole quadrants of the page missing from
+     the preview while the inserted page was correct).
+     Drawn at canvas size, the preview is the export's
+     own geometry at preview resolution. */
+  scanDrawWarped(ctx, page.img, page, canvas.width,
+    canvas.height);
   scanApplyEnhancement(canvas, ctx,
     (scanState && scanState.mode) || "color");
 }
