@@ -40,10 +40,61 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-31-SSN-V2770
-  Version: 2.77.0
+  BUILD STAMP: 2026-10-31-SSN-V2780
+  Version: 2.78.0
 
   Revision history:
+    v2.78.0 2026-10-31 Transcription runs in a
+                      Web Worker, so the app
+                      stays responsive while a
+                      recording is read. The
+                      Whisper pipeline no longer
+                      runs on the page's main
+                      thread: a module worker,
+                      built from an inline Blob
+                      so the single file app
+                      needs no extra hosted
+                      file, imports the pinned
+                      speech library from the
+                      same CDN the page uses,
+                      points its ONNX wasm paths
+                      at the same CDN folder in
+                      absolute terms, builds and
+                      caches one pipeline per
+                      model there, and returns
+                      the raw result the page
+                      normalizes and lands
+                      exactly as before. The
+                      download progress still
+                      reaches the same status
+                      line, the Transcribing
+                      status still follows the
+                      model's readiness, jobs
+                      stay serialized with the
+                      model each job started
+                      with, and the transcript
+                      record is unchanged. If
+                      the worker cannot be
+                      built, its library fails
+                      to load, or it fails at
+                      any point before returning
+                      a result, the job runs on
+                      the page pipeline instead,
+                      which stays in the app
+                      fully working; the worker
+                      that cannot load its
+                      library is not tried again
+                      that session. A job fails
+                      only when both engines
+                      fail, with the page's own
+                      error. The host sends no
+                      cross origin isolation
+                      headers, so the worker's
+                      runtime has no wasm
+                      multithreading to use; one
+                      thread there is the point,
+                      because it is not the
+                      page's.
     v2.77.0 2026-10-31 Recorder live transcripts
                       land in the audio card,
                       and card transcripts are
@@ -11384,8 +11435,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-31-SSN-V2770";
-const APP_VERSION = "2.77.0";
+const APP_BUILD = "2026-10-31-SSN-V2780";
+const APP_VERSION = "2.78.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -49977,6 +50028,32 @@ function loadSpeechLib() {
   return speechLibPromise;
 }
 
+/* One transcription run's options, shared by every
+   engine that can serve a run (the worker's pipeline and
+   the page's, below): 30 second chunks with a 5 second
+   stride, and word level timestamps, the finest the
+   pinned library produces (see
+   transcriptUnitsFromResult). One constant, so the paths
+   can never drift apart. */
+const SPEECH_RUN_OPTIONS = {
+  chunk_length_s: 30,
+  stride_length_s: 5,
+  return_timestamps: "word"
+};
+
+/* A pipeline build's download progress, as the status
+   line reports it. The page pipeline's build calls it
+   directly; the worker relays the same progress objects
+   as messages and the page hands them here, so a model
+   download reads identically whichever thread runs it. */
+function speechProgressStatus(info) {
+  if (info && info.status === "progress" &&
+      typeof info.progress === "number") {
+    showTranscribeStatus("Downloading the speech model: " +
+      Math.round(info.progress) + "%");
+  }
+}
+
 /* The transcription pipelines, one built and kept per
    model: a model's download rides its first build (the
    status line reports it: the standing Loading line first,
@@ -49993,13 +50070,7 @@ function speechTranscriber(modelId) {
   const built = (async function () {
     const lib = await loadSpeechLib();
     return lib.pipeline("automatic-speech-recognition", modelId, {
-      progress_callback: function (info) {
-        if (info && info.status === "progress" &&
-            typeof info.progress === "number") {
-          showTranscribeStatus("Downloading the speech model: " +
-            Math.round(info.progress) + "%");
-        }
-      }
+      progress_callback: speechProgressStatus
     });
   })();
   speechPipelinePromises[modelId] = built;
@@ -50009,6 +50080,292 @@ function speechTranscriber(modelId) {
     }
   });
   return built;
+}
+
+/* ----- v2.78: the speech engine runs in a Web Worker -------
+   Through v2.77.0 the Whisper pipeline ran on the page's
+   main thread, and a transcription locked the app while
+   it processed: the same thread draws the screen and
+   answers taps, and inference held it for seconds at a
+   time. The pipeline now runs in a module Web Worker
+   built from an inline Blob, so the single file app (and
+   a standalone copy opened on its own) needs no extra
+   hosted file. The worker imports the pinned library
+   build from the same CDN the page uses, points its ONNX
+   wasm paths at the same CDN folder in absolute terms
+   (relative resolution differs inside a worker), builds
+   and caches one pipeline per model exactly as the page
+   does, and returns the same raw result shape the page
+   normalizes. GitHub Pages sends no cross origin
+   isolation headers, so the runtime has no
+   SharedArrayBuffer and no wasm multithreading to reach
+   for; one thread inside the worker is the whole point,
+   because it is not the page's thread.
+
+   The protocol is one job in flight, which the page's
+   own serialization (runSpeechJob) already guarantees,
+   and the worker chains its runs the same way on its
+   side: the page posts {type: "run", id, modelId,
+   samples, options}, sending a COPY of the samples with
+   the copy's buffer transferred (the page keeps its own
+   samples whole, because the fallback below may still
+   need them). The worker posts {type: "progress", id,
+   info} while its model downloads, relayed to the same
+   status callback the page pipeline uses, then
+   {type: "ready", id} once the model stands built, then
+   exactly one of {type: "result", id, result} with the
+   raw recognition result, or {type: "error", id, stage,
+   message} naming the stage that failed: "load" (the
+   library import), "build" (the pipeline build), or
+   "run" (the recognition itself). The worker loads its
+   library by dynamic import, so a failed import is an
+   ordinary protocol error it can report, never a silent
+   death.
+
+   The fallback is the hard requirement: the page
+   pipeline above stays in the code, fully working, and
+   ANY worker failure hands the job to it, mid run
+   failures included. Construction failing, the worker
+   erroring outside the protocol (a crash), or a "load"
+   stage failure retires the worker for the rest of the
+   session: a worker that cannot even load its library
+   will not heal between jobs. A "build" or "run" stage
+   failure leaves the worker standing (its failed build
+   is already evicted from its own cache) and falls back
+   for that job only. The job fails only when the page
+   pipeline also fails, and then with the page's own
+   error, exactly as before this build. */
+let speechWorker = null;
+let speechWorkerRetired = false;
+let speechWorkerSeq = 0;
+let speechWorkerPending = null;
+
+/* The worker's source. Its only generated lines are the
+   two library addresses, injected from the page's own
+   constants so the worker can never point anywhere the
+   page does not. */
+function speechWorkerSource() {
+  const head = "const SPEECH_WORKER_LIB_URL = " +
+    JSON.stringify(SPEECH_LIB_URL) + ";\n" +
+    "const SPEECH_WORKER_LIB_DIST = " +
+    JSON.stringify(SPEECH_LIB_DIST) + ";\n";
+  return head + [
+    '"use strict";',
+    "/* The transcription worker: the Whisper pipeline",
+    "   lives here, off the page's main thread, so a",
+    "   transcription no longer locks the app while it",
+    "   runs. The page above this worker's source (in",
+    "   speechWorkerSource) documents the protocol both",
+    "   sides speak. */",
+    "const pipelines = {};",
+    "let libPromise = null;",
+    "let chain = Promise.resolve();",
+    "function loadLib() {",
+    "  if (!libPromise) {",
+    "    libPromise = import(SPEECH_WORKER_LIB_URL)",
+    "      .then(function (lib) {",
+    "        if (!lib || typeof lib.pipeline !== 'function') {",
+    "          throw new Error('The speech recognition ' +",
+    "            'library did not initialize.');",
+    "        }",
+    "        try {",
+    "          lib.env.backends.onnx.wasm.wasmPaths =",
+    "            SPEECH_WORKER_LIB_DIST;",
+    "        } catch (e) { /* a runtime without the knob",
+    "           keeps its default */ }",
+    "        return lib;",
+    "      });",
+    "  }",
+    "  return libPromise;",
+    "}",
+    "function transcriber(modelId, jobId) {",
+    "  let built = pipelines[modelId];",
+    "  if (!built) {",
+    "    built = loadLib().then(function (lib) {",
+    "      return lib.pipeline(",
+    "        'automatic-speech-recognition', modelId, {",
+    "          progress_callback: function (info) {",
+    "            self.postMessage({ type: 'progress',",
+    "              id: jobId, info: info });",
+    "          }",
+    "        });",
+    "    });",
+    "    pipelines[modelId] = built;",
+    "    built.catch(function () {",
+    "      if (pipelines[modelId] === built) {",
+    "        delete pipelines[modelId];",
+    "      }",
+    "    });",
+    "  }",
+    "  return built;",
+    "}",
+    "function fail(id, stage, err) {",
+    "  self.postMessage({ type: 'error', id: id,",
+    "    stage: stage,",
+    "    message: err && err.message ? err.message",
+    "      : String(err) });",
+    "}",
+    "async function runJob(msg) {",
+    "  const id = msg.id;",
+    "  try { await loadLib(); }",
+    "  catch (err) { fail(id, 'load', err); return; }",
+    "  let fn = null;",
+    "  try { fn = await transcriber(msg.modelId, id); }",
+    "  catch (err) { fail(id, 'build', err); return; }",
+    "  self.postMessage({ type: 'ready', id: id });",
+    "  try {",
+    "    const result = await fn(msg.samples, msg.options);",
+    "    self.postMessage({ type: 'result', id: id,",
+    "      result: result });",
+    "  } catch (err) { fail(id, 'run', err); }",
+    "}",
+    "self.addEventListener('message', function (ev) {",
+    "  const msg = ev && ev.data;",
+    "  if (!msg || msg.type !== 'run') { return; }",
+    "  chain = chain.then(function () {",
+    "    return runJob(msg);",
+    "  }, function () { return runJob(msg); });",
+    "});",
+    "self.postMessage({ type: 'boot' });"
+  ].join("\n");
+}
+
+/* Build the worker on first use and keep it for the
+   session. Returns null when this session has no worker
+   (none could be built, or it was retired): the caller
+   then runs the job on the page pipeline. */
+function startSpeechWorker() {
+  if (speechWorkerRetired) { return null; }
+  if (speechWorker) { return speechWorker; }
+  if (typeof Worker !== "function" ||
+      typeof Blob !== "function" ||
+      typeof URL === "undefined" ||
+      typeof URL.createObjectURL !== "function") {
+    speechWorkerRetired = true;
+    return null;
+  }
+  let url = null;
+  let worker = null;
+  try {
+    url = URL.createObjectURL(new Blob([speechWorkerSource()],
+      { type: "text/javascript" }));
+    worker = new Worker(url, { type: "module" });
+  } catch (err) {
+    speechWorkerRetired = true;
+    if (url) {
+      try { URL.revokeObjectURL(url); } catch (e) { /* no-op */ }
+    }
+    return null;
+  }
+  worker.addEventListener("message", onSpeechWorkerMessage);
+  worker.addEventListener("error", onSpeechWorkerCrash);
+  speechWorker = worker;
+  return worker;
+}
+
+function retireSpeechWorker() {
+  speechWorkerRetired = true;
+  if (speechWorker) {
+    try { speechWorker.terminate(); } catch (e) { /* gone */ }
+    speechWorker = null;
+  }
+}
+
+function onSpeechWorkerMessage(ev) {
+  const msg = ev && ev.data;
+  if (!msg) { return; }
+  const pending = speechWorkerPending;
+  if (msg.type === "progress") {
+    if (pending && msg.id === pending.id) {
+      pending.hooks.onProgress(msg.info);
+    }
+    return;
+  }
+  if (!pending || msg.id !== pending.id) { return; }
+  if (msg.type === "ready") {
+    pending.hooks.onReady();
+    return;
+  }
+  if (msg.type === "result") {
+    speechWorkerPending = null;
+    pending.resolve(msg.result);
+    return;
+  }
+  if (msg.type === "error") {
+    speechWorkerPending = null;
+    if (msg.stage === "load") { retireSpeechWorker(); }
+    pending.reject(new Error(msg.message ||
+      "The transcription worker could not run."));
+  }
+}
+
+/* The worker died outside the protocol (an uncaught
+   error, a crash): the pending job, if any, falls back
+   like any other worker failure, and the worker is
+   retired for the session. */
+function onSpeechWorkerCrash() {
+  const pending = speechWorkerPending;
+  speechWorkerPending = null;
+  retireSpeechWorker();
+  if (pending) {
+    pending.reject(new Error(
+      "The transcription worker stopped unexpectedly."));
+  }
+}
+
+/* Post one job to the worker and await its word. The
+   job's hooks hear the relayed download progress and
+   the model ready moment on the way. */
+function runSpeechInWorker(worker, modelId, samples, hooks) {
+  return new Promise(function (resolve, reject) {
+    const id = ++speechWorkerSeq;
+    speechWorkerPending = { id: id, resolve: resolve,
+      reject: reject, hooks: hooks };
+    /* A copy travels, its buffer transferred (see the
+       block head): the transfer detaches the copy, and
+       the page's own samples stay whole for the
+       fallback. */
+    const copy = samples.slice();
+    try {
+      worker.postMessage({ type: "run", id: id,
+        modelId: modelId, samples: copy,
+        options: SPEECH_RUN_OPTIONS }, [copy.buffer]);
+    } catch (err) {
+      speechWorkerPending = null;
+      retireSpeechWorker();
+      reject(err);
+    }
+  });
+}
+
+/* Run one transcription, wherever the engine can: the
+   worker first, the page pipeline on any worker
+   failure. Resolves with the raw recognition result
+   the caller normalizes; rejects only when the page
+   pipeline itself fails, with its error. */
+async function runSpeechTranscription(modelId, samples, hooks) {
+  hooks = hooks || {};
+  const wired = {
+    onProgress: typeof hooks.onProgress === "function"
+      ? hooks.onProgress : function () {},
+    onReady: typeof hooks.onReady === "function"
+      ? hooks.onReady : function () {}
+  };
+  const worker = startSpeechWorker();
+  if (worker) {
+    try {
+      return await runSpeechInWorker(worker, modelId,
+        samples, wired);
+    } catch (err) {
+      /* The worker could not serve this job (the block
+         head says how each failure is told apart): fall
+         through to the page pipeline, whose outcome is
+         the job's outcome. */
+    }
+  }
+  const transcriber = await speechTranscriber(modelId);
+  wired.onReady();
+  return transcriber(samples, SPEECH_RUN_OPTIONS);
 }
 
 /* Decode a recording's bytes to the mono 16 kHz samples the
@@ -50135,22 +50492,32 @@ async function transcribeAudioAttachment(note, att, el) {
     showTranscribeStatus("Loading the speech model " +
       "(the first use downloads it)...");
     try {
-      const transcriber = await speechTranscriber(modelId);
-      showTranscribeStatus("Transcribing \"" + att.name + "\"...");
+      /* v2.78: the samples are decoded before the run
+         rather than after the build, because the build
+         now happens wherever the engine lives: inside
+         the worker when it serves (its download progress
+         relayed to the same status callback), or in the
+         runner's page pipeline when it falls back. The
+         status story is unchanged either way: the
+         Loading line above, download percentages as the
+         model arrives, and "Transcribing ..." the
+         moment the model stands ready, which the ready
+         hook reports on both paths. */
       const samples = await decodeSpeechAudio(blob);
       /* v2.73: the one Whisper pipeline is shared, so its runs
          are serialized through runSpeechJob: two recordings
          transcribe one after the other, never inside the same
-         pipeline at once (see the background block). */
+         pipeline at once (see the background block). v2.78:
+         the serialization wraps the whole run, model build
+         included, because the build is part of the worker's
+         one job in flight. */
       const result = await runSpeechJob(function () {
-        return transcriber(samples, {
-          chunk_length_s: 30,
-          stride_length_s: 5,
-          /* v2.76: word level timestamps, the finest the
-             pinned library produces (see
-             transcriptUnitsFromResult): the card's words
-             can then seek the player. */
-          return_timestamps: "word"
+        return runSpeechTranscription(modelId, samples, {
+          onProgress: speechProgressStatus,
+          onReady: function () {
+            showTranscribeStatus("Transcribing \"" + att.name +
+              "\"...");
+          }
         });
       });
       const text = result && typeof result.text === "string"
