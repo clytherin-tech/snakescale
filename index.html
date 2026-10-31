@@ -40,10 +40,64 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-30-SSN-V2720
-  Version: 2.72.0
+  BUILD STAMP: 2026-10-30-SSN-V2730
+  Version: 2.73.0
 
   Revision history:
+    v2.73.0 2026-10-30 Background transcription.
+                      A finished transcription,
+                      from an audio recording
+                      (Whisper) or an image
+                      (Tesseract), is a job
+                      bound to its note and its
+                      attachment instead of an
+                      errand on the open page:
+                      when the engine finishes,
+                      the text is inserted after
+                      the attachment's card in
+                      that note and saved
+                      through the ordinary save,
+                      wherever the editor has
+                      gone, and the completion
+                      toast names the note. A
+                      note open with a settled
+                      editor takes the insertion
+                      at the card as before. A
+                      note open with unsaved
+                      edits is never rewritten
+                      under the user's fingers,
+                      and its stored object is
+                      never touched either: the
+                      job waits, and lands the
+                      moment the user's own save
+                      settles, or in the stored
+                      body once the note is
+                      left. A note that is not
+                      open takes the insertion
+                      in its stored body, after
+                      the attachment's
+                      placeholder. The only
+                      failures are the note
+                      being deleted, trashed, or
+                      archived while the engine
+                      ran, or the attachment or
+                      its card being removed,
+                      each reported plainly, and
+                      the text is never inserted
+                      into a different note. One
+                      transcription per
+                      attachment at a time;
+                      Whisper runs are
+                      serialized on the shared
+                      pipeline, while Tesseract
+                      builds a worker per run
+                      and runs independently. A
+                      job lives in the page's
+                      memory: leaving the note
+                      and switching tabs are
+                      covered, but closing the
+                      app still ends a run, and
+                      nothing persists partway.
     v2.72.0 2026-10-30 Features, from the
                       Testing Checklist's
                       findings. (1) A Default
@@ -11042,8 +11096,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-30-SSN-V2720";
-const APP_VERSION = "2.72.0";
+const APP_BUILD = "2026-10-30-SSN-V2730";
+const APP_VERSION = "2.73.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -31263,6 +31317,12 @@ function openNoteNow(id) {
   renderNoteList();
   renderEditor();
   setMobileView("editor");
+  /* v2.73: a switch leaves the outgoing note closed, so a
+     transcription that was parked on its unsaved edits
+     can land in its stored body now (the settle has
+     already collected and saved those edits by the time
+     a switch reaches this point). */
+  void drainParkedTranscripts();
 }
 
 function currentNote() {
@@ -42023,6 +42083,10 @@ async function runEditorAutosave() {
        found the count still open. */
     swEditorSettledSeq = swEditorDirtySeq;
     maybeReloadForUpdate();
+    /* v2.73: the editor has closed, so any parked
+       transcription belongs to a note that is not open:
+       its stored body can take the text now. */
+    void drainParkedTranscripts();
     return "none";
   }
   const previousPath = notePath(note);
@@ -42072,6 +42136,11 @@ async function runEditorAutosave() {
     maybeReloadForUpdate();
     renderSidebar();
     renderNoteList();
+    /* v2.73: this pass settled the editor, so a parked
+       transcription for the open note can land at the
+       card, and parked jobs for other notes can land in
+       their stored bodies. */
+    void drainParkedTranscripts();
     return "landed";
   }
   setSaveState("Saving...");
@@ -42138,6 +42207,11 @@ async function runEditorAutosave() {
   /* v2.51: report the outcome to the note switch settle
      (see runEditorAutosave's header). Every other caller
      ignores this, as it ignored the debounce's return. */
+  /* v2.73: the pass ended; whatever it settled unblocks
+     the parked transcription drains (the attempts
+     themselves re-check the settlement, so a pass that
+     landed nothing simply parks them again). */
+  void drainParkedTranscripts();
   return saveLanded ? "landed" : (savePaused ? "held" : "failed");
 }
 
@@ -48633,64 +48707,334 @@ function hideTranscribeStatus() {
   transcribeStatusEl = null;
 }
 
-async function transcribeImage(note, att, el) {
-  if (!state.online) {
-    toast("Transcribing needs an internet connection: the text " +
-      "recognition library loads on first use. You appear to be offline.", true);
-    return;
-  }
-  let blob;
-  try {
-    blob = await fetchAttachmentBlob(att);
-  } catch (err) {
-    toast(err.message, true);
-    return;
-  }
-  showTranscribeStatus("Loading text recognition...");
-  let worker = null;
-  try {
-    const T = await loadTesseract();
-    worker = await createTesseractWorker(T, function (m) {
-      if (m && m.status === "recognizing text" &&
-          typeof m.progress === "number") {
-        showTranscribeStatus("Reading the text in \"" + att.name +
-          "\": " + Math.round(m.progress * 100) + "%");
-      }
-    });
-    const result = await worker.recognize(blob);
-    const text = result && result.data &&
-      typeof result.data.text === "string" ? result.data.text : "";
-    const trimmed = text.trim();
-    if (!trimmed) {
-      toast("No text found in the image.");
-      return;
+/* ----- v2.73: background transcription -----------------------
+   A transcription used to be a page errand: the recognized
+   text was inserted at the attachment's live element, and if
+   the note had been left by the time the engine finished,
+   the guard at the end of each transcribe run threw the text
+   away ("no longer in the open note"). Chris asked not to
+   have to wait on the page, so a finished transcription is
+   now a JOB, bound to the note and the attachment by id, and
+   its landing (attemptTranscriptLanding) puts the text after
+   the attachment's card in that note, wherever the editor
+   has gone:
+
+   - The note is open and its editor is settled: the text is
+     inserted at the card's live element, exactly as before,
+     and the ordinary autosave carries it to the store.
+   - The note is open with unsaved edits: the job PARKS. The
+     editor is never rewritten under the user's fingers, and
+     the note's stored object is never touched either (the
+     next collect would overwrite it from the editor and lose
+     the text). The parked job is retried at the moments the
+     editor provably settles: the end of every autosave pass
+     and the end of every note switch. Once the user's own
+     save has landed, the editor is clean and the first case
+     applies; if the user has switched away by then, the
+     third case does.
+   - The note is not open: the text is inserted into the
+     note's stored body, after the attachment's placeholder,
+     and saved through saveNoteToRepo, the ordinary save,
+     with its conflict rules, so the text is there on return
+     and survives a reload.
+
+   Three guarantees the seam is built to keep: the user's
+   edits are never overwritten (a dirty editor and its note
+   object are both left strictly alone); the transcript is
+   never discarded (a job stays registered until it lands or
+   fails honestly); and the text lands exactly once (the
+   registry entry is claimed, deleted, in the same breath as
+   the insertion, and landings for one note are serialized
+   on a per note chain, so two jobs for the same note can
+   never read-modify-write its body over each other).
+
+   The only failures to land: the note was deleted, moved to
+   Trash, or archived while the engine ran (trashed and
+   archived notes are read only to every save this app
+   makes, so a background save follows the same rule), the
+   attachment record was removed, or the card itself is no
+   longer in the note's text. Each is reported by a toast
+   that says what happened; the text is never inserted into
+   a different note.
+
+   Concurrency: one transcription per attachment at a time
+   (a second start is refused while one runs or is parked).
+   The Whisper pipeline is a single shared instance, so
+   audio jobs are serialized through runSpeechJob; Tesseract
+   builds a worker per run, so image jobs run independently,
+   and an image job and an audio job may overlap. The shared
+   status line is held by count (acquireTranscribeStatus /
+   releaseTranscribeStatus): the latest update wins the
+   text, and the line stands until the last running job
+   ends.
+
+   The platform boundary, stated plainly: a job lives in
+   this page's memory. Leaving the note, moving around the
+   app, or switching tabs with the app open are all covered;
+   closing the app still ends a run, and nothing persists
+   partway. */
+const transcriptionJobs = new Map();
+const activeTranscriptions = new Set();
+const transcriptLandingChains = new Map();
+let transcribeStatusHolds = 0;
+
+function transcriptionKey(noteId, attId) {
+  return noteId + "\n" + attId;
+}
+
+function acquireTranscribeStatus() {
+  transcribeStatusHolds++;
+}
+
+function releaseTranscribeStatus() {
+  transcribeStatusHolds = Math.max(0, transcribeStatusHolds - 1);
+  if (transcribeStatusHolds === 0) { hideTranscribeStatus(); }
+}
+
+/* The transcript paragraph, one shape for both engines and
+   both landing paths: plain text lines in one paragraph,
+   <br> between lines, built from text nodes only, because
+   recognized words are data, never markup. */
+function buildTranscriptParagraph(lines) {
+  const p = document.createElement("p");
+  lines.forEach(function (line, idx) {
+    p.appendChild(document.createTextNode(line));
+    if (idx < lines.length - 1) {
+      p.appendChild(document.createElement("br"));
     }
-    if (!el || !el.isConnected || currentNote() !== note) {
-      toast("The image is no longer in the open note, so the " +
-        "recognized text was not inserted.", true);
-      return;
+  });
+  return p;
+}
+
+/* Serialize the Whisper pipeline's runs (see the block
+   head): fn runs when every earlier speech job's run has
+   settled, and the chain survives a failed run. */
+let speechJobChain = Promise.resolve();
+function runSpeechJob(fn) {
+  const run = speechJobChain.then(fn, fn);
+  speechJobChain = run.then(function () {}, function () {});
+  return run;
+}
+
+/* Serialize one note's landings (see the block head): each
+   attempt runs after the previous attempt for the same
+   note settles, so two stored body rewrites for one note
+   can never interleave. Resolves with the attempt's
+   outcome: "landed", "parked", "failed", or "gone" (the
+   job was already claimed by an earlier attempt). */
+function queueTranscriptLanding(job) {
+  const prev = transcriptLandingChains.get(job.noteId) ||
+    Promise.resolve();
+  const run = prev.then(function () {
+    return attemptTranscriptLanding(job);
+  }, function () {
+    return attemptTranscriptLanding(job);
+  });
+  const tail = run.then(function () {}, function () {});
+  transcriptLandingChains.set(job.noteId, tail);
+  tail.then(function () {
+    if (transcriptLandingChains.get(job.noteId) === tail) {
+      transcriptLandingChains.delete(job.noteId);
     }
-    /* The recognized text becomes a new paragraph right after the
-       image, built from text nodes line by line: OCR output is
-       data, never markup. */
-    const p = document.createElement("p");
-    const lines = trimmed.split(/\r?\n/);
-    lines.forEach(function (line, idx) {
-      p.appendChild(document.createTextNode(line));
-      if (idx < lines.length - 1) {
-        p.appendChild(document.createElement("br"));
-      }
-    });
-    el.after(p);
+  });
+  return run;
+}
+
+async function attemptTranscriptLanding(job) {
+  if (transcriptionJobs.get(job.key) !== job) { return "gone"; }
+  job.parked = false;
+  const isAudio = job.kind === "audio";
+  const thing = isAudio ? "recording" : "image";
+  const titleOf = function (n) {
+    return n.title || "Untitled note";
+  };
+  const fail = function (reason) {
+    transcriptionJobs.delete(job.key);
+    toast("The text from \"" + job.attName + "\" could not be " +
+      "inserted: " + reason, true);
+    return "failed";
+  };
+  const note = findNoteById(job.noteId);
+  if (!note) {
+    return fail("its note was deleted while the transcription " +
+      "was running.");
+  }
+  if (note.trashed) {
+    return fail("its note was moved to Trash while the " +
+      "transcription was running, and trashed notes are read " +
+      "only.");
+  }
+  if (note.archived) {
+    return fail("its note was archived while the transcription " +
+      "was running, and archived notes are read only.");
+  }
+  const att = (note.attachments || []).find(function (a) {
+    return a.id === job.attId;
+  });
+  if (!att) {
+    return fail("the " + thing + " was removed from the note " +
+      "while the transcription was running.");
+  }
+  if (currentNote() === note) {
+    /* The editor is showing this note. A switch settle in
+       flight, or edits the autosave has not landed yet, both
+       mean hands off: park, and the drains retry when the
+       editor settles. */
+    if (noteSettleInFlight || swEditorUnsettled()) {
+      job.parked = true;
+      return "parked";
+    }
+    const bodyEl = document.getElementById("noteBody");
+    const el = bodyEl ? bodyEl.querySelector(
+      ".ss-attachment[data-attachment-id=\"" + job.attId + "\"]")
+      : null;
+    if (!el) {
+      return fail("the " + thing + " is no longer in the " +
+        "note's text.");
+    }
+    el.after(buildTranscriptParagraph(job.lines));
+    transcriptionJobs.delete(job.key);
     markDirty();
-    toast("Text inserted below the image.");
-  } catch (err) {
-    toast("Transcribe failed: " + err.message, true);
-  } finally {
-    hideTranscribeStatus();
-    if (worker && typeof worker.terminate === "function") {
-      try { await worker.terminate(); } catch (e) { /* already gone */ }
+    toast("Text inserted below the " + thing + " in \"" +
+      titleOf(note) + "\".");
+    return "landed";
+  }
+  /* The note is not open: its stored body is the text of
+     record. Insert after the attachment's placeholder and
+     save through the ordinary save. The registry entry is
+     claimed in the same breath as the body changes, before
+     the save is awaited, so no second attempt can insert
+     the text again; if the save itself then fails, the text
+     stands in the note on this device exactly once and the
+     failure is reported as a save failure, the way a failed
+     save anywhere in this app is reported. */
+  let claimed = false;
+  try {
+    await ensureNoteBodyLoaded(note);
+    if (note.trashed || note.archived) {
+      return fail("its note left the notebook while the " +
+        "transcription was running, and it is read only now.");
     }
+    const rec = (note.attachments || []).find(function (a) {
+      return a.id === job.attId;
+    });
+    if (!rec) {
+      return fail("the " + thing + " was removed from the " +
+        "note while the transcription was running.");
+    }
+    const holder = document.createElement("div");
+    holder.innerHTML = note.body || "";
+    const ph = holder.querySelector(
+      ".ss-attachment[data-attachment-id=\"" + job.attId + "\"]");
+    if (!ph) {
+      return fail("the " + thing + " is no longer in the " +
+        "note's text.");
+    }
+    ph.after(buildTranscriptParagraph(job.lines));
+    note.body = canonicalizeAttachmentPlaceholders(holder.innerHTML);
+    note.previewText = htmlToText(note.body).slice(0, 140);
+    transcriptionJobs.delete(job.key);
+    claimed = true;
+    await saveNoteToRepo(note);
+    renderAll();
+    toast("Text inserted below the " + thing + " in \"" +
+      titleOf(note) + "\".");
+    return "landed";
+  } catch (err) {
+    if (claimed) {
+      /* The text is in the note on this device, exactly
+         once; only its save failed. */
+      toast("The text was added to \"" + titleOf(note) +
+        "\" on this device, but its save failed: " +
+        err.message, true);
+      return "landed";
+    }
+    return fail("the note's stored text could not be updated: " +
+      err.message);
+  }
+}
+
+/* Retry every parked job. Called where the editor provably
+   settles: at the end of every autosave pass (the user's own
+   save just landed) and at the end of every note switch
+   (the note that was left is no longer open, so its stored
+   body can take the text). Attempts are guarded inside
+   attemptTranscriptLanding, so a drain that arrives early
+   simply parks the job again. */
+function drainParkedTranscripts() {
+  transcriptionJobs.forEach(function (job) {
+    if (job.parked) { void queueTranscriptLanding(job); }
+  });
+}
+
+async function transcribeImage(note, att, el) {
+  /* v2.73: one transcription per attachment at a time (see
+     the background transcription block above); a second
+     start while one is running or parked is refused, so a
+     result can never land twice. */
+  const key = transcriptionKey(note.id, att.id);
+  if (activeTranscriptions.has(key) || transcriptionJobs.has(key)) {
+    toast("\"" + att.name + "\" is already being transcribed.", true);
+    return;
+  }
+  activeTranscriptions.add(key);
+  try {
+    if (!state.online) {
+      toast("Transcribing needs an internet connection: the text " +
+        "recognition library loads on first use. You appear to be offline.", true);
+      return;
+    }
+    let blob;
+    try {
+      blob = await fetchAttachmentBlob(att);
+    } catch (err) {
+      toast(err.message, true);
+      return;
+    }
+    acquireTranscribeStatus();
+    showTranscribeStatus("Loading text recognition...");
+    let worker = null;
+    try {
+      const T = await loadTesseract();
+      worker = await createTesseractWorker(T, function (m) {
+        if (m && m.status === "recognizing text" &&
+            typeof m.progress === "number") {
+          showTranscribeStatus("Reading the text in \"" + att.name +
+            "\": " + Math.round(m.progress * 100) + "%");
+        }
+      });
+      const result = await worker.recognize(blob);
+      const text = result && result.data &&
+        typeof result.data.text === "string" ? result.data.text : "";
+      const trimmed = text.trim();
+      if (!trimmed) {
+        toast("No text found in the image.");
+        return;
+      }
+      /* v2.73: the words are a job now, not a page errand: the
+         landing puts them after the image in the note they
+         belong to, wherever the editor has gone (see
+         attemptTranscriptLanding in the background block). */
+      const job = { key: key, noteId: note.id, attId: att.id,
+        kind: "image", attName: att.name,
+        lines: trimmed.split(/\r?\n/), parked: false };
+      transcriptionJobs.set(key, job);
+      const outcome = await queueTranscriptLanding(job);
+      if (outcome === "parked") {
+        toast("The text from \"" + att.name + "\" will be added " +
+          "to \"" + (note.title || "Untitled note") + "\" as soon " +
+          "as its current edits have saved.");
+      }
+    } catch (err) {
+      toast("Transcribe failed: " + err.message, true);
+    } finally {
+      releaseTranscribeStatus();
+      if (worker && typeof worker.terminate === "function") {
+        try { await worker.terminate(); } catch (e) { /* already gone */ }
+      }
+    }
+  } finally {
+    activeTranscriptions.delete(key);
   }
 }
 
@@ -48953,51 +49297,71 @@ async function decodeSpeechAudio(blob) {
 }
 
 async function transcribeAudioAttachment(note, att, el) {
-  if (!state.online) {
-    toast("Transcribing needs an internet connection: the speech " +
-      "model loads on first use. You appear to be offline.", true);
+  /* v2.73: one transcription per attachment at a time, the
+     image run's rule (see the background block above). */
+  const key = transcriptionKey(note.id, att.id);
+  if (activeTranscriptions.has(key) || transcriptionJobs.has(key)) {
+    toast("\"" + att.name + "\" is already being transcribed.", true);
     return;
   }
-  let blob;
+  activeTranscriptions.add(key);
   try {
-    blob = await fetchAttachmentBlob(att);
-  } catch (err) {
-    toast(err.message, true);
-    return;
-  }
-  showTranscribeStatus("Loading the speech model " +
-    "(the first use downloads it)...");
-  try {
-    const transcriber = await speechTranscriber();
-    showTranscribeStatus("Transcribing \"" + att.name + "\"...");
-    const samples = await decodeSpeechAudio(blob);
-    const result = await transcriber(samples, {
-      chunk_length_s: 30,
-      stride_length_s: 5
-    });
-    const text = result && typeof result.text === "string"
-      ? result.text.trim() : "";
-    if (!text) {
-      toast("No speech was recognized in this recording.");
+    if (!state.online) {
+      toast("Transcribing needs an internet connection: the speech " +
+        "model loads on first use. You appear to be offline.", true);
       return;
     }
-    if (!el || !el.isConnected || currentNote() !== note) {
-      toast("The recording is no longer in the open note, so the " +
-        "transcribed text was not inserted.", true);
+    let blob;
+    try {
+      blob = await fetchAttachmentBlob(att);
+    } catch (err) {
+      toast(err.message, true);
       return;
     }
-    /* The words become a new paragraph right after the card,
-       built from a text assignment: recognized speech is data,
-       never markup, the image transcribe's own rule. */
-    const p = document.createElement("p");
-    p.textContent = text;
-    el.after(p);
-    markDirty();
-    toast("Text inserted below the recording.");
-  } catch (err) {
-    toast("Transcribe failed: " + err.message, true);
+    acquireTranscribeStatus();
+    showTranscribeStatus("Loading the speech model " +
+      "(the first use downloads it)...");
+    try {
+      const transcriber = await speechTranscriber();
+      showTranscribeStatus("Transcribing \"" + att.name + "\"...");
+      const samples = await decodeSpeechAudio(blob);
+      /* v2.73: the one Whisper pipeline is shared, so its runs
+         are serialized through runSpeechJob: two recordings
+         transcribe one after the other, never inside the same
+         pipeline at once (see the background block). */
+      const result = await runSpeechJob(function () {
+        return transcriber(samples, {
+          chunk_length_s: 30,
+          stride_length_s: 5
+        });
+      });
+      const text = result && typeof result.text === "string"
+        ? result.text.trim() : "";
+      if (!text) {
+        toast("No speech was recognized in this recording.");
+        return;
+      }
+      /* v2.73: the words are a job now, not a page errand: the
+         landing puts them after the card in the note they
+         belong to, wherever the editor has gone (see
+         attemptTranscriptLanding in the background block). */
+      const job = { key: key, noteId: note.id, attId: att.id,
+        kind: "audio", attName: att.name,
+        lines: [text], parked: false };
+      transcriptionJobs.set(key, job);
+      const outcome = await queueTranscriptLanding(job);
+      if (outcome === "parked") {
+        toast("The words from \"" + att.name + "\" will be added " +
+          "to \"" + (note.title || "Untitled note") + "\" as soon " +
+          "as its current edits have saved.");
+      }
+    } catch (err) {
+      toast("Transcribe failed: " + err.message, true);
+    } finally {
+      releaseTranscribeStatus();
+    }
   } finally {
-    hideTranscribeStatus();
+    activeTranscriptions.delete(key);
   }
 }
 
