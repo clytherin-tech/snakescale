@@ -40,10 +40,78 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-30-SSN-V2750
-  Version: 2.75.0
+  BUILD STAMP: 2026-10-31-SSN-V2760
+  Version: 2.76.0
 
   Revision history:
+    v2.76.0 2026-10-31 Transcripts in the audio
+                      card, click to seek, and a
+                      transcription model
+                      choice. A recording's
+                      transcript no longer lands
+                      as paragraphs in the note
+                      body: it is stored on the
+                      recording's own attachment
+                      record and shown in the
+                      card in a collapsible
+                      Transcript section,
+                      written there by the
+                      background transcription
+                      job wherever the editor
+                      has gone, under the same
+                      settle, park, and failure
+                      rules as before, and the
+                      completion toast is
+                      unchanged. The run now
+                      asks the speech model for
+                      word timings, the finest
+                      the pinned library
+                      produces, and each timed
+                      word (or, when a run
+                      returns only segments,
+                      each segment) is a button
+                      in the section that seeks
+                      the card's player to its
+                      start and plays from
+                      there; the word sounding
+                      now is highlighted as the
+                      player runs, and a run
+                      that returns no timings
+                      shows as plain text.
+                      Transcribing again
+                      replaces the stored
+                      transcript; a duplicate or
+                      a merge carries it with
+                      the copied recording;
+                      transcripts already
+                      sitting as paragraphs in
+                      older notes are untouched,
+                      and image OCR still lands
+                      as a paragraph. Settings
+                      (Editor) gains a
+                      Transcription model
+                      choice, in Chris's labels:
+                      Fast (the whisper-tiny.en
+                      every earlier build used),
+                      Normal (whisper-base.en),
+                      and Best (whisper-
+                      small.en). The choice is
+                      per device, applies to the
+                      next run started, and a
+                      run keeps the model it
+                      started with; each model
+                      downloads on its first use
+                      and is cached per model
+                      after that. One cost,
+                      stated plainly: transcript
+                      words no longer sit in the
+                      note body, so note search,
+                      which reads the title, the
+                      body text, attachment
+                      names, and tags, no longer
+                      finds a note by words that
+                      were only ever spoken in
+                      its recordings.
     v2.75.0 2026-10-30 Fix for attachment
                       deletes that announced
                       success without removing
@@ -7608,6 +7676,43 @@ body.dark #conflictReloadBtn{background:#574512;color:#FFE1A8;border-color:#A887
    notes land as audio attachments), so a recording can be played
    where it sits in the note instead of only downloaded. */
 .ss-att-audio{display:block;width:100%;margin-top:8px;}
+
+/* ---------- v2.76: the transcript section in the audio card ----------
+   Editor furniture inside the card (rebuilt from the record
+   on every render, stripped on save like the player): a
+   quiet header row over the words. Every color is a theme
+   variable, so it dresses in both themes like the rest of
+   the card. */
+.ss-att-transcript{
+  margin-top:8px;border-top:1px solid var(--border);padding-top:4px;
+}
+.ss-att-transcript-head{
+  display:flex;align-items:center;gap:6px;
+  background:none;border:none;padding:4px 2px;cursor:pointer;
+  color:var(--primary);font:inherit;font-size:13px;font-weight:700;
+  border-radius:var(--radius-button);text-align:left;
+}
+.ss-att-transcript-head:hover{color:var(--accent);}
+.ss-att-transcript-chevron{
+  display:inline-flex;transform:rotate(0deg);
+  transition:transform var(--motion);
+}
+.ss-att-transcript.ss-open .ss-att-transcript-chevron{
+  transform:rotate(90deg);
+}
+.ss-att-transcript-text{margin:2px 0 4px;font-size:14px;line-height:1.6;}
+/* A timed unit is bare text until pressed or sounding: no
+   box and no layout shift; the sounding one takes the soft
+   wash and the primary color, and the hover wash alone
+   marks the rest as pressable. */
+.ss-att-unit{
+  background:none;border:none;padding:0;margin:0;cursor:pointer;
+  font:inherit;color:inherit;border-radius:4px;text-align:left;
+}
+.ss-att-unit:hover{background:var(--soft);}
+.ss-att-unit.ss-att-unit-now{
+  background:var(--soft);color:var(--primary);font-weight:600;
+}
 .ss-att-meta{font-size:12.5px;color:var(--muted);margin:2px 0 8px;}
 .ss-att-msg{font-size:13.5px;color:var(--muted);margin:4px 0 8px;}
 .ss-att-actions{display:flex;gap:6px;flex-wrap:wrap;}
@@ -10702,6 +10807,21 @@ body.dark .version-date{color:var(--accent);}
         </select>
         <div class="settings-help">What a paste carrying formatting does first. After any rich paste, the Paste options popup beside the pasted text still offers the other two modes for that paste.</div>
       </div>
+      <!-- v2.76: the transcription model choice. The select
+           is the whole control, like the paste choice above:
+           its shown value is the saved choice, and it is
+           saved on this device only, because each device
+           downloads and caches the model it uses. A run
+           already going keeps the model it started with. -->
+      <div class="field">
+        <label for="settingsTranscriptionModelSelect">Transcription model</label>
+        <select id="settingsTranscriptionModelSelect">
+          <option value="fast">Fast</option>
+          <option value="normal">Normal</option>
+          <option value="best">Best</option>
+        </select>
+        <div class="settings-help">Which speech model reads a recording when you Transcribe it, on this device. The model downloads the first time it is used and is cached on this device after that. Fast is the smallest download and the quickest read; Normal reads more accurately; Best reads the most accurately and is the largest download. Changing this never re-reads a recording: it applies to the next transcription you start.</div>
+      </div>
     </section>
 
     <section class="settings-section hidden" id="settingsPanelHistory" role="tabpanel" data-settings-panel="history" aria-labelledby="settingsHistoryTitle">
@@ -11199,8 +11319,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-30-SSN-V2750";
-const APP_VERSION = "2.75.0";
+const APP_BUILD = "2026-10-31-SSN-V2760";
+const APP_VERSION = "2.76.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -11481,6 +11601,16 @@ const state = {
                             // edited in the Settings
                             // modal, NOT in the synced
                             // index.
+  transcriptionModel: "fast", // v2.76: the transcription
+                            // model choice ("fast",
+                            // "normal", or "best"; see
+                            // SPEECH_MODELS). Per device
+                            // like the other choices here,
+                            // because the model files
+                            // cache on the device that
+                            // downloads them; remembered
+                            // in settings and edited in
+                            // the Settings modal.
   versionsLimit: 10,        // v2.8: how many past versions to keep
                             // per note (0 turns version history
                             // off), remembered in settings and
@@ -12343,6 +12473,15 @@ function loadSettings() {
   if (typeof s.defaultNotebook === "string") {
     state.defaultNotebook = s.defaultNotebook;
   }
+  /* v2.76: the transcription model choice. Fast is the
+     default (the model every earlier build used), so
+     only an explicitly stored "normal" or "best" moves
+     it; anything else (an absent field from an older
+     build, a damaged value) leaves Fast in place. */
+  if (s.transcriptionModel === "normal" ||
+      s.transcriptionModel === "best") {
+    state.transcriptionModel = s.transcriptionModel;
+  }
 }
 
 
@@ -12366,7 +12505,8 @@ function saveSettings() {
     noteReminders: state.noteReminders,   // v2.35: note reminder notifications
     noteReminderFired: state.noteReminderFired,   // v2.35: the fired stamps
     startView: state.startView,   // v2.33: the When opening choice
-    defaultNotebook: state.defaultNotebook   // v2.72: the default notebook
+    defaultNotebook: state.defaultNotebook,   // v2.72: the default notebook
+    transcriptionModel: state.transcriptionModel   // v2.76: the transcription model choice
   }));
 }
 
@@ -13261,6 +13401,9 @@ async function storeDeleteFile(path, token, message) {
    The v1.2 attachments line is a single line JSON array of small objects:
    {id, provider, fileId, name, storageName, mime, size, created}. JSON
    string escaping guarantees the value stays on one line. The attachment
+   v2.76: an audio record may carry one more field, transcript (see
+   sanitizeTranscript): the recording's transcribed words, their
+   timings, and the model that read them, all inside the same JSON.
    BINARIES never live in the notes store; they sit in the attachments
    subfolder of the user's SnakeScale Notes folder in Google Drive,
    and this line only carries the provider file references.
@@ -13282,7 +13425,54 @@ function notePath(note) {
    v2.46: one optional field rides along only when it is
    exactly true: sketch, the marking of a sketch record
    (see the sketch section). It is absent from every
-   other record, so their shape is unchanged. */
+   other record, so their shape is unchanged.
+   v2.76: one more optional field rides along only when
+   it holds a well formed transcript: transcript, a
+   recording's transcribed words with their timings
+   (see sanitizeTranscript). Absent otherwise, same
+   rule. */
+/* v2.76: one attachment record's transcript, the shape
+   transcribeAudioAttachment stores and the audio card reads:
+   { text, units, model, at }. text is the whole transcript;
+   units, when the run returned timings, are its timed pieces
+   ({start, end, text}, seconds, finest first: word level
+   when the model produced word timings, the segment chunks
+   when it produced only those); model is the speech model
+   id that read it; at is when the run finished. Kept only
+   when the text is a real string with words in it; the
+   units are coerced one by one and dropped when none
+   survive (the text then stands plain, with no click
+   targets). Returns null for anything else, so a damaged
+   or hand edited value degrades to no transcript, never to
+   a broken record. The returned object is always freshly
+   built, so storing it never shares an object with its
+   source. */
+function sanitizeTranscript(t) {
+  if (!t || typeof t !== "object" || Array.isArray(t)) {
+    return null;
+  }
+  const text = typeof t.text === "string" ? t.text : "";
+  if (!text.trim()) { return null; }
+  const out = { text: text };
+  if (Array.isArray(t.units)) {
+    const units = [];
+    t.units.forEach(function (u) {
+      if (!u || typeof u !== "object") { return; }
+      const start = Number(u.start);
+      if (!isFinite(start) || start < 0) { return; }
+      let end = Number(u.end);
+      if (!isFinite(end) || end < start) { end = start; }
+      const ut = typeof u.text === "string" ? u.text.trim() : "";
+      if (!ut) { return; }
+      units.push({ start: start, end: end, text: ut });
+    });
+    if (units.length) { out.units = units; }
+  }
+  out.model = typeof t.model === "string" ? t.model : "";
+  out.at = typeof t.at === "string" ? t.at : "";
+  return out;
+}
+
 function sanitizeAttachments(list) {
   if (!Array.isArray(list)) { return []; }
   const out = [];
@@ -13304,6 +13494,19 @@ function sanitizeAttachments(list) {
        truthy string in the field) serializes exactly as every
        record did before sketches existed. */
     if (a.sketch === true) { rec.sketch = true; }
+    /* v2.76: a recording's transcript rides its record
+       the same way, kept only when it is a well formed
+       transcript (see sanitizeTranscript), so a
+       transcriptless record serializes exactly as
+       every record did before transcripts lived on
+       records. Because every path that reads or writes
+       a note's records passes through this function
+       (serialize, parse, the editor collect, the cache,
+       version snapshots, the drop box import), the
+       transcript survives every round trip those paths
+       make. */
+    const tr = sanitizeTranscript(a.transcript);
+    if (tr) { rec.transcript = tr; }
     out.push(rec);
   });
   return out;
@@ -23466,6 +23669,16 @@ async function copyOneAttachment(source, att) {
      attribute rides the copied body, so the copy's
      image menu offers Edit sketch like the original's. */
   if (att.sketch === true) { newRec.sketch = true; }
+  /* v2.76: a copied recording keeps its transcript: the
+     words describe the copied bytes exactly as they
+     described the original's, timings included, so the
+     copy's card shows the section and its words seek
+     the copy's own player. Sanitized into fresh
+     objects, so the two records never share one. */
+  if (att.transcript) {
+    const trCopy = sanitizeTranscript(att.transcript);
+    if (trCopy) { newRec.transcript = trCopy; }
+  }
   return {
     record: newRec,
     uploaded: { driver: driver, fileId: String(result.fileId) }
@@ -32157,6 +32370,11 @@ function syncSettingsControls() {
      choice, its options rebuilt from the notebooks that
      stand (see renderDefaultNotebookSelect). */
   renderDefaultNotebookSelect();
+  /* v2.76: the Transcription model select shows the saved
+     choice (Fast unless this device chose otherwise). */
+  const speechSelect = document.getElementById(
+    "settingsTranscriptionModelSelect");
+  if (speechSelect) { speechSelect.value = speechModelKey(); }
   /* v2.24: the Notifications section shows the live
      permission and the saved reminders switch. */
   renderNotificationSettings();
@@ -32274,6 +32492,25 @@ function applyDefaultNotebookFromSelect() {
   } else {
     state.defaultNotebook = "";
     select.value = "";
+  }
+  saveSettings();
+}
+
+/* v2.76: the Transcription model select's change handler.
+   The choice persists at once, like every Settings
+   control, on this device only, and governs the next
+   transcription started; a run in flight keeps the model
+   it started with (see transcribeAudioAttachment). */
+function applySpeechModelFromSelect() {
+  const select = document.getElementById(
+    "settingsTranscriptionModelSelect");
+  if (!select) { return; }
+  if (select.value === "normal" || select.value === "best" ||
+      select.value === "fast") {
+    state.transcriptionModel = select.value;
+  } else {
+    state.transcriptionModel = "fast";
+    select.value = "fast";
   }
   saveSettings();
 }
@@ -47785,6 +48022,15 @@ async function hydrateOneAttachment(note, el) {
   if (isAudioAttachment(att) && driver && status.connected) {
     appendAudioPlayer(el, att, driver);
   }
+  /* v2.76: an audio card whose record carries a
+     transcript shows it in the card's own collapsible
+     section, built from the record (never from the
+     body: canonicalization strips the card's contents
+     on save, and the section is rebuilt here on every
+     render). It stands whether or not the player could
+     load, and in read only notes too: reading a
+     transcript changes nothing there. */
+  if (audioCard) { renderTranscriptSection(el, att); }
 }
 
 /* v2.14: audio attachments, by mime type with the file name
@@ -47810,7 +48056,24 @@ async function appendAudioPlayer(el, att, driver) {
     audio.controls = true;
     audio.preload = "metadata";
     audio.src = url;
-    el.appendChild(audio);
+    /* v2.76: the transcript section's seek and highlight
+       reach the player through the card (see
+       seekTranscriptUnit); the highlight follows the
+       player's own clock. */
+    el._ssAudioEl = audio;
+    audio.addEventListener("timeupdate", function () {
+      syncTranscriptHighlight(el);
+    });
+    /* v2.76: the player stands above the transcript section
+       when the card carries one: hydration starts this load
+       without awaiting it, so the section may already stand
+       by the time the player lands. */
+    const sec = el.querySelector(".ss-att-transcript");
+    if (sec) {
+      el.insertBefore(audio, sec);
+    } else {
+      el.appendChild(audio);
+    }
   } catch (err) {
     if (!el.isConnected) { return; }
     const fail = document.createElement("div");
@@ -47818,6 +48081,154 @@ async function appendAudioPlayer(el, att, driver) {
     fail.textContent = "This recording could not be loaded: " + err.message;
     el.appendChild(fail);
   }
+}
+
+/* ----- v2.76: the transcript section in the audio card ------
+   A recording's transcript lives on its attachment record
+   (att.transcript, see sanitizeTranscript), not in the note
+   body, and the card renders it as a collapsible section
+   under the player: a Transcript header (a real button
+   wearing the sidebar chevron, collapsed by default) over
+   the words. When the run captured timings, each unit is a
+   button that seeks the card's own player to the unit's
+   start and plays from there, and the unit sounding now is
+   highlighted as the player runs. With no timings the
+   words stand as plain text with no click targets. The
+   section is editor furniture like the player:
+   canonicalization rebuilds placeholders as empty shells
+   on save, so it never reaches the note file; it is rebuilt
+   from the record on every hydration, and rebuilt in place
+   by the transcription landing when a run finishes on the
+   open note. */
+function renderTranscriptSection(el, att) {
+  if (!el) { return; }
+  const old = el.querySelector(".ss-att-transcript");
+  if (old) { old.remove(); }
+  const tr = att ? sanitizeTranscript(att.transcript) : null;
+  if (!tr) { return; }
+  const wrap = document.createElement("div");
+  wrap.className = "ss-att-transcript";
+  const head = document.createElement("button");
+  head.type = "button";
+  head.className = "ss-att-transcript-head";
+  head.setAttribute("aria-expanded", "false");
+  const chev = document.createElement("span");
+  chev.className = "ss-att-transcript-chevron";
+  chev.setAttribute("aria-hidden", "true");
+  chev.innerHTML = "<svg viewBox=\"0 0 16 16\" width=\"12\" " +
+    "height=\"12\" aria-hidden=\"true\"><path d=\"M6 3l5 5-5 5\" " +
+    "stroke=\"currentColor\" stroke-width=\"1.8\" " +
+    "stroke-linecap=\"round\" stroke-linejoin=\"round\" " +
+    "fill=\"none\"/></svg>";
+  head.appendChild(chev);
+  const label = document.createElement("span");
+  label.textContent = "Transcript";
+  head.appendChild(label);
+  const body = document.createElement("div");
+  body.className = "ss-att-transcript-body hidden";
+  const para = document.createElement("p");
+  para.className = "ss-att-transcript-text";
+  if (tr.units && tr.units.length) {
+    tr.units.forEach(function (u, idx) {
+      if (idx > 0) {
+        para.appendChild(document.createTextNode(" "));
+      }
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "ss-att-unit";
+      b.textContent = u.text;
+      b.setAttribute("data-start", String(u.start));
+      b.setAttribute("data-end", String(u.end));
+      /* The card sits inside the contenteditable body; the
+         press is swallowed on the way down so a seek never
+         moves the editor caret, the card buttons' own rule. */
+      b.addEventListener("mousedown", function (ev) {
+        ev.preventDefault();
+      });
+      b.addEventListener("click", function () {
+        seekTranscriptUnit(el, att, u.start);
+      });
+      para.appendChild(b);
+    });
+  } else {
+    para.textContent = tr.text;
+  }
+  body.appendChild(para);
+  head.addEventListener("mousedown", function (ev) {
+    ev.preventDefault();
+  });
+  head.addEventListener("click", function () {
+    const open = body.classList.toggle("hidden") === false;
+    wrap.classList.toggle("ss-open", open);
+    head.setAttribute("aria-expanded", open ? "true" : "false");
+  });
+  wrap.appendChild(head);
+  wrap.appendChild(body);
+  el.appendChild(wrap);
+}
+
+/* One timed unit's click: the card's own player goes to
+   the unit's start and plays from there. A player that has
+   not been built yet (its fetch is still in flight, or the
+   note rendered while signed out) is built through the
+   player's own load path first, and the seek lands when it
+   stands; a player that cannot be built that way (signed
+   out, or its load failed onto the card as a message)
+   leaves the click a quiet no-op rather than an error. */
+async function seekTranscriptUnit(el, att, start) {
+  if (!el || !att) { return; }
+  let audio = el.querySelector("audio.ss-att-audio");
+  if (!audio) {
+    const driver = providers[att.provider];
+    if (!driver) { return; }
+    const status = await driver.getStatus();
+    if (!status || !status.connected) { return; }
+    if (!el._ssAudioLoading) {
+      el._ssAudioLoading = true;
+      try {
+        await appendAudioPlayer(el, att, driver);
+      } finally {
+        el._ssAudioLoading = false;
+      }
+    }
+    audio = el.querySelector("audio.ss-att-audio");
+    if (!audio) { return; }
+  }
+  try {
+    audio.currentTime = start;
+  } catch (e) { /* a player with no media yet keeps its place */ }
+  const played = audio.play && audio.play();
+  if (played && typeof played.catch === "function") {
+    played.catch(function () {
+      /* the browser may refuse until a fuller gesture; the
+         seek itself stands either way. */
+    });
+  }
+  syncTranscriptHighlight(el);
+}
+
+/* The sounding unit's highlight, driven by the player's
+   timeupdate (wired in appendAudioPlayer) and by a seek:
+   the lit unit is the last one whose start the playhead
+   has reached, so a gap between units keeps the most
+   recent one lit, a seek lights its target at once, and
+   before the first unit nothing is lit. Pure class
+   changes on standing buttons: no layout moves. */
+function syncTranscriptHighlight(el) {
+  if (!el) { return; }
+  const audio = el.querySelector("audio.ss-att-audio");
+  if (!audio) { return; }
+  const units = el.querySelectorAll(".ss-att-unit");
+  if (!units.length) { return; }
+  const t = Number(audio.currentTime) || 0;
+  let active = null;
+  units.forEach(function (b) {
+    const s = parseFloat(b.getAttribute("data-start"));
+    if (isFinite(s) && s <= t) { active = b; }
+  });
+  units.forEach(function (b) {
+    b.classList.toggle("ss-att-unit-now", b === active);
+  });
 }
 
 /* ----- v1.6: inline PDF preview ---------------------------------------
@@ -48860,6 +49271,16 @@ function hideTranscribeStatus() {
    that says what happened; the text is never inserted into
    a different note.
 
+   v2.76 addendum: an AUDIO job's payload changed shape.
+   The transcript no longer lands as body paragraphs; it
+   is written onto the attachment's record (its text, its
+   timed units, and the model that read it), and the card
+   renders it in its own section (see the transcript
+   section block). The seam, the parking, the claiming,
+   and the failure rules are unchanged; only what is
+   written differs, and only for audio. Image jobs still
+   land their lines as a body paragraph, exactly as above.
+
    Concurrency: one transcription per attachment at a time
    (a second start is refused while one runs or is parked).
    The Whisper pipeline is a single shared instance, so
@@ -48995,7 +49416,20 @@ async function attemptTranscriptLanding(job) {
       return fail("the " + thing + " is no longer in the " +
         "note's text.");
     }
-    el.after(buildTranscriptParagraph(job.lines));
+    if (isAudio) {
+      /* v2.76: an audio job lands on the record, not in
+         the body: the transcript is written onto the
+         note's own record for the attachment (replacing
+         any earlier one), the open card's section is
+         rebuilt from it in place, and the dirty mark
+         carries the record into the note's next save
+         like any attachment edit. The editor's text is
+         never touched. */
+      att.transcript = sanitizeTranscript(job.transcript);
+      renderTranscriptSection(el, att);
+    } else {
+      el.after(buildTranscriptParagraph(job.lines));
+    }
     transcriptionJobs.delete(job.key);
     markDirty();
     toast("Text inserted below the " + thing + " in \"" +
@@ -49033,9 +49467,21 @@ async function attemptTranscriptLanding(job) {
       return fail("the " + thing + " is no longer in the " +
         "note's text.");
     }
-    ph.after(buildTranscriptParagraph(job.lines));
-    note.body = canonicalizeAttachmentPlaceholders(holder.innerHTML);
-    note.previewText = htmlToText(note.body).slice(0, 140);
+    if (isAudio) {
+      /* v2.76: the stored body is not touched at all: the
+         transcript goes onto the loaded note's record for
+         the attachment, and the save below writes the
+         file with it, the record carrying it exactly the
+         way serializeNote writes every record field. The
+         registry entry is claimed in the same breath,
+         before the save is awaited, exactly as the body
+         path claims it. */
+      rec.transcript = sanitizeTranscript(job.transcript);
+    } else {
+      ph.after(buildTranscriptParagraph(job.lines));
+      note.body = canonicalizeAttachmentPlaceholders(holder.innerHTML);
+      note.previewText = htmlToText(note.body).slice(0, 140);
+    }
     transcriptionJobs.delete(job.key);
     claimed = true;
     await saveNoteToRepo(note);
@@ -49280,8 +49726,10 @@ function runAttCardMenuAction(action) {
    The browser's live speech recognition (the one a voice note
    records with) cannot read a saved file, so a recording's words
    are read by a real speech model instead: transformers.js with
-   the whisper-tiny.en model, loaded from its CDN the first time
-   Transcribe is used, and only then, exactly the bargain the
+   a Whisper model (v2.76: the Settings choice below; Fast is
+   the whisper-tiny.en every earlier build used), loaded from
+   its CDN the first time Transcribe is used, and only then,
+   exactly the bargain the
    image Transcribe made with Tesseract. Everything after the
    load happens on the device: the model files come down from
    the model host once (the library caches them), the recording
@@ -49293,7 +49741,29 @@ const SPEECH_LIB_URL =
   "https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2/dist/transformers.min.js";
 const SPEECH_LIB_DIST =
   "https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2/dist/";
-const SPEECH_MODEL_ID = "Xenova/whisper-tiny.en";
+/* v2.76: the transcription model is a Settings choice
+   (Settings, Editor), in Chris's labels: Fast, Normal,
+   Best. The ids are the Xenova Whisper builds the pinned
+   transformers.js loads; Fast is the model every build
+   through v2.75.0 used. The choice is per device (the
+   model files cache on the device that downloads them),
+   governs audio transcription only, and a run uses the
+   model chosen when it started: the choice is read once
+   at the run's start and rides its job and its stored
+   transcript, so changing the setting mid run changes
+   neither. */
+const SPEECH_MODELS = {
+  fast: "Xenova/whisper-tiny.en",
+  normal: "Xenova/whisper-base.en",
+  best: "Xenova/whisper-small.en"
+};
+function speechModelKey() {
+  return SPEECH_MODELS[state.transcriptionModel]
+    ? state.transcriptionModel : "fast";
+}
+function speechModelId() {
+  return SPEECH_MODELS[speechModelKey()];
+}
 const SPEECH_SAMPLE_RATE = 16000;
 
 let speechLibPromise = null;
@@ -49326,16 +49796,22 @@ function loadSpeechLib() {
   return speechLibPromise;
 }
 
-/* The transcription pipeline, built once and kept: the model
-   download rides this first build (reported through the status
-   line), and later runs reuse the pipeline. A failed build is
-   not kept, so the next Transcribe tries again. */
-let speechPipelinePromise = null;
-function speechTranscriber() {
-  if (speechPipelinePromise) { return speechPipelinePromise; }
-  speechPipelinePromise = (async function () {
+/* The transcription pipelines, one built and kept per
+   model: a model's download rides its first build (the
+   status line reports it: the standing Loading line first,
+   then the download's percentage, so a long first download
+   for a bigger model reads as loading, never as stuck),
+   and later runs with that model reuse its pipeline. A
+   failed build is not kept, so the next Transcribe with
+   that model tries again. */
+const speechPipelinePromises = {};
+function speechTranscriber(modelId) {
+  if (speechPipelinePromises[modelId]) {
+    return speechPipelinePromises[modelId];
+  }
+  const built = (async function () {
     const lib = await loadSpeechLib();
-    return lib.pipeline("automatic-speech-recognition", SPEECH_MODEL_ID, {
+    return lib.pipeline("automatic-speech-recognition", modelId, {
       progress_callback: function (info) {
         if (info && info.status === "progress" &&
             typeof info.progress === "number") {
@@ -49345,10 +49821,13 @@ function speechTranscriber() {
       }
     });
   })();
-  speechPipelinePromise.catch(function () {
-    speechPipelinePromise = null;
+  speechPipelinePromises[modelId] = built;
+  built.catch(function () {
+    if (speechPipelinePromises[modelId] === built) {
+      delete speechPipelinePromises[modelId];
+    }
   });
-  return speechPipelinePromise;
+  return built;
 }
 
 /* Decode a recording's bytes to the mono 16 kHz samples the
@@ -49399,6 +49878,49 @@ async function decodeSpeechAudio(blob) {
   return rendered.getChannelData(0);
 }
 
+/* v2.76: the timed units in one Whisper result, in the
+   record's shape ({start, end, text}, seconds). The pinned
+   transformers.js (2.17.2) answers return_timestamps:
+   "word" with segment chunks that each carry a words
+   array of {text, timestamp: [start, end]} at absolute
+   times across the whole recording (its tokenizer collates
+   token timings into words, strides already resolved);
+   those words are the units when they exist. A result
+   whose chunks carry no words falls back to the chunks
+   themselves (the segment level the same library returns
+   for return_timestamps: true), and a result with no
+   usable chunks at all yields no units: the transcript
+   then stores and shows as plain text. Entries without a
+   usable start, or with no words of their own, are
+   skipped; an end that is missing or before its start
+   collapses to the start. */
+function transcriptUnitsFromResult(result) {
+  const chunks = result && Array.isArray(result.chunks)
+    ? result.chunks : [];
+  const units = [];
+  function pushUnit(item) {
+    if (!item || typeof item.text !== "string") { return; }
+    const ts = item.timestamp;
+    if (!Array.isArray(ts)) { return; }
+    const start = Number(ts[0]);
+    if (!isFinite(start) || start < 0) { return; }
+    let end = Number(ts[1]);
+    if (!isFinite(end) || end < start) { end = start; }
+    const t = item.text.trim();
+    if (!t) { return; }
+    units.push({ start: start, end: end, text: t });
+  }
+  chunks.forEach(function (c) {
+    if (c && Array.isArray(c.words)) {
+      c.words.forEach(pushUnit);
+    }
+  });
+  if (!units.length) {
+    chunks.forEach(pushUnit);
+  }
+  return units;
+}
+
 async function transcribeAudioAttachment(note, att, el) {
   /* v2.73: one transcription per attachment at a time, the
      image run's rule (see the background block above). */
@@ -49408,6 +49930,13 @@ async function transcribeAudioAttachment(note, att, el) {
     return;
   }
   activeTranscriptions.add(key);
+  /* v2.76: the model is the Settings choice as it stands
+     at the run's start, and it rides the job (and the
+     stored transcript) from here: flipping the choice
+     while a run is in flight changes neither the model
+     that run transcribes with nor the one its transcript
+     credits. */
+  const modelId = speechModelId();
   try {
     if (!state.online) {
       toast("Transcribing needs an internet connection: the speech " +
@@ -49425,7 +49954,7 @@ async function transcribeAudioAttachment(note, att, el) {
     showTranscribeStatus("Loading the speech model " +
       "(the first use downloads it)...");
     try {
-      const transcriber = await speechTranscriber();
+      const transcriber = await speechTranscriber(modelId);
       showTranscribeStatus("Transcribing \"" + att.name + "\"...");
       const samples = await decodeSpeechAudio(blob);
       /* v2.73: the one Whisper pipeline is shared, so its runs
@@ -49435,7 +49964,12 @@ async function transcribeAudioAttachment(note, att, el) {
       const result = await runSpeechJob(function () {
         return transcriber(samples, {
           chunk_length_s: 30,
-          stride_length_s: 5
+          stride_length_s: 5,
+          /* v2.76: word level timestamps, the finest the
+             pinned library produces (see
+             transcriptUnitsFromResult): the card's words
+             can then seek the player. */
+          return_timestamps: "word"
         });
       });
       const text = result && typeof result.text === "string"
@@ -49444,13 +49978,19 @@ async function transcribeAudioAttachment(note, att, el) {
         toast("No speech was recognized in this recording.");
         return;
       }
-      /* v2.73: the words are a job now, not a page errand: the
-         landing puts them after the card in the note they
-         belong to, wherever the editor has gone (see
-         attemptTranscriptLanding in the background block). */
+      /* v2.73: the words are a job now, not a page errand:
+         the landing puts them in the note they belong to,
+         wherever the editor has gone (see
+         attemptTranscriptLanding in the background block).
+         v2.76: an audio job carries a transcript for the
+         attachment record, not lines for the body: the
+         text, its timed units, the model that read it,
+         and the moment the run finished. */
       const job = { key: key, noteId: note.id, attId: att.id,
-        kind: "audio", attName: att.name,
-        lines: [text], parked: false };
+        kind: "audio", attName: att.name, parked: false,
+        transcript: { text: text,
+          units: transcriptUnitsFromResult(result),
+          model: modelId, at: new Date().toISOString() } };
       transcriptionJobs.set(key, job);
       const outcome = await queueTranscriptLanding(job);
       if (outcome === "parked") {
@@ -54279,6 +54819,9 @@ function wireEvents() {
   /* v2.72: the Default notebook select in Settings Appearance. */
   document.getElementById("settingsDefaultNotebookSelect")
     .addEventListener("change", applyDefaultNotebookFromSelect);
+  /* v2.76: the Transcription model select in Settings Editor. */
+  document.getElementById("settingsTranscriptionModelSelect")
+    .addEventListener("change", applySpeechModelFromSelect);
   /* v2.47: the Web clipper copy button in Settings. */
   document.getElementById("webClipCopyBtn")
     .addEventListener("click", copyWebClipBookmarklet);
