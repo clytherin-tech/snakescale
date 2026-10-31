@@ -40,10 +40,70 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-31-SSN-V2760
-  Version: 2.76.0
+  BUILD STAMP: 2026-10-31-SSN-V2770
+  Version: 2.77.0
 
   Revision history:
+    v2.77.0 2026-10-31 Recorder live transcripts
+                      land in the audio card,
+                      and card transcripts are
+                      laid out as sentences and
+                      paragraphs. A voice note's
+                      live transcription (the
+                      browser's recognition,
+                      heard while recording) no
+                      longer lands as paragraphs
+                      under the card: on Stop
+                      its segments are stored on
+                      the recording's own record
+                      in the card transcript
+                      shape, one timed unit per
+                      segment, stamped at the
+                      offset where the
+                      recognition first surfaced
+                      the segment, and credited
+                      live-speech-recognition,
+                      so it can never be
+                      mistaken for a Whisper
+                      transcript. The card's
+                      Transcript section shows
+                      the segments as tap
+                      targets that seek the
+                      player and play, like any
+                      other unit. A failed
+                      upload still keeps the
+                      words as text, as before,
+                      since no card exists to
+                      hold them; a recording
+                      with no recognized speech
+                      still attaches on its own.
+                      The section also groups
+                      what it shows, at render
+                      time and from the stored
+                      record alone, so
+                      transcripts stored by
+                      earlier builds gain the
+                      layout: a segment grained
+                      transcript (a live
+                      capture's turns, a chunk
+                      run's pieces) stands one
+                      paragraph per segment; a
+                      word grained one breaks a
+                      paragraph where the pause
+                      before a word exceeds one
+                      second; within a paragraph
+                      the words flow as prose,
+                      their sentences reading by
+                      the punctuation they
+                      carry; and a transcript
+                      with no timings is split
+                      into sentences on the same
+                      terminal punctuation, one
+                      paragraph per sentence.
+                      The stored record is never
+                      rewritten for layout, and
+                      the Whisper Transcribe
+                      flow is unchanged.
     v2.76.0 2026-10-31 Transcripts in the audio
                       card, click to seek, and a
                       transcription model
@@ -7701,6 +7761,11 @@ body.dark #conflictReloadBtn{background:#574512;color:#FFE1A8;border-color:#A887
   transform:rotate(90deg);
 }
 .ss-att-transcript-text{margin:2px 0 4px;font-size:14px;line-height:1.6;}
+/* v2.77: consecutive transcript paragraphs (the render time
+   sentence and paragraph layout, see
+   transcriptParagraphUnits) breathe a little more than a
+   wrapped line, so a paragraph break reads as one. */
+.ss-att-transcript-text + .ss-att-transcript-text{margin-top:9px;}
 /* A timed unit is bare text until pressed or sounding: no
    box and no layout shift; the sounding one takes the soft
    wash and the primary color, and the hover wash alone
@@ -11319,8 +11384,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-31-SSN-V2760";
-const APP_VERSION = "2.76.0";
+const APP_BUILD = "2026-10-31-SSN-V2770";
+const APP_VERSION = "2.77.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -48100,6 +48165,133 @@ async function appendAudioPlayer(el, att, driver) {
    from the record on every hydration, and rebuilt in place
    by the transcription landing when a run finishes on the
    open note. */
+/* v2.77: the pause, in seconds, that starts a new
+   paragraph in a timed transcript when the silence
+   between one unit's end and the next unit's start
+   exceeds it. A second is about a breath between
+   thoughts: the gaps inside a fluent sentence, whose
+   word ends and starts sit nearly back to back in the
+   model's timings, stay well under it, and a deliberate
+   pause crosses it. */
+const TRANSCRIPT_PARAGRAPH_PAUSE_S = 1;
+
+/* v2.77: the render time paragraph grouping for a timed
+   transcript, layout only: the stored record never
+   changes, so transcripts stored by earlier builds gain
+   the layout too. Two rules start a new paragraph
+   before a unit. A segment boundary, when the
+   transcript is segment grained: any unit holding more
+   than one word marks the set as segments (a live
+   capture's turns, a chunk run's pieces), and every
+   segment then stands as its own paragraph. And the
+   pause rule above, for word grained sets. Within a
+   paragraph the units flow as prose with a normal space
+   between them, so sentences read by the punctuation
+   the units themselves carry: a sentence ends after a
+   unit whose text ends with terminal punctuation
+   (. ? !, a closing quote or bracket after it allowed).
+   A lone one word segment in a word grained set groups
+   by the same pause rule. */
+function transcriptParagraphUnits(units) {
+  const segmentGrained = units.some(function (u) {
+    return /\s/.test(u.text);
+  });
+  const groups = [];
+  let cur = [];
+  units.forEach(function (u, i) {
+    if (i > 0) {
+      const prev = units[i - 1];
+      const prevEnd = typeof prev.end === "number"
+        ? prev.end : prev.start;
+      if (segmentGrained ||
+          u.start - prevEnd > TRANSCRIPT_PARAGRAPH_PAUSE_S) {
+        groups.push(cur);
+        cur = [];
+      }
+    }
+    cur.push(u);
+  });
+  if (cur.length) { groups.push(cur); }
+  return groups;
+}
+
+/* v2.77: the plain text fallback's sentences, for a
+   stored transcript with no usable timings: the text is
+   split after terminal punctuation (. ? !, a closing
+   quote or bracket riding with its sentence, a decimal
+   point between digits never terminal), and each
+   sentence stands as its own paragraph, the only
+   structure a timingless transcript honestly has. The
+   split only decides where paragraphs break: the words
+   and punctuation are the stored text's own, untouched.
+   A text with no sentence end stands as one paragraph,
+   as before. */
+function splitTranscriptSentences(text) {
+  const s = String(text || "");
+  const out = [];
+  let cur = "";
+  for (let i = 0; i < s.length; i++) {
+    const ch = s.charAt(i);
+    cur += ch;
+    if (ch !== "." && ch !== "?" && ch !== "!") { continue; }
+    if (ch === "." && i > 0 && i + 1 < s.length &&
+        /\d/.test(s.charAt(i - 1)) && /\d/.test(s.charAt(i + 1))) {
+      continue;
+    }
+    let j = i + 1;
+    let closers = "";
+    while (j < s.length &&
+        "\"'\u201d\u2019)]".indexOf(s.charAt(j)) >= 0) {
+      closers += s.charAt(j);
+      j++;
+    }
+    if (j < s.length && !/\s/.test(s.charAt(j))) { continue; }
+    cur += closers;
+    const done = cur.trim();
+    if (done) { out.push(done); }
+    cur = "";
+    i = j - 1;
+  }
+  const tail = cur.trim();
+  if (tail) { out.push(tail); }
+  if (!out.length && s.trim()) { out.push(s.trim()); }
+  return out;
+}
+
+/* One paragraph of a timed transcript: its units as
+   buttons in prose order, a normal space between them,
+   each button seeking the card's player to its unit's
+   start (see seekTranscriptUnit). The buttons are the
+   same elements the sounding unit highlight looks up
+   across the whole card, so the paragraph wrappers
+   change nothing for it. */
+function transcriptUnitParagraph(el, att, units) {
+  const para = document.createElement("p");
+  para.className = "ss-att-transcript-text";
+  units.forEach(function (u, idx) {
+    if (idx > 0) {
+      para.appendChild(document.createTextNode(" "));
+    }
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "ss-att-unit";
+    b.textContent = u.text;
+    b.setAttribute("data-start", String(u.start));
+    b.setAttribute("data-end", String(u.end));
+    /* The card sits inside the contenteditable body; the
+       press is swallowed on the way down so a seek never
+       moves the editor caret, the card buttons' own rule. */
+    b.addEventListener("mousedown", function (ev) {
+      ev.preventDefault();
+    });
+    b.addEventListener("click", function () {
+      seekTranscriptUnit(el, att, u.start);
+    });
+    para.appendChild(b);
+  });
+  return para;
+}
+
 function renderTranscriptSection(el, att) {
   if (!el) { return; }
   const old = el.querySelector(".ss-att-transcript");
@@ -48126,34 +48318,23 @@ function renderTranscriptSection(el, att) {
   head.appendChild(label);
   const body = document.createElement("div");
   body.className = "ss-att-transcript-body hidden";
-  const para = document.createElement("p");
-  para.className = "ss-att-transcript-text";
+  /* v2.77: the words are laid out as sentences and
+     paragraphs at render time (see
+     transcriptParagraphUnits for the timed rules and
+     splitTranscriptSentences for the plain fallback);
+     the stored record is never rewritten for layout. */
   if (tr.units && tr.units.length) {
-    tr.units.forEach(function (u, idx) {
-      if (idx > 0) {
-        para.appendChild(document.createTextNode(" "));
-      }
-      const b = document.createElement("button");
-      b.type = "button";
-      b.className = "ss-att-unit";
-      b.textContent = u.text;
-      b.setAttribute("data-start", String(u.start));
-      b.setAttribute("data-end", String(u.end));
-      /* The card sits inside the contenteditable body; the
-         press is swallowed on the way down so a seek never
-         moves the editor caret, the card buttons' own rule. */
-      b.addEventListener("mousedown", function (ev) {
-        ev.preventDefault();
-      });
-      b.addEventListener("click", function () {
-        seekTranscriptUnit(el, att, u.start);
-      });
-      para.appendChild(b);
+    transcriptParagraphUnits(tr.units).forEach(function (group) {
+      body.appendChild(transcriptUnitParagraph(el, att, group));
     });
   } else {
-    para.textContent = tr.text;
+    splitTranscriptSentences(tr.text).forEach(function (s) {
+      const para = document.createElement("p");
+      para.className = "ss-att-transcript-text";
+      para.textContent = s;
+      body.appendChild(para);
+    });
   }
-  body.appendChild(para);
   head.addEventListener("mousedown", function (ev) {
     ev.preventDefault();
   });
@@ -53463,7 +53644,9 @@ function renderVoiceTranscript() {
   const finalEl = document.getElementById("voiceFinalText");
   const interimEl = document.getElementById("voiceInterimText");
   if (!finalEl || !interimEl) { return; }
-  const finalText = voiceCapture.segments.join(" ");
+  const finalText = voiceCapture.segments.map(function (s) {
+    return s.text;
+  }).join(" ");
   const interimText = voiceCapture.interimText;
   finalEl.textContent = finalText;
   interimEl.textContent =
@@ -53482,15 +53665,37 @@ function showVoiceRecNote(text) {
   }
 }
 
+/* v2.77: a segment is {text, start}, not a bare string:
+   its start is the offset in seconds from the capture's
+   start at which the recognition first surfaced that
+   result (its first interim, ordinarily; a result that
+   only ever surfaces as a final is stamped as it lands).
+   The stamp is taken the first time a result index is
+   seen and dropped when the result finalizes, because a
+   finalized result never changes again in its session;
+   the table itself is reset at every recognition start
+   (see startVoiceNote), because a fresh session's
+   results list starts again at index 0. The precision is
+   the recognition service's own delivery: a start names
+   when the words reached the app, not the acoustic
+   instant they were spoken. */
 function onVoiceResult(capture, ev) {
   if (voiceCapture !== capture) { return; }
   let interim = "";
+  const now = (Date.now() - capture.startedAt) / 1000;
   for (let i = ev.resultIndex; i < ev.results.length; i++) {
     const res = ev.results[i];
     const text = (res[0] && res[0].transcript) || "";
+    if (capture.segmentStarts[i] === undefined) {
+      capture.segmentStarts[i] = now;
+    }
     if (res.isFinal) {
+      const start = capture.segmentStarts[i];
+      delete capture.segmentStarts[i];
       const piece = text.trim();
-      if (piece) { capture.segments.push(piece); }
+      if (piece) {
+        capture.segments.push({ text: piece, start: start });
+      }
     } else {
       interim += text;
     }
@@ -53627,6 +53832,7 @@ async function startVoiceNote() {
     recognitionFailed: false,
     endResolve: null,
     segments: [],
+    segmentStarts: {},
     interimText: "",
     startedAt: Date.now(),
     timer: null,
@@ -53659,7 +53865,14 @@ async function startVoiceNote() {
       capture.hadRecognition = true;
       rec.onresult = function (ev) { onVoiceResult(capture, ev); };
       rec.onerror = function (ev) { onVoiceRecognitionError(capture, ev); };
-      rec.onstart = function () { capture.recognitionRunning = true; };
+      rec.onstart = function () {
+        capture.recognitionRunning = true;
+        /* v2.77: a fresh session's results list starts
+           again at index 0, so the first appearance
+           stamps keyed to the old session's indexes are
+           dropped with it (see onVoiceResult). */
+        capture.segmentStarts = {};
+      };
       rec.onend = function () {
         capture.recognitionRunning = false;
         /* Recognition ends itself on long silences in some
@@ -53778,7 +53991,7 @@ async function stopVoiceNote() {
     return;
   }
   const segments = capture.segments.filter(function (s) {
-    return s && s.replace(/\s+/g, "") !== "";
+    return s && s.text && s.text.replace(/\s+/g, "") !== "";
   });
   const name = voiceNoteFileName(new Date()) +
     voiceAudioExtension(capture.mime);
@@ -53788,9 +54001,41 @@ async function stopVoiceNote() {
   await saveVoiceNoteToNote(capture, note, file, segments);
 }
 
+/* v2.77: the transcript a live capture stores on its
+   recording's record, in the exact shape the card reads
+   (see sanitizeTranscript): the segments joined with a
+   space as the text (the way the voice bar showed them),
+   one timed unit per segment, and the model credit
+   "live-speech-recognition", which names the browser's
+   live recognition and can never be mistaken for one of
+   the Whisper model ids the Transcribe menu stores. A
+   unit's start is the offset at which the recognition
+   first surfaced the segment (see onVoiceResult); its
+   end is the next segment's start, and the last
+   segment's end is its own start, because the capture
+   tracks no segment end and never reads the recording's
+   duration back. sanitizeTranscript coerces the shape
+   like any other transcript's, so a malformed value
+   degrades to no transcript rather than a broken
+   record. */
+function liveVoiceTranscript(segments) {
+  const units = segments.map(function (s, i) {
+    const next = segments[i + 1];
+    return { start: s.start,
+      end: next ? next.start : s.start, text: s.text };
+  });
+  return sanitizeTranscript({
+    text: segments.map(function (s) { return s.text; }).join(" "),
+    units: units,
+    model: "live-speech-recognition",
+    at: new Date().toISOString()
+  });
+}
+
 /* The Stop landing: the recording goes through the one upload path
-   every attachment takes, then the transcript paragraphs go in
-   right after the audio card. A failed upload keeps the words: the
+   every attachment takes, then its live transcript is stored on
+   the recording's own record as the card's transcript (v2.77;
+   see liveVoiceTranscript). A failed upload keeps the words: the
    failure toast uploadOneAttachment already gave stands, and the
    transcript is added as text at the saved caret instead, so a
    dictated note is never lost with its recording. */
@@ -53821,23 +54066,35 @@ async function saveVoiceNoteToNote(capture, note, file, segments) {
   }
   const el = bodyEl.querySelector(
     ".ss-attachment[data-attachment-id=\"" + record.id + "\"]");
-  insertVoiceTranscript(el, segments);
+  /* v2.77: the live transcript lands on the recording's
+     own record as the card's transcript, and the open
+     card's section is rebuilt from it in place; no
+     transcript paragraphs enter the body. The dirty
+     mark carries the record into the note's next save
+     like any attachment edit. */
+  record.transcript = liveVoiceTranscript(segments);
+  if (el) { renderTranscriptSection(el, record); }
   markDirty();
   toast("Voice note added.");
 }
 
-/* Transcript paragraphs are built with textContent assignment
-   only: dictated words are data, never markup, so speech that
-   happens to sound like HTML lands as plain text. With an anchor
+/* v2.77: this paragraph landing remains only for the failed
+   upload fallback in saveVoiceNoteToNote, where the recording
+   itself could not be saved and no card exists to hold the
+   words; a saved recording's transcript goes on its record
+   instead (see liveVoiceTranscript). The paragraphs are built
+   with textContent assignment only: dictated words are data,
+   never markup, so speech that happens to sound like HTML
+   lands as plain text. With an anchor
    (the audio card) they go directly after it; without one they go
    at the saved caret when it sits on a block boundary, and at the
    end of the note otherwise, rather than splitting a paragraph
    open around them. */
 function insertVoiceTranscript(anchorEl, segments) {
   const bodyEl = document.getElementById("noteBody");
-  const nodes = segments.map(function (text) {
+  const nodes = segments.map(function (seg) {
     const p = document.createElement("p");
-    p.textContent = text;
+    p.textContent = seg.text;
     return p;
   });
   if (!nodes.length) { return; }
