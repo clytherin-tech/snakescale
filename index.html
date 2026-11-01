@@ -40,10 +40,59 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-11-01-SSN-V2790
-  Version: 2.79.0
+  BUILD STAMP: 2026-11-01-SSN-V2800
+  Version: 2.80.0
 
   Revision history:
+    v2.80.0 2026-11-01 Google Calendar events
+                      join the app's calendars,
+                      read only. The sign in now
+                      also asks Google for the
+                      calendar.readonly
+                      permission, and the app's
+                      two calendars, the Home
+                      Calendar widget and the
+                      Tasks view's calendar
+                      mode, fetch the month they
+                      show from the Google
+                      Calendar API with the
+                      app's own access token and
+                      render the events beside
+                      tasks and note reminders:
+                      dots on event days, one
+                      merged agenda (all day
+                      events first, then timed
+                      items by start), and the
+                      same rows in the Tasks
+                      grid and its day detail,
+                      each with its calendar's
+                      color, its time, and its
+                      calendar's name when more
+                      than one calendar shows.
+                      Events are display only:
+                      no checkbox, no editing,
+                      and a click opens the
+                      event in Google Calendar.
+                      They live in page memory
+                      only and are never written
+                      to Drive or the device. A
+                      sign in without the
+                      calendar grant (the API
+                      answers 403) is a designed
+                      state, not an error: the
+                      surfaces show one quiet
+                      line, Google Calendar is
+                      not connected, with a
+                      Connect button that runs
+                      the consent forcing sign
+                      in; a network failure
+                      shows an unavailable line
+                      instead, and tasks and
+                      reminders render exactly
+                      as before either way.
+                      Settings gains a Google
+                      Calendar row with the same
+                      state and button.
     v2.79.0 2026-11-01 Sign in moves to the
                       ssnotes-auth Cloudflare
                       Worker, and the hourly
@@ -8815,6 +8864,33 @@ body.dark .task-cal-more{color:var(--accent);}
 .task-cal-foot{
   margin-top:10px;font-size:12.5px;color:var(--muted);
 }
+/* v2.80: Google Calendar event rows and captions. The
+   event row reuses the task calendar entry's own shape
+   (.task-cal-entry with its head, time, and title
+   classes); what is new is the calendar color chip, the
+   calendar name at the head's right, the one caption
+   line the surfaces share, and the Tasks detail strip's
+   events box. Every color is a theme token, so both
+   themes carry them. */
+.gcal-chip{
+  flex:none;width:9px;height:9px;border-radius:3px;
+  background:var(--accent);
+}
+.gcal-cal-name{
+  margin-left:auto;min-width:0;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap;
+  font-size:11px;color:var(--muted);
+}
+.gcal-status{
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  margin-top:10px;font-size:12.5px;color:var(--muted);
+}
+.task-cal-detail-events{
+  display:flex;flex-direction:column;gap:6px;
+  margin-top:8px;padding:10px 12px;background:var(--surface);
+  border:1px solid var(--border);border-radius:var(--radius-card);
+}
+#settingsGcalConnectBtn{margin-top:8px;}
 @media (max-width:700px){
   .task-cal-day{min-height:64px;padding:4px 3px 5px;}
   .task-cal-entry-title{font-size:11px;}
@@ -10911,6 +10987,18 @@ body.dark .version-date{color:var(--accent);}
            token answers; filled by renderWorkerAccountLine
            whenever Settings syncs its controls. -->
       <div class="settings-help" id="settingsAccountLine"></div>
+      <!-- v2.80: the Google Calendar row. The connection
+           is read only (the calendar.readonly permission),
+           so this row reports and connects, and never
+           offers an edit: status text filled by
+           renderGcalSettingsRow, and the Connect button
+           standing only in the not connected state, where
+           it runs the consent forcing sign in. -->
+      <div class="settings-autosync">
+        <div class="settings-help">Google Calendar</div>
+        <div class="settings-help" id="settingsGcalStatus">Not connected</div>
+        <button class="btn hidden" id="settingsGcalConnectBtn" type="button">Connect Google Calendar</button>
+      </div>
       <!-- v2.16: the idle auto-sync toggle. A plain checkbox
            input (accented like the checklist boxes), so the on
            or off state is the control itself, never a silently
@@ -11510,8 +11598,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-11-01-SSN-V2790";
-const APP_VERSION = "2.79.0";
+const APP_BUILD = "2026-11-01-SSN-V2800";
+const APP_VERSION = "2.80.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -16347,6 +16435,10 @@ async function syncNow(showToast) {
     /* v2.24: and the same for tasks.json, for the same reason. */
     await flushTasksWrites();
     await loadAllFromRepo();
+  /* v2.80: a sync refreshes the calendar events with
+     everything else (page memory only; a standing
+     consent state is left to its Connect path). */
+  refreshGcalAfterSync();
     /* v2.20: the drop box imports inside the sync, after the
        load and before the render, so what it brought in shows
        up in this same pass (and an auto-sync cycle imports
@@ -22411,6 +22503,659 @@ function buildHomeNotebooksWidget() {
   return parts.widget;
 }
 
+/* ---------------- v2.80: Google Calendar, read only ----
+   The app's calendars (the Home Calendar widget and the
+   Tasks view's calendar mode) gain the user's Google
+   Calendar events, displayed beside the app's own dated
+   items. The connection is read only in the permission
+   itself: the sign in asks Google for the calendar.readonly
+   scope, so no code here could create, edit, or delete an
+   event even if it wanted to, and a static scan of this
+   file (part of the build's test record) proves no write
+   call to the Calendar API exists anywhere in it.
+
+   How it works, in the order the pieces run:
+
+   - The token is the app's own Google access token, from
+     the one token source every Drive call uses
+     (getGoogleAccessToken, which renews quietly at the
+     sign in Worker when the recorded token has lapsed).
+     There is no second auth path for the calendar.
+   - Fetching is lazy and month shaped. A calendar surface
+     names the month it is showing (ensureGcalMonth) and
+     the module fetches that month's visible grid range
+     once: the calendar list first (once per session, or
+     until a reset), then each participating calendar's
+     events inside the range. A calendar participates when
+     Google Calendar itself shows it (its selected flag is
+     not false). Results are cached per range in page
+   memory, in-flight requests for a range are shared, and
+     nothing about an event is ever written to Drive, to
+     the notes index, to tasks, or to the local snapshot:
+     events live in this page's memory only and are gone
+     when the app closes.
+   - Days are local days, the task system's own convention
+     (formatTaskDateParts over local date parts, never a
+     UTC string slice). An event stands on every local day
+     it touches: an all day event on each day from its
+     start date to the day before its end date (the API's
+     end date is exclusive), and a timed event on each day
+     from its local start day to its local end day, where
+     an end exactly at midnight belongs to the day before.
+   - The standing states, each a first class outcome and
+     never a toast: "ok" (events stand), "needs-consent"
+     (the Calendar API answered 403, which is what a sign
+     in without the calendar scope, or a project without
+     the Calendar API enabled, produces; the surfaces show
+     one caption line, "Google Calendar is not connected",
+     with a Connect button that runs the consent forcing
+     sign in, and nothing retries on its own until a sign
+     in lands or a sync resets the module), and
+     "unavailable" (a network failure or an unexpected
+     answer; the surfaces show a subtle caption with a
+     Retry button, tasks and reminders render exactly as
+     they always have, and a later success clears it). A
+     401 runs the standing silent renewal once and retries
+     the load once; a second 401 reads as unavailable for
+     that load, because session death is the auth layer's
+     business, not this module's. While signed out the
+     module never fetches and shows nothing.
+   - Display order, pinned here because two surfaces share
+     it. In a day bucket, and in the Home agenda which
+     reads the same buckets: all day events first (by
+     calendar name, then title), then timed items by their
+     moment, an event's moment being its start held to the
+     day's start when it began on an earlier day. The Home
+     agenda merges tasks and note reminders into the timed
+     group by the agenda's standing rules (a task before a
+     note at the same moment); an event at the same moment
+     stands before both, as the day's fixed appointments.
+     In the Tasks month grid, a day's tasks stand first in
+     their own order and the day's events follow, sharing
+     the cell's visible entry limit and its expander. */
+
+const GCAL_API_BASE = "https://www.googleapis.com/calendar/v3";
+
+/* How long a failed range rests before a surface showing
+   it may ask again on its own. The Retry button and a
+   sync ignore the rest; it exists so a broken network
+   cannot turn every render into a fetch. */
+const GCAL_RETRY_REST_MS = 60 * 1000;
+
+/* The module's standing state. gcalStatus is one of
+   "idle" (nothing asked yet, or signed out), "ok",
+   "needs-consent", or "unavailable". The rest is the
+   page memory cache the header describes: the calendar
+   list once loaded, the events by their unique key, the
+   day buckets rebuilt from them, the ranges that stand
+   fetched, in flight, or resting after a failure, and
+   the months any surface has named (the Retry button's
+   and the sync refresh's working set). */
+let gcalStatus = "idle";
+let gcalCalendars = null;
+let gcalEventsByKey = {};
+let gcalEventsByDay = {};
+let gcalRangesDone = {};
+let gcalRangesInFlight = {};
+let gcalRangeFailedAt = {};
+let gcalVisibleMonths = {};
+let gcalCaptionDirty = false;
+
+/* A calendar credential stands when a Worker session or
+   a recorded provider token does: the same trio the
+   v2.79 migration reads. When none stands the user is
+   signed out, and the module stays silent. */
+function gcalSignedInAble() {
+  if (workerSessionToken || loadWorkerSessionBlob()) {
+    return true;
+  }
+  const blob = loadProviderTokenBlob();
+  return !!(blob && blob.google);
+}
+
+/* The local day string for a Date, in the task system's
+   own parts form. */
+function gcalLocalDayStr(date) {
+  return formatTaskDateParts(date.getFullYear(),
+    date.getMonth() + 1, date.getDate());
+}
+
+/* The local start of a day string, as a timestamp. */
+function gcalDayStartMs(dayStr) {
+  const p = parseTaskDate(dayStr);
+  if (!p) { return 0; }
+  return new Date(p.y, p.m - 1, p.d).getTime();
+}
+
+/* The range a month grid actually shows: the Sunday on
+   or before the first of the month through the Saturday
+   completing its last week, the two calendar builders'
+   own cell math, as a half open interval of instants
+   plus the cache key that names it. */
+function gcalMonthRange(y, m) {
+  const firstDow = new Date(y, m - 1, 1).getDay();
+  const daysInMonth = new Date(y, m, 0).getDate();
+  const cellCount = Math.ceil((firstDow + daysInMonth) / 7) * 7;
+  const start = new Date(y, m - 1, 1 - firstDow);
+  const end = new Date(y, m - 1, 1 - firstDow + cellCount);
+  return {
+    key: gcalLocalDayStr(start) + "/" + gcalLocalDayStr(end),
+    timeMin: start.toISOString(),
+    timeMax: end.toISOString()
+  };
+}
+
+/* One Calendar API read. Resolves with the status and the
+   parsed body (null when the body does not parse); a
+   network failure rejects, and the caller reads that as
+   the unavailable state. */
+async function gcalApiGet(path, token) {
+  const res = await fetch(GCAL_API_BASE + path, {
+    method: "GET",
+    headers: { "Authorization": "Bearer " + token }
+  });
+  let data = null;
+  try { data = await res.json(); } catch (e) { data = null; }
+  return { status: res.status, data: data };
+}
+
+/* Settle one raw API event into the module's own shape,
+   or return null for an event that does not stand
+   (cancelled, or carrying no usable start). Days are
+   computed once, here, by the header's local day rules;
+   the iteration is capped at a generous year so a
+   pathological span cannot flood the buckets. */
+function normalizeGcalEvent(raw, cal) {
+  if (!raw || raw.status === "cancelled" || !raw.start) {
+    return null;
+  }
+  const ev = {
+    uid: cal.id + "|" + String(raw.id || ""),
+    calendarId: cal.id,
+    calendarName: cal.summary || "",
+    color: cal.color || "",
+    title: raw.summary ? String(raw.summary) : "(No title)",
+    htmlLink: raw.htmlLink ? String(raw.htmlLink) : "",
+    allDay: !!raw.start.date,
+    startMs: 0,
+    endMs: 0,
+    days: []
+  };
+  if (!raw.id) { return null; }
+  const days = [];
+  if (ev.allDay) {
+    const startParts = parseTaskDate(String(raw.start.date));
+    if (!startParts) { return null; }
+    const endParts = raw.end && raw.end.date
+      ? parseTaskDate(String(raw.end.date)) : null;
+    const cur = new Date(startParts.y, startParts.m - 1,
+      startParts.d);
+    let end = endParts
+      ? new Date(endParts.y, endParts.m - 1, endParts.d)
+      : new Date(startParts.y, startParts.m - 1,
+        startParts.d + 1);
+    if (end.getTime() <= cur.getTime()) {
+      end = new Date(cur.getTime() + 86400000);
+    }
+    while (cur.getTime() < end.getTime() && days.length < 370) {
+      days.push(gcalLocalDayStr(cur));
+      cur.setDate(cur.getDate() + 1);
+    }
+    ev.startMs = gcalDayStartMs(days[0]);
+    ev.endMs = end.getTime();
+  } else {
+    const startMs = Date.parse(String(raw.start.dateTime || ""));
+    if (!isFinite(startMs)) { return null; }
+    let endMs = raw.end ? Date.parse(String(raw.end.dateTime || "")) : NaN;
+    if (!isFinite(endMs) || endMs < startMs) { endMs = startMs; }
+    ev.startMs = startMs;
+    ev.endMs = endMs;
+    const cur = new Date(startMs);
+    cur.setHours(0, 0, 0, 0);
+    let last = new Date(endMs);
+    /* An end exactly at local midnight belongs to the
+       day before: the event never touches that day. */
+    if (endMs > startMs && last.getHours() === 0 &&
+        last.getMinutes() === 0 && last.getSeconds() === 0 &&
+        last.getMilliseconds() === 0) {
+      last = new Date(endMs - 86400000);
+    }
+    last.setHours(0, 0, 0, 0);
+    while (cur.getTime() <= last.getTime() && days.length < 370) {
+      days.push(gcalLocalDayStr(cur));
+      cur.setDate(cur.getDate() + 1);
+    }
+  }
+  if (!days.length) { return null; }
+  ev.days = days;
+  return ev;
+}
+
+/* Rebuild the day buckets from every event the module
+   holds, in the header's display order: all day events
+   first (calendar name, then title), then timed events
+   by their start held to the day's start, then title. */
+function gcalRebuildDayBuckets() {
+  const byDay = {};
+  Object.keys(gcalEventsByKey).forEach(function (uid) {
+    const ev = gcalEventsByKey[uid];
+    ev.days.forEach(function (day) {
+      (byDay[day] = byDay[day] || []).push(ev);
+    });
+  });
+  Object.keys(byDay).forEach(function (day) {
+    const dayStart = gcalDayStartMs(day);
+    byDay[day].sort(function (a, b) {
+      if (a.allDay !== b.allDay) { return a.allDay ? -1 : 1; }
+      if (a.allDay) {
+        const ac = a.calendarName || "";
+        const bc = b.calendarName || "";
+        if (ac !== bc) { return ac.localeCompare(bc); }
+        return a.title.localeCompare(b.title);
+      }
+      const am = Math.max(a.startMs, dayStart);
+      const bm = Math.max(b.startMs, dayStart);
+      if (am !== bm) { return am - bm; }
+      return a.title.localeCompare(b.title);
+    });
+  });
+  gcalEventsByDay = byDay;
+}
+
+/* The day's events, in display order (empty when the
+   module holds none for it). */
+function gcalEventsForDay(dayStr) {
+  return gcalEventsByDay[dayStr] || [];
+}
+
+/* How many calendars participate (shown names and the
+   Settings count read it). Zero until the list stands. */
+function gcalParticipatingCount() {
+  return gcalCalendars ? gcalCalendars.length : 0;
+}
+
+/* Record a status change. A change in whether a caption
+   stands (into or out of the two captioned states) is
+   remembered, so the settle pass re-renders the surfaces
+   that must gain or lose the line. */
+function gcalSetStatus(next) {
+  if (gcalStatus === next) { return; }
+  const wasCaption = gcalStatus === "needs-consent" ||
+    gcalStatus === "unavailable";
+  gcalStatus = next;
+  const isCaption = next === "needs-consent" ||
+    next === "unavailable";
+  if (wasCaption !== isCaption) { gcalCaptionDirty = true; }
+}
+
+/* Forget everything the module holds: the calendar list,
+   the events, the range cache, and the standing state.
+   A completed sign in calls it (a consent may have just
+   changed what the API will answer), and a sync calls
+   it before re-asking for the visible months. */
+function resetGcalState() {
+  gcalCalendars = null;
+  gcalEventsByKey = {};
+  gcalEventsByDay = {};
+  gcalRangesDone = {};
+  gcalRangeFailedAt = {};
+  if (gcalStatus !== "idle") {
+    gcalSetStatus("idle");
+  }
+}
+
+/* One full load attempt for a range with a token in
+   hand: the calendar list first when it does not stand
+   yet, then every participating calendar's events in
+   the range, in parallel. Resolves with an outcome word
+   ("ok" with the settled events, "unauthorized",
+   "forbidden", or "bad"); only a network failure
+   rejects. An answer's outcome outranks another's in
+   that order: a 401 may heal on the caller's retry, a
+   403 is the consent state, anything else unexpected is
+   simply bad. */
+async function gcalLoadAttempt(range, token) {
+  if (!gcalCalendars) {
+    const listRes = await gcalApiGet(
+      "/users/me/calendarList?minAccessRole=reader", token);
+    if (listRes.status === 401) {
+      return { outcome: "unauthorized" };
+    }
+    if (listRes.status === 403) {
+      return { outcome: "forbidden" };
+    }
+    if (listRes.status !== 200 || !listRes.data) {
+      return { outcome: "bad" };
+    }
+    const items = Array.isArray(listRes.data.items)
+      ? listRes.data.items : [];
+    gcalCalendars = items.filter(function (c) {
+      return c && c.id && c.selected !== false;
+    }).map(function (c) {
+      return {
+        id: String(c.id),
+        summary: String(c.summary || ""),
+        color: String(c.backgroundColor || "")
+      };
+    });
+  }
+  let sawUnauthorized = false;
+  let sawForbidden = false;
+  let sawBad = false;
+  const collected = [];
+  await Promise.all(gcalCalendars.map(function (cal) {
+    const path = "/calendars/" + encodeURIComponent(cal.id) +
+      "/events?singleEvents=true&orderBy=startTime" +
+      "&maxResults=250" +
+      "&timeMin=" + encodeURIComponent(range.timeMin) +
+      "&timeMax=" + encodeURIComponent(range.timeMax);
+    return gcalApiGet(path, token).then(function (res) {
+      if (res.status === 401) { sawUnauthorized = true; return; }
+      if (res.status === 403) { sawForbidden = true; return; }
+      if (res.status !== 200 || !res.data) { sawBad = true; return; }
+      const items = Array.isArray(res.data.items)
+        ? res.data.items : [];
+      items.forEach(function (raw) {
+        const ev = normalizeGcalEvent(raw, cal);
+        if (ev) { collected.push(ev); }
+      });
+    });
+  }));
+  if (sawUnauthorized) { return { outcome: "unauthorized" }; }
+  if (sawForbidden) { return { outcome: "forbidden" }; }
+  if (sawBad) { return { outcome: "bad" }; }
+  return { outcome: "ok", events: collected };
+}
+
+/* Load one range and settle the outcome into the
+   module's standing state, per the header: the token
+   from the app's one token source, one renewal and one
+   retry behind a 401, the consent state behind a 403,
+   the unavailable state behind a network failure or an
+   unexpected answer, and events merged into the page
+   memory cache behind a success. */
+async function fetchGcalRange(range) {
+  let token = null;
+  try {
+    token = await getGoogleAccessToken();
+  } catch (e) {
+    if (e && e.code === "GOOGLE_SIGN_IN_REQUIRED") {
+      /* No credential stands after all: the signed out
+         state, which the gate owns. Stay silent. */
+      gcalSetStatus("idle");
+    } else {
+      gcalRangeFailedAt[range.key] = Date.now();
+      gcalSetStatus("unavailable");
+    }
+    gcalAfterSettle(false);
+    return;
+  }
+  let attempt = null;
+  try {
+    attempt = await gcalLoadAttempt(range, token);
+    if (attempt.outcome === "unauthorized") {
+      const renewed = await googleTrySilentSignIn();
+      if (renewed) {
+        const fresh = await getProviderToken("google");
+        if (fresh) {
+          attempt = await gcalLoadAttempt(range, fresh);
+        }
+      }
+    }
+  } catch (e) {
+    gcalRangeFailedAt[range.key] = Date.now();
+    gcalSetStatus("unavailable");
+    gcalAfterSettle(false);
+    return;
+  }
+  if (attempt.outcome === "forbidden") {
+    gcalSetStatus("needs-consent");
+    gcalAfterSettle(false);
+    return;
+  }
+  if (attempt.outcome !== "ok") {
+    gcalRangeFailedAt[range.key] = Date.now();
+    gcalSetStatus("unavailable");
+    gcalAfterSettle(false);
+    return;
+  }
+  let changed = false;
+  attempt.events.forEach(function (ev) {
+    if (!gcalEventsByKey[ev.uid]) { changed = true; }
+    gcalEventsByKey[ev.uid] = ev;
+  });
+  if (changed) { gcalRebuildDayBuckets(); }
+  gcalRangesDone[range.key] = true;
+  delete gcalRangeFailedAt[range.key];
+  gcalSetStatus("ok");
+  gcalAfterSettle(changed);
+}
+
+/* The surfaces' one ask: make sure this month's events
+   are on their way. Records the month as visible (the
+   Retry button and the sync refresh work from that
+   set), then starts the load unless the range stands
+   fetched, is already in flight, is resting after a
+   recent failure, the consent state stands (only a sign
+   in or a reset reopens it), or nobody is signed in. */
+function ensureGcalMonth(y, m) {
+  gcalVisibleMonths[y + "-" + m] = { y: y, m: m };
+  if (!gcalSignedInAble()) { return; }
+  if (gcalStatus === "needs-consent") { return; }
+  const range = gcalMonthRange(y, m);
+  if (gcalRangesDone[range.key] ||
+      gcalRangesInFlight[range.key]) {
+    return;
+  }
+  const failedAt = gcalRangeFailedAt[range.key];
+  if (failedAt && Date.now() - failedAt < GCAL_RETRY_REST_MS) {
+    return;
+  }
+  gcalRangesInFlight[range.key] = true;
+  const settle = function () {
+    delete gcalRangesInFlight[range.key];
+  };
+  fetchGcalRange(range).then(settle, settle);
+}
+
+/* The unavailable caption's Retry: lift every failure
+   rest and ask for the visible months again. */
+function gcalRetryVisible() {
+  gcalRangeFailedAt = {};
+  Object.keys(gcalVisibleMonths).forEach(function (k) {
+    const vm = gcalVisibleMonths[k];
+    ensureGcalMonth(vm.y, vm.m);
+  });
+}
+
+/* A completed sync refreshes the events with everything
+   else: forget the cache and re-ask for the visible
+   months (the current month when none has been named).
+   The consent state is left standing: only a sign in
+   reopens it, and its Connect button is the path. */
+function refreshGcalAfterSync() {
+  if (gcalStatus === "needs-consent") { return; }
+  resetGcalState();
+  const keys = Object.keys(gcalVisibleMonths);
+  if (!keys.length) {
+    const t = taskTodayParts();
+    ensureGcalMonth(t.y, t.m);
+    return;
+  }
+  keys.forEach(function (k) {
+    const vm = gcalVisibleMonths[k];
+    ensureGcalMonth(vm.y, vm.m);
+  });
+}
+
+/* The consent sign in, from the captions and Settings:
+   arm the fresh flag (the consent screen is the only
+   route to a grant the standing sign in does not hold,
+   the flag's own meaning since v2.79) and run the one
+   navigation seam. Nothing else in this module ever
+   navigates. */
+function connectGoogleCalendar() {
+  workerReauthNeeded = true;
+  navigateToWorkerLogin();
+}
+
+/* After a load settles: the Settings row always follows
+   the state, and the calendar surfaces re-render when
+   what they show could have changed (events landed, or
+   a caption must appear or clear). */
+function gcalAfterSettle(eventsChanged) {
+  renderGcalSettingsRow();
+  if (!eventsChanged && !gcalCaptionDirty) { return; }
+  gcalCaptionDirty = false;
+  if (state.view && state.view.kind === "home") {
+    renderHome();
+  }
+  if (state.view && state.view.kind === "tasks" &&
+      state.tasksView.mode === "calendar") {
+    fillTasksBody();
+  }
+}
+
+/* "9:00 AM" for an instant, the task system's own time
+   words over the instant's local time of day. */
+function gcalTimeOfDayLabel(ms) {
+  const d = new Date(ms);
+  function pad(n) {
+    const s = String(n);
+    return s.length < 2 ? "0" + s : s;
+  }
+  return taskTimeLabel(pad(d.getHours()) + ":" +
+    pad(d.getMinutes()));
+}
+
+/* An event's time words: "All day", a same day range, or
+   a range whose end day is named (a timed event that
+   runs past midnight shows its true range). */
+function gcalEventTimeLabel(ev) {
+  if (ev.allDay) { return "All day"; }
+  const start = gcalTimeOfDayLabel(ev.startMs);
+  const end = gcalTimeOfDayLabel(ev.endMs);
+  const startDay = gcalLocalDayStr(new Date(ev.startMs));
+  const endDay = gcalLocalDayStr(new Date(ev.endMs));
+  if (startDay === endDay) { return start + " - " + end; }
+  return start + " - " + taskDateLabel(endDay) + " " + end;
+}
+
+/* One event's row, shared by both calendar surfaces in
+   the Tasks calendar entry's own shape (see
+   buildTaskCalEntryEl): a head row with the calendar's
+   color chip, the time words, and the calendar's name
+   at the right when more than one calendar participates,
+   over the title at the card's full width. There is no
+   checkbox and no editor behind it: an event is display
+   only, and its click opens the event in Google Calendar
+   (its own htmlLink) in a new tab, stopping the click
+   from reaching the day cell under it. */
+function buildGcalEventEl(ev) {
+  const el = document.createElement("div");
+  el.className = "task-cal-entry gcal-entry";
+  el.setAttribute("data-gcal-id", ev.uid);
+  el.title = ev.title;
+  const head = document.createElement("span");
+  head.className = "task-cal-entry-head";
+  const chip = document.createElement("span");
+  chip.className = "gcal-chip";
+  chip.setAttribute("aria-hidden", "true");
+  if (ev.color) { chip.style.backgroundColor = ev.color; }
+  head.appendChild(chip);
+  const time = document.createElement("span");
+  time.className = "task-cal-entry-time";
+  time.textContent = gcalEventTimeLabel(ev);
+  head.appendChild(time);
+  if (gcalParticipatingCount() > 1 && ev.calendarName) {
+    const name = document.createElement("span");
+    name.className = "gcal-cal-name";
+    name.textContent = ev.calendarName;
+    head.appendChild(name);
+  }
+  el.appendChild(head);
+  const title = document.createElement("span");
+  title.className = "task-cal-entry-title";
+  title.textContent = ev.title;
+  el.appendChild(title);
+  el.addEventListener("click", function (clickEv) {
+    clickEv.stopPropagation();
+    if (ev.htmlLink) {
+      window.open(ev.htmlLink, "_blank", "noopener");
+    }
+  });
+  return el;
+}
+
+/* The one caption line the surfaces show for the two
+   captioned states (null in every other state, signed
+   out included): the consent state's line carries its
+   Connect button, the unavailable state's its Retry.
+   Deliberately quiet: muted words, a small button, no
+   toast, and never more than this one line per surface. */
+function buildGcalStatusEl() {
+  if (gcalStatus !== "needs-consent" &&
+      gcalStatus !== "unavailable") {
+    return null;
+  }
+  const el = document.createElement("div");
+  el.className = "gcal-status";
+  el.setAttribute("data-gcal-status", gcalStatus);
+  const text = document.createElement("span");
+  text.className = "gcal-status-text";
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "btn small";
+  if (gcalStatus === "needs-consent") {
+    text.textContent = "Google Calendar is not connected";
+    btn.className += " gcal-connect-btn";
+    btn.textContent = "Connect";
+    btn.addEventListener("click", function (ev) {
+      ev.stopPropagation();
+      connectGoogleCalendar();
+    });
+  } else {
+    text.textContent = "Google Calendar unavailable";
+    btn.className += " gcal-retry-btn";
+    btn.textContent = "Retry";
+    btn.addEventListener("click", function (ev) {
+      ev.stopPropagation();
+      gcalRetryVisible();
+    });
+  }
+  el.appendChild(text);
+  el.appendChild(btn);
+  return el;
+}
+
+/* The Settings Connection row's standing state, filled
+   whenever Settings syncs its controls and whenever a
+   load settles: Connected with the participating
+   calendar count, Not connected (its Connect button
+   standing only in the consent state, the one state
+   where a click is the cure), or Unavailable. */
+function renderGcalSettingsRow() {
+  const statusEl = document.getElementById(
+    "settingsGcalStatus");
+  if (!statusEl) { return; }
+  const btn = document.getElementById(
+    "settingsGcalConnectBtn");
+  let text = "Not connected";
+  let showBtn = false;
+  if (gcalStatus === "ok") {
+    const n = gcalParticipatingCount();
+    text = "Connected (" + n + (n === 1
+      ? " calendar)" : " calendars)");
+  } else if (gcalStatus === "needs-consent") {
+    text = "Not connected";
+    showBtn = true;
+  } else if (gcalStatus === "unavailable") {
+    text = "Unavailable right now";
+  }
+  statusEl.textContent = text;
+  if (btn) { btn.classList.toggle("hidden", !showBtn); }
+}
+
 /* ---------------- v2.43: the Calendar widget ----------
    Evernote's Home calendar widget renders a connected
    calendar account's events. This app has no calendar
@@ -22442,7 +23187,7 @@ function buildHomeNotebooksWidget() {
    no note body is ever loaded for this widget. A done
    reminder is not an item, and a trashed or archived
    note's reminder is not either: state.notes holds live
-   notes only, which is the Reminders view's own pool. */
+   notes only, which is the Reminders view's own pool. Since v2.80 the widget also renders the user's Google Calendar events beside those items: the read only calendar module (its own section above) pools its events into the same day buckets, so an event-only day earns a dot and the agenda merges all three kinds by the module header's pinned order. */
 
 let homeCalCursor = null;    /* {y, m} or null: the month
                                 the grid shows; null is the
@@ -22483,7 +23228,15 @@ function shiftHomeCalMonth(delta) {
 /* The widget's items, grouped by day: {kind: "task",
    task, moment} and {kind: "note", note, moment},
    each day's list in agenda order (by moment; a task
-   before a note at the same moment; then by title). */
+   before a note at the same moment; then by title).
+   v2.80 adds {kind: "event", event, allDay, moment}
+   pooled from the read only calendar module's day
+   buckets, merged by the module header's pinned order:
+   all day events first (by calendar name, then title),
+   then timed items by moment, an event before a task or
+   a note at the same moment. An event's moment is its
+   start, held to the day's start when it began on an
+   earlier day. */
 function homeCalItemsByDay() {
   const byDay = {};
   function push(day, item) {
@@ -22501,16 +23254,36 @@ function homeCalItemsByDay() {
     push(parts.date, { kind: "note", note: n,
       moment: new Date(n.reminderAt) });
   });
+  Object.keys(gcalEventsByDay).forEach(function (day) {
+    const dayStart = gcalDayStartMs(day);
+    gcalEventsByDay[day].forEach(function (ev) {
+      push(day, { kind: "event", event: ev,
+        allDay: ev.allDay,
+        moment: new Date(Math.max(ev.startMs, dayStart)) });
+    });
+  });
   Object.keys(byDay).forEach(function (day) {
     byDay[day].sort(function (a, b) {
+      const aAllDay = a.kind === "event" && a.allDay;
+      const bAllDay = b.kind === "event" && b.allDay;
+      if (aAllDay !== bAllDay) { return aAllDay ? -1 : 1; }
+      if (aAllDay && bAllDay) {
+        const ac = a.event.calendarName || "";
+        const bc = b.event.calendarName || "";
+        if (ac !== bc) { return ac.localeCompare(bc); }
+        return a.event.title.localeCompare(b.event.title);
+      }
       const am = a.moment ? a.moment.getTime() : 0;
       const bm = b.moment ? b.moment.getTime() : 0;
       if (am !== bm) { return am - bm; }
       if (a.kind !== b.kind) {
-        return a.kind === "task" ? -1 : 1;
+        const rank = { event: 0, task: 1, note: 2 };
+        return rank[a.kind] - rank[b.kind];
       }
-      const at = a.kind === "task" ? a.task.title : a.note.title;
-      const bt = b.kind === "task" ? b.task.title : b.note.title;
+      const at = a.kind === "task" ? a.task.title
+        : a.kind === "note" ? a.note.title : a.event.title;
+      const bt = b.kind === "task" ? b.task.title
+        : b.kind === "note" ? b.note.title : b.event.title;
       return String(at || "").localeCompare(String(bt || ""));
     });
   });
@@ -22564,6 +23337,10 @@ function buildHomeCalendarWidget() {
   const todayStr = formatTaskDateParts(today.y, today.m, today.d);
   const selectedStr = homeCalSelectedStr();
   const byDay = homeCalItemsByDay();
+  /* v2.80: ask the read only calendar module for this
+     month's events (lazy, cached, silent when signed
+     out; see the module's header). */
+  ensureGcalMonth(y, m);
 
   const head = document.createElement("div");
   head.className = "home-cal-head";
@@ -22676,10 +23453,16 @@ function buildHomeCalendarWidget() {
     items.forEach(function (item) {
       agenda.appendChild(item.kind === "task"
         ? buildTaskCalEntryEl(item.task)
-        : buildHomeCalNoteEntryEl(item.note));
+        : item.kind === "event"
+          ? buildGcalEventEl(item.event)
+          : buildHomeCalNoteEntryEl(item.note));
     });
     parts.body.appendChild(agenda);
   }
+  /* v2.80: the calendar module's one caption line, when
+     its state carries one (see buildGcalStatusEl). */
+  const gcalStatusEl = buildGcalStatusEl();
+  if (gcalStatusEl) { parts.body.appendChild(gcalStatusEl); }
   return parts.widget;
 }
 
@@ -30275,7 +31058,7 @@ function fillTasksBody() {
    under the grid says. A recurring task shows its one
    current due occurrence, exactly as the list shows it;
    checking it off rolls that occurrence forward through
-   toggleTaskComplete, the rows' own completion path. */
+   toggleTaskComplete, the rows' own completion path. Since v2.80 the grid also carries the user's Google Calendar events from the read only calendar module, display only rows standing after each day's tasks; the module's header carries the connection's rules, and its own section sits above, with the Home calendar code. */
 
 const TASK_CAL_VISIBLE = 3;   /* entries a day shows before
                                  the "+N more" expander */
@@ -30423,6 +31206,10 @@ function fillTasksCalendar(body) {
   Object.keys(byDay).forEach(function (key) {
     byDay[key] = sortTasksForList(byDay[key]);
   });
+  /* v2.80: ask the read only calendar module for this
+     month's events (lazy, cached, silent when signed
+     out; see the module's header). */
+  ensureGcalMonth(y, m);
 
   const wrap = document.createElement("div");
   wrap.id = "taskCal";
@@ -30499,18 +31286,34 @@ function fillTasksCalendar(body) {
     num.textContent = String(date.getDate());
     cellEl.appendChild(num);
     const dayTasks = byDay[dateStr] || [];
+    /* v2.80: the day's Google Calendar events stand after
+       its tasks, from the read only calendar module's
+       day buckets (display only rows, see
+       buildGcalEventEl), and share the cell's visible
+       limit and expander: the tasks keep the first slots
+       in their own order and the events fill what
+       remains. */
+    const dayEvents = gcalEventsForDay(dateStr);
     const expanded = state.tasksView.calExpanded === dateStr;
-    const shown = expanded
+    const shownTasks = expanded
       ? dayTasks : dayTasks.slice(0, TASK_CAL_VISIBLE);
-    shown.forEach(function (task) {
+    shownTasks.forEach(function (task) {
       cellEl.appendChild(buildTaskCalEntryEl(task));
     });
-    if (dayTasks.length > TASK_CAL_VISIBLE) {
+    const shownEvents = expanded
+      ? dayEvents
+      : dayEvents.slice(0, Math.max(0,
+          TASK_CAL_VISIBLE - shownTasks.length));
+    shownEvents.forEach(function (ev) {
+      cellEl.appendChild(buildGcalEventEl(ev));
+    });
+    const dayTotal = dayTasks.length + dayEvents.length;
+    if (dayTotal > TASK_CAL_VISIBLE) {
       const more = document.createElement("button");
       more.type = "button";
       more.className = "task-cal-more";
       more.textContent = expanded ? "Show less"
-        : "+" + (dayTasks.length - TASK_CAL_VISIBLE) + " more";
+        : "+" + (dayTotal - TASK_CAL_VISIBLE) + " more";
       more.addEventListener("click", function (ev) {
         ev.stopPropagation();
         state.tasksView.calExpanded = expanded ? null : dateStr;
@@ -30564,6 +31367,20 @@ function fillTasksCalendar(body) {
     });
     strip.appendChild(add);
     wrap.appendChild(strip);
+    /* v2.80: the selected day's Google Calendar events,
+       under the strip in the same display only rows the
+       grid cells carry. */
+    const selEvents = gcalEventsForDay(
+      state.tasksView.calSelected);
+    if (selEvents.length) {
+      const evBox = document.createElement("div");
+      evBox.className = "task-cal-detail-events";
+      evBox.id = "taskCalDetailEvents";
+      selEvents.forEach(function (ev) {
+        evBox.appendChild(buildGcalEventEl(ev));
+      });
+      wrap.appendChild(evBox);
+    }
   }
 
   const foot = document.createElement("div");
@@ -30571,6 +31388,11 @@ function fillTasksCalendar(body) {
   foot.textContent =
     "Tasks without a due date appear in the list only.";
   wrap.appendChild(foot);
+
+  /* v2.80: the calendar module's one caption line, when
+     its state carries one (see buildGcalStatusEl). */
+  const gcalStatusEl = buildGcalStatusEl();
+  if (gcalStatusEl) { wrap.appendChild(gcalStatusEl); }
 
   body.appendChild(wrap);
 }
@@ -32589,6 +33411,12 @@ function syncSettingsControls() {
   renderNotificationSettings();
   /* v2.79: the account line shows the signed in account. */
   renderWorkerAccountLine();
+  /* v2.80: the Google Calendar row shows the read only
+     connection's state, and opening Settings asks for the
+     current month like any calendar surface. */
+  renderGcalSettingsRow();
+  const gcalNowParts = taskTodayParts();
+  ensureGcalMonth(gcalNowParts.y, gcalNowParts.m);
   /* v2.21: the Last load readout shows this session's boot. */
   renderLastLoadReadout();
   /* v2.47: the Web clipper section shows this build's
@@ -46327,6 +47155,11 @@ async function persistPendingWorkerSession() {
   if (!state.sessionKey) { await loadOrCreateDeviceKey(); }
   await storeWorkerSession(token);
   workerReauthNeeded = false;
+  /* v2.80: a sign in just completed, and a consent may
+     have changed what the Calendar API will answer:
+     forget the calendar module's cache and state so the
+     next calendar surface asks fresh. */
+  resetGcalState();
   return true;
 }
 
@@ -55675,6 +56508,13 @@ function wireEvents() {
   });
   document.getElementById("settingsRefreshBtn").addEventListener("click", function () {
     refreshGoogleConnection().catch(function (err) { toast(err.message, true); });
+  });
+  /* v2.80: the Google Calendar row's Connect button runs
+     the consent forcing sign in (the new scope's only
+     route), exactly like the calendar surfaces' caption
+     button. */
+  document.getElementById("settingsGcalConnectBtn").addEventListener("click", function () {
+    connectGoogleCalendar();
   });
   /* v2.65: the orphaned attachments scan button. The scan
      runs only from this press; the function's own guard

@@ -46,6 +46,20 @@
   changes to that folder (a feature you can turn off in Settings) and syncs
   only when something actually changed.</p>
 
+  <h2>Your calendar</h2>
+  <p>With your permission, the app also reads your Google Calendar,
+  using the read only permission known as calendar.readonly. When a
+  calendar view is open (the Home Calendar widget or the Tasks
+  calendar), the app asks Google for the events in the month on
+  screen and displays them beside your tasks and reminders. The
+  read only permission means the app cannot create, edit, or
+  delete calendar events, and it does not try. Events are fetched
+  live from Google, held only in the app's memory while it is
+  open, and never stored in your Drive, in the app's files, or on
+  your device. You can withdraw the permission at any time on your
+  Google account's permissions page; the app then simply shows
+  its calendars without events.</p>
+
   <h2>Microphone and voice notes</h2>
   <p>The app uses your microphone only when you choose to record a voice
   note, and only after your browser asks for your permission. The finished
@@ -86,15 +100,16 @@
   account only (the developer's). Signing out of the app also ends
   the session at the helper; the stored refresh token stays there
   so signing back in is quick, and it can be removed from the
-  helper's store by the developer on request.</p>
+  helper's store by the developer on request. The permissions the sign in requests are the Drive permission and the read only calendar permission described in this policy.</p>
 
   <h2>Services the app contacts</h2>
   <p>The app connects only to the services listed here, and only as
   described:</p>
   <ul>
     <li><strong>Google</strong> (accounts.google.com and
-    www.googleapis.com): for sign-in and for reading and writing your notes
-    in your Google Drive. Google's handling of your information is covered
+    www.googleapis.com): for sign-in, for reading and writing your notes
+    in your Google Drive, and for reading your calendar
+    events (read only) when a calendar view is open. Google's handling of your information is covered
     by the <a href="https://policies.google.com/privacy">Google Privacy
     Policy</a>.</li>
     <li><strong>The sign-in helper</strong> (ssnotes-auth, a
@@ -143,7 +158,10 @@
   API Services User Data Policy</a>, including the Limited Use requirements.
   Information accessed through Google Drive is used only to create, read,
   update, and delete your own notes and attachments, at your direction, in
-  your own Drive account.</p>
+  your own Drive account. Information accessed through Google
+  Calendar is used only to display your events inside the app
+  while it is open; it is not stored, and the app cannot
+  change it.</p>
 
   <h2>Your choices and control</h2>
   <p>You can revoke the app's access to your Google account at any time from
