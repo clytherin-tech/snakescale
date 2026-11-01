@@ -40,10 +40,66 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-11-01-SSN-V2800
-  Version: 2.80.0
+  BUILD STAMP: 2026-11-01-SSN-V2810
+  Version: 2.81.0
 
   Revision history:
+    v2.81.0 2026-11-01 Calendar Phase 2: events
+                      can be created, edited,
+                      and deleted from inside
+                      the app, and a fresh sign
+                      in now lands on a fresh
+                      token. The sign in's
+                      calendar permission grows
+                      to the write capable
+                      calendar.events scope, and
+                      both calendars gain the
+                      event editor: a New event
+                      button in the Home
+                      widget's head and in the
+                      Tasks calendar's day
+                      detail, and a click on any
+                      event opens it in the
+                      editor, with the Open in
+                      Google Calendar link
+                      inside it. The editor
+                      writes straight to Google
+                      through the one write
+                      transport; events still
+                      live in page memory only,
+                      are never stored by the
+                      app, and a successful
+                      write re-reads the visible
+                      months from Google. A
+                      repeating event, or one on
+                      a read only calendar,
+                      opens in a limited view
+                      only mode. A failed write
+                      keeps the editor open over
+                      the fields as typed, with
+                      a Connect button when the
+                      grant lacks write
+                      permission. And the stale
+                      token fix: a sign in
+                      landing now drops the
+                      standing access token and
+                      its expiry, so the app
+                      enters on a token minted
+                      under the grant that just
+                      landed, instead of the
+                      pre-consent token it kept
+                      presenting until that
+                      token lapsed. The sidebar
+                      gains a Calendar entry
+                      directly above Tasks,
+                      opening the Tasks view in
+                      its calendar mode. And the
+                      browser's own right click
+                      menu is suppressed
+                      throughout the app now,
+                      except in text fields and
+                      the note editor, where it
+                      stays.
     v2.80.0 2026-11-01 Google Calendar events
                       join the app's calendars,
                       read only. The sign in now
@@ -8891,6 +8947,22 @@ body.dark .task-cal-more{color:var(--accent);}
   border:1px solid var(--border);border-radius:var(--radius-card);
 }
 #settingsGcalConnectBtn{margin-top:8px;}
+/* v2.81: the calendar event editor's own rules: the
+   limited mode's note, the inline error line (its
+   Connect button stands only on the write permission
+   failure), and the Open in Google Calendar row. The
+   fields themselves wear the shared modal and field
+   rules, like every dialog; every color here is a
+   theme token, so both themes carry them. */
+.gcal-ev-note{
+  font-size:13.5px;color:var(--muted);margin:0 0 12px;
+}
+.gcal-ev-error{
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  color:var(--danger);font-size:13.5px;font-weight:600;
+  margin:4px 0 2px;
+}
+#gcalEvOpenLink{font-size:13.5px;}
 @media (max-width:700px){
   .task-cal-day{min-height:64px;padding:4px 3px 5px;}
   .task-cal-entry-title{font-size:11px;}
@@ -9760,6 +9832,14 @@ body.dark .version-date{color:var(--accent);}
            there unless Settings say the notes list. -->
       <button class="nav-item" id="navHome" type="button">Home</button>
       <button class="nav-item" id="navAll" type="button">All Notes <span class="count count-pill" id="countAll"></span></button>
+      <!-- v2.81: the Calendar entry, directly above
+           Tasks: it opens the Tasks view with its
+           calendar mode already active, the same grid
+           the view's own Calendar segment shows. The
+           order is Chris's: Home, Calendar, Tasks
+           (Email joins between Home and Calendar in
+           v2.82.0). -->
+      <button class="nav-item" id="navCalendar" type="button">Calendar</button>
       <!-- v2.24: the Tasks view's entry, directly under All
            Notes, with the open task count as its pill. -->
       <button class="nav-item" id="navTasks" type="button">Tasks <span class="count count-pill" id="countTasks"></span></button>
@@ -9897,6 +9977,7 @@ body.dark .version-date{color:var(--accent);}
     <button class="rail-btn rail-expand-btn" id="railExpandBtn" type="button" title="Click to expand" aria-label="Click to expand">&gt;</button>
     <button class="rail-btn" id="railNewNoteBtn" type="button" title="New Note" aria-label="New Note"><svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true" focusable="false"><path d="M10 3v14M3 10h14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" fill="none"/></svg></button>
     <button class="rail-btn" id="railAllBtn" type="button" title="All Notes" aria-label="All Notes"><svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true" focusable="false"><path d="M3 5.5h14M3 10h14M3 14.5h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" fill="none"/></svg></button>
+    <button class="rail-btn" id="railCalendarBtn" type="button" title="Calendar" aria-label="Calendar"><svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true" focusable="false"><rect x="3" y="4.6" width="14" height="12.4" rx="1.8" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M3 8.4h14M6.8 2.8v3.4M13.2 2.8v3.4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" fill="none"/></svg></button>
     <button class="rail-btn" id="railPinnedBtn" type="button" title="Pinned" aria-label="Pinned"><svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true" focusable="false"><rect x="7.2" y="2.2" width="8.6" height="8.6" rx="2.2" transform="rotate(45 11.5 6.5)" fill="currentColor" stroke="none"/><path d="M7.6 10.4L3 17" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" fill="none"/></svg></button>
     <button class="rail-btn" id="railRemindersBtn" type="button" title="Reminders" aria-label="Reminders"><svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true" focusable="false"><path d="M10 2.5a5.5 5.5 0 0 0-5.5 5.5c0 4-1.2 5.2-2 6h14c-.8-.8-2-2-2-6A5.5 5.5 0 0 0 10 2.5zM8.4 16.8a1.8 1.8 0 0 0 3.2 0" fill="currentColor" stroke="none"/></svg></button>
     <button class="rail-btn" id="railNotebooksBtn" type="button" title="Notebooks" aria-label="Notebooks" aria-haspopup="true" aria-expanded="false"><svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true" focusable="false"><path d="M4 3.5C4 2.7 4.7 2 5.5 2H10v16H5.5C4.7 18 4 17.3 4 16.5zM16 3.5C16 2.7 15.3 2 14.5 2H10v16h4.5c.8 0 1.5-.7 1.5-1.5z" fill="currentColor" stroke="none"/></svg></button>
@@ -10987,10 +11068,12 @@ body.dark .version-date{color:var(--accent);}
            token answers; filled by renderWorkerAccountLine
            whenever Settings syncs its controls. -->
       <div class="settings-help" id="settingsAccountLine"></div>
-      <!-- v2.80: the Google Calendar row. The connection
-           is read only (the calendar.readonly permission),
-           so this row reports and connects, and never
-           offers an edit: status text filled by
+      <!-- v2.80: the Google Calendar row; v2.81: the
+           connection is not read only anymore (Phase 2's
+           calendar.events permission is what lets the
+           calendars' own event editor create, edit, and
+           delete events), but this row still only reports
+           and connects: status text filled by
            renderGcalSettingsRow, and the Connect button
            standing only in the not connected state, where
            it runs the consent forcing sign in. -->
@@ -11273,6 +11356,99 @@ body.dark .version-date{color:var(--accent);}
   </div>
 </div>
 
+<!-- ==========================================================================
+     v2.81: the Google Calendar event editor, and its
+     delete confirmation.
+     The one dialog both calendar surfaces open (their New
+     event buttons, and a click on any event row): it
+     creates, edits, and deletes events on the user's
+     Google calendars through the calendar module's one
+     write transport (the module's v2.81 section carries
+     the rules), and nothing it holds is ever saved
+     anywhere else. A repeating event, or an event on a
+     read only calendar, opens in the module's limited
+     mode: fields disabled, no Save or Delete, a note,
+     and the Open in Google Calendar link. Failures stay
+     inside the dialog, in its error line, over the
+     fields exactly as typed. The confirmation names the
+     event and carries Delete and Cancel, like the task
+     editor's own delete, but as a dialog in the app's
+     pattern rather than the browser's.
+     ========================================================================== -->
+<div id="gcalEventModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="gcalEventModalTitle">
+  <div class="modal-card gcal-event-card">
+    <h2 id="gcalEventModalTitle">New event</h2>
+    <p class="modal-sub">Saved on Google Calendar. The app keeps no copy of it.</p>
+
+    <div class="field">
+      <label for="gcalEvTitleInput">Title</label>
+      <input id="gcalEvTitleInput" type="text" placeholder="What is happening?" autocomplete="off">
+    </div>
+    <div class="field">
+      <label for="gcalEvCalendarSelect">Calendar</label>
+      <select id="gcalEvCalendarSelect"></select>
+    </div>
+    <div class="field">
+      <label class="settings-check" for="gcalEvAllDayInput">
+        <input type="checkbox" id="gcalEvAllDayInput">
+        <span>All day</span>
+      </label>
+    </div>
+    <div class="task-form-row">
+      <div class="field">
+        <label for="gcalEvStartDateInput">Start date</label>
+        <input id="gcalEvStartDateInput" type="date">
+      </div>
+      <div class="field">
+        <label for="gcalEvStartTimeInput">Start time</label>
+        <input id="gcalEvStartTimeInput" type="time">
+      </div>
+    </div>
+    <div class="task-form-row">
+      <div class="field">
+        <label for="gcalEvEndDateInput">End date</label>
+        <input id="gcalEvEndDateInput" type="date">
+      </div>
+      <div class="field">
+        <label for="gcalEvEndTimeInput">End time</label>
+        <input id="gcalEvEndTimeInput" type="time">
+      </div>
+    </div>
+    <div class="field">
+      <label for="gcalEvLocationInput">Location</label>
+      <input id="gcalEvLocationInput" type="text" autocomplete="off">
+    </div>
+    <div class="field">
+      <label for="gcalEvDescInput">Description</label>
+      <textarea id="gcalEvDescInput" rows="4"></textarea>
+    </div>
+    <p class="gcal-ev-note hidden" id="gcalEvNote"></p>
+    <div class="field hidden" id="gcalEvOpenRow">
+      <a id="gcalEvOpenLink" target="_blank" rel="noopener">Open in Google Calendar</a>
+    </div>
+    <div class="gcal-ev-error hidden" id="gcalEvError">
+      <span id="gcalEvErrorText"></span>
+      <button class="btn small hidden" id="gcalEvConnectBtn" type="button">Connect</button>
+    </div>
+
+    <div class="modal-foot">
+      <button class="btn danger" id="gcalEvDeleteBtn" type="button">Delete event</button>
+      <button class="btn" id="gcalEvCancelBtn" type="button">Cancel</button>
+      <button class="btn primary" id="gcalEvSaveBtn" type="button">Save event</button>
+    </div>
+  </div>
+</div>
+
+<div id="gcalDeleteModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="gcalDeleteTitle">
+  <div class="modal-card">
+    <h2 id="gcalDeleteTitle">Delete event</h2>
+    <p class="modal-sub" id="gcalDeleteText"></p>
+    <div class="modal-foot">
+      <button class="btn" id="gcalDeleteCancelBtn" type="button">Cancel</button>
+      <button class="btn danger" id="gcalDeleteConfirmBtn" type="button">Delete</button>
+    </div>
+  </div>
+</div>
 <!-- ==========================================================================
      v2.35: the note reminder panel.
      The one panel both reminder surfaces open (the notes list
@@ -11598,8 +11774,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-11-01-SSN-V2800";
-const APP_VERSION = "2.80.0";
+const APP_BUILD = "2026-11-01-SSN-V2810";
+const APP_VERSION = "2.81.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -22503,16 +22679,20 @@ function buildHomeNotebooksWidget() {
   return parts.widget;
 }
 
-/* ---------------- v2.80: Google Calendar, read only ----
+/* ---------------- v2.80: Google Calendar; v2.81: writes ----
    The app's calendars (the Home Calendar widget and the
    Tasks view's calendar mode) gain the user's Google
    Calendar events, displayed beside the app's own dated
-   items. The connection is read only in the permission
-   itself: the sign in asks Google for the calendar.readonly
-   scope, so no code here could create, edit, or delete an
-   event even if it wanted to, and a static scan of this
-   file (part of the build's test record) proves no write
-   call to the Calendar API exists anywhere in it.
+   items. Through v2.80 the connection was read only in
+   the permission itself (the calendar.readonly scope);
+   since v2.81 the sign in asks for the write capable
+   calendar.events scope instead, and the module's
+   second half (its own section, after the Settings row
+   below) adds the event editor: creating, editing, and
+   deleting events on the user's writable calendars,
+   through the one write transport a static scan of this
+   file (part of the build's test record) proves is the
+   only path a calendar write verb can take.
 
    How it works, in the order the pieces run:
 
@@ -22671,10 +22851,15 @@ function normalizeGcalEvent(raw, cal) {
   }
   const ev = {
     uid: cal.id + "|" + String(raw.id || ""),
+    id: String(raw.id || ""),
     calendarId: cal.id,
     calendarName: cal.summary || "",
     color: cal.color || "",
     title: raw.summary ? String(raw.summary) : "(No title)",
+    summary: raw.summary ? String(raw.summary) : "",
+    location: raw.location ? String(raw.location) : "",
+    description: raw.description ? String(raw.description) : "",
+    recurring: !!(raw.recurrence || raw.recurringEventId),
     htmlLink: raw.htmlLink ? String(raw.htmlLink) : "",
     allDay: !!raw.start.date,
     startMs: 0,
@@ -22829,15 +23014,7 @@ async function gcalLoadAttempt(range, token) {
     }
     const items = Array.isArray(listRes.data.items)
       ? listRes.data.items : [];
-    gcalCalendars = items.filter(function (c) {
-      return c && c.id && c.selected !== false;
-    }).map(function (c) {
-      return {
-        id: String(c.id),
-        summary: String(c.summary || ""),
-        color: String(c.backgroundColor || "")
-      };
-    });
+    gcalCalendars = gcalSanitizeCalendarList(items);
   }
   let sawUnauthorized = false;
   let sawForbidden = false;
@@ -23047,10 +23224,12 @@ function gcalEventTimeLabel(ev) {
    color chip, the time words, and the calendar's name
    at the right when more than one calendar participates,
    over the title at the card's full width. There is no
-   checkbox and no editor behind it: an event is display
-   only, and its click opens the event in Google Calendar
-   (its own htmlLink) in a new tab, stopping the click
-   from reaching the day cell under it. */
+   checkbox on it: an event is never a task. Since v2.81
+   its click opens the event editor (the module's second
+   half), stopping the click from reaching the day cell
+   under it; through v2.80 the click opened the event in
+   Google Calendar instead, and that link now lives
+   inside the editor. */
 function buildGcalEventEl(ev) {
   const el = document.createElement("div");
   el.className = "task-cal-entry gcal-entry";
@@ -23080,9 +23259,7 @@ function buildGcalEventEl(ev) {
   el.appendChild(title);
   el.addEventListener("click", function (clickEv) {
     clickEv.stopPropagation();
-    if (ev.htmlLink) {
-      window.open(ev.htmlLink, "_blank", "noopener");
-    }
+    openGcalEventEditor(ev, ev.days[0]);
   });
   return el;
 }
@@ -23156,6 +23333,648 @@ function renderGcalSettingsRow() {
   if (btn) { btn.classList.toggle("hidden", !showBtn); }
 }
 
+/* ---------------- v2.81: calendar writes, the event editor ----
+   Phase 2 of the calendar connection: the user can
+   create, edit, and delete Google Calendar events from
+   inside the app, in one editor dialog both calendar
+   surfaces open (their New event buttons, and a click
+   on any event row, which through v2.80 opened the
+   event in Google Calendar instead; that link now lives
+   inside the editor). The sign in's calendar permission
+   grows from read only to the write capable
+   calendar.events scope at the Worker (Worker v3,
+   console work beside this build); this module behaves
+   correctly on either grant, because a write the grant
+   does not cover answers 403 and lands in the editor as
+   its own state (below), never as the read side's
+   consent state.
+
+   The write rules, in the order the pieces run:
+
+   - Every write goes through the one transport,
+     gcalApiSend, against the same API base the reads
+     use, with the token from the app's one token
+     source. A static scan of this file (part of the
+     build's test record) proves the calendar write
+     verbs reach the API only through it. The outcome
+     discipline mirrors the read loader's: a 401 runs
+     the standing silent renewal once and retries once;
+     a 403 is the distinct "forbidden-write" outcome; a
+     network failure or any other answer is "bad".
+   - Events still live in page memory only. A write
+     sends the event to Google and nothing event shaped
+     is ever written to Drive, to the notes index, to
+     tasks, or to the local snapshot: on success the
+     module forgets its cache and re-asks for the
+     visible months, so what the surfaces show is what
+     Google answered, never a local edit.
+   - The editor never loses input. A failed save or
+     delete leaves the dialog open with every field
+     exactly as typed and the reason in its inline error
+     line: the write permission line, with a Connect
+     button that runs the consent forcing sign in, for
+     forbidden-write; a could-not-reach line for the
+     rest, where saving again is the retry.
+   - Two kinds of event open in a limited mode, fields
+     disabled, no Save and no Delete, a note saying why,
+     and the Open in Google Calendar link: a repeating
+     event (the fetched record carries a recurrence or
+     a recurring event id; this build does not edit
+     recurrence, an intended limitation), and an event
+     on a calendar the sign in may only read (its access
+     role is neither owner nor writer). Editing never
+     moves an event between calendars: the calendar
+     select is disabled on edit. */
+
+/* Settle the calendar list's raw records into the
+   module's own shape: identity and display, and the
+   facts the event editor needs, the access role that
+   says whether the sign in may write to the calendar
+   (owner or writer) and the primary flag that picks
+   the create default. Only calendars Google Calendar
+   itself shows (selected not false) participate, the
+   read side's standing rule. */
+function gcalSanitizeCalendarList(items) {
+  return (items || []).filter(function (c) {
+    return c && c.id && c.selected !== false;
+  }).map(function (c) {
+    return {
+      id: String(c.id),
+      summary: String(c.summary || ""),
+      color: String(c.backgroundColor || ""),
+      accessRole: String(c.accessRole || ""),
+      primary: c.primary === true
+    };
+  });
+}
+
+/* The calendars the editor may write to: access role
+   owner or writer. Everything else the list holds is
+   read only for this sign in. */
+function gcalWritableCalendars() {
+  if (!gcalCalendars) { return []; }
+  return gcalCalendars.filter(function (c) {
+    return c.accessRole === "owner" || c.accessRole === "writer";
+  });
+}
+
+function gcalCalendarIsWritable(calId) {
+  return gcalWritableCalendars().some(function (c) {
+    return c.id === calId;
+  });
+}
+
+/* Make sure the calendar list stands before the editor
+   opens. The surfaces' lazy month fetch is what usually
+   loads it; the editor asks for the list alone when it
+   has not landed yet, with the read loader's own 401
+   discipline. Resolves false when the list could not be
+   had; the editor still opens (an edit carries its own
+   calendar facts, and a create then has no calendar to
+   offer, which its error line says). */
+async function gcalEnsureCalendarList() {
+  if (gcalCalendars) { return true; }
+  let token = null;
+  try { token = await getGoogleAccessToken(); }
+  catch (e) { return false; }
+  let res = null;
+  try {
+    res = await gcalApiGet(
+      "/users/me/calendarList?minAccessRole=reader", token);
+    if (res.status === 401) {
+      const renewed = await googleTrySilentSignIn();
+      if (renewed) {
+        const fresh = await getProviderToken("google");
+        if (fresh) {
+          res = await gcalApiGet(
+            "/users/me/calendarList?minAccessRole=reader",
+            fresh);
+        }
+      }
+    }
+  } catch (e) { return false; }
+  if (!res || res.status !== 200 || !res.data) {
+    return false;
+  }
+  gcalCalendars = gcalSanitizeCalendarList(
+    Array.isArray(res.data.items) ? res.data.items : []);
+  return true;
+}
+
+/* One Calendar API write, the transport every create,
+   edit, and delete goes through: the method, a JSON
+   body when the call carries one, and the same lenient
+   answer reading as the read transport (a 204 delete
+   answer parses to null). Resolves with the status and
+   the parsed body; a network failure rejects, and the
+   caller reads that as its bad outcome. */
+async function gcalApiSend(method, path, bodyObj, token) {
+  const opts = {
+    method: method,
+    headers: { "Authorization": "Bearer " + token }
+  };
+  if (bodyObj) {
+    opts.headers["Content-Type"] = "application/json";
+    opts.body = JSON.stringify(bodyObj);
+  }
+  const res = await fetch(GCAL_API_BASE + path, opts);
+  let data = null;
+  try { data = await res.json(); } catch (e) { data = null; }
+  return { status: res.status, data: data };
+}
+
+/* One write, settled into the module's outcome words:
+   "ok" (the answer is a success status), "forbidden-
+   write" (a 403: the standing grant does not cover
+   writing, which since Phase 2 is a state of the grant,
+   not of the read connection, and never touches the
+   read side's consent state), or "bad" (a network
+   failure or any other answer). A 401 runs the standing
+   silent renewal once and retries the write once, the
+   read loader's own discipline; a second 401 is bad. */
+async function gcalSendWithRenewal(method, path, bodyObj) {
+  let token = null;
+  try { token = await getGoogleAccessToken(); }
+  catch (e) { return { outcome: "bad", data: null }; }
+  let res = null;
+  try {
+    res = await gcalApiSend(method, path, bodyObj, token);
+    if (res.status === 401) {
+      const renewed = await googleTrySilentSignIn();
+      if (renewed) {
+        const fresh = await getProviderToken("google");
+        if (fresh) {
+          res = await gcalApiSend(method, path, bodyObj,
+            fresh);
+        }
+      }
+    }
+  } catch (e) {
+    return { outcome: "bad", data: null };
+  }
+  if (res.status === 200 || res.status === 201 ||
+      res.status === 204) {
+    return { outcome: "ok", data: res.data };
+  }
+  if (res.status === 403) {
+    return { outcome: "forbidden-write", data: res.data };
+  }
+  return { outcome: "bad", data: res.data };
+}
+
+/* "HH:MM" for an instant's local time of day, the time
+   input's own value shape. */
+function gcalTimeInputValue(ms) {
+  const d = new Date(ms);
+  function p2(n) {
+    const s = String(n);
+    return s.length < 2 ? "0" + s : s;
+  }
+  return p2(d.getHours()) + ":" + p2(d.getMinutes());
+}
+
+/* The instant a date input's day and a time input's
+   value name together, in local time (an empty time
+   reads as midnight). NaN when the date does not
+   parse. */
+function gcalDateTimeMs(dateStr, timeStr) {
+  const p = parseTaskDate(dateStr);
+  if (!p) { return NaN; }
+  const t = /^(\d{1,2}):(\d{2})/.exec(String(timeStr || ""));
+  const hh = t ? Number(t[1]) : 0;
+  const mm = t ? Number(t[2]) : 0;
+  return new Date(p.y, p.m - 1, p.d, hh, mm).getTime();
+}
+
+/* An instant as an RFC 3339 string in local time, with
+   the device's own offset, the shape the API pairs with
+   the timeZone field the editor sends beside it. */
+function gcalRfc3339Local(ms) {
+  const d = new Date(ms);
+  function p2(n) {
+    const s = String(n);
+    return s.length < 2 ? "0" + s : s;
+  }
+  const offMin = -d.getTimezoneOffset();
+  const sign = offMin < 0 ? "-" : "+";
+  const abs = Math.abs(offMin);
+  return d.getFullYear() + "-" + p2(d.getMonth() + 1) +
+    "-" + p2(d.getDate()) + "T" + p2(d.getHours()) + ":" +
+    p2(d.getMinutes()) + ":" + p2(d.getSeconds()) + sign +
+    p2(Math.floor(abs / 60)) + ":" + p2(abs % 60);
+}
+
+/* A day string shifted by whole days, the all day
+   editor's exclusive end conversion (the form's end
+   date is the inclusive last day; the API's end date
+   is the day after). */
+function gcalShiftDayStr(dayStr, n) {
+  const p = parseTaskDate(dayStr);
+  if (!p) { return dayStr; }
+  return gcalLocalDayStr(new Date(p.y, p.m - 1, p.d + n));
+}
+
+/* The next whole hour from now, the new event's default
+   start time of day. */
+function gcalNextWholeHour() {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth(),
+    now.getDate(), now.getHours(), 0, 0, 0);
+  if (start.getTime() <= now.getTime()) {
+    start.setHours(start.getHours() + 1);
+  }
+  return start;
+}
+
+/* The editor's standing state: null while it is closed,
+   else { mode ("create" or "edit"), eventId, calendarId,
+   uid, title (the display title, for the delete
+   confirmation), limited, saving, deleting }. */
+let gcalEditorState = null;
+
+function gcalEditorEl(id) {
+  return document.getElementById(id);
+}
+
+/* Fill the editor's calendar select. On create it lists
+   the writable calendars only (a read only calendar can
+   never be a create target). On edit the event's own
+   calendar stands at the head even when it is not
+   writable, so the disabled select can show where the
+   event lives. */
+function fillGcalEditorCalendarSelect(st) {
+  const sel = gcalEditorEl("gcalEvCalendarSelect");
+  if (!sel) { return; }
+  sel.innerHTML = "";
+  let pool = gcalWritableCalendars();
+  if (st.mode === "edit") {
+    const own = (gcalCalendars || []).filter(function (c) {
+      return c.id === st.calendarId;
+    });
+    if (own.length && !pool.some(function (c) {
+      return c.id === st.calendarId;
+    })) {
+      pool = own.concat(pool);
+    }
+  }
+  pool.forEach(function (c) {
+    const opt = document.createElement("option");
+    opt.value = c.id;
+    opt.textContent = c.summary || c.id;
+    sel.appendChild(opt);
+  });
+  if (st.calendarId) { sel.value = st.calendarId; }
+}
+
+/* The editor's inline error line: a message, and the
+   Connect button standing only when asked for (the
+   write permission failure, whose cure is the consent
+   forcing sign in). The line never carries a toast's
+   job: it stays until the next save or a close. */
+function showGcalEditorError(message, withConnect) {
+  const box = gcalEditorEl("gcalEvError");
+  const text = gcalEditorEl("gcalEvErrorText");
+  const btn = gcalEditorEl("gcalEvConnectBtn");
+  if (!box || !text) { return; }
+  text.textContent = message;
+  box.classList.remove("hidden");
+  if (btn) {
+    btn.classList.toggle("hidden", !withConnect);
+  }
+}
+
+function clearGcalEditorError() {
+  const box = gcalEditorEl("gcalEvError");
+  if (box) { box.classList.add("hidden"); }
+  const btn = gcalEditorEl("gcalEvConnectBtn");
+  if (btn) { btn.classList.add("hidden"); }
+}
+
+/* The all day checkbox's one effect on the fields: the
+   time inputs stand disabled while it is checked (the
+   end date then reads as the inclusive last day). The
+   limited mode's blanket disable outranks it. */
+function gcalEditorSyncAllDay() {
+  const allDay = gcalEditorEl("gcalEvAllDayInput");
+  const dis = !!(allDay && allDay.checked);
+  if (gcalEditorState && gcalEditorState.limited) { return; }
+  ["gcalEvStartTimeInput", "gcalEvEndTimeInput"]
+    .forEach(function (id) {
+      const el = gcalEditorEl(id);
+      if (el) { el.disabled = dis; }
+    });
+}
+
+/* Put the editor into or out of its limited mode: every
+   field disabled, Save and Delete hidden, and the note
+   standing with its reason. Out of it, the fields
+   enable again (the caller re-applies the edit mode's
+   disabled calendar select and the all day time rule
+   after this runs). */
+function gcalEditorSetLimited(limited, noteText) {
+  const note = gcalEditorEl("gcalEvNote");
+  if (note) {
+    note.textContent = noteText || "";
+    note.classList.toggle("hidden", !limited);
+  }
+  ["gcalEvTitleInput", "gcalEvCalendarSelect",
+   "gcalEvAllDayInput", "gcalEvStartDateInput",
+   "gcalEvStartTimeInput", "gcalEvEndDateInput",
+   "gcalEvEndTimeInput", "gcalEvLocationInput",
+   "gcalEvDescInput"].forEach(function (id) {
+    const el = gcalEditorEl(id);
+    if (el) { el.disabled = !!limited; }
+  });
+  const save = gcalEditorEl("gcalEvSaveBtn");
+  if (save) { save.classList.toggle("hidden", !!limited); }
+  const del = gcalEditorEl("gcalEvDeleteBtn");
+  if (del && limited) { del.classList.add("hidden"); }
+}
+
+/* Open the event editor: for a new event (ev null) on
+   the given day, or for the given event. A new event
+   defaults to the selected day, the primary writable
+   calendar (else the first writable), timed, the next
+   whole hour, one hour long. An edit loads the event's
+   own facts; an all day event's end date shows as its
+   inclusive last day. A repeating event, or one on a
+   read only calendar, opens in the limited mode. */
+async function openGcalEventEditor(ev, dayStr) {
+  const modal = gcalEditorEl("gcalEventModal");
+  if (!modal) { return; }
+  await gcalEnsureCalendarList();
+  const st = {
+    mode: ev ? "edit" : "create",
+    eventId: ev ? ev.id : "",
+    calendarId: ev ? ev.calendarId : "",
+    uid: ev ? ev.uid : "",
+    title: ev ? ev.title : "",
+    limited: false,
+    saving: false,
+    deleting: false
+  };
+  gcalEditorState = st;
+  const writable = gcalWritableCalendars();
+  if (!ev) {
+    const def = writable.filter(function (c) {
+      return c.primary;
+    })[0] || writable[0] || null;
+    st.calendarId = def ? def.id : "";
+  }
+  fillGcalEditorCalendarSelect(st);
+  gcalEditorEl("gcalEventModalTitle").textContent =
+    ev ? "Edit event" : "New event";
+  gcalEditorEl("gcalEvTitleInput").value =
+    ev ? ev.summary : "";
+  gcalEditorEl("gcalEvLocationInput").value =
+    ev ? ev.location : "";
+  gcalEditorEl("gcalEvDescInput").value =
+    ev ? ev.description : "";
+  const allDayInput = gcalEditorEl("gcalEvAllDayInput");
+  if (ev && ev.allDay) {
+    allDayInput.checked = true;
+    gcalEditorEl("gcalEvStartDateInput").value = ev.days[0];
+    gcalEditorEl("gcalEvStartTimeInput").value = "09:00";
+    gcalEditorEl("gcalEvEndDateInput").value =
+      ev.days[ev.days.length - 1];
+    gcalEditorEl("gcalEvEndTimeInput").value = "10:00";
+  } else if (ev) {
+    allDayInput.checked = false;
+    gcalEditorEl("gcalEvStartDateInput").value =
+      gcalLocalDayStr(new Date(ev.startMs));
+    gcalEditorEl("gcalEvStartTimeInput").value =
+      gcalTimeInputValue(ev.startMs);
+    gcalEditorEl("gcalEvEndDateInput").value =
+      gcalLocalDayStr(new Date(ev.endMs));
+    gcalEditorEl("gcalEvEndTimeInput").value =
+      gcalTimeInputValue(ev.endMs);
+  } else {
+    allDayInput.checked = false;
+    const day = dayStr || gcalLocalDayStr(new Date());
+    const timeStr = gcalTimeInputValue(
+      gcalNextWholeHour().getTime());
+    const startMs = gcalDateTimeMs(day, timeStr);
+    const endMs = startMs + 3600000;
+    gcalEditorEl("gcalEvStartDateInput").value = day;
+    gcalEditorEl("gcalEvStartTimeInput").value = timeStr;
+    gcalEditorEl("gcalEvEndDateInput").value =
+      gcalLocalDayStr(new Date(endMs));
+    gcalEditorEl("gcalEvEndTimeInput").value =
+      gcalTimeInputValue(endMs);
+  }
+  /* The Open in Google Calendar link stands on edit,
+     carrying the event's own htmlLink in a new tab. */
+  const link = gcalEditorEl("gcalEvOpenLink");
+  const linkRow = gcalEditorEl("gcalEvOpenRow");
+  if (ev && ev.htmlLink) {
+    link.href = ev.htmlLink;
+    if (linkRow) { linkRow.classList.remove("hidden"); }
+  } else {
+    link.removeAttribute("href");
+    if (linkRow) { linkRow.classList.add("hidden"); }
+  }
+  gcalEditorEl("gcalEvDeleteBtn").classList
+    .toggle("hidden", !ev);
+  let limitedNote = "";
+  if (ev && ev.recurring) {
+    limitedNote = "This is a repeating event. " +
+      "Edit it in Google Calendar.";
+  } else if (ev && !gcalCalendarIsWritable(ev.calendarId)) {
+    limitedNote = "This calendar is read only here. " +
+      "Edit it in Google Calendar.";
+  }
+  st.limited = !!limitedNote;
+  gcalEditorSetLimited(st.limited, limitedNote);
+  if (ev) {
+    /* Editing never moves an event between calendars:
+       the select is disabled on edit, in every mode. */
+    gcalEditorEl("gcalEvCalendarSelect").disabled = true;
+  }
+  gcalEditorSyncAllDay();
+  clearGcalEditorError();
+  if (!ev && !writable.length) {
+    showGcalEditorError(
+      "No writable calendar is available.", false);
+    const saveBtn = gcalEditorEl("gcalEvSaveBtn");
+    if (saveBtn) { saveBtn.disabled = true; }
+  } else {
+    const saveBtn = gcalEditorEl("gcalEvSaveBtn");
+    if (saveBtn) { saveBtn.disabled = false; }
+  }
+  modal.classList.remove("hidden");
+  if (!st.limited) {
+    const titleInput = gcalEditorEl("gcalEvTitleInput");
+    if (titleInput) { titleInput.focus(); }
+  }
+}
+
+function closeGcalEventEditor() {
+  const modal = gcalEditorEl("gcalEventModal");
+  if (modal) { modal.classList.add("hidden"); }
+  closeGcalDeleteConfirm();
+  gcalEditorState = null;
+}
+
+/* Read the editor's fields into a create/edit payload,
+   or the validation error that stops the save before
+   any request is sent: a timed event's end must be
+   after its start, an all day event's end date (the
+   inclusive last day on the form) must not precede its
+   start date, and the form's all day end converts to
+   the API's exclusive end (the day after). An empty
+   title is allowed: the display falls back to
+   (No title), as it does for events made elsewhere. */
+function readGcalEditorPayload() {
+  const allDay = gcalEditorEl("gcalEvAllDayInput").checked;
+  const sd = gcalEditorEl("gcalEvStartDateInput").value;
+  const ed = gcalEditorEl("gcalEvEndDateInput").value;
+  if (!sd || !ed) {
+    return { error: "Enter the event's dates." };
+  }
+  let start, end;
+  if (allDay) {
+    if (ed < sd) {
+      return { error: "The end date cannot be before " +
+        "the start date." };
+    }
+    start = { date: sd };
+    end = { date: gcalShiftDayStr(ed, 1) };
+  } else {
+    const sMs = gcalDateTimeMs(sd,
+      gcalEditorEl("gcalEvStartTimeInput").value || "00:00");
+    const eMs = gcalDateTimeMs(ed,
+      gcalEditorEl("gcalEvEndTimeInput").value || "00:00");
+    if (!(eMs > sMs)) {
+      return { error: "The end must be after the start." };
+    }
+    const tz = Intl.DateTimeFormat().resolvedOptions()
+      .timeZone || "UTC";
+    start = { dateTime: gcalRfc3339Local(sMs),
+      timeZone: tz };
+    end = { dateTime: gcalRfc3339Local(eMs),
+      timeZone: tz };
+  }
+  return {
+    payload: {
+      summary: gcalEditorEl("gcalEvTitleInput").value,
+      location: gcalEditorEl("gcalEvLocationInput").value,
+      description: gcalEditorEl("gcalEvDescInput").value,
+      start: start,
+      end: end
+    }
+  };
+}
+
+/* A write landed: forget the module's cache and re-ask
+   for the visible months, so the surfaces show what
+   Google holds now, and say so in the established pill
+   toast at the top center. */
+function gcalAfterWriteSuccess(word) {
+  resetGcalState();
+  const keys = Object.keys(gcalVisibleMonths);
+  if (!keys.length) {
+    const t = taskTodayParts();
+    ensureGcalMonth(t.y, t.m);
+  } else {
+    keys.forEach(function (k) {
+      const vm = gcalVisibleMonths[k];
+      ensureGcalMonth(vm.y, vm.m);
+    });
+  }
+  toastTopCenter(word === "deleted"
+    ? "Event deleted" : "Event saved");
+}
+
+/* A failed write settles into the editor's error line,
+   the dialog standing open over the fields exactly as
+   typed: the write permission line with its Connect
+   button for forbidden-write, the could-not-reach line
+   (saving again retries) for the rest. */
+function gcalSettleWriteFailure(outcome) {
+  if (outcome.outcome === "forbidden-write") {
+    showGcalEditorError(
+      "Google has not granted write permission yet.",
+      true);
+  } else {
+    showGcalEditorError(
+      "Could not reach Google Calendar. " +
+      "Your entry is still here.", false);
+  }
+}
+
+async function saveGcalEventEditor() {
+  const st = gcalEditorState;
+  if (!st || st.limited || st.saving) { return; }
+  clearGcalEditorError();
+  const read = readGcalEditorPayload();
+  if (read.error) {
+    showGcalEditorError(read.error, false);
+    return;
+  }
+  const calId = st.mode === "edit" ? st.calendarId
+    : gcalEditorEl("gcalEvCalendarSelect").value;
+  if (!calId) {
+    showGcalEditorError(
+      "No writable calendar is available.", false);
+    return;
+  }
+  st.saving = true;
+  const saveBtn = gcalEditorEl("gcalEvSaveBtn");
+  if (saveBtn) { saveBtn.disabled = true; }
+  const path = "/calendars/" +
+    encodeURIComponent(calId) + "/events" +
+    (st.mode === "edit"
+      ? "/" + encodeURIComponent(st.eventId) : "");
+  const outcome = await gcalSendWithRenewal(
+    st.mode === "edit" ? "PATCH" : "POST", path,
+    read.payload);
+  st.saving = false;
+  if (saveBtn) { saveBtn.disabled = false; }
+  if (outcome.outcome === "ok") {
+    closeGcalEventEditor();
+    gcalAfterWriteSuccess("saved");
+    return;
+  }
+  gcalSettleWriteFailure(outcome);
+}
+
+/* The Delete button opens the confirmation over the
+   editor; only its own Delete runs the write. */
+function deleteGcalEventFromEditor() {
+  const st = gcalEditorState;
+  if (!st || st.mode !== "edit" || st.limited) { return; }
+  const text = gcalEditorEl("gcalDeleteText");
+  if (text) {
+    text.textContent = "Delete the event \"" +
+      (st.title || "(No title)") +
+      "\"? This cannot be undone.";
+  }
+  const modal = gcalEditorEl("gcalDeleteModal");
+  if (modal) { modal.classList.remove("hidden"); }
+}
+
+function closeGcalDeleteConfirm() {
+  const modal = gcalEditorEl("gcalDeleteModal");
+  if (modal) { modal.classList.add("hidden"); }
+}
+
+async function confirmGcalEventDelete() {
+  const st = gcalEditorState;
+  closeGcalDeleteConfirm();
+  if (!st || st.mode !== "edit" || st.deleting) { return; }
+  st.deleting = true;
+  const outcome = await gcalSendWithRenewal("DELETE",
+    "/calendars/" + encodeURIComponent(st.calendarId) +
+      "/events/" + encodeURIComponent(st.eventId), null);
+  st.deleting = false;
+  if (outcome.outcome === "ok") {
+    closeGcalEventEditor();
+    gcalAfterWriteSuccess("deleted");
+    return;
+  }
+  gcalSettleWriteFailure(outcome);
+}
+
 /* ---------------- v2.43: the Calendar widget ----------
    Evernote's Home calendar widget renders a connected
    calendar account's events. This app has no calendar
@@ -23187,7 +24006,7 @@ function renderGcalSettingsRow() {
    no note body is ever loaded for this widget. A done
    reminder is not an item, and a trashed or archived
    note's reminder is not either: state.notes holds live
-   notes only, which is the Reminders view's own pool. Since v2.80 the widget also renders the user's Google Calendar events beside those items: the read only calendar module (its own section above) pools its events into the same day buckets, so an event-only day earns a dot and the agenda merges all three kinds by the module header's pinned order. */
+   notes only, which is the Reminders view's own pool. Since v2.80 the widget also renders the user's Google Calendar events beside those items: the calendar module (its own section above) pools its events into the same day buckets, so an event-only day earns a dot and the agenda merges all three kinds by the module header's pinned order. */
 
 let homeCalCursor = null;    /* {y, m} or null: the month
                                 the grid shows; null is the
@@ -23230,7 +24049,7 @@ function shiftHomeCalMonth(delta) {
    each day's list in agenda order (by moment; a task
    before a note at the same moment; then by title).
    v2.80 adds {kind: "event", event, allDay, moment}
-   pooled from the read only calendar module's day
+   pooled from the calendar module's day
    buckets, merged by the module header's pinned order:
    all day events first (by calendar name, then title),
    then timed items by moment, an event before a task or
@@ -23337,7 +24156,7 @@ function buildHomeCalendarWidget() {
   const todayStr = formatTaskDateParts(today.y, today.m, today.d);
   const selectedStr = homeCalSelectedStr();
   const byDay = homeCalItemsByDay();
-  /* v2.80: ask the read only calendar module for this
+  /* v2.80: ask the calendar module for this
      month's events (lazy, cached, silent when signed
      out; see the module's header). */
   ensureGcalMonth(y, m);
@@ -23380,6 +24199,17 @@ function buildHomeCalendarWidget() {
     renderHome();
   });
   head.appendChild(todayBtn);
+  /* v2.81: the New event button: opens the calendar
+     module's event editor for the selected day. */
+  const newEventBtn = document.createElement("button");
+  newEventBtn.type = "button";
+  newEventBtn.className = "btn small";
+  newEventBtn.id = "homeCalNewEventBtn";
+  newEventBtn.textContent = "New event";
+  newEventBtn.addEventListener("click", function () {
+    openGcalEventEditor(null, homeCalSelectedStr());
+  });
+  head.appendChild(newEventBtn);
   parts.body.appendChild(head);
 
   const week = document.createElement("div");
@@ -26789,8 +27619,16 @@ function renderSidebar() {
     state.view.kind === "home");
   document.getElementById("navAll").classList.toggle("active",
     state.view.kind === "all");
+  /* v2.81: the Calendar entry is the Tasks view in its
+     calendar mode wearing its own seat: it carries the
+     highlight there, and Tasks carries it in list
+     mode. */
+  document.getElementById("navCalendar").classList.toggle("active",
+    state.view.kind === "tasks" &&
+      state.tasksView.mode === "calendar");
   document.getElementById("navTasks").classList.toggle("active",
-    state.view.kind === "tasks");
+    state.view.kind === "tasks" &&
+      state.tasksView.mode !== "calendar");
   document.getElementById("navPinned").classList.toggle("active",
     state.view.kind === "pinned");
   document.getElementById("navReminders").classList.toggle("active",
@@ -26938,6 +27776,11 @@ function renderRailChrome() {
      button at its foot; both run setSidebarRail directly. */
   const marks = [
     ["railAllBtn", state.view.kind === "all"],
+    /* v2.81: the rail's Calendar button marks with the
+       Tasks view's calendar mode, like its sidebar
+       counterpart. */
+    ["railCalendarBtn", state.view.kind === "tasks" &&
+      state.tasksView.mode === "calendar"],
     ["railPinnedBtn", state.view.kind === "pinned"],
     /* v2.35: the rail's Reminders button marks with its view. */
     ["railRemindersBtn", state.view.kind === "reminders"],
@@ -28805,19 +29648,68 @@ function initNoteContextMenu() {
    before. Ordinary clicks, the rows' checkbox
    completion through the one completion path, and
    every sidebar button and drag are untouched,
-   because the guard only ever answers contextmenu. */
+   because the guard only ever answers contextmenu.
+
+   v2.81 widens the word once more, at Chris's
+   instruction: the suppression is app wide now. Any
+   press that reaches this listener and matches no
+   earlier answer is the browser's own menu asking to
+   appear somewhere the app shows no menu of its own,
+   and it never does, on any surface: Home, the note
+   list's furniture, the calendar surfaces, Settings,
+   and every dialog included. His correction the same
+   day carves the text surfaces back out: text-like
+   inputs, text areas, and the contenteditable
+   regions (the note body above all, and the task
+   description editor) keep the browser's menu with
+   its cut, copy, paste, and spellcheck, exactly as
+   they always had it. The order inside the listener
+   is the whole design: the task rows answer first
+   (they are not text surfaces, even when a note's
+   Tasks block nests them inside the editor), the
+   carve-out answers next, and the blanket closes.
+   The sidebar's own blanket from v2.61.1 is subsumed
+   by the closing blanket; its one text field, the
+   search box, now falls under the carve-out like
+   every other text field. The note list's handler
+   still runs first on its cards in the bubble and
+   opens the app menu; this listener then only
+   confirms a prevention already made. */
 function initNativeMenuSuppression() {
   document.addEventListener("contextmenu", function (ev) {
     const target = ev.target;
     if (!target || !target.closest) { return; }
-    if (target.closest("#sidebar, #sidebarRail, #railFlyout")) {
+    if (target.closest(".task-row, .task-cal-entry")) {
       ev.preventDefault();
       return;
     }
-    if (target.closest(".task-row, .task-cal-entry")) {
-      ev.preventDefault();
-    }
+    if (nativeMenuTargetKeepsMenu(target)) { return; }
+    ev.preventDefault();
   });
+}
+
+/* v2.81: the carve-out's measure. A press keeps the
+   browser's own menu when it lands on a text-like
+   input (the type list is the text entry family;
+   checkboxes, radios, buttons, and selects are not
+   text), on a text area, or anywhere inside a
+   contenteditable region (contenteditable="true";
+   the false islands inside the editor, like its
+   attachment cards, are part of the region around
+   them, while its task rows were answered before
+   this is consulted). */
+function nativeMenuTargetKeepsMenu(target) {
+  const field = target.closest("input, textarea");
+  if (field) {
+    if (field.tagName === "TEXTAREA") { return true; }
+    const type = (field.getAttribute("type") || "text")
+      .toLowerCase();
+    return ["text", "search", "email", "url", "tel",
+      "password", "number", "date", "time",
+      "datetime-local", "month", "week"]
+      .indexOf(type) !== -1;
+  }
+  return !!target.closest('[contenteditable="true"]');
 }
 
 /* Permanently delete several trashed notes, one at a time. Each
@@ -30901,6 +31793,10 @@ function renderTasksView() {
     b.addEventListener("click", function () {
       state.tasksView.mode = pair[0];
       renderNoteList();
+      /* v2.81: the sidebar's Calendar and Tasks items
+         trade the active highlight with this mode, so
+         the sidebar re-renders with the switch. */
+      renderSidebar();
     });
     modeSeg.appendChild(b);
   });
@@ -31058,7 +31954,7 @@ function fillTasksBody() {
    under the grid says. A recurring task shows its one
    current due occurrence, exactly as the list shows it;
    checking it off rolls that occurrence forward through
-   toggleTaskComplete, the rows' own completion path. Since v2.80 the grid also carries the user's Google Calendar events from the read only calendar module, display only rows standing after each day's tasks; the module's header carries the connection's rules, and its own section sits above, with the Home calendar code. */
+   toggleTaskComplete, the rows' own completion path. Since v2.80 the grid also carries the user's Google Calendar events from the calendar module, rows standing after each day's tasks (a click on one opens the event editor since v2.81); the module's header carries the connection's rules, and its own section sits above, with the Home calendar code. */
 
 const TASK_CAL_VISIBLE = 3;   /* entries a day shows before
                                  the "+N more" expander */
@@ -31206,7 +32102,7 @@ function fillTasksCalendar(body) {
   Object.keys(byDay).forEach(function (key) {
     byDay[key] = sortTasksForList(byDay[key]);
   });
-  /* v2.80: ask the read only calendar module for this
+  /* v2.80: ask the calendar module for this
      month's events (lazy, cached, silent when signed
      out; see the module's header). */
   ensureGcalMonth(y, m);
@@ -31287,9 +32183,9 @@ function fillTasksCalendar(body) {
     cellEl.appendChild(num);
     const dayTasks = byDay[dateStr] || [];
     /* v2.80: the day's Google Calendar events stand after
-       its tasks, from the read only calendar module's
-       day buckets (display only rows, see
-       buildGcalEventEl), and share the cell's visible
+       its tasks, from the calendar module's
+       day buckets (rows, see buildGcalEventEl), and
+       share the cell's visible
        limit and expander: the tasks keep the first slots
        in their own order and the events fill what
        remains. */
@@ -31366,9 +32262,21 @@ function fillTasksCalendar(body) {
       }
     });
     strip.appendChild(add);
+    /* v2.81: the New event button beside Add a task:
+       opens the calendar module's event editor for the
+       selected day. */
+    const newEventBtn = document.createElement("button");
+    newEventBtn.type = "button";
+    newEventBtn.className = "btn small";
+    newEventBtn.id = "taskCalNewEventBtn";
+    newEventBtn.textContent = "New event";
+    newEventBtn.addEventListener("click", function () {
+      openGcalEventEditor(null, state.tasksView.calSelected);
+    });
+    strip.appendChild(newEventBtn);
     wrap.appendChild(strip);
     /* v2.80: the selected day's Google Calendar events,
-       under the strip in the same display only rows the
+       under the strip in the same rows the
        grid cells carry. */
     const selEvents = gcalEventsForDay(
       state.tasksView.calSelected);
@@ -33411,7 +34319,7 @@ function syncSettingsControls() {
   renderNotificationSettings();
   /* v2.79: the account line shows the signed in account. */
   renderWorkerAccountLine();
-  /* v2.80: the Google Calendar row shows the read only
+  /* v2.80: the Google Calendar row shows the
      connection's state, and opening Settings asks for the
      current month like any calendar surface. */
   renderGcalSettingsRow();
@@ -47155,6 +48063,22 @@ async function persistPendingWorkerSession() {
   if (!state.sessionKey) { await loadOrCreateDeviceKey(); }
   await storeWorkerSession(token);
   workerReauthNeeded = false;
+  /* v2.81: the sign in that just landed may carry a
+     wider grant than the standing access token was
+     minted under (the calendar consent upgrades are the
+     case in point), and a recorded token cannot gain a
+     permission after the fact: when the Phase 1 consent
+     landed on 2026-11-01, the app kept entering on its
+     pre-consent token, and the new permission reached
+     it only when the user signed out by hand. Drop the
+     standing provider token and its expiry here, on the
+     one path where a new session has actually been
+     persisted, so the gate's preparation falls through
+     to its silent Worker trade and the app enters on a
+     token minted under the new grant. If that trade
+     fails, the gate stands, exactly as it does today. */
+  clearProviderToken("google");
+  state.attach.googleExpiresAt = 0;
   /* v2.80: a sign in just completed, and a consent may
      have changed what the Calendar API will answer:
      forget the calendar module's cache and state so the
@@ -55717,6 +56641,18 @@ function wireEvents() {
   document.addEventListener("keydown", function (ev) {
     if (ev.key === "Escape") { closeHomeWidgetsPopover(); }
   });
+  /* v2.81: the Calendar entry opens the Tasks view with
+     its calendar mode active, exactly as if the view
+     had been opened and its Calendar segment pressed;
+     the mode is the session state the view already
+     keeps, and the Tasks entry's own behavior below is
+     unchanged. */
+  document.getElementById("navCalendar").addEventListener("click", function () {
+    state.view = { kind: "tasks", value: null };
+    state.tasksView.mode = "calendar";
+    renderAll();
+    setMobileView("list");
+  });
   /* v2.24: the Tasks entry under All Notes opens the Tasks
      view, the same one line navigation as its neighbours. */
   document.getElementById("navTasks").addEventListener("click", function () {
@@ -56516,6 +57452,41 @@ function wireEvents() {
   document.getElementById("settingsGcalConnectBtn").addEventListener("click", function () {
     connectGoogleCalendar();
   });
+  /* v2.81: the calendar event editor's wiring, the
+     module's second half: Save and Delete run the one
+     write transport, Cancel and a backdrop click close
+     (the delete confirmation likewise), the error line's
+     Connect button runs the consent forcing sign in, and
+     the All day checkbox keeps the time inputs' state.
+     A failed write reports inside the dialog, so the
+     catches here are a last resort only. */
+  document.getElementById("gcalEvSaveBtn").addEventListener("click", function () {
+    saveGcalEventEditor().catch(function () { /* reported in the editor */ });
+  });
+  document.getElementById("gcalEvCancelBtn").addEventListener("click", function () {
+    closeGcalEventEditor();
+  });
+  document.getElementById("gcalEvDeleteBtn").addEventListener("click", function () {
+    deleteGcalEventFromEditor();
+  });
+  document.getElementById("gcalDeleteCancelBtn").addEventListener("click", function () {
+    closeGcalDeleteConfirm();
+  });
+  document.getElementById("gcalDeleteConfirmBtn").addEventListener("click", function () {
+    confirmGcalEventDelete().catch(function () { /* reported in the editor */ });
+  });
+  document.getElementById("gcalEvConnectBtn").addEventListener("click", function () {
+    connectGoogleCalendar();
+  });
+  document.getElementById("gcalEvAllDayInput").addEventListener("change", function () {
+    gcalEditorSyncAllDay();
+  });
+  document.getElementById("gcalEventModal").addEventListener("click", function (ev) {
+    if (ev.target === ev.currentTarget) { closeGcalEventEditor(); }
+  });
+  document.getElementById("gcalDeleteModal").addEventListener("click", function (ev) {
+    if (ev.target === ev.currentTarget) { closeGcalDeleteConfirm(); }
+  });
   /* v2.65: the orphaned attachments scan button. The scan
      runs only from this press; the function's own guard
      and its error state carry the outcomes, so the catch
@@ -56945,6 +57916,7 @@ function wireEvents() {
      runs setSidebarRail directly, the same single toggle the
      new footer collapse button runs. */
   [["railNewNoteBtn", "newNoteBtn"], ["railAllBtn", "navAll"],
+   ["railCalendarBtn", "navCalendar"],
    ["railPinnedBtn", "navPinned"], ["railRemindersBtn", "navReminders"], ["railTrashBtn", "navTrash"],
    ["railArchiveBtn", "navArchive"], ["railLockBtn", "sidebarSignOutItem"]
    ].forEach(function (pair) {
