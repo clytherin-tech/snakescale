@@ -40,10 +40,82 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-10-31-SSN-V2780
-  Version: 2.78.0
+  BUILD STAMP: 2026-11-01-SSN-V2790
+  Version: 2.79.0
 
   Revision history:
+    v2.79.0 2026-11-01 Sign in moves to the
+                      ssnotes-auth Cloudflare
+                      Worker, and the hourly
+                      sign in is gone. Through
+                      v2.78.0 the app asked
+                      Google for access tokens
+                      through the browser token
+                      flow, which hands out no
+                      refresh token, so a sign
+                      in lasted about an hour
+                      and renewal depended on a
+                      silent browser ask that
+                      some browsers and phones
+                      refuse. Now the gate's
+                      Sign in button navigates
+                      to the Worker's /login
+                      route; Google signs the
+                      user in there, the Worker
+                      keeps the refresh token in
+                      its own store, and the
+                      browser returns with a 30
+                      day Worker session in the
+                      URL fragment. The boot
+                      reads that fragment before
+                      any gate logic and scrubs
+                      it from the address bar at
+                      once; the session is
+                      stored encrypted under the
+                      device key, like a
+                      provider token. Getting an
+                      access token is now a POST
+                      to the Worker's /token
+                      route feeding the same
+                      state plumbing every Drive
+                      call already uses, and the
+                      renewal ladder (timer, tab
+                      return, Drive 401 retry,
+                      backoff) trades there too.
+                      The Worker's answers carry
+                      their meanings: a
+                      no_session answer clears
+                      the local session and
+                      lands on the gate, a
+                      reauth answer does the
+                      same and arms the fresh
+                      consent route for the next
+                      sign in, and a network
+                      failure or a Worker error
+                      clears nothing, so an
+                      outage never logs the user
+                      out. The GIS token client
+                      and its one shot gesture
+                      machinery are removed
+                      outright: no code path can
+                      open a Google window
+                      anymore, and automatic
+                      triggers only ever fetch.
+                      Sign out also signs the
+                      session out at the Worker.
+                      A stored token from the
+                      old flow cannot become a
+                      session, so it is dropped
+                      on the first boot and the
+                      user signs in once through
+                      the Worker; notes and the
+                      local cache are untouched.
+                      Only the hosted app can
+                      sign in now: the Worker
+                      answers only its origin,
+                      so a standalone copy of
+                      this file can no longer
+                      sign in.
     v2.78.0 2026-10-31 Transcription runs in a
                       Web Worker, so the app
                       stays responsive while a
@@ -9467,14 +9539,13 @@ body.dark .version-date{color:var(--accent);}
     <p id="repoScreenText">Sign in with Google to load your notes from Google Drive.</p>
     <!-- v2.0: this gate is the only sign in screen. There is no app
          password before or after it, and no client ID field either:
-         the publisher Google client ID ships inside the app (a public
-         identifier, see PUBLISHER_GOOGLE_CLIENT_ID in the script), so
-         the only thing a user ever does on this screen is click the
-         sign in button. -->
+         since v2.79 the sign in runs through the publisher's
+         ssnotes-auth Worker, so the only thing a user ever does
+         on this screen is click the sign in button. -->
 
     <div id="googleConnectPanel" class="provider-card hidden">
       <h3>Sign in with Google</h3>
-      <div class="provider-status">Google sign in is the only sign in for Google Drive storage. Notes and attachments use the same sign in. Google sign ins expire after about an hour; signing in again takes one click.</div>
+      <div class="provider-status">Google sign in is the only sign in for Google Drive storage. Notes and attachments use the same sign in. A sign in lasts 30 days on this device, and the app renews itself quietly in the background.</div>
       <button id="googleBackendConnectBtn" class="btn primary block" type="button">Sign in with Google</button>
       <div class="hint">Your notes go in a folder named SnakeScale Notes in your own Google Drive. Attachments live in the attachments subfolder of that same folder.</div>
     </div>
@@ -10836,6 +10907,10 @@ body.dark .version-date{color:var(--accent);}
       <h3 id="settingsConnectionTitle">Connection</h3>
       <p>Reconnect to Google Drive without reloading the page. The open note is saved on this device first, and nothing is wiped.</p>
       <button class="btn" id="settingsRefreshBtn" type="button"><span id="settingsRefreshLabel">Refresh connection</span></button>
+      <!-- v2.79: the signed in account, from the Worker's
+           token answers; filled by renderWorkerAccountLine
+           whenever Settings syncs its controls. -->
+      <div class="settings-help" id="settingsAccountLine"></div>
       <!-- v2.16: the idle auto-sync toggle. A plain checkbox
            input (accented like the checklist boxes), so the on
            or off state is the control itself, never a silently
@@ -11435,8 +11510,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-10-31-SSN-V2780";
-const APP_VERSION = "2.78.0";
+const APP_BUILD = "2026-11-01-SSN-V2790";
+const APP_VERSION = "2.79.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -11464,6 +11539,15 @@ const LS_DEVICE_KEY = "snakescale.deviceKey.v1";
    encrypted under the device key (see section 11). Only ciphertext
    lives here. */
 const LS_PROVIDERS = "snakescale.providerTokens.v1";
+/* v2.79.0: the ssnotes-auth Worker session token, AES-GCM
+   encrypted under the same device key and held to the same
+   standard as the provider tokens above (see the Worker
+   sign in block in section 11). Only ciphertext lives
+   here. The session is the app's credential for asking the
+   Worker for fresh Google access tokens; it lasts 30 days
+   server side, and the client learns it has died only from
+   the Worker's 401 answers, never from a local clock. */
+const LS_WORKER_SESSION = "snakescale.workerSession.v1";
 /* Attachment constants. ATTACH_ROOT_NAME is the pre-v2.0 top level
    attachments folder name. v2.0 creates no such folder; the name is
    kept only so the one time consolidation can find the legacy
@@ -11474,21 +11558,12 @@ const ATTACH_ROOT_NAME = "SnakeScale Notes Attachments";
 const ATTACH_SUBFOLDER_NAME = "attachments";
 const ATTACH_MAX_BYTES = 100 * 1024 * 1024; /* 100 MB per file cap */
 const GOOGLE_DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file";
-/* v1.4.2: the publisher Google OAuth client ID, baked into the app.
-   This is the publisher's public OAuth client identifier for browser
-   sign in. It is NOT a secret, and it is NOT the client secret: Google
-   expects browser apps to ship this value inside their code, and Google
-   locks its use to the authorized JavaScript origins registered in the
-   publisher's Google Cloud project (for SnakeScale, the GitHub Pages
-   origin), so anyone who views this value gains no access to anything
-   with it. Forks of SnakeScale must register their own OAuth client in
-   Google Cloud and replace this value, or use the advanced override
-   saved in the app settings. Every Google sign in in
-   this app resolves its client ID through effectiveGoogleClientId(),
-   which prefers a saved override and otherwise returns this constant,
-   so no end user is ever asked for a client ID. */
-const PUBLISHER_GOOGLE_CLIENT_ID =
-  "548143299601-n4i6nh3kc0j889ddq44jcmn163okbr1v.apps.googleusercontent.com";
+/* v2.79.0: there is no Google client ID in the app anymore.
+   Through v2.78.0 the publisher's public client ID shipped
+   here for the browser token flow; that flow is retired.
+   Sign in now runs through the ssnotes-auth Cloudflare
+   Worker (see the Worker sign in block in section 11),
+   whose own Google client and secret never leave it. */
 
 /* The in-memory app state. The Google access token lives ONLY in
    state.providerTokens.google while the app is signed in; signing
@@ -12315,8 +12390,8 @@ function wipeDeviceKey() {
 /* Sign out, the only sign out there is (v2.0). There is no lock to
    fall back to anymore: signing out is the full Google sign out
    Drive users have had since v1.4.1, and it is what the sidebar
-   button and the gate button both run. It revokes the Google
-   token with Google when GIS is loaded (best effort), then wipes
+   button and the gate button both run. It signs the Worker
+   session out at the Worker (best effort), then wipes
    this device's copies: the encrypted provider token store, the
    encrypted note cache, the offline queue, any legacy vault
    record left by an older build, and the device key itself.
@@ -12353,11 +12428,16 @@ async function signOut() {
     state.cacheWritePromise = null;
   }
 
-  if (googleToken && window.google && window.google.accounts &&
-      window.google.accounts.oauth2) {
-    try { window.google.accounts.oauth2.revoke(googleToken, function () {}); }
-    catch (e) { /* Revoke is best effort; the local token is dropped below. */ }
-  }
+  /* v2.79.0: the Worker session is signed out too: its own
+     logout, best effort, then the local session store joins
+     the wipes below (its memory copy here, its localStorage
+     key beside LS_PROVIDERS). Only the session dies; the
+     refresh token stays in the Worker, so signing back in
+     on this device is quick. */
+  await workerLogout();
+  clearWorkerSession();
+  workerReauthNeeded = false;
+  workerAccountEmail = "";
 
   state.sessionKey = null;
   state.providerTokens = { google: null };
@@ -12396,6 +12476,7 @@ async function signOut() {
   hideLinkBar();
 
   localStorage.removeItem(LS_PROVIDERS);
+  localStorage.removeItem(LS_WORKER_SESSION);
   localStorage.removeItem(LS_CACHE);
   localStorage.removeItem(LS_QUEUE);
   localStorage.removeItem(LS_LEGACY_VAULT);
@@ -24947,7 +25028,19 @@ async function connectAndLoad() {
   repoError.textContent = "";
   document.getElementById("googleConnectPanel").classList.add("hidden");
 
-  const status = await providers.google.getStatus();
+  let status = await providers.google.getStatus();
+  if (!status.connected && (await getWorkerSession())) {
+    /* v2.79.0: a standing Worker session mints the access
+       token on the spot, so a stale status (an expired
+       recorded token, none recorded yet after a fragment
+       landing) heals here instead of bouncing to the gate.
+       A failed trade leaves the status exactly as it was,
+       and the gate below speaks for it as it always has. */
+    const fetched = await workerFetchAccessToken();
+    if (fetched.ok) {
+      status = await providers.google.getStatus();
+    }
+  }
   if (!status.connected) {
     state.repoExists = false;
     showGoogleConnectScreen(status.reason === "expired"
@@ -32494,6 +32587,8 @@ function syncSettingsControls() {
   /* v2.24: the Notifications section shows the live
      permission and the saved reminders switch. */
   renderNotificationSettings();
+  /* v2.79: the account line shows the signed in account. */
+  renderWorkerAccountLine();
   /* v2.21: the Last load readout shows this session's boot. */
   renderLastLoadReadout();
   /* v2.47: the Web clipper section shows this build's
@@ -45882,21 +45977,22 @@ function wireToolbar() {
    provider: the user clicks Sign in with Google and approves access
    on Google's own site, and that one sign in covers notes and
    attachments alike. SnakeScale never sees the user's Google
-   password. The client ID that makes the button work belongs to
-   the PUBLISHER (Chris, the app owner), who registered one app
-   with Google, once, for free; it is baked into the app (see
-   PUBLISHER_GOOGLE_CLIENT_ID and effectiveGoogleClientId below).
-   A client ID override saved in the app settings is honored as an
-   advanced override; there is no field for it in the app anymore.
+   password. Since v2.79.0 the sign in itself runs through the
+   publisher's ssnotes-auth Cloudflare Worker (see the Worker
+   sign in block below): the Worker holds the Google client and
+   its secret, keeps the sign in's refresh token in its own
+   store, and hands this app a 30 day session in exchange.
    End users never register anything.
 
-   Token safety: the Google OAuth token is encrypted with AES-GCM
-   under state.sessionKey, the random device key from section 4,
+   Token safety: the Google access token and the Worker
+   session token are encrypted with AES-GCM under
+   state.sessionKey, the random device key from section 4,
    and localStorage holds only ciphertext. That key is not a login
-   and does not lock the browser profile. Google's browser token
-   flow hands out short lived access tokens (about an hour) and NO
-   refresh token, so expiry is tracked and the user simply signs
-   in again. Signing out drops every plaintext token from memory.
+   and does not lock the browser profile. Access tokens still
+   live about an hour, but the Worker holds a refresh token
+   server side, so a fresh access token is one quiet fetch
+   away and signing in again is a 30 day event, not an hourly
+   one. Signing out drops every plaintext token from memory.
 
    Attachment records written by older versions can name a provider
    this build no longer has (pCloud, removed in v2.0). Those records
@@ -45984,6 +46080,33 @@ async function getGoogleAccessToken() {
     const token = await getProviderToken("google");
     if (token) { return token; }
   }
+  /* v2.79.0: a standing Worker session renews the access
+     token quietly right here, at the one source every Drive
+     call shares, before any caller is told to reconnect.
+     A transient failure (the fetch failed, the Worker
+     answered 5xx) is the reconnect error, so the pending
+     work queues exactly as it does for an expired token,
+     and the session stands for the next attempt. A session
+     the Worker reports dead (no_session or reauth) is the
+     plain sign in error instead: no token is coming until
+     the user signs in again. */
+  if (await getWorkerSession()) {
+    const fetched = await workerFetchAccessToken();
+    if (fetched.ok) {
+      const fresh = await getProviderToken("google");
+      if (fresh) { return fresh; }
+    }
+    if (fetched.kind === "network" || fetched.kind === "worker") {
+      throw googleReconnectError(
+        "The sign in service could not be reached just now. " +
+        "Your notes and queued changes are saved on this " +
+        "device; try again in a moment.");
+    }
+    const dead = new Error("Sign in with Google first.");
+    dead.code = "GOOGLE_SIGN_IN_REQUIRED";
+    dead.needsGoogleReconnect = true;
+    throw dead;
+  }
   const err = new Error(status.reason === "expired"
     ? "Your Google sign in expired. Use Refresh connection in " +
       "Settings to reconnect."
@@ -46037,222 +46160,309 @@ function revokeAttachmentUrls() {
   state.objectUrls = [];
 }
 
-/* ----- Google Drive driver ----------------------------------------------
-   Sign in uses Google Identity Services (GIS) token client, loaded
-   lazily from Google ONLY when the user clicks Sign in with Google, so
-   users who never touch attachments never load Google code. Scope is
-   drive.file only: SnakeScale can see and manage just the files it
-   creates (plus files the user picks), never the whole Drive.        */
-let gisScriptPromise = null;
-function loadGisScript() {
-  if (window.google && window.google.accounts && window.google.accounts.oauth2) {
-    return Promise.resolve();
-  }
-  if (gisScriptPromise) { return gisScriptPromise; }
-  gisScriptPromise = new Promise(function (resolve, reject) {
-    const s = document.createElement("script");
-    s.src = "https://accounts.google.com/gsi/client";
-    s.async = true;
-    s.defer = true;
-    s.onload = function () { resolve(); };
-    s.onerror = function () {
-      gisScriptPromise = null;
-      reject(new Error("The Google sign in script could not be loaded. Check your connection and try again."));
-    };
-    document.head.appendChild(s);
-  });
-  return gisScriptPromise;
+/* ----- Google sign in: the ssnotes-auth Worker (v2.79.0) --------------
+   Sign in runs through the publisher's Cloudflare Worker,
+   ssnotes-auth. The Worker holds the Google client secret and,
+   after the one sign in, the account's Google refresh token in
+   its own KV store; this app never sees either. What the app
+   holds is a Worker session token (30 days, server side),
+   encrypted on this device exactly like a provider token.
+
+   The flow, in the order the pieces below run it:
+
+   - The gate's Sign in button navigates the browser to the
+     Worker's /login route (navigateToWorkerLogin, the one
+     navigation seam). Google signs the user in there, and the
+     Worker sends the browser back to this app's address with
+     the outcome in the URL fragment.
+   - At boot, before any gate logic, readWorkerAuthFragment
+     lifts that fragment out of the address bar and scrubs it:
+     a session token must never linger in the URL, in history,
+     or in a screenshot. The gate then persists the session
+     (persistPendingWorkerSession) and enters.
+   - Whenever the app needs a Google access token and the
+     recorded one has expired, workerFetchAccessToken trades
+     the session at the Worker's /token route and records the
+     fresh token through the same plumbing every Drive call
+     already consumes (recordGoogleAccessToken). The renewal
+     ladder below calls the same trade. No code path in this
+     app can open a Google window anymore: the only navigation
+     is the deliberate Sign in click (and Refresh connection
+     with no live session, the same deliberate gesture it has
+     always been), and automatic triggers only ever fetch.
+   - The Worker's answers decide what a failure means:
+     401 no_session clears the local session and lands on the
+     gate; 401 reauth does the same and arms the fresh flag,
+     so the next Sign in goes to /login?fresh=1, the only
+     route that mints a new refresh token; a network failure
+     or a Worker 5xx clears NOTHING, because a transient
+     outage must never log the user out.
+   Scope is drive.file only, as it has been since v1.4: the
+   app can see and manage just the files it creates (plus
+   files the user picks), never the whole Drive.            */
+const WORKER_AUTH_BASE = "https://ssnotes-auth.clytherin.workers.dev";
+
+/* The session token in memory, the boot fragment's held
+   outcome, the fresh flag a reauth answer arms, and the
+   account email the Worker reports (shown in Settings).
+   The token's durable copy is the encrypted blob under
+   LS_WORKER_SESSION; memory is only its working copy. */
+let workerSessionToken = null;
+let pendingWorkerAuth = null;
+let workerReauthNeeded = false;
+let workerAccountEmail = "";
+
+function loadWorkerSessionBlob() {
+  try { return JSON.parse(localStorage.getItem(LS_WORKER_SESSION) || "null"); }
+  catch (e) { return null; }
 }
 
-/* v1.4.2: the one place that decides which Google client ID a sign in
-   uses. A value saved in settings (an advanced override kept for
-   testing and for forks that registered their own Google OAuth
-   client; v2.1.0 removed the dialog field that used to edit it, but a
-   stored value is still honored) wins when it is non empty after
-   trimming. Otherwise the publisher ID baked into the app is used.
-   Either way a client ID is always available, so no sign in flow
-   ever has to ask the user for one. */
-function effectiveGoogleClientId() {
-  const override = (state.attach.googleClientId || "").trim();
-  return override || PUBLISHER_GOOGLE_CLIENT_ID;
-}
-
-/* v2.71.0: the one shot UI gesture token. A UI capable
-   token request (the gate Sign in ask, Refresh
-   connection's consent fallback) must prove a deliberate
-   gesture stands behind it, at the request itself. The
-   token is minted only in those two places: inside the
-   gate Sign in button's click handler, and at the start
-   of a Refresh connection run (whose only callers are
-   its three deliberate click handlers). googleConnect
-   consumes it at the request line: the first flagged
-   request spends it, and a flagged request that finds
-   no live token is forced to the silent prompt there,
-   whatever its caller passed. The token is also
-   cleared whenever the renewal cycle resets (every
-   successful connect, every sign out), so it can never
-   be saved up across actions or inherited by a later
-   session. It carries a serial and a mint time for the
-   test record; only its presence is ever consulted. */
-let googleUiGestureToken = null;
-let googleUiGestureSerial = 0;
-function mintGoogleUiGesture() {
-  googleUiGestureSerial += 1;
-  googleUiGestureToken = {
-    n: googleUiGestureSerial, at: Date.now()
-  };
-}
-function consumeGoogleUiGesture() {
-  const token = googleUiGestureToken;
-  googleUiGestureToken = null;
-  return token !== null;
-}
-
-async function googleConnect(options) {
-  /* The options argument carries the prompt the token request should
-     use. googleTrySilentSignIn passes {silent: true}, which maps to
-     the default below: an empty prompt that lets Google decide
-     whether an interaction is needed, and no interaction is shown
-     when Google can issue the token quietly. v2.2: the Refresh
-     connection flow's fallback passes { prompt: "consent" } to ask
-     for the interactive consent prompt explicitly, so the silent
-     attempt and the interactive attempt share this one function and
-     its token recording, with no duplicated token logic anywhere.
-     v2.68.0: the empty prompt default above is historical: the
-     request below now honors a caller prompt only behind an
-     explicit interactive: true flag and otherwise asks with the
-     GIS prompt "none", so no automatic path can raise Google's
-     window (see the gate comment at the request itself).
-     v2.71.0: the flag is no longer the whole proof: the
-     request also consumes the one shot UI gesture token
-     (see above), minted only by the gate Sign in click
-     and by Refresh connection at the start of its run,
-     so a flagged request with no deliberate gesture
-     behind it is forced to "none" at the same line (see
-     the choke point comment at the request itself).
-     v1.4.2: every GIS token client in the app is created here (the
-     notes sign in, the silent renewal, and the attachments
-     provider all funnel through googleConnect), and the client ID
-     always comes from effectiveGoogleClientId(). No code reads a
-     client ID field directly anymore: no screen has a field at all
-     (v2.1.0 removed the last one), and the helper consults the saved
-     settings override itself. */
-  const clientId = effectiveGoogleClientId();
-  /* A user may reach sign in right after signing out, when the old
-     device key was wiped with everything else. Recreate the local
-     encryption key before any token is stored. */
+/* Store the session token: AES-GCM under the device key,
+   the provider token store's own recipe (storeProviderToken),
+   so the session is held to the same standard as every
+   other credential on this device. */
+async function storeWorkerSession(token) {
   if (!state.sessionKey) {
-    await loadOrCreateDeviceKey();
+    throw new Error("SnakeScale Notes is not ready to save a provider sign in on this device yet.");
   }
-  await loadGisScript();
-  const resp = await new Promise(function (resolve, reject) {
-    const client = window.google.accounts.oauth2.initTokenClient({
-      client_id: clientId,
-      scope: GOOGLE_DRIVE_SCOPE,
-      callback: function (r) {
-        if (r && r.access_token) { resolve(r); }
-        else { reject(new Error("Google sign in did not return an access token.")); }
-      },
-      error_callback: function (err) {
-        /* v2.24.6: the message is unchanged for the interactive
-           callers, but the GIS error type now also rides on the
-           error object itself, so the silent path can report
-           WHICH failure Google gave instead of discarding it
-           (see googleTrySilentSignInDetailed below). */
-        const gisError = new Error("Google sign in was cancelled or failed" +
-          (err && err.type ? " (" + err.type + ")" : "") + ".");
-        if (err && err.type) { gisError.gisErrorType = String(err.type); }
-        reject(gisError);
-      }
-    });
-    const promptValue = options && typeof options.prompt === "string"
-      ? options.prompt : "";
-    /* v2.68.0: the interactive gate. Through v2.67.0 the
-       silent path asked with an EMPTY prompt, which does
-       not mean "no UI": it lets Google decide, and when
-       Google wants an interaction the token request itself
-       raises the sign in popup with no user gesture behind
-       it, the recurring popup Chris kept seeing against
-       the v2.24.8 silent only rule. From here on, only a
-       caller passing interactive: true (the gate Sign in
-       button's click handler and Refresh connection's
-       consent fallback, both deliberate gestures) may use
-       a UI capable prompt. Every other caller, the renewal
-       timer, the visibility return, 401 recovery, the
-       gesture ladder, auto sync retries, asks with the
-       GIS prompt "none": Google either issues the token
-       with no UI at all or fails the request through
-       error_callback, and the app lands on its signed out
-       or Refresh state quietly. */
-    /* v2.71.0: the choke point. The v2.68.0 flag alone
-       was a convention: any caller passing interactive:
-       true received a UI capable prompt, and nothing at
-       the request itself proved a deliberate gesture
-       stood behind the call. (The v2.71.0 diagnosis, a
-       GIS spy in the real browser rig driving every
-       automatic trigger with silent renewal forced to
-       fail, found every automatic request already
-       asking "none"; what the flag could not do is
-       PROVE that of the next caller, or of a regression
-       in this one.) From here on a UI capable prompt
-       must also consume the one shot UI gesture token
-       (minted only inside the gate Sign in click
-       handler and at the start of a Refresh connection
-       run; see the token block above). A flagged
-       request with no live token is forced to "none"
-       at this line, exactly like an unflagged one, so
-       the silent only rule is enforced at the one
-       place that can ask Google for a window instead
-       of resting on every call site's memory. The
-       google.accounts.id surface (One Tap, auto
-       select) is not used anywhere in this app and
-       must not be added: this token client is the
-       only Google prompt there is. */
-    const wantsInteractive = !!(options && options.interactive === true);
-    const interactive = wantsInteractive && consumeGoogleUiGesture();
-    client.requestAccessToken({
-      prompt: interactive ? promptValue : "none"
-    });
-  });
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const cipher = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv: iv },
+    state.sessionKey,
+    new TextEncoder().encode(token)
+  );
+  localStorage.setItem(LS_WORKER_SESSION, JSON.stringify({
+    iv: bytesToBase64(iv),
+    data: bytesToBase64(new Uint8Array(cipher))
+  }));
+  workerSessionToken = token;
+}
+
+/* Read the session token: memory first, then decrypt the
+   stored blob with the device key. Returns null when there
+   is no session, the key is not ready, or the blob is
+   damaged. The client keeps no local expiry for the
+   session: it is dead when the Worker says so (a 401),
+   not when a local clock decides. */
+async function getWorkerSession() {
+  if (workerSessionToken) { return workerSessionToken; }
+  const rec = loadWorkerSessionBlob();
+  if (!rec || !state.sessionKey) { return null; }
+  try {
+    const plain = await crypto.subtle.decrypt(
+      { name: "AES-GCM", iv: base64ToBytes(rec.iv) },
+      state.sessionKey,
+      base64ToBytes(rec.data)
+    );
+    workerSessionToken = new TextDecoder().decode(plain);
+    return workerSessionToken;
+  } catch (e) {
+    return null;
+  }
+}
+
+/* Drop the session everywhere it lives on this device.
+   Runs when the Worker reports it dead, and on sign out
+   and disconnect beside the provider token's own clear. */
+function clearWorkerSession() {
+  workerSessionToken = null;
+  try { localStorage.removeItem(LS_WORKER_SESSION); }
+  catch (e) { /* storage can refuse; memory is already clear */ }
+}
+
+/* Remove the auth fragment from the address bar without
+   touching anything else in the URL, the web clip strip's
+   own recipe (stripWebClipFragment): a history replace to
+   the same path and query, so a ?task= or ?noteReminder=
+   return trip sharing the URL survives. Falls back to
+   clearing the hash where the history call is refused. */
+function scrubWorkerAuthFragment() {
+  try {
+    window.history.replaceState(null, document.title,
+      window.location.pathname + window.location.search);
+  } catch (err) {
+    try { window.location.hash = ""; } catch (e) { /* no-op */ }
+  }
+}
+
+/* The boot fragment reader. A fragment that is not a Worker
+   auth fragment is left entirely alone (a web clip fragment
+   is the clip reader's business, and it runs after this
+   one). A Worker fragment is scrubbed at once, whatever it
+   carries, and its outcome is held in pendingWorkerAuth for
+   the gate: a session token (also held in memory at once,
+   so nothing downstream can lose it before the encrypted
+   store is ready), or the plain word error or denied. */
+function readWorkerAuthFragment() {
+  let hash = "";
+  try { hash = window.location.hash || ""; }
+  catch (e) { return null; }
+  let out = null;
+  if (hash.indexOf("#ssnotes_session=") === 0) {
+    const token = hash.slice("#ssnotes_session=".length);
+    if (token) { out = { kind: "session", token: token }; }
+  } else if (hash.indexOf("#ssnotes_auth=") === 0) {
+    const word = hash.slice("#ssnotes_auth=".length);
+    out = { kind: word === "denied" ? "denied" : "error" };
+  }
+  if (!out) { return null; }
+  pendingWorkerAuth = out;
+  if (out.kind === "session") { workerSessionToken = out.token; }
+  scrubWorkerAuthFragment();
+  return out;
+}
+
+/* Persist the held session outcome into the encrypted
+   store. Runs at the head of the gate's preparation, once
+   the device key exists; the memory copy bridges the gap
+   between the fragment read and this write. A persisted
+   session also spends the fresh flag: the sign in that
+   just landed is the freshest one there is. */
+async function persistPendingWorkerSession() {
+  if (!pendingWorkerAuth || pendingWorkerAuth.kind !== "session") {
+    return false;
+  }
+  const token = pendingWorkerAuth.token;
+  pendingWorkerAuth = null;
+  if (!state.sessionKey) { await loadOrCreateDeviceKey(); }
+  await storeWorkerSession(token);
+  workerReauthNeeded = false;
+  return true;
+}
+
+/* Where Sign in navigates. The fresh flag, armed only by a
+   Worker reauth answer, asks the Worker to force Google's
+   consent screen: a plain /login reuses the standing grant
+   and cannot mint a replacement refresh token. */
+function workerLoginUrl() {
+  return WORKER_AUTH_BASE + "/login" +
+    (workerReauthNeeded ? "?fresh=1" : "");
+}
+
+/* The one navigation the auth model performs, kept as a
+   named seam the way the update reload is kept
+   (reloadForUpdate): the decision logic around it is the
+   app's own and runs for real everywhere; the seam is the
+   single line that sends the browser to the Worker. Only
+   deliberate gestures call it (the gate's Sign in button,
+   and Refresh connection when no session stands). */
+function navigateToWorkerLogin() {
+  window.location.assign(workerLoginUrl());
+}
+
+/* The providers registry's connect entry: signing in IS
+   the navigation above, nothing else. */
+function workerSignIn() {
+  navigateToWorkerLogin();
+}
+
+/* The Settings Connection tab's account line, filled from
+   the email the Worker's /token answers carry (the same
+   value its /me route reports). Rendered whenever Settings
+   syncs its controls and whenever a token lands. */
+function renderWorkerAccountLine() {
+  const el = document.getElementById("settingsAccountLine");
+  if (!el) { return; }
+  if (workerAccountEmail) {
+    el.textContent = "Signed in as " + workerAccountEmail + ".";
+  } else if (workerSessionToken || loadWorkerSessionBlob()) {
+    el.textContent = "Signed in with Google.";
+  } else {
+    el.textContent = "";
+  }
+}
+
+/* Record a fresh Google access token: the one landing
+   every successful token acquisition shares, with exactly
+   the effects a successful connect has always had (the
+   expiry on state.attach, the folder and notes caches
+   re-resolved for the account, the recorded renewal
+   failure cleared, settings saved, the token into the
+   encrypted provider store, and the proactive renewal
+   rescheduled). Resolves once the token is stored. */
+async function recordGoogleAccessToken(accessToken, expiresInSeconds, email) {
   state.attach.googleExpiresAt =
-    Date.now() + (Number(resp.expires_in) || 3600) * 1000;
+    Date.now() + (Number(expiresInSeconds) || 3600) * 1000;
   state.attach.googleFolderId = null;   /* re-resolve for this account */
-  resetDriveNotesCache();               /* v1.4: notes folders too */
-  /* v2.24.6: a successful connect ends whatever renewal trouble
-     came before it: the recorded failure clears (and the
-     saveSettings below persists the clear), and its line
-     leaves the sidebar menu. The ladder, the episode, and any
-     armed gesture reset when scheduleGoogleRenewal runs just
-     below, as part of the fresh cycle this connect starts. */
+  resetDriveNotesCache();               /* notes folders too */
   state.attach.googleRenewalFailure = null;
   renderRenewalFailureLine();
+  if (email) { workerAccountEmail = String(email); }
+  renderWorkerAccountLine();
   saveSettings();
-  await storeProviderToken("google", resp.access_token);
-  /* v2.15: every successful connect (a gate sign in, a silent
-     renewal, a manual refresh: all of them funnel through here)
-     (re)schedules the automatic silent renewal below, so the
-     session rolls forward on its own instead of lapsing at the
-     hour while the app sits open. */
+  await storeProviderToken("google", accessToken);
+  /* v2.15: every fresh token (re)schedules the automatic
+     renewal below, so the session rolls forward on its own
+     instead of lapsing while the app sits open. */
   scheduleGoogleRenewal();
-  /* v2.0: the attachments folder is NOT prepared here. It is created
-     lazily, on the first attachment upload or by the one time legacy
-     consolidation in the connect flow, so a sign in by itself never
-     creates folders. The notes connect flow proves this token works
-     against Drive right away when it resolves the notes root. */
 }
 
-/* v1.4.1: one silent renewal attempt for a returning Drive user. GIS is
-   asked for a token with an empty prompt, which means "issue one only if
-   Google can do it without showing an interaction." Every failure mode
-   (script blocked, interaction required, network trouble) simply
-   returns false. The caller then shows the sign in gate with no error
-   toast; a toast belongs only to a manual sign in click.
-   v2.24.6: the attempt now also reports WHY it failed, through
-   the detailed form below: googleConnect tags its rejection
-   with the GIS error type, and that type is what the renewal
-   block records for the sidebar menu line. The plain boolean
-   form keeps its exact old contract for its old callers (the
-   gate's background attempt, the manual Refresh flow). */
+/* The token trade itself: POST the session to the Worker's
+   /token route and settle the outcome into one of four
+   shapes, so every caller (the gate, the renewal ladder,
+   the Drive 401 retry, Refresh connection, and the token
+   source below) reads the same answer:
+     { ok: true }                 a fresh access token is recorded
+     { ok: false, kind: "no_session" }
+                                  the Worker has no session for
+                                  this token (missing or expired);
+                                  the local copy is cleared
+     { ok: false, kind: "reauth" }
+                                  no usable refresh token stands;
+                                  the local copy is cleared and
+                                  the fresh flag is armed
+     { ok: false, kind: "network" }  the fetch itself failed
+     { ok: false, kind: "worker", status }
+                                  the Worker answered something
+                                  else (a 5xx, a malformed 200);
+                                  the session is RETAINED in both
+                                  transient shapes, by design */
+async function workerFetchAccessToken() {
+  const session = await getWorkerSession();
+  if (!session) { return { ok: false, kind: "no_session" }; }
+  let res;
+  try {
+    res = await fetch(WORKER_AUTH_BASE + "/token", {
+      method: "POST",
+      headers: { "Authorization": "Bearer " + session }
+    });
+  } catch (e) {
+    return { ok: false, kind: "network" };
+  }
+  if (res.status === 200) {
+    let data = null;
+    try { data = await res.json(); } catch (e) { data = null; }
+    if (data && data.access_token) {
+      await recordGoogleAccessToken(
+        data.access_token, data.expires_in, data.email);
+      return { ok: true };
+    }
+    return { ok: false, kind: "worker", status: res.status };
+  }
+  if (res.status === 401) {
+    let code = "";
+    try {
+      const j = await res.json();
+      code = j && j.error ? String(j.error) : "";
+    } catch (e) { /* an unreadable body reads as no_session */ }
+    clearWorkerSession();
+    if (code === "reauth") {
+      workerReauthNeeded = true;
+      return { ok: false, kind: "reauth" };
+    }
+    return { ok: false, kind: "no_session" };
+  }
+  return { ok: false, kind: "worker", status: res.status };
+}
+
+/* One silent renewal attempt for a returning user: the
+   Worker trade above, which can only fetch, never navigate
+   and never prompt. The detailed form reports WHY a failed
+   attempt failed (the trade's kind, or worker_<status>),
+   which is what the renewal block records for the sidebar
+   menu line; the plain boolean form keeps its exact old
+   contract for its old callers (the gate's background
+   attempt, the manual Refresh flow). */
 async function googleTrySilentSignIn() {
   const detailed = await googleTrySilentSignInDetailed();
   return detailed.ok;
@@ -46260,14 +46470,52 @@ async function googleTrySilentSignIn() {
 
 async function googleTrySilentSignInDetailed() {
   try {
-    await googleConnect({ silent: true });
-    return { ok: true, errorType: null };
-  } catch (e) {
+    const r = await workerFetchAccessToken();
+    if (r.ok) { return { ok: true, errorType: null }; }
     return {
       ok: false,
-      errorType: (e && e.gisErrorType) || "unknown"
+      errorType: r.kind === "worker" ? "worker_" + r.status : r.kind
     };
+  } catch (e) {
+    return { ok: false, errorType: "unknown" };
   }
+}
+
+/* Tell the Worker the session is over: POST /logout with
+   the session, best effort. Only the session dies server
+   side; the stored refresh token stays, so the next sign
+   in is quick. A failed call changes nothing locally: the
+   local copies are cleared by the caller regardless, and
+   an orphaned session simply expires on its own clock. */
+async function workerLogout() {
+  const session = await getWorkerSession();
+  if (!session) { return; }
+  try {
+    await fetch(WORKER_AUTH_BASE + "/logout", {
+      method: "POST",
+      headers: { "Authorization": "Bearer " + session }
+    });
+  } catch (e) { /* best effort, as the old revoke was */ }
+}
+
+/* v2.79.0 migration: a stored GIS era provider token cannot
+   become a Worker session, and left in place it would let
+   the gate enter on a credential this build no longer
+   renews, then strand the user at its expiry. When no
+   Worker session stands (stored, held from the fragment,
+   or in memory), the legacy token is dropped once, here,
+   and the user signs in once through the Worker instead.
+   Notes data and the local snapshot cache are untouched:
+   only the dead credential goes. */
+function migrateLegacyGoogleToken() {
+  if (workerSessionToken || loadWorkerSessionBlob()) { return; }
+  if (pendingWorkerAuth && pendingWorkerAuth.kind === "session") {
+    return;
+  }
+  if (!loadProviderTokenBlob().google) { return; }
+  clearProviderToken("google");
+  state.attach.googleExpiresAt = 0;
+  saveSettings();
 }
 
 /* v2.15: automatic silent renewal. Google's browser token flow
@@ -46275,9 +46523,12 @@ async function googleTrySilentSignInDetailed() {
    hour; until this build the session simply lapsed at the hour
    and the next Drive call surfaced the "sign in expired" path
    until the user pressed Refresh connection by hand. Renewal is
-   still the same silent ask (googleTrySilentSignIn, an empty GIS
-   prompt: a token only when Google can issue one without showing
-   an interaction), now attempted on its own in three places:
+   still the same silent ask (googleTrySilentSignIn), attempted
+   on its own in three places. v2.79.0: the ask itself is the
+   Worker token trade now, not a GIS prompt: the Worker holds
+   the refresh token the browser flow never had, so the ask is
+   a plain fetch that can neither show an interaction nor fail
+   for want of one:
      - a timer set for a few minutes ahead of the recorded
        expiry after every successful connect;
      - a return to the tab when the token is expired or inside
@@ -46296,7 +46547,7 @@ async function googleTrySilentSignInDetailed() {
    timer was rescheduled (googleConnect did not run), so a
    session whose one scheduled ask failed coasted to expiry
    with only the visibility and 401 triggers left, which may
-   never fire for a user sitting in the tab, and the GIS error
+   never fire for a user sitting in the tab, and the error
    type behind the failure was discarded. Now every automatic
    failure settles in one place, onGoogleRenewalFailure below:
    the failure's type and time are recorded in settings (and
@@ -46411,10 +46662,13 @@ function scheduleGoogleRenewalRetry() {
 }
 
 /* Whether a session exists for renewal purposes: the same
-   test the visibility trigger makes, a token in memory or
-   one waiting in the encrypted store. */
+   test the visibility trigger makes. Since v2.79.0 the
+   session that matters is the Worker session (memory or
+   its encrypted store); a standing access token counts
+   too, as it did before, for the span it is still live. */
 function googleRenewalSessionLive() {
-  return !!(state.providerTokens.google || loadProviderTokenBlob().google);
+  return !!(workerSessionToken || loadWorkerSessionBlob() ||
+    state.providerTokens.google || loadProviderTokenBlob().google);
 }
 
 /* Whether the token is inside the renewal margin or already
@@ -46435,15 +46689,11 @@ function resetGoogleRenewalRecovery() {
   googleRenewalRetryStep = 0;
   googleRenewalEpisode = null;
   disarmGoogleRenewalGesture();
-  /* v2.71.0: a fresh cycle never inherits a UI gesture
-     token either: an unspent mint belongs to the action
-     that minted it, and that action's flagged request
-     (the only consumer) runs before any success here
-     could land. Clearing with the cycle means a token
-     minted by a Refresh run whose silent attempt then
-     succeeded (so its fallback never ran) cannot linger
-     into a later, unrelated flagged request. */
-  googleUiGestureToken = null;
+  /* v2.79.0: through v2.78.0 this reset also cleared the
+     one shot UI gesture token the GIS choke point spent.
+     That machinery is retired with the token client
+     itself: no request in this app can raise a Google
+     window at all now, so there is no mint left to clear. */
 }
 
 /* The one silent renewal every automatic trigger shares. A
@@ -46494,7 +46744,7 @@ function onGoogleRenewalFailure(errorType) {
 }
 
 /* v2.24.6: the failure record. The last automatic renewal
-   failure, its GIS error type and when it happened, kept in
+   failure, its failure type and when it happened, kept in
    settings (state.attach rides along in the settings record)
    so it survives a reload, and cleared by the next
    successful connect in googleConnect. Nothing about the
@@ -46605,7 +46855,7 @@ function onGoogleRenewalGesture(ev) {
    immediately ask again. */
 function maybeRenewGoogleOnVisible() {
   if (document.visibilityState !== "visible") { return; }
-  if (!state.providerTokens.google && !loadProviderTokenBlob().google) {
+  if (!googleRenewalSessionLive()) {
     return;
   }
   if (state.attach.googleExpiresAt &&
@@ -46946,13 +47196,14 @@ async function autoSyncTick() {
    the cache, the queue, the device key, or settings, and it is safe
    to press at any time, signed in, expired, or mid edit.
    What it reuses, deliberately, instead of duplicating token logic:
-   googleConnect (the one GIS token client factory and token
-   recorder) for both token attempts, googleTrySilentSignIn for the
-   silent first attempt, driveEnsureNotesRoot to prove the fresh
+   googleTrySilentSignIn (the Worker token trade) for the token
+   attempt, driveEnsureNotesRoot to prove the fresh
    token against Drive, and syncNow for the established flush then
    load sequence a gate sign in runs (flushQueue, flushIndexWrites,
-   loadAllFromRepo, renderAll). The only new token behavior is the
-   prompt googleConnect now honors from its options.
+   loadAllFromRepo, renderAll). v2.79.0: when the trade reports
+   the session dead, or none stands, this deliberate gesture
+   navigates to the Worker's sign in instead; a transient
+   failure keeps the session and earns the toast, as before.
    Failure honesty: if both token attempts fail, or the Drive proof
    or the sync throws, the toast says plainly that the connection
    could not be refreshed and that his notes and queued changes are
@@ -46964,15 +47215,6 @@ let refreshConnectionRunning = false;
 async function refreshGoogleConnection() {
   if (refreshConnectionRunning) { return; }
   refreshConnectionRunning = true;
-  /* v2.71.0: this run begins inside a deliberate Refresh
-     click (the sidebar menu item, the Settings button,
-     and the rail button are its only callers), so it
-     mints the one shot UI gesture token here, at the top
-     of the run, synchronously within that click (see the
-     choke point in googleConnect). The silent attempt
-     below does not consume it; the consent fallback
-     spends it, if the fallback is reached. */
-  mintGoogleUiGesture();
   const busyControls = [
     { btn: document.getElementById("settingsRefreshBtn"),
       label: document.getElementById("settingsRefreshLabel"),
@@ -47017,24 +47259,25 @@ async function refreshGoogleConnection() {
       await saveNoteToRepo(open, { ambient: true })
         .catch(function () { return null; });
     }
-    /* (b) A fresh token through the existing GIS machinery: the
-       silent request first (empty prompt, via googleTrySilentSignIn,
-       which is googleConnect), and only when that fails, the
-       interactive consent prompt through the same googleConnect.
-       googleConnect records the token exactly as a normal sign in
-       does (expiry on state.attach, provider token store, settings
-       saved), so nothing after this step can tell the difference
-       between a refresh and a sign in. */
-    let connected = await googleTrySilentSignIn();
-    if (!connected) {
-      try {
-        await googleConnect({ prompt: "consent", interactive: true });
-        connected = true;
-      } catch (err) {
-        connected = false;
+    /* (b) A fresh token through the Worker trade
+       (googleTrySilentSignIn, which records the token exactly
+       as a normal sign in does: expiry on state.attach, provider
+       token store, settings saved), so nothing after this step
+       can tell the difference between a refresh and a sign in.
+       v2.79.0: when the trade reports the session dead
+       (no_session, reauth) or none stands, this deliberate
+       gesture navigates to the Worker's sign in, the fresh
+       route when the reauth flag stands. A transient failure
+       (network, Worker 5xx) keeps the session, and the run
+       ends on the toast below, exactly as a failed refresh
+       always has. */
+    const attempt = await googleTrySilentSignInDetailed();
+    if (!attempt.ok) {
+      if (attempt.errorType === "no_session" ||
+          attempt.errorType === "reauth") {
+        navigateToWorkerLogin();
+        return;
       }
-    }
-    if (!connected) {
       toast("Could not refresh the connection. Your notes and queued " +
         "changes are saved on this device; try again in a moment.", true);
       return;
@@ -47073,6 +47316,12 @@ async function refreshGoogleConnection() {
 
 async function googleDisconnect() {
   const token = await getProviderToken("google");
+  /* v2.79.0: the Worker session dies with the disconnect
+     too: the Worker's own logout first (best effort), then
+     the local session store. */
+  await workerLogout();
+  clearWorkerSession();
+  workerReauthNeeded = false;
   clearProviderToken("google");
   /* v2.15: the session this disconnect drops is the one the
      renewal timer serves; cancel the timer with the token. */
@@ -47088,23 +47337,41 @@ async function googleDisconnect() {
   state.attach.googleFolderId = null;
   resetDriveNotesCache();
   saveSettings();
-  if (token && window.google && window.google.accounts &&
-      window.google.accounts.oauth2) {
-    try { window.google.accounts.oauth2.revoke(token, function () {}); }
-    catch (e) { /* revoke is best effort; the local copy is already gone */ }
-  }
+  /* v2.79.0: through v2.78.0 the dropped access token was
+     also revoked with Google here, best effort, through
+     the GIS client. There is no GIS client anymore; the
+     Worker logout above is the server side sign out, and
+     the access token simply expires on its own clock. */
 }
 
 async function googleGetStatus() {
   const token = await getProviderToken("google");
-  if (!token) { return { connected: false, reason: "signed-out" }; }
+  if (!token) {
+    /* v2.79.0: no access token in hand is not yet signed
+       out when a Worker session stands: the session can
+       mint one on the spot (the gate's silent attempt, the
+       token source, and the renewal ladder all do exactly
+       that), so the honest word for this state is expired,
+       the state those paths already know how to heal. */
+    if (await getWorkerSession()) {
+      return { connected: false, reason: "expired" };
+    }
+    return { connected: false, reason: "signed-out" };
+  }
   if (!state.attach.googleExpiresAt ||
       Date.now() > state.attach.googleExpiresAt - 30000) {
-    /* Expired (or expiry unknown): drop the dead token and ask the user
-       to sign in again. The browser token flow has no refresh token. */
-    clearProviderToken("google");
-    state.attach.googleExpiresAt = 0;
-    saveSettings();
+    /* Expired (or expiry unknown). Through v2.78.0 the dead
+       token was dropped here and the user signed in again:
+       the browser token flow had no refresh token. Since
+       v2.79.0 a standing Worker session renews the token
+       instead, so with one the token stays where it is and
+       the renewal paths replace it; without one the old
+       behavior stands, word for word. */
+    if (!(await getWorkerSession())) {
+      clearProviderToken("google");
+      state.attach.googleExpiresAt = 0;
+      saveSettings();
+    }
     return { connected: false, reason: "expired" };
   }
   return { connected: true };
@@ -47755,7 +48022,7 @@ const providers = {
   google: {
     label: "Google Drive",
     getStatus: googleGetStatus,
-    connect: googleConnect,
+    connect: workerSignIn,
     disconnect: googleDisconnect,
     upload: googleUpload,
     download: googleDownload,
@@ -52893,19 +53160,25 @@ async function saveSketchDialog() {
    than the clip failing silently. WEBCLIP_MAX_FRAGMENT_CHARS
    caps the encoded fragment the app will even try to decode.
 
-   Auth sequencing: this app's Google sign in is the GIS token
-   client, a popup flow whose token arrives through a callback,
-   never through a URL fragment, and its notification return
-   trips ride the query string (?task= and ?noteReminder=),
-   never the fragment either. A clip fragment therefore can
-   neither be mistaken for an auth response nor destroy one:
-   the reader below acts only on a fragment beginning with the
-   clip prefix, leaves every other fragment and the whole query
-   string untouched, and strips only the clip fragment, by a
-   history replace that preserves the query string exactly.
-   The read itself runs first in boot(), ahead of the sign in
-   routing, so the payload is safely in memory whatever route
-   the boot then takes, and filing waits for connectAndLoad,
+   Auth sequencing: through v2.78.0 sign in was the GIS token
+   client, a popup flow whose token arrived through a callback,
+   never through a URL fragment. Since v2.79.0 sign in DOES
+   return through a fragment (the Worker session fragment),
+   and boot reads that fragment first, ahead of this reader;
+   the two prefixes cannot collide (ssnotes_ against the clip
+   prefix), each reader acts only on its own fragment, and
+   the notification return trips still ride the query string
+   (?task= and ?noteReminder=), never the fragment. A clip
+   fragment therefore can neither be mistaken for an auth
+   response nor destroy one: the reader below acts only on a
+   fragment beginning with the clip prefix, leaves every
+   other fragment and the whole query string untouched, and
+   strips only the clip fragment, by a history replace that
+   preserves the query string exactly. The read itself runs
+   at the head of boot(), just after the auth fragment read
+   and ahead of the sign in routing, so the payload is safely
+   in memory whatever route the boot then takes, and filing
+   waits for connectAndLoad,
    the one funnel every signed in arrival passes through.
    -------------------------------------------------------------------------- */
 const WEBCLIP_FRAGMENT_PREFIX = "clip=";
@@ -54538,30 +54811,20 @@ function wireEvents() {
 
 
   /* The Google sign in gate button. There is no client ID field on
-     this screen; googleConnect resolves the built in publisher ID
-     (or a saved advanced override) itself. On success the normal
-     connect flow runs: first run seeding for a brand new Drive
-     root, or a normal load. */
-  document.getElementById("googleBackendConnectBtn").addEventListener("click", async function () {
-    /* v2.71.0: this click is one of the two deliberate
-       gestures that may mint the one shot UI gesture
-       token (see the choke point in googleConnect); the
-       connect below consumes it at its request line. */
-    mintGoogleUiGesture();
+     this screen and no token request behind this button anymore:
+     since v2.79.0 the click navigates the browser to the
+     ssnotes-auth Worker's /login route, Google signs the user in
+     there, and the Worker returns the browser to this address
+     with the outcome in the fragment, which the next boot's
+     fragment reader settles. The fresh route stands in when a
+     reauth answer armed it. */
+  document.getElementById("googleBackendConnectBtn").addEventListener("click", function () {
     const errEl = document.getElementById("repoError");
     errEl.textContent = "";
     const btn = document.getElementById("googleBackendConnectBtn");
     btn.disabled = true;
-    btn.textContent = "Signing in...";
-    try {
-      await providers.google.connect({ interactive: true });
-      await connectAndLoad();
-    } catch (err) {
-      errEl.textContent = err.message;
-    } finally {
-      btn.disabled = false;
-      btn.textContent = "Sign in with Google";
-    }
+    btn.textContent = "Opening Google sign in...";
+    navigateToWorkerLogin();
   });
   document.getElementById("repoRetryBtn").addEventListener("click", function () {
     connectAndLoad().catch(function (err) { toast(err.message, true); });
@@ -57119,10 +57382,17 @@ function initialScreenFor(input) {
 
 /* Prepare the Google gate for a returning user: load or create the
    device key, then try to enter without bothering the user: first a
-   token that is still live, then one silent GIS renewal. Only when
+   token that is still live, then one silent Worker renewal. Only when
    both fail does the gate itself appear, and it appears quietly: no
    error toast is raised for a background renewal that did not work.
-   (Legacy artifacts were already cleaned by boot before this runs.) */
+   (Legacy artifacts were already cleaned by boot before this runs.)
+   v2.79.0: a Worker sign in return is settled first, before any
+   status question is asked: an error or denied fragment shows the
+   gate with its plain message and nothing else is attempted, and a
+   session fragment is persisted into the encrypted store, from
+   where the silent attempt below spends it. The legacy GIS token
+   migration runs on the same pass, so a device with no session
+   never enters on a credential this build cannot renew. */
 async function prepareGoogleGate() {
   /* Boot lands here with the loading overlay already up; keep it up
      (with an honest status) through the silent sign in attempt.
@@ -57138,6 +57408,25 @@ async function prepareGoogleGate() {
       "This device could not prepare its local encryption key: " + e.message;
     return;
   }
+  if (pendingWorkerAuth && pendingWorkerAuth.kind !== "session") {
+    const denied = pendingWorkerAuth.kind === "denied";
+    pendingWorkerAuth = null;
+    showGoogleConnectScreen(denied
+      ? "That Google account is not authorized for this app."
+      : "Sign in did not complete. Please try again.");
+    return;
+  }
+  if (pendingWorkerAuth && pendingWorkerAuth.kind === "session") {
+    try {
+      await persistPendingWorkerSession();
+    } catch (e) {
+      pendingWorkerAuth = null;
+      showGoogleConnectScreen(
+        "Sign in did not complete. Please try again.");
+      return;
+    }
+  }
+  migrateLegacyGoogleToken();
   let status = null;
   try { status = await providers.google.getStatus(); }
   catch (e) { status = null; }
@@ -57522,6 +57811,12 @@ function onUpdateReadyPillClick() {
    screen to route to.
    -------------------------------------------------------------------------- */
 async function boot() {
+  /* v2.79.0: a Worker sign in return arrives in the fragment,
+     and it is read and stripped before anything else can trip
+     over it: the session token it may carry must never linger
+     in the address bar. Its outcome is held in
+     pendingWorkerAuth and settled by the gate routing below. */
+  readWorkerAuthFragment();
   /* v2.47: a web clip arriving in the fragment is read and
      stripped before anything else can trip over it (see the
      web clipper section head for the auth sequencing note:
@@ -57555,6 +57850,16 @@ async function boot() {
      and also visible in the console for support. */
   console.log("SnakeScale Notes v" + APP_VERSION + " build " + APP_BUILD);
 
+  /* v2.79.0: a held Worker return routes through the gate's
+     preparation whatever the stored state says: the fragment
+     is fresh evidence about the sign in, newer than any
+     first run or returning device test, and the preparation
+     creates the device key itself when this device has none
+     yet. */
+  if (pendingWorkerAuth) {
+    await prepareGoogleGate();
+    return;
+  }
   const start = initialScreenFor({
     hasDeviceKey: deviceKeyExists(),
     hasSettings: !!localStorage.getItem(LS_SETTINGS),

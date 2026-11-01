@@ -71,7 +71,22 @@
   sign-in token kept only in encrypted form. Signing out of the app removes
   the cached notes, the pending changes, the sign-in token, and the
   encryption key from that browser. Your Google password is never seen or
-  stored by the app; sign-in is handled entirely by Google.</p>
+  stored by the app; sign-in is handled by Google.</p>
+
+  <h2>The sign-in helper</h2>
+  <p>Sign-in runs through a small helper service operated by the
+  developer (a Cloudflare Worker named ssnotes-auth). Google's
+  browser sign-in lasts about an hour and offers the app no way to
+  renew it, so the helper holds the sign-in's Google refresh token
+  on its server side, in its own encrypted key-value store, and
+  hands the app a 30 day session in exchange. The app sends the
+  helper only that session token when it needs a fresh access
+  token; your notes, attachments, and note content never pass
+  through the helper. The helper accepts sign-ins from one Google
+  account only (the developer's). Signing out of the app also ends
+  the session at the helper; the stored refresh token stays there
+  so signing back in is quick, and it can be removed from the
+  helper's store by the developer on request.</p>
 
   <h2>Services the app contacts</h2>
   <p>The app connects only to the services listed here, and only as
@@ -82,6 +97,10 @@
     in your Google Drive. Google's handling of your information is covered
     by the <a href="https://policies.google.com/privacy">Google Privacy
     Policy</a>.</li>
+    <li><strong>The sign-in helper</strong> (ssnotes-auth, a
+    Cloudflare Worker operated by the developer): holds the
+    sign-in refresh token described above and mints fresh
+    access tokens for the app. It receives no note content.</li>
     <li><strong>Microlink</strong> (api.microlink.io): when you switch a web
     link inside one of your notes to its Mention or Preview display, the app
     sends that link's web address, and nothing else, to Microlink to fetch
