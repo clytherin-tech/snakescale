@@ -40,10 +40,48 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-11-02-SSN-V2910
-  Version: 2.91.0
+  BUILD STAMP: 2026-11-02-SSN-V2920
+  Version: 2.92.0
 
   Revision history:
+    v2.92.0 2026-11-02 Tables resize by dragging.
+                      While a table is active in
+                      the editor (the pointer over
+                      it, or the caret inside it),
+                      thin drag strips stand over
+                      its column and row borders
+                      and a small square handle
+                      stands on its bottom right
+                      corner. Dragging a border
+                      between two columns trades
+                      width between those columns
+                      and keeps the table's total
+                      width; dragging the table's
+                      right border moves the last
+                      column and the total width
+                      together; dragging the corner
+                      handle scales every column in
+                      proportion to the new total;
+                      dragging a row border sets
+                      that row's height, which
+                      works as a minimum (content
+                      needing more room still grows
+                      the row). The sizes save into
+                      the note itself: column
+                      widths on a colgroup, the
+                      total as the table's own
+                      inline width, and row heights
+                      as inline heights on the
+                      rows, and a sized table lays
+                      out fixed in the editor and
+                      in print, so the saved widths
+                      are the rendered widths.
+                      Mouse and touch drags both
+                      work, a finished resize is
+                      one undo step, and releasing
+                      the drag autosaves the note.
+                      Nothing else about tables
+                      changes.
     v2.91.0 2026-11-02 Encryption takes any
                       selection, and the note
                       editor gains its own right
@@ -7563,6 +7601,15 @@ body.dark .modal:hover::-webkit-scrollbar-thumb{
 #noteBody table.ss-table td{border:1px solid var(--border);
   padding:6px 10px;text-align:left;vertical-align:top;}
 #noteBody table.ss-table th{background:var(--soft);}
+/* v2.92.0: a drag sized table (the ss-sized class is written
+   by the resize pass together with its colgroup, its inline
+   width, and its row heights) lays out fixed, so the saved
+   column widths ARE the rendered column widths rather than
+   hints the content can renegotiate. A table that has never
+   been resized keeps the standing automatic layout exactly
+   as before. */
+#noteBody table.ss-sized{table-layout:fixed;}
+
 /* v2.1.0: the Link to Note picker (a modal in the app's modal style).
    The results list scrolls; each row is a full width button with the
    note title on one line and a muted notebook and date line under it.
@@ -7873,6 +7920,32 @@ body.dark .modal:hover::-webkit-scrollbar-thumb{
 }
 #tableFilterChip:hover{background:var(--surface);}
 #tableFilterChip.hidden{display:none;}
+/* v2.92.0: table resize furniture. The strips are thin fixed
+   overlays parked over the active table's column and row
+   borders (the layer itself never takes a pointer event;
+   each strip does), and the handle is a small square grip
+   parked on the table's bottom right corner. All of it
+   lives OUTSIDE #noteBody (inside .editor-inner), so none
+   of it can ever be saved into a note. touch-action:none
+   makes a touch drag on any of them a drag, never a scroll
+   of the note. The strip being dragged paints accent, so
+   the border in hand is visible while it moves. */
+#tableResizeStrips{position:fixed;inset:0;pointer-events:none;z-index:60;}
+.ss-tresize-strip{position:fixed;pointer-events:auto;touch-action:none;
+  background:transparent;}
+.ss-tresize-strip[data-kind="col"],
+.ss-tresize-strip[data-kind="right"]{cursor:col-resize;}
+.ss-tresize-strip[data-kind="row"]{cursor:row-resize;}
+.ss-tresize-strip.ss-active{background:var(--accent);opacity:.55;}
+#tableResizeHandle{
+  position:fixed;z-index:60;width:14px;height:14px;padding:0;
+  touch-action:none;cursor:nwse-resize;
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:3px;box-shadow:0 2px 6px rgba(6,32,22,.25);
+}
+#tableResizeHandle:hover{border-color:var(--accent);}
+#tableResizeHandle.hidden{display:none;}
+
 #cellMenu{
   position:fixed;z-index:61;min-width:230px;max-width:300px;padding:6px;
   background:var(--surface);border:1px solid var(--border);
@@ -11610,6 +11683,17 @@ body.dark .version-date{color:var(--accent);}
                clears all of its filters. All three hidden by default. -->
           <button id="cellMenuBtn" class="hidden" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Cell options">&#8943;</button>
           <button id="tableFilterChip" class="hidden" type="button" title="Clear all filters on this table">Filter active <span aria-hidden="true">&#215;</span></button>
+          <!-- v2.92.0: table resize furniture, also siblings of
+               #noteBody like the rest of the table furniture, so
+               none of it can ever be saved into a note: a layer of
+               thin drag strips parked over the active table's
+               column and row borders, and a small square handle
+               parked on the table's bottom right corner. The
+               script (the v2.92.0 table resizing section) builds
+               the strips per table; both start empty and hidden. -->
+          <div id="tableResizeStrips" aria-hidden="true"></div>
+          <button id="tableResizeHandle" class="hidden" type="button" aria-label="Resize table" title="Drag to resize the table"></button>
+
           <div id="cellMenu" class="hidden" role="menu" aria-label="Cell options">
             <button class="att-menu-item cell-flex" type="button" data-cell-menu="sort"><span>Sort column</span><span class="cell-menu-value" id="cellMenuSortValue">None</span></button>
             <div class="cell-sub hidden" id="cellSortSub">
@@ -13032,8 +13116,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-11-02-SSN-V2910";
-const APP_VERSION = "2.91.0";
+const APP_BUILD = "2026-11-02-SSN-V2920";
+const APP_VERSION = "2.92.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -47760,6 +47844,9 @@ function hideCellMenu() {
   if (btn) { btn.classList.add("hidden"); }
   const chip = document.getElementById("tableFilterChip");
   if (chip) { chip.classList.add("hidden"); }
+  /* v2.92.0: the resize furniture follows the same hides
+     (note switches and editor locks land here). */
+  hideTableResizeFurniture();
 }
 
 /* Fill the menu's current values from the captured cell and table
@@ -48120,6 +48207,13 @@ function wireCellMenu() {
     if (!target || !target.closest) { return; }
     if (target.closest("#cellMenu") || target.closest("#cellMenuBtn") ||
         target.closest("#tableFilterChip")) { return; }
+    /* v2.92.0: the resize furniture is table furniture
+       too: resting on a strip or the handle is not
+       leaving the table, so the hover cell stands (and
+       the furniture with it) while the pointer travels
+       onto a border to drag it. */
+    if (target.closest("#tableResizeStrips") ||
+        target.closest("#tableResizeHandle")) { return; }
     const appEl = document.getElementById("app");
     if (!appEl || appEl.classList.contains("hidden")) { return; }
     cellHoverCell = bodyEl.contains(target)
@@ -48336,6 +48430,668 @@ function wireCellMenu() {
         positionFilterChip();
       }
     });
+}
+
+/* ----- v2.92.0: table resizing ------------------------------------------------
+   Tables in the note editor resize by dragging, the way Chris
+   asked on 2026-11-02: column borders, row borders, and the
+   table as a whole.
+
+   The furniture is editor chrome in the standing pattern: a
+   layer of thin drag strips (#tableResizeStrips) parked over
+   the active table's borders and a small square handle
+   (#tableResizeHandle) parked on its bottom right corner, all
+   of it OUTSIDE #noteBody (siblings of #tableMenu inside
+   .editor-inner), so none of it can ever be saved into a note.
+   The active table is the one the pointer is over, or the one
+   holding the caret when the pointer is elsewhere, the same
+   rule the cell menu's watcher applies; the furniture hides
+   when neither is in a table, when the note is read only,
+   and while either table menu is open. A parked position is
+   re-read from live geometry on every watcher pass and on
+   editor scroll, mirroring how the Table button re-parks.
+
+   The sizes themselves are note content and save into the
+   note's own HTML: column widths on a colgroup (one col per
+   column, pixel widths), the table's total width as its own
+   inline width, and row heights as inline heights on the
+   rows. A table that has been sized carries the class
+   ss-sized, whose one rule (table-layout:fixed, in the editor
+   stylesheet and in the print stylesheet) makes the saved
+   widths the rendered widths instead of hints; a table that
+   has never been resized keeps the standing automatic layout
+   untouched. The first drag on any table normalizes it:
+   unset columns seed from their rendered widths, the total
+   seeds from the rendered total, and unset rows seed their
+   rendered heights, so a table pasted or imported with
+   widths of its own keeps them and a plain table keeps the
+   exact shape it had. Column widths live on the colgroup,
+   so a cell spanning columns simply spans their sum, and a
+   row drag on a row a cell spans downward still writes that
+   row's own height.
+
+   Drag rules:
+     - an interior column border trades width between the
+       two columns it separates; the total never moves;
+     - the table's right border moves the last column and
+       the total together;
+     - the corner handle scales every column in proportion
+       to the new total (height is never scaled);
+     - a row border writes that row's height. The written
+       form is the height property on the row, which the
+       table layout treats as a floor, not a ceiling: a row
+       whose content needs more room still grows, in both
+       the automatic and the fixed layout, and nothing in
+       the table CSS clips cell content, so a set height
+       can never cut text off.
+   Columns stop at TABLE_RESIZE_MIN_COL_PX and rows at
+   TABLE_RESIZE_MIN_ROW_PX, so a drag can never collapse a
+   column or a row to nothing.
+
+   Drag mechanics follow the image grips' pattern: pointer
+   events only (one path serves mouse, pen, and touch; the
+   strips and the handle carry touch-action:none, so a touch
+   drag on them is never stolen as a scroll), a pointerdown
+   on a strip or the handle is prevented, so a drag never
+   starts a text selection, the geometry writes live during
+   the drag, and the release commits. The commit is ONE undo
+   step, composed the way the paste mode switch composes
+   its own: the drag's mutations are first reverted to the
+   pre-drag table, then the final table is inserted over it
+   with a single insertHTML, so one Ctrl+Z restores the
+   exact pre-drag sizes and Redo reapplies the resize.
+   Where insertHTML is unavailable or refuses, the final
+   table is swapped in directly (the sizes still land; only
+   the single undo step is lost). A drag that ends where it
+   started, an Escape mid-drag, and a pointercancel all
+   restore the pre-drag table exactly and mark nothing.
+   Only a committed resize calls markDirty, once, on
+   release, which is what autosaves the note. */
+
+const TABLE_RESIZE_MIN_COL_PX = 40;
+const TABLE_RESIZE_MIN_ROW_PX = 24;
+/* A border's hit strip is 9px wide, centered on the border. */
+const TABLE_RESIZE_STRIP_HALF = 4;
+
+let tableResizeTable = null;  /* the table the furniture serves */
+let tableResizeSig = "";      /* its structure signature */
+let tableResizeDrag = null;   /* the in-flight drag, or null */
+
+/* The table's column count on the grid: the widest row's
+   colspan sum. A table with no cells has none. */
+function tableResizeGridColumns(table) {
+  let cols = 0;
+  Array.prototype.forEach.call(table.rows, function (row) {
+    let n = 0;
+    Array.prototype.forEach.call(row.cells, function (cell) {
+      n += Math.max(1, cell.colSpan || 1);
+    });
+    if (n > cols) { cols = n; }
+  });
+  return cols;
+}
+
+/* The table's first colgroup, or null. With create, one is
+   built as the table's first child when it has none. */
+function tableResizeColgroup(table, create) {
+  let group = null;
+  Array.prototype.forEach.call(table.children, function (el) {
+    if (!group && el.tagName === "COLGROUP") { group = el; }
+  });
+  if (!group && create) {
+    group = document.createElement("colgroup");
+    table.insertBefore(group, table.firstChild);
+  }
+  return group;
+}
+
+/* The x coordinate of every column boundary, read from the
+   rendered cells (a spanning cell contributes the two
+   boundaries it spans, so merged cells need no special
+   case). A boundary no cell edge lands on, possible when
+   every row spans across it, is interpolated between its
+   known neighbors. */
+function tableResizeColumnBounds(table, cols) {
+  const bounds = new Array(cols + 1).fill(null);
+  Array.prototype.forEach.call(table.rows, function (row) {
+    let ci = 0;
+    Array.prototype.forEach.call(row.cells, function (cell) {
+      const span = Math.max(1, cell.colSpan || 1);
+      const rect = cell.getBoundingClientRect();
+      if (rect.width > 0) {
+        if (bounds[ci] === null) { bounds[ci] = rect.left; }
+        if (bounds[ci + span] === null) {
+          bounds[ci + span] = rect.right;
+        }
+      }
+      ci += span;
+    });
+  });
+  const trect = table.getBoundingClientRect();
+  if (bounds[0] === null) { bounds[0] = trect.left; }
+  if (bounds[cols] === null) { bounds[cols] = trect.right; }
+  let last = 0;
+  for (let i = 1; i <= cols; i++) {
+    if (bounds[i] !== null) {
+      const gap = i - last;
+      for (let k = 1; k < gap; k++) {
+        bounds[last + k] = bounds[last] +
+          (bounds[i] - bounds[last]) * k / gap;
+      }
+      last = i;
+    }
+  }
+  return bounds;
+}
+
+/* The rendered column widths, integers summing to the
+   rendered table width (the last column absorbs the
+   rounding residue, so the saved structure is always
+   self consistent). */
+function tableResizeRenderedWidths(table, cols) {
+  const bounds = tableResizeColumnBounds(table, cols);
+  const widths = [];
+  let sum = 0;
+  for (let i = 0; i < cols; i++) {
+    const w = Math.max(1, Math.round(bounds[i + 1] - bounds[i]));
+    widths.push(w);
+    sum += w;
+  }
+  const total = Math.round(table.getBoundingClientRect().width);
+  if (total > 0 && widths.length) {
+    widths[widths.length - 1] += total - sum;
+    if (widths[widths.length - 1] < 1) {
+      widths[widths.length - 1] = 1;
+    }
+  }
+  return widths;
+}
+
+/* Write a full width set: every col, and the table's own
+   width as their sum. */
+function tableResizeApplyWidths(table, widths) {
+  const group = tableResizeColgroup(table, false);
+  if (!group) { return; }
+  let total = 0;
+  widths.forEach(function (w, i) {
+    total += w;
+    const col = group.children[i];
+    if (col) { col.style.width = w + "px"; }
+  });
+  table.style.width = total + "px";
+}
+
+/* Normalize a table for its first drag: colgroup present
+   and matching the grid, every column width explicit
+   (seeded from the rendered widths, so existing widths
+   from a paste or import are kept as they render), the
+   table width explicit, the ss-sized class on, and every
+   row without a height given its rendered height. Returns
+   the width set now in force, or null when the table has
+   no columns to size. */
+function tableResizeNormalize(table) {
+  const cols = tableResizeGridColumns(table);
+  if (!cols) { return null; }
+  const widths = tableResizeRenderedWidths(table, cols);
+  const group = tableResizeColgroup(table, true);
+  while (group.children.length < cols) {
+    group.appendChild(document.createElement("col"));
+  }
+  while (group.children.length > cols) {
+    group.removeChild(group.lastChild);
+  }
+  table.classList.add("ss-sized");
+  tableResizeApplyWidths(table, widths);
+  Array.prototype.forEach.call(table.rows, function (row) {
+    if (!row.style.height) {
+      const h = Math.round(row.getBoundingClientRect().height);
+      if (h > 0) { row.style.height = h + "px"; }
+    }
+  });
+  return widths;
+}
+
+/* A DOM node as a child index path from #noteBody, and back.
+   The commit replaces the table element, so the selection
+   is carried across it as paths (which the replacement
+   cannot disturb: the new table stands exactly where the
+   old one did, with the same child counts around it). */
+function tableResizeNodePath(node) {
+  const bodyEl = document.getElementById("noteBody");
+  if (!node || !bodyEl) { return null; }
+  const path = [];
+  let n = node;
+  while (n && n !== bodyEl) {
+    const parent = n.parentNode;
+    if (!parent) { return null; }
+    path.unshift(Array.prototype.indexOf.call(parent.childNodes, n));
+    n = parent;
+  }
+  return n === bodyEl ? path : null;
+}
+
+function tableResizeNodeAtPath(path) {
+  const bodyEl = document.getElementById("noteBody");
+  if (!bodyEl || !path) { return null; }
+  let n = bodyEl;
+  for (let i = 0; i < path.length; i++) {
+    if (!n.childNodes || path[i] >= n.childNodes.length) {
+      return null;
+    }
+    n = n.childNodes[path[i]];
+  }
+  return n;
+}
+
+function tableResizeSelectionSnapshot() {
+  const sel = window.getSelection();
+  if (!sel || !sel.rangeCount) { return null; }
+  const anchorPath = tableResizeNodePath(sel.anchorNode);
+  const focusPath = tableResizeNodePath(sel.focusNode);
+  if (!anchorPath || !focusPath) { return null; }
+  return {
+    anchorPath: anchorPath, anchorOff: sel.anchorOffset,
+    focusPath: focusPath, focusOff: sel.focusOffset
+  };
+}
+
+function tableResizeRestoreSelection(snap) {
+  if (!snap) { return; }
+  try {
+    const a = tableResizeNodeAtPath(snap.anchorPath);
+    const f = tableResizeNodeAtPath(snap.focusPath);
+    if (!a || !f) { return; }
+    const range = document.createRange();
+    const aMax = a.nodeType === 3 ? a.nodeValue.length
+      : a.childNodes.length;
+    const fMax = f.nodeType === 3 ? f.nodeValue.length
+      : f.childNodes.length;
+    range.setStart(a, Math.min(snap.anchorOff, aMax));
+    range.setEnd(f, Math.min(snap.focusOff, fMax));
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+  } catch (err) { /* the caret lands where the insert left it */ }
+}
+
+/* The table the furniture should serve right now: the
+   hovered cell's table, or the caret cell's table when the
+   pointer is not over a cell. Mirrors updateCellMenu. */
+function tableResizeActiveTable() {
+  const bodyEl = document.getElementById("noteBody");
+  if (!bodyEl) { return null; }
+  if (cellHoverCell && bodyEl.contains(cellHoverCell)) {
+    return cellHoverCell.closest("table");
+  }
+  const sel = window.getSelection();
+  const anchor = sel && sel.rangeCount ? sel.anchorNode : null;
+  const cell = tableCellFromNode(anchor);
+  return cell ? cell.closest("table") : null;
+}
+
+function hideTableResizeFurniture() {
+  tableResizeTable = null;
+  tableResizeSig = "";
+  const layer = document.getElementById("tableResizeStrips");
+  if (layer) { layer.innerHTML = ""; }
+  const handle = document.getElementById("tableResizeHandle");
+  if (handle) { handle.classList.add("hidden"); }
+}
+
+/* Build the strip set for the tracked table: one strip per
+   interior column border plus one on the right edge (each
+   knows the boundary it drags), and one strip per visible
+   row on its bottom border (each knows its row). Zero
+   height rows (a filter hides them) get no strip: they have
+   no border on screen to drag. */
+function tableResizeBuildStrips(table) {
+  const layer = document.getElementById("tableResizeStrips");
+  if (!layer) { return; }
+  layer.innerHTML = "";
+  const cols = tableResizeGridColumns(table);
+  function addStrip(kind, spec) {
+    const el = document.createElement("div");
+    el.className = "ss-tresize-strip";
+    el.setAttribute("data-kind", kind);
+    spec.kind = kind;
+    spec.table = table;
+    spec.stripEl = el;
+    el._ssResizeSpec = spec;
+    layer.appendChild(el);
+  }
+  for (let b = 1; b < cols; b++) {
+    addStrip("col", { boundary: b });
+  }
+  if (cols > 0) { addStrip("right", { boundary: cols }); }
+  Array.prototype.forEach.call(table.rows, function (row) {
+    if (row.getBoundingClientRect().height > 0) {
+      addStrip("row", { rowEl: row });
+    }
+  });
+}
+
+/* (Re)park the strips and the handle on the tracked table
+   from its live geometry. */
+function positionTableResizeFurniture() {
+  const table = tableResizeTable;
+  const layer = document.getElementById("tableResizeStrips");
+  const handle = document.getElementById("tableResizeHandle");
+  if (!table || !layer || !handle) { return; }
+  if (!table.isConnected) { hideTableResizeFurniture(); return; }
+  const rect = table.getBoundingClientRect();
+  if (!rect.width || !rect.height) { return; }
+  const cols = tableResizeGridColumns(table);
+  const bounds = cols ? tableResizeColumnBounds(table, cols)
+    : null;
+  Array.prototype.forEach.call(layer.children, function (el) {
+    const spec = el._ssResizeSpec;
+    if (!spec) { return; }
+    if (spec.kind === "col" || spec.kind === "right") {
+      const x = bounds ? bounds[spec.boundary] : rect.right;
+      el.style.left = (x - TABLE_RESIZE_STRIP_HALF) + "px";
+      el.style.top = rect.top + "px";
+      el.style.width = (TABLE_RESIZE_STRIP_HALF * 2 + 1) + "px";
+      el.style.height = rect.height + "px";
+    } else if (spec.kind === "row" && spec.rowEl) {
+      const r = spec.rowEl.getBoundingClientRect();
+      el.style.left = rect.left + "px";
+      el.style.top = (r.bottom - TABLE_RESIZE_STRIP_HALF) + "px";
+      el.style.width = rect.width + "px";
+      el.style.height = (TABLE_RESIZE_STRIP_HALF * 2 + 1) + "px";
+    }
+  });
+  handle.style.left = (rect.right - 7) + "px";
+  handle.style.top = (rect.bottom - 7) + "px";
+}
+
+/* The furniture watcher: serve the active table of an
+   editable note, and nothing in every other case. While
+   either table menu stands open the furniture hides (the
+   menus act on their own captures and close on the next
+   outside press, whose watchers park everything again). */
+function updateTableResizeFurniture() {
+  if (tableResizeDrag) { return; }
+  const layer = document.getElementById("tableResizeStrips");
+  const handle = document.getElementById("tableResizeHandle");
+  if (!layer || !handle) { return; }
+  const cellMenu = document.getElementById("cellMenu");
+  const tableMenu = document.getElementById("tableMenu");
+  const menuOpen =
+    (cellMenu && !cellMenu.classList.contains("hidden")) ||
+    (tableMenu && !tableMenu.classList.contains("hidden"));
+  if (!cellEditorEditable() || menuOpen) {
+    hideTableResizeFurniture();
+    return;
+  }
+  const table = tableResizeActiveTable();
+  if (!table) { hideTableResizeFurniture(); return; }
+  const rect = table.getBoundingClientRect();
+  if (!rect.width || !rect.height) {
+    hideTableResizeFurniture();
+    return;
+  }
+  const sig = tableResizeGridColumns(table) + "/" +
+    table.rows.length;
+  if (table !== tableResizeTable || sig !== tableResizeSig) {
+    tableResizeTable = table;
+    tableResizeSig = sig;
+    tableResizeBuildStrips(table);
+  }
+  handle.classList.remove("hidden");
+  positionTableResizeFurniture();
+}
+
+/* Begin a drag from a strip's or the handle's pointerdown.
+   The pre-drag table is snapshotted whole (its outerHTML)
+   before anything mutates: the commit and the cancel both
+   work from that one snapshot, so what one undo restores
+   and what a cancelled drag restores are byte for byte the
+   table the user started with. */
+function startTableResizeDrag(ev, spec) {
+  const table = spec.table;
+  if (!table || !table.isConnected) { return; }
+  if (!cellEditorEditable()) { return; }
+  ev.preventDefault();
+  ev.stopPropagation();
+  closeTableMenu();
+  closeCellMenu();
+  clearCellSelection();
+  const bodyEl = document.getElementById("noteBody");
+  const tables = Array.prototype.slice.call(
+    bodyEl.querySelectorAll("table"));
+  const drag = {
+    table: table,
+    kind: spec.kind,
+    boundary: spec.boundary || 0,
+    rowEl: spec.rowEl || null,
+    stripEl: spec.stripEl || null,
+    startX: ev.clientX,
+    startY: ev.clientY,
+    beforeHTML: table.outerHTML,
+    tableIndex: tables.indexOf(table),
+    selSnapshot: tableResizeSelectionSnapshot(),
+    widths: null,
+    total: 0,
+    rowStart: 0,
+    changed: false
+  };
+  const widths = tableResizeNormalize(table);
+  if (spec.kind === "row") {
+    if (!widths || !drag.rowEl) { return; }
+    drag.rowStart = parseFloat(drag.rowEl.style.height) || 0;
+    if (!drag.rowStart) { return; }
+  } else {
+    if (!widths) { return; }
+  }
+  drag.widths = widths;
+  drag.total = widths.reduce(function (a, b) { return a + b; }, 0);
+  tableResizeDrag = drag;
+  if (drag.stripEl) { drag.stripEl.classList.add("ss-active"); }
+  document.addEventListener("pointermove", onTableResizeDragMove);
+  document.addEventListener("pointerup", onTableResizeDragUp);
+  document.addEventListener("pointercancel",
+    onTableResizeDragCancel);
+  document.addEventListener("keydown", onTableResizeDragKey, true);
+}
+
+/* One pointermove of a drag: the geometry writes live, and
+   the changed flag records whether the drag has actually
+   moved any size off its start (a drag that ends unchanged
+   restores and marks nothing). */
+function onTableResizeDragMove(ev) {
+  const drag = tableResizeDrag;
+  if (!drag) { return; }
+  const dx = ev.clientX - drag.startX;
+  const dy = ev.clientY - drag.startY;
+  if (drag.kind === "col") {
+    const b = drag.boundary;
+    const pair = drag.widths[b - 1] + drag.widths[b];
+    let d = dx;
+    d = Math.max(TABLE_RESIZE_MIN_COL_PX - drag.widths[b - 1], d);
+    d = Math.min(drag.widths[b] - TABLE_RESIZE_MIN_COL_PX, d);
+    const wl = Math.round(drag.widths[b - 1] + d);
+    if (wl !== drag.widths[b - 1]) {
+      const next = drag.widths.slice();
+      next[b - 1] = wl;
+      next[b] = pair - wl;
+      tableResizeApplyWidths(drag.table, next);
+      drag.changed = true;
+    }
+  } else if (drag.kind === "right") {
+    const last = drag.widths.length - 1;
+    const w = Math.max(TABLE_RESIZE_MIN_COL_PX,
+      Math.round(drag.widths[last] + dx));
+    if (w !== drag.widths[last]) {
+      const next = drag.widths.slice();
+      next[last] = w;
+      tableResizeApplyWidths(drag.table, next);
+      drag.changed = true;
+    }
+  } else if (drag.kind === "corner") {
+    const cols = drag.widths.length;
+    let newTotal = Math.max(TABLE_RESIZE_MIN_COL_PX * cols,
+      Math.round(drag.total + dx));
+    const scale = newTotal / drag.total;
+    const next = drag.widths.map(function (w) {
+      return Math.max(TABLE_RESIZE_MIN_COL_PX,
+        Math.round(w * scale));
+    });
+    if (next.join(",") !== drag.widths.join(",")) {
+      tableResizeApplyWidths(drag.table, next);
+      drag.changed = true;
+    }
+  } else if (drag.kind === "row") {
+    const h = Math.max(TABLE_RESIZE_MIN_ROW_PX,
+      Math.round(drag.rowStart + dy));
+    if (h !== drag.rowStart) {
+      drag.rowEl.style.height = h + "px";
+      drag.changed = true;
+    }
+  }
+}
+
+/* End a drag: detach the drag listeners, then commit or
+   restore. */
+function finishTableResizeDrag(commit) {
+  const drag = tableResizeDrag;
+  tableResizeDrag = null;
+  document.removeEventListener("pointermove",
+    onTableResizeDragMove);
+  document.removeEventListener("pointerup", onTableResizeDragUp);
+  document.removeEventListener("pointercancel",
+    onTableResizeDragCancel);
+  document.removeEventListener("keydown", onTableResizeDragKey,
+    true);
+  if (!drag) { return; }
+  if (drag.stripEl) { drag.stripEl.classList.remove("ss-active"); }
+  if (commit && drag.changed) { tableResizeCommit(drag); }
+  else { tableResizeRestore(drag); }
+}
+
+function onTableResizeDragUp() { finishTableResizeDrag(true); }
+function onTableResizeDragCancel() {
+  finishTableResizeDrag(false);
+}
+function onTableResizeDragKey(ev) {
+  if (ev.key === "Escape") { finishTableResizeDrag(false); }
+}
+
+/* Parse a serialized table back into a live element. */
+function tableResizeParse(html) {
+  const holder = document.createElement("div");
+  holder.innerHTML = html;
+  return holder.firstElementChild;
+}
+
+/* The shared tail of commit and restore: the selection goes
+   back where the snapshot had it, and every piece of table
+   furniture re-derives from the table now standing in the
+   body (the commit and the restore both replace the
+   element, so tracked references to the old one are
+   stale by construction). */
+function tableResizeAfterReplace(drag) {
+  tableResizeRestoreSelection(drag.selSnapshot);
+  tableResizeTable = null;
+  tableResizeSig = "";
+  updateTableMenu();
+  updateCellMenu();
+  updateTableResizeFurniture();
+}
+
+/* Cancel, Escape, pointercancel, and the no-change release:
+   the pre-drag table stands again, exactly, and nothing is
+   marked. */
+function tableResizeRestore(drag) {
+  const before = tableResizeParse(drag.beforeHTML);
+  if (before && drag.table.parentNode) {
+    drag.table.replaceWith(before);
+  }
+  tableResizeAfterReplace(drag);
+}
+
+/* The commit. The live table holds the final sizes; the
+   document is first put back to the pre-drag table, and the
+   final table is then inserted over it through one
+   insertHTML, so the resize is exactly one step on the
+   editor's undo stack. Where that call is unavailable or
+   refuses, the final table is swapped in directly instead:
+   the sizes land either way, and markDirty runs once, so
+   the note autosaves on release exactly like a typed edit. */
+function tableResizeCommit(drag) {
+  const bodyEl = document.getElementById("noteBody");
+  const finalHTML = drag.table.outerHTML;
+  const before = tableResizeParse(drag.beforeHTML);
+  if (!before || !drag.table.parentNode) { return; }
+  drag.table.replaceWith(before);
+  let done = false;
+  if (typeof document.execCommand === "function") {
+    try {
+      bodyEl.focus();
+      const sel = window.getSelection();
+      const range = document.createRange();
+      range.setStartBefore(before);
+      range.setEndAfter(before);
+      sel.removeAllRanges();
+      sel.addRange(range);
+      done = document.execCommand("insertHTML", false,
+        finalHTML) === true;
+    } catch (err) { done = false; }
+  }
+  if (!done) {
+    const after = tableResizeParse(finalHTML);
+    const current = bodyEl.querySelectorAll("table")[
+      drag.tableIndex];
+    if (after && current) { current.replaceWith(after); }
+  }
+  tableResizeAfterReplace(drag);
+  markDirty();
+}
+
+/* Wiring: the strips take their drags through one delegated
+   pointerdown on the layer; the handle takes its own. The
+   watchers mirror the cell menu's (document mouseover, body
+   clicks and keyups, document selectionchange), a scroll of
+   the editor re-parks (the table moved under its strips,
+   the way the Table button re-parks), and a window resize
+   re-parks too. Called once from wireEvents, beside
+   wireCellMenu. */
+function wireTableResize() {
+  const layer = document.getElementById("tableResizeStrips");
+  const handle = document.getElementById("tableResizeHandle");
+  const bodyEl = document.getElementById("noteBody");
+  if (!layer || !handle || !bodyEl) { return; }
+  layer.addEventListener("pointerdown", function (ev) {
+    const spec = ev.target && ev.target._ssResizeSpec;
+    if (spec) { startTableResizeDrag(ev, spec); }
+  });
+  handle.addEventListener("pointerdown", function (ev) {
+    if (!tableResizeTable) { return; }
+    startTableResizeDrag(ev, {
+      kind: "corner", table: tableResizeTable
+    });
+  });
+  document.addEventListener("mouseover", function (ev) {
+    const target = ev.target;
+    if (!target || !target.closest) { return; }
+    if (target.closest("#cellMenu") ||
+        target.closest("#tableMenu") ||
+        target.closest("#tableResizeStrips") ||
+        target.closest("#tableResizeHandle")) { return; }
+    updateTableResizeFurniture();
+  });
+  bodyEl.addEventListener("click", updateTableResizeFurniture);
+  bodyEl.addEventListener("keyup", updateTableResizeFurniture);
+  document.addEventListener("selectionchange",
+    updateTableResizeFurniture);
+  const scroller = document.querySelector(".editor-scroll");
+  if (scroller) {
+    scroller.addEventListener("scroll", function () {
+      if (tableResizeTable) { positionTableResizeFurniture(); }
+    });
+  }
+  window.addEventListener("resize", function () {
+    if (tableResizeTable) { positionTableResizeFurniture(); }
+  });
 }
 
 /* Insert, Code Block: a pre.ss-code-block holding a code element, an
@@ -50349,6 +51105,7 @@ function buildPrintDocument(note, bodyHtml) {
     "padding:10px 12px;overflow-x:auto;font-size:13px;}" +
     "code{font-family:Consolas,Menlo,monospace;}" +
     "table{border-collapse:collapse;width:100%;}" +
+    "table.ss-sized{table-layout:fixed;}" +
     "th,td{border:1px solid #C9D6C9;padding:6px 10px;text-align:left;}" +
     "th{background:#EFF4EE;}" +
     "a{color:#14532D;}" +
@@ -68097,6 +68854,8 @@ function wireEvents() {
   /* v2.3: per-cell table menu, filter chip, and multi-cell
      selection wiring. */
   wireCellMenu();
+  /* v2.92.0: table resize wiring (strips, handle, watchers). */
+  wireTableResize();
 
   /* Toolbar buttons. mousedown is prevented so the text selection in the
      editor is not lost before execCommand runs. */
