@@ -40,10 +40,67 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-11-02-SSN-V2900
-  Version: 2.90.0
+  BUILD STAMP: 2026-11-02-SSN-V2910
+  Version: 2.91.0
 
   Revision history:
+    v2.91.0 2026-11-02 Encryption takes any
+                      selection, and the note
+                      editor gains its own right
+                      click menu. The v2.89.0
+                      selection limit is gone:
+                      the Encrypt action now
+                      takes the selection's exact
+                      HTML fragment, so any span
+                      of the note body encrypts,
+                      across paragraphs, headings,
+                      blockquotes, lists starting
+                      and ending mid item,
+                      checklists, tables, and
+                      attachment cards. A locked
+                      block caught inside a
+                      selection is carried nested
+                      in the fragment and stands
+                      locked again after the
+                      outer unlock; an open
+                      decrypted region caught in
+                      one is subsumed, its current
+                      HTML becoming fragment
+                      content. Decrypted regions
+                      can now wrap whole runs of
+                      blocks, collect and save
+                      re-encrypt a region's full
+                      inner HTML from wherever it
+                      sits, and a restored
+                      fragment is rebound through
+                      the same render pass a note
+                      load runs, so links, pills,
+                      and cards inside it are
+                      live again. The payload
+                      format is unchanged, so
+                      v2.89.0 blocks keep
+                      decrypting. The only
+                      refusals left: no selection
+                      (or a collapsed caret), a
+                      selection outside the note
+                      body, and a selection in
+                      the title field (encryption
+                      stays body only). The note
+                      editor also gains its own
+                      right click menu (Cut, Copy,
+                      Paste, Encrypt selected
+                      text, and Unlock or Lock
+                      encrypted text following
+                      the vault), which replaces
+                      the browser menu inside the
+                      note body and supersedes
+                      the editor half of the
+                      v2.81.0 exception; text
+                      fields elsewhere keep the
+                      browser menu as before.
+                      Spell checking in the
+                      editor is pinned always on,
+                      with no menu item for it.
     v2.90.0 2026-11-02 Contacts fix. The People API
                       base put the People path on
                       the www.googleapis.com host,
@@ -7724,13 +7781,17 @@ body.dark .modal:hover::-webkit-scrollbar-thumb{
    is position:fixed and lives OUTSIDE #noteBody, so it can never be
    saved into a note; the script positions it at the image's menu
    button and closes it under the same rules as the link popup. */
-#attMenu, #attCardMenu{
+#attMenu, #attCardMenu, #editorCtxMenu{
   position:fixed;z-index:60;min-width:180px;padding:6px;
   background:var(--surface);border:1px solid var(--border);
   border-radius:var(--radius-card);box-shadow:0 10px 28px rgba(6,32,22,.28);
   display:flex;flex-direction:column;gap:2px;
 }
-#attMenu.hidden, #attCardMenu.hidden{display:none;}
+#attMenu.hidden, #attCardMenu.hidden, #editorCtxMenu.hidden{display:none;}
+/* v2.91.0: the separator inside the editor's own
+   right click menu, in the attachment menus'
+   separator shape. */
+.editor-ctx-sep{height:1px;background:var(--border);margin:4px 2px;}
 .att-menu-item{
   display:block;width:100%;text-align:left;border:none;background:none;
   color:var(--text);font-size:14px;padding:8px 10px;border-radius:8px;
@@ -9476,6 +9537,15 @@ body.dark .task-cal-more{color:var(--accent);}
   outline:1.5px dashed var(--accent);outline-offset:1px;
   padding:0 2px;
 }
+/* v2.91.0: a decrypted region wrapping block level
+   content (a whole run of paragraphs, list items,
+   a table) stands as a block of its own, so the
+   restored run lays out like the text it
+   replaced. Inline only regions keep the plain
+   inline span above. */
+#noteBody .ssenc-open.ssenc-open-blocks{
+  display:block;padding:2px 8px;margin:3px 0;
+}
 #noteBody .ssenc-relock{
   display:inline-flex;align-items:center;
   color:var(--accent);cursor:pointer;
@@ -10251,7 +10321,7 @@ body.dark .version-date{color:var(--accent);}
   #toastBoxTop{top:calc(60px + env(safe-area-inset-top));}
   #savePill{bottom:calc(68px + env(safe-area-inset-bottom));}
   #attMenu,#attCardMenu,#attAlignMenu,#tableMenu,#cellMenu,
-  #linkViewMenu{max-width:calc(100vw - 16px);}
+  #linkViewMenu,#editorCtxMenu{max-width:calc(100vw - 16px);}
   .att-menu-item{white-space:normal;overflow-wrap:anywhere;}
   #linkBarView{flex-wrap:wrap;}
   #linkBarUrl{flex:1 1 120px;max-width:none;min-width:0;}
@@ -11224,7 +11294,7 @@ body.dark .version-date{color:var(--accent);}
           <!-- Rich text body. The note body is stored as HTML inside the
                .md file (documented in the script header), which keeps
                checklists and formatting intact in v1.0. -->
-          <div id="noteBody" contenteditable="true" aria-label="Note body"></div>
+          <div id="noteBody" contenteditable="true" spellcheck="true" aria-label="Note body"></div>
 
           <!-- v2.14: the block drag grip and its drop line. Both
                are runtime only furniture: siblings of #noteBody in
@@ -11435,6 +11505,27 @@ body.dark .version-date{color:var(--accent);}
             <button class="att-menu-item" type="button" data-card-action="rename"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg><span class="att-menu-label">Rename</span></button>
             <button class="att-menu-item danger" type="button" data-card-action="delete"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13"/><path d="M10 11v6M14 11v6"/></svg><span class="att-menu-label">Delete</span></button>
             <button class="att-menu-item" type="button" data-card-action="transcribe"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10v4"/><path d="M8.5 7v10"/><path d="M13 4v16"/><path d="M17.5 7v10"/><path d="M21 10v4"/></svg><span class="att-menu-label">Transcribe</span></button>
+          </div>
+
+          <!-- v2.91.0: the note editor's own right click
+               menu. A right click inside the note body
+               opens this menu instead of the browser's
+               (Chris's direction, superseding the editor
+               half of the v2.81.0 exception): Cut, Copy,
+               Paste, then Encrypt selected text and an
+               Unlock or Lock item that follows the vault.
+               There is NO spell check item: spell checking
+               in the editor is pinned always on. The script
+               moves the panel directly under the document
+               body, like the popups, and wires it in
+               wireEditorCtxMenu. Hidden by default. -->
+          <div id="editorCtxMenu" class="hidden" role="menu" aria-label="Editor options">
+            <button class="att-menu-item" type="button" data-ctx-action="cut">Cut</button>
+            <button class="att-menu-item" type="button" data-ctx-action="copy">Copy</button>
+            <button class="att-menu-item" type="button" data-ctx-action="paste">Paste</button>
+            <div class="editor-ctx-sep" role="separator"></div>
+            <button class="att-menu-item" type="button" data-ctx-action="encrypt">Encrypt selected text</button>
+            <button class="att-menu-item hidden" type="button" data-ctx-action="vault">Unlock encrypted text</button>
           </div>
 
           <!-- v2.11: the full screen image preview. A dark lightbox
@@ -12941,8 +13032,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-11-02-SSN-V2900";
-const APP_VERSION = "2.90.0";
+const APP_BUILD = "2026-11-02-SSN-V2910";
+const APP_VERSION = "2.91.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -37153,7 +37244,20 @@ function initNoteContextMenu() {
    every other text field. The note list's handler
    still runs first on its cards in the bubble and
    opens the app menu; this listener then only
-   confirms a prevention already made. */
+   confirms a prevention already made.
+
+   v2.91.0: Chris directed the note editor onto its
+   own custom right click menu (Cut, Copy, Paste,
+   Encrypt selected text, Unlock or Lock encrypted
+   text), superseding the note editor half of the
+   carve out above: a contextmenu inside the note
+   body now opens the app's own menu (see
+   wireEditorCtxMenu) instead of the browser's. This
+   guard's behavior is unchanged: the editor's own
+   listener answers first in the bubble, and the
+   carve out still stands for the task description
+   editor and every other contenteditable region,
+   which keep the browser menu exactly as before. */
 function initNativeMenuSuppression() {
   document.addEventListener("contextmenu", function (ev) {
     const target = ev.target;
@@ -64297,7 +64401,11 @@ function insertVoiceTranscript(anchorEl, segments) {
    - While unlocked, a passage in the open note is
      decrypted in place into a span.ssenc-open region
      (visually distinct, with a lock chip at its head
-     that locks the vault again). The region element
+     that locks the vault again). Since v2.91.0 the
+     decrypted fragment can hold whole runs of blocks,
+     and such a region stands as a block of its own
+     (the ssenc-open-blocks class) wherever the locked
+     block stood. The region element
      carries the passage's latest ciphertext in its own
      data-ssenc-iv and data-ssenc-ct attributes, kept
      current by an encryption chain that re-encrypts
@@ -64328,13 +64436,25 @@ function insertVoiceTranscript(anchorEl, segments) {
      control, and hidden titles are likewise out of
      scope; note titles stay visible as always.
 
-   Refusal rule for the Encrypt action (stated in the
-   delivery report): the selection must be non empty,
-   must sit inside one block of the note body, and
-   must not touch an attachment placeholder, a table,
-   a code block, a table of contents block, or an
-   existing encrypted or decrypted passage; anything
-   else is refused with a toast rather than mangled.
+   Refusal rule for the Encrypt action (v2.91.0,
+   widened on Chris's direction from the v2.89.0
+   one paragraph rule he rejected: "Any text, with
+   any format anywhere in the note needs to be able
+   to be encrypted"): the Encrypt action takes the
+   selection's exact HTML fragment with NO structural
+   restriction, across any blocks and structures in
+   the note body. The only refusals left are no
+   selection (or a collapsed caret), a selection
+   outside the note body, and a selection in the
+   title field (encryption is body only; titles stay
+   visible). A locked block inside the selection is
+   carried nested in the fragment; an open decrypted
+   region caught in one is subsumed, its current HTML
+   becoming ordinary fragment content. Since v2.91.0
+   a decrypted region can wrap whole runs of blocks,
+   and collect/save re-encrypts a region's full inner
+   HTML from wherever the region sits in the body
+   tree.
    -------------------------------------------------------------------------- */
 
 const SSENC_KDF_ITERATIONS = 600000;
@@ -64501,11 +64621,62 @@ function ssencBuildRegion(html, iv, ct) {
   while (holder.firstChild) {
     region.appendChild(holder.firstChild);
   }
+  /* v2.91.0: a fragment holding block level markup
+     (whole paragraphs, list items, a table) makes the
+     region a block of its own, so the restored run
+     lays out like the text it replaced instead of
+     squeezing into one line. Inline only fragments
+     keep the plain inline span, exactly as v2.89.0. */
+  if (region.querySelector(
+      "p, div, ul, ol, li, table, blockquote, pre, " +
+      "h1, h2, h3, h4, h5, h6, figure, hr, section")) {
+    region.classList.add("ssenc-open-blocks");
+  }
   ssencRegions.set(rid, {
     el: region, running: false, queuedHtml: null,
     chain: Promise.resolve()
   });
   return region;
+}
+
+
+/* v2.91.0: rebind one freshly restored fragment, the
+   render half of a decrypt. A restored fragment can
+   hold anything a note body can (links in any view,
+   tag pills, checklist items, attachment cards, a
+   table of contents, a note tasks block, folded
+   sections), so the region runs through the same
+   render and rebind steps renderEditor runs when a
+   note loads, scoped to the region: checklist
+   normalization and sync, attachment placeholder
+   decoration and hydration, table filters, link
+   tooltips and views, task links, the table of
+   contents rebuild, section folds, and the note
+   tasks repaint. Without this the restored markup
+   would be inert: pills that do not filter, cards
+   that never fill, links that show no face. */
+function ssencRebindFragment(region) {
+  const note = (typeof currentNote === "function")
+    ? currentNote() : null;
+  if (!note) { return; }
+  normalizeChecklists(region);
+  syncChecklistBoxes(region);
+  const attById = new Map();
+  (note.attachments || []).forEach(function (a) {
+    attById.set(a.id, a);
+  });
+  region.querySelectorAll(".ss-attachment").forEach(
+    function (el) {
+      decorateAttachmentPlaceholder(note, el, attById);
+    });
+  applyAllTableFilters(region);
+  decorateLinkTooltips(region);
+  decorateLinkViews(region);
+  decorateTaskLinks(region);
+  refreshTocBlocks(document.getElementById("noteBody"));
+  decorateSectionFolds(region);
+  refreshNoteTaskBlocks(region, note);
+  void hydrateAttachments(note);
 }
 
 /* One region's encryptable content: its inner HTML
@@ -64623,6 +64794,11 @@ async function ssencDecryptOpenNoteBlocks() {
         block.getAttribute("data-ssenc-iv"),
         block.getAttribute("data-ssenc-ct"));
       block.parentNode.replaceChild(region, block);
+      /* v2.91.0: the restored fragment is rebound
+         through the note load render pass, so the
+         links, pills, and cards inside it are live
+         again (see ssencRebindFragment). */
+      ssencRebindFragment(region);
     } catch (err) {
       block.classList.add("ssenc-error");
       const face = block.querySelector(".ssenc-face-text");
@@ -64861,34 +65037,33 @@ async function ssencUnlockFlow() {
 
 /* ---------- the Encrypt action ---------- */
 
-/* The block element a node's inline content lives in,
-   for the one block rule: the note body itself, or
-   the nearest block level ancestor inside it. */
-function ssencBlockAncestor(node) {
-  const bodyEl = document.getElementById("noteBody");
-  let el = node && node.nodeType === 1 ? node : node.parentNode;
-  const BLOCKS = ["P", "LI", "H1", "H2", "H3", "H4", "H5",
-    "H6", "BLOCKQUOTE", "TD", "TH", "DIV", "PRE"];
-  while (el && el !== bodyEl) {
-    if (BLOCKS.indexOf(el.tagName) >= 0) { return el; }
-    el = el.parentNode;
-  }
-  return null;
-}
-
-function ssencRangeIntersectsNode(range, node) {
-  const nr = document.createRange();
-  nr.selectNode(node);
-  const after = range.compareBoundaryPoints(
-    Range.END_TO_START, nr);
-  const before = range.compareBoundaryPoints(
-    Range.START_TO_END, nr);
-  return after === 1 && before === -1;
-}
-
 /* Judge the live selection for the Encrypt action.
    Returns {ok, range, html} or {ok:false, message}
-   under the refusal rule in this section's header. */
+   under the refusal rule in this section's header:
+   v2.91.0 takes the selection's exact HTML fragment
+   with no structural restriction, so selections
+   spanning several paragraphs, headings, blockquotes,
+   partial list items (starting mid item and ending
+   mid item elsewhere), checklist items, mixed inline
+   formatting and links, and selections containing
+   attachment cards, images, tables, or an existing
+   locked block are all encryptable.
+
+   Content caught inside the fragment keeps its
+   identity. A locked block inside the selection is
+   carried as part of the fragment, nested: after the
+   outer block is unlocked it stands locked again in
+   place and unlocks normally. An open decrypted
+   region the selection subsumes is unwrapped here in
+   the clone: its lock chip drops and its current HTML
+   becomes ordinary fragment content. The fragment
+   then passes through the same canonicalization every
+   save applies, so attachment shells, link faces,
+   fold chrome, and the note tasks marker reach the
+   payload in exactly their saved shapes. (The
+   v2.89.0 helpers ssencBlockAncestor and
+   ssencRangeIntersectsNode existed only for the
+   deleted one block rule and are gone with it.) */
 function ssencSelectionPlan() {
   const bodyEl = document.getElementById("noteBody");
   const sel = window.getSelection();
@@ -64900,39 +65075,22 @@ function ssencSelectionPlan() {
       !bodyEl.contains(range.commonAncestorContainer)) {
     return { ok: false, message: "Select the text to encrypt first." };
   }
-  if (!range.toString().trim()) {
-    return { ok: false,
-      message: "Select some text to encrypt first." };
-  }
-  const startBlock = ssencBlockAncestor(range.startContainer);
-  const endBlock = ssencBlockAncestor(range.endContainer);
-  if (!startBlock || startBlock !== endBlock) {
-    return { ok: false,
-      message: "Encrypted text has to sit inside one " +
-        "paragraph. Select text within a single " +
-        "paragraph and try again." };
-  }
-  const guarded = bodyEl.querySelectorAll(
-    "[data-ssenc], .ssenc-open");
-  for (let i = 0; i < guarded.length; i++) {
-    if (ssencRangeIntersectsNode(range, guarded[i])) {
-      return { ok: false,
-        message: "That selection touches an encrypted " +
-          "passage. Leave encrypted passages out of " +
-          "the selection." };
-    }
-  }
   const holder = document.createElement("div");
   holder.appendChild(range.cloneContents());
-  if (holder.querySelector(
-      ".ss-attachment, table, pre, .ss-toc")) {
-    return { ok: false,
-      message: "Attachments, tables, code blocks, and " +
-        "tables of contents cannot be encrypted. " +
-        "Select plain text and try again." };
-  }
+  holder.querySelectorAll(".ssenc-open").forEach(
+    function (el) {
+      el.querySelectorAll(".ssenc-relock").forEach(
+        function (chip) { chip.remove(); });
+      const parent = el.parentNode;
+      if (!parent) { return; }
+      while (el.firstChild) {
+        parent.insertBefore(el.firstChild, el);
+      }
+      el.remove();
+    });
   return { ok: true, range: range.cloneRange(),
-    html: holder.innerHTML };
+    html: canonicalizeAttachmentPlaceholders(
+      holder.innerHTML) };
 }
 
 /* The Encrypt action itself (the toolbar More menu's
@@ -64961,6 +65119,17 @@ async function ssencEncryptSelectionFlow() {
   plan.range.deleteContents();
   const block = ssencBuildBlock(out.iv, out.ct);
   plan.range.insertNode(block);
+  /* v2.91.0: the replacement can have cut an open
+     region the selection crossed. Any region left
+     standing is told to re-encrypt from its current
+     content (the cut fired no input event, so its
+     chain is stale), and records for regions the cut
+     removed are pruned before they can chain. */
+  bodyEl.querySelectorAll(".ssenc-open").forEach(
+    function (region) {
+      ssencScheduleRegionEncrypt(region);
+    });
+  ssencPruneRegions();
   const sel = window.getSelection();
   const after = document.createRange();
   after.setStartAfter(block);
@@ -65085,6 +65254,384 @@ function wireSsencControls() {
       if (ssencKey) { void ssencDecryptOpenNoteBlocks(); }
       else { void ssencUnlockFlow(); }
     }
+  });
+}
+
+
+/* ==========================================================================
+   v2.91.0: the note editor's own right click menu.
+
+   Chris's direction on 2026-11-02 supersedes the
+   editor half of the v2.81.0 context menu exception:
+   the note body no longer keeps the browser's menu.
+   A right click inside the note body editor opens
+   this app menu instead (Cut, Copy, Paste, a
+   separator, then Encrypt selected text and an
+   Unlock or Lock item that follows the vault),
+   through the same fixed panel machinery and theming
+   as the app's other floating menus. Text fields and
+   inputs elsewhere keep the browser menu exactly as
+   today: this section listens on the note body
+   alone, the document level guard still leaves every
+   surface it always left, and the task description
+   editor is untouched.
+
+   Per Chris's amendment the same day, the menu has
+   NO spell check item: spell checking in the note
+   editor is pinned always on. The note body carries
+   spellcheck="true" in its markup, the wiring below
+   sets it again, and no app path turns it off. (The
+   search before this build found no per device or
+   default path that could leave the editor's
+   spellcheck off: the attribute simply was never
+   set, so a browser was free to default it either
+   way. It is now pinned in the markup itself.)
+
+   The menu never eats the selection it acts on: its
+   mousedown is swallowed so focus and the live
+   selection stay in the editor, and every action
+   first restores the saved format selection, the
+   same pattern the toolbar uses. A right click
+   inside an existing selection keeps it (a browser
+   does not collapse a selection for a right click
+   inside it); a right click elsewhere has already
+   placed the caret there before this handler runs,
+   as the browser would. The Menu key and Shift+F10
+   open the same menu at the caret. The menu closes
+   on an outside press and on Escape, and clamps to
+   the viewport like the app's other fixed menus.
+   ========================================================================== */
+
+function editorCtxMenuEl() {
+  return document.getElementById("editorCtxMenu");
+}
+
+function closeEditorCtxMenu() {
+  const menu = editorCtxMenuEl();
+  if (menu) { menu.classList.add("hidden"); }
+}
+
+function editorCtxMenuIsOpen() {
+  const menu = editorCtxMenuEl();
+  return !!menu && !menu.classList.contains("hidden");
+}
+
+/* The note body's current selection, for item
+   states: a non collapsed range inside the body. */
+function editorCtxSelectionInBody() {
+  const bodyEl = document.getElementById("noteBody");
+  const sel = window.getSelection();
+  if (!sel || !sel.rangeCount || !bodyEl) { return null; }
+  const range = sel.getRangeAt(0);
+  if (range.collapsed ||
+      !bodyEl.contains(range.commonAncestorContainer)) {
+    return null;
+  }
+  return range;
+}
+
+/* Fill the item states for the note as it stands,
+   then show the menu at (x, y), clamped to the
+   viewport like the app's other fixed menus. The
+   vault item stands only when the open note contains
+   locked blocks or open regions, and its label
+   follows the vault: Unlock while locked, Lock
+   while unlocked. */
+function openEditorCtxMenu(x, y) {
+  const bodyEl = document.getElementById("noteBody");
+  const menu = editorCtxMenuEl();
+  if (!bodyEl || !menu) { return; }
+  const hasSel = !!editorCtxSelectionInBody();
+  const setDisabled = function (action, disabled) {
+    const btn = menu.querySelector(
+      "[data-ctx-action=\"" + action + "\"]");
+    if (btn) { btn.disabled = disabled; }
+  };
+  setDisabled("cut", !hasSel);
+  setDisabled("copy", !hasSel);
+  setDisabled("encrypt", !hasSel);
+  const vaultBtn = menu.querySelector(
+    "[data-ctx-action=\"vault\"]");
+  if (vaultBtn) {
+    const hasPassages = !!bodyEl.querySelector(
+      "[data-ssenc], .ssenc-open");
+    vaultBtn.classList.toggle("hidden", !hasPassages);
+    vaultBtn.textContent = ssencKey
+      ? "Lock encrypted text" : "Unlock encrypted text";
+  }
+  menu.classList.remove("hidden");
+  const width = menu.offsetWidth || 200;
+  const height = menu.offsetHeight || 170;
+  const left = Math.max(8, Math.min(x,
+    window.innerWidth - width - 8));
+  const top = Math.max(8, Math.min(y,
+    window.innerHeight - height - 8));
+  menu.style.left = left + "px";
+  menu.style.top = top + "px";
+}
+
+/* Copy (cut false) or cut (cut true) the current
+   selection: the async Clipboard API with rich HTML
+   first, plain text second, and the built in copy or
+   cut command on the still standing live selection
+   as the fallback, the chain the app's menus use. */
+async function editorCtxCopyOrCut(cut) {
+  restoreFormatSelection();
+  const bodyEl = document.getElementById("noteBody");
+  const range = editorCtxSelectionInBody();
+  if (!range || !bodyEl) { return; }
+  const holder = document.createElement("div");
+  holder.appendChild(range.cloneContents());
+  const html = holder.innerHTML;
+  const plain = range.toString();
+  let wrote = false;
+  try {
+    if (navigator.clipboard && navigator.clipboard.write &&
+        typeof ClipboardItem !== "undefined") {
+      await navigator.clipboard.write([new ClipboardItem({
+        "text/html": new Blob([html],
+          { type: "text/html" }),
+        "text/plain": new Blob([plain],
+          { type: "text/plain" })
+      })]);
+      wrote = true;
+    }
+  } catch (err) { wrote = false; }
+  if (!wrote) {
+    try {
+      if (navigator.clipboard &&
+          navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(plain);
+        wrote = true;
+      }
+    } catch (err) { wrote = false; }
+  }
+  if (!wrote) {
+    try {
+      wrote = document.execCommand(cut ? "cut" : "copy");
+    } catch (err) { wrote = false; }
+  }
+  if (!wrote) {
+    toast((cut ? "Cut" : "Copy") +
+      " did not work in this browser.", true);
+    return;
+  }
+  if (cut) {
+    range.deleteContents();
+    bodyEl.focus();
+    markDirty();
+  }
+}
+
+/* Paste at the caret from the clipboard, through the
+   same insertion rules as the paste event (the app's
+   paste modes, the code block rule included). A
+   browser that refuses the read by permission gets a
+   plain toast pointing at the keyboard, never a
+   silent failure. */
+async function editorCtxPaste() {
+  restoreFormatSelection();
+  const bodyEl = document.getElementById("noteBody");
+  if (!bodyEl) { return; }
+  let html = "";
+  let plain = "";
+  let read = false;
+  try {
+    if (navigator.clipboard && navigator.clipboard.read) {
+      const items = await navigator.clipboard.read();
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (!html &&
+            item.types.indexOf("text/html") >= 0) {
+          html = await (await item.getType(
+            "text/html")).text();
+        }
+        if (!plain &&
+            item.types.indexOf("text/plain") >= 0) {
+          plain = await (await item.getType(
+            "text/plain")).text();
+        }
+      }
+      read = true;
+    } else if (navigator.clipboard &&
+               navigator.clipboard.readText) {
+      plain = await navigator.clipboard.readText();
+      read = true;
+    }
+  } catch (err) { read = false; }
+  if (!read) {
+    toast("The browser would not hand over the " +
+      "clipboard. Paste from the keyboard instead: " +
+      "Ctrl+V, or Cmd+V on a Mac.", true);
+    return;
+  }
+  if (!html && !plain) { return; }
+  bodyEl.focus();
+  const codePre = codeBlockAtSelection();
+  if (codePre && plain) {
+    if (insertPlainTextIntoCode(codePre, plain)) {
+      markDirty();
+      return;
+    }
+  }
+  const insertHtml = html
+    ? renderPasteForMode(
+        ["source", "merge", "text"].indexOf(
+          state.defaultPasteMode) >= 0
+          ? state.defaultPasteMode : "source",
+        html, plain)
+    : null;
+  let inserted = false;
+  try {
+    if (typeof document.execCommand === "function") {
+      inserted = insertHtml !== null
+        ? document.execCommand("insertHTML", false,
+            insertHtml)
+        : document.execCommand("insertText", false,
+            plain);
+    }
+  } catch (err) { inserted = false; }
+  if (!inserted) {
+    /* The built in insertion is unavailable or refused:
+       insert at the live range by hand, the same nodes
+       the command would have placed. */
+    const sel = window.getSelection();
+    if (sel && sel.rangeCount) {
+      const range = sel.getRangeAt(0);
+      range.deleteContents();
+      let lastNode = null;
+      if (insertHtml !== null) {
+        const holder = document.createElement("div");
+        holder.innerHTML = insertHtml;
+        const frag = document.createDocumentFragment();
+        while (holder.firstChild) {
+          lastNode = holder.firstChild;
+          frag.appendChild(holder.firstChild);
+        }
+        range.insertNode(frag);
+      } else {
+        lastNode = document.createTextNode(plain);
+        range.insertNode(lastNode);
+      }
+      if (lastNode) {
+        const after = document.createRange();
+        after.setStartAfter(lastNode);
+        after.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(after);
+      }
+      inserted = true;
+    }
+  }
+  if (inserted) { markDirty(); }
+}
+
+/* Run one menu item. Encrypt is the identical flow to
+   the toolbar More menu's item (the same function);
+   the vault item runs exactly the unlock and lock
+   actions the Settings row runs. */
+function runEditorCtxAction(action) {
+  closeEditorCtxMenu();
+  if (action === "cut") {
+    void editorCtxCopyOrCut(true);
+    return;
+  }
+  if (action === "copy") {
+    void editorCtxCopyOrCut(false);
+    return;
+  }
+  if (action === "paste") {
+    void editorCtxPaste();
+    return;
+  }
+  if (action === "encrypt") {
+    restoreFormatSelection();
+    void ssencEncryptSelectionFlow();
+    return;
+  }
+  if (action === "vault") {
+    if (ssencKey) { void ssencLockVault(); }
+    else { void ssencUnlockFlow(); }
+  }
+}
+
+function wireEditorCtxMenu() {
+  const bodyEl = document.getElementById("noteBody");
+  const menu = editorCtxMenuEl();
+  if (!bodyEl || !menu) { return; }
+  /* The menu takes the mention popups' move: directly
+     under the document body, so no editor ancestor's
+     stacking or parked hidden state can clip or bury
+     it. appendChild moves the element with its
+     listeners intact. */
+  if (menu.parentElement !== document.body) {
+    document.body.appendChild(menu);
+  }
+  /* Spell check is pinned on for the note editor (see
+     this section's header): the markup carries
+     spellcheck="true" and the wiring sets it again,
+     and nothing in the app turns it off. */
+  bodyEl.setAttribute("spellcheck", "true");
+  bodyEl.addEventListener("contextmenu", function (ev) {
+    /* A read only (locked) note keeps the standing
+       behavior: no app menu, and the document guard's
+       blanket suppression stands. */
+    if (bodyEl.contentEditable === "false") { return; }
+    /* Task rows inside the body keep their standing
+       no menu rule; the document guard answers them. */
+    if (ev.target && ev.target.closest &&
+        ev.target.closest(".task-row, .task-cal-entry")) {
+      return;
+    }
+    ev.preventDefault();
+    saveFormatSelection();
+    openEditorCtxMenu(ev.clientX, ev.clientY);
+  });
+  bodyEl.addEventListener("keydown", function (ev) {
+    if (bodyEl.contentEditable === "false") { return; }
+    if (ev.key === "ContextMenu" ||
+        (ev.shiftKey && ev.key === "F10")) {
+      ev.preventDefault();
+      saveFormatSelection();
+      let x = 16;
+      let y = 16;
+      const sel = window.getSelection();
+      if (sel && sel.rangeCount) {
+        try {
+          const rect = sel.getRangeAt(0)
+            .getBoundingClientRect();
+          if (rect.left || rect.bottom) {
+            x = rect.left;
+            y = rect.bottom;
+          }
+        } catch (err) {
+          /* No range geometry on this surface: the
+             menu opens at its fallback corner. */
+        }
+      }
+      openEditorCtxMenu(x, y);
+    }
+  });
+  /* A press on the menu itself must not move focus out
+     of the editor: swallow its mousedown so the live
+     selection stands, then let the click run the
+     item. */
+  menu.addEventListener("mousedown", function (ev) {
+    ev.preventDefault();
+  });
+  menu.addEventListener("click", function (ev) {
+    const btn = ev.target.closest("[data-ctx-action]");
+    if (!btn || btn.disabled) { return; }
+    runEditorCtxAction(btn.getAttribute("data-ctx-action"));
+  });
+  document.addEventListener("pointerdown", function (ev) {
+    if (editorCtxMenuIsOpen() &&
+        !menu.contains(ev.target)) {
+      closeEditorCtxMenu();
+    }
+  });
+  document.addEventListener("keydown", function (ev) {
+    if (ev.key === "Escape") { closeEditorCtxMenu(); }
   });
 }
 
@@ -66217,6 +66764,7 @@ function wireEvents() {
      Settings row, the two dialogs, and the editor's
      delegated block and region handling). */
   wireSsencControls();
+  wireEditorCtxMenu();
   /* v2.47: the Web clipper copy button in Settings. */
   document.getElementById("webClipCopyBtn")
     .addEventListener("click", copyWebClipBookmarklet);
