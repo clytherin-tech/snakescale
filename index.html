@@ -40,10 +40,42 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-11-02-SSN-V2920
-  Version: 2.92.0
+  BUILD STAMP: 2026-11-02-SSN-V2930
+  Version: 2.93.0
 
   Revision history:
+    v2.93.0 2026-11-02 Encryption polish, three items
+                      Chris directed. A locked
+                      passage's face gains a Remove
+                      encryption icon beside its lock
+                      icon: using it strips that
+                      passage's encryption permanently,
+                      its content left standing as
+                      ordinary note text, every other
+                      passage untouched, the removal a
+                      single undo step that autosaves
+                      like any edit; while the vault is
+                      locked the unlock dialog runs
+                      first and the removal follows in
+                      the same action, and a passage
+                      that cannot be decrypted says so
+                      and is left alone. Pressing Enter
+                      in the Unlock dialog's passphrase
+                      field now submits exactly as
+                      clicking Unlock does: the dialog's
+                      field and buttons stand in a real
+                      form whose submit is the one
+                      confirm path. And the Encrypt
+                      action refuses any selection
+                      touching a locked block or an
+                      open decrypted passage, with a
+                      toast saying the text is already
+                      encrypted: already encrypted text
+                      cannot be encrypted again, and
+                      the v2.91.0 behavior of carrying
+                      a caught passage inside a new
+                      block, or folding a caught open
+                      passage into one, is removed.
     v2.92.0 2026-11-02 Tables resize by dragging.
                       While a table is active in
                       the editor (the pointer over
@@ -9625,6 +9657,16 @@ body.dark .task-cal-more{color:var(--accent);}
   margin-right:5px;vertical-align:middle;
   user-select:none;
 }
+/* v2.93.0: the Remove encryption control on a locked
+   block's face, standing beside the lock icon: an
+   open lock glyph in the relock chip's dress, muted
+   until hovered. */
+#noteBody .ssenc-remove{
+  display:inline-flex;align-items:center;
+  color:var(--muted);cursor:pointer;
+  vertical-align:middle;user-select:none;
+}
+#noteBody .ssenc-remove:hover{color:var(--accent);}
 #noteBody .ss-tag-pill{
   display:inline-block;border:1px solid var(--border);
   background:var(--accent-soft);color:var(--text);
@@ -12651,6 +12693,13 @@ body.dark .version-date{color:var(--accent);}
      a wrong one is answered in the dialog's error line
      and changes no state. The passphrase is read from
      the field at the confirm click and never stored.
+     v2.93.0: the Unlock dialog's field and buttons
+     stand in a real form (ssencUnlockForm) whose
+     submit is the dialog's one confirm path, so
+     pressing Enter in the passphrase field submits
+     exactly as clicking Unlock does. The setup
+     dialog keeps its buttons and click handlers, as
+     shipped.
      ========================================================================== -->
 <div id="ssencSetupModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="ssencSetupTitle">
   <div class="modal-card">
@@ -12678,17 +12727,19 @@ body.dark .version-date{color:var(--accent);}
   <div class="modal-card">
     <h2 id="ssencUnlockTitle">Unlock encrypted text</h2>
     <p class="modal-sub">Enter the passphrase you set up for encrypted text. It stays unlocked for the time chosen in Settings, on this device only.</p>
-    <div class="field">
-      <label for="ssencUnlockPass">Passphrase</label>
-      <input id="ssencUnlockPass" type="password" autocomplete="current-password">
-    </div>
-    <div class="gcal-ev-error hidden" id="ssencUnlockError">
-      <span id="ssencUnlockErrorText"></span>
-    </div>
-    <div class="modal-foot">
-      <button class="btn" id="ssencUnlockCancelBtn" type="button">Cancel</button>
-      <button class="btn primary" id="ssencUnlockBtn" type="button">Unlock</button>
-    </div>
+    <form id="ssencUnlockForm">
+      <div class="field">
+        <label for="ssencUnlockPass">Passphrase</label>
+        <input id="ssencUnlockPass" type="password" autocomplete="current-password">
+      </div>
+      <div class="gcal-ev-error hidden" id="ssencUnlockError">
+        <span id="ssencUnlockErrorText"></span>
+      </div>
+      <div class="modal-foot">
+        <button class="btn" id="ssencUnlockCancelBtn" type="button">Cancel</button>
+        <button class="btn primary" id="ssencUnlockBtn" type="submit">Unlock</button>
+      </div>
+    </form>
   </div>
 </div>
 <div id="mailLabelMenu" class="note-ctx-menu hidden" role="menu" aria-label="Label actions">
@@ -13116,8 +13167,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-11-02-SSN-V2920";
-const APP_VERSION = "2.92.0";
+const APP_BUILD = "2026-11-02-SSN-V2930";
+const APP_VERSION = "2.93.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -65200,18 +65251,28 @@ function insertVoiceTranscript(anchorEl, segments) {
    to be encrypted"): the Encrypt action takes the
    selection's exact HTML fragment with NO structural
    restriction, across any blocks and structures in
-   the note body. The only refusals left are no
-   selection (or a collapsed caret), a selection
-   outside the note body, and a selection in the
-   title field (encryption is body only; titles stay
-   visible). A locked block inside the selection is
-   carried nested in the fragment; an open decrypted
-   region caught in one is subsumed, its current HTML
-   becoming ordinary fragment content. Since v2.91.0
-   a decrypted region can wrap whole runs of blocks,
-   and collect/save re-encrypts a region's full inner
+   the note body. The refusals are no selection (or
+   a collapsed caret), a selection outside the note
+   body, a selection in the title field (encryption
+   is body only; titles stay visible), and, since
+   v2.93.0 on Chris's direction, any selection
+   touching a locked block or an open decrypted
+   region: already encrypted text cannot be
+   encrypted again, so the v2.91.0 nested carrying
+   of a caught block and subsuming of a caught
+   region are removed. Since v2.91.0 a decrypted
+   region can wrap whole runs of blocks, and
+   collect/save re-encrypts a region's full inner
    HTML from wherever the region sits in the body
    tree.
+
+   v2.93.0 also adds the Remove encryption control
+   to every locked block's face (beside the lock
+   icon): it strips that one passage's encryption
+   permanently, leaving its content as ordinary
+   note text (see ssencRemoveEncryptionFlow), and
+   the Unlock dialog's Enter key now submits
+   through its form, exactly as its button does.
    -------------------------------------------------------------------------- */
 
 const SSENC_KDF_ITERATIONS = 600000;
@@ -65333,6 +65394,30 @@ const SSENC_LOCK_SVG =
   "<rect x=\"4\" y=\"11\" width=\"16\" height=\"10\" rx=\"2\"/>" +
   "<path d=\"M8 11V7a4 4 0 0 1 8 0v4\"/></svg>";
 
+/* v2.93.0: the open lock glyph for the Remove
+   encryption control: the lock's own geometry with
+   the shackle sprung open (it does not come back
+   down on the right), in the same stroke dress. */
+const SSENC_REMOVE_SVG =
+  "<svg viewBox=\"0 0 24 24\" width=\"13\" height=\"13\" " +
+  "fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" " +
+  "stroke-linecap=\"round\" stroke-linejoin=\"round\" " +
+  "aria-hidden=\"true\" focusable=\"false\">" +
+  "<rect x=\"4\" y=\"11\" width=\"16\" height=\"10\" rx=\"2\"/>" +
+  "<path d=\"M8 11V7a4 4 0 0 1 7.8-1.3\"/></svg>";
+
+/* The Remove encryption control's markup, one shape
+   shared by the block builder and the face
+   normalization in ssencDecorateEditorBody: a span
+   button carrying the app's tooltip convention, its
+   title naming the action it runs. */
+function ssencRemoveControlHtml() {
+  return "<span class=\"ssenc-remove\" role=\"button\" " +
+    "aria-label=\"Remove encryption\" " +
+    "title=\"Remove encryption\">" +
+    SSENC_REMOVE_SVG + "</span>";
+}
+
 function ssencBuildBlock(iv, ct) {
   const block = document.createElement("span");
   block.className = "ssenc-block";
@@ -65344,6 +65429,7 @@ function ssencBuildBlock(iv, ct) {
   block.setAttribute("aria-label", "Encrypted text");
   block.setAttribute("title", "Encrypted text");
   block.innerHTML = SSENC_LOCK_SVG +
+    ssencRemoveControlHtml() +
     "<span class=\"ssenc-face-text\">Encrypted text</span>";
   return block;
 }
@@ -65588,6 +65674,32 @@ function ssencRelockOpenNoteRegions() {
    while locked, the stored blocks already show their
    faces and nothing runs. */
 function ssencDecorateEditorBody() {
+  const bodyEl = document.getElementById("noteBody");
+  if (bodyEl) {
+    /* v2.93.0: a block saved by an earlier build
+       carries the older face (the lock icon and its
+       label only). The Remove encryption control is
+       added to its face here, beside the lock icon,
+       so every locked block standing in the editor
+       offers the removal, whatever build saved it.
+       Decoration only: nothing here marks the note. */
+    bodyEl.querySelectorAll("[data-ssenc]").forEach(
+      function (block) {
+        if (block.querySelector(".ssenc-remove")) {
+          return;
+        }
+        const holder = document.createElement("div");
+        holder.innerHTML = ssencRemoveControlHtml();
+        const ctl = holder.firstChild;
+        const faceText =
+          block.querySelector(".ssenc-face-text");
+        if (faceText) {
+          block.insertBefore(ctl, faceText);
+        } else {
+          block.appendChild(ctl);
+        }
+      });
+  }
   if (ssencKey) { void ssencDecryptOpenNoteBlocks(); }
 }
 
@@ -65803,24 +65915,28 @@ async function ssencUnlockFlow() {
    partial list items (starting mid item and ending
    mid item elsewhere), checklist items, mixed inline
    formatting and links, and selections containing
-   attachment cards, images, tables, or an existing
-   locked block are all encryptable.
+   attachment cards, images, or tables are all
+   encryptable.
 
-   Content caught inside the fragment keeps its
-   identity. A locked block inside the selection is
-   carried as part of the fragment, nested: after the
-   outer block is unlocked it stands locked again in
-   place and unlocks normally. An open decrypted
-   region the selection subsumes is unwrapped here in
-   the clone: its lock chip drops and its current HTML
-   becomes ordinary fragment content. The fragment
-   then passes through the same canonicalization every
-   save applies, so attachment shells, link faces,
-   fold chrome, and the note tasks marker reach the
-   payload in exactly their saved shapes. (The
-   v2.89.0 helpers ssencBlockAncestor and
-   ssencRangeIntersectsNode existed only for the
-   deleted one block rule and are gone with it.) */
+   v2.93.0 (Chris's direction) adds the one refusal
+   that widening had left open: a selection touching
+   already encrypted text is refused outright. Any
+   intersection with a locked block or an open
+   decrypted region, the passage wholly covered, the
+   passage clipped at an edge, or the selection
+   standing wholly inside a region, refuses the
+   whole selection with a toast, and nothing changes:
+   no nesting, no subsuming, and no partial
+   encryption of the selection's plain remainder
+   (the v2.91.0 carrying behavior is removed, so
+   text that is already encrypted cannot be
+   encrypted again). A selection that merely sits
+   next to a passage without touching it still
+   encrypts. The fragment then passes through the
+   same canonicalization every save applies, so
+   attachment shells, link faces, fold chrome, and
+   the note tasks marker reach the payload in
+   exactly their saved shapes. */
 function ssencSelectionPlan() {
   const bodyEl = document.getElementById("noteBody");
   const sel = window.getSelection();
@@ -65832,19 +65948,18 @@ function ssencSelectionPlan() {
       !bodyEl.contains(range.commonAncestorContainer)) {
     return { ok: false, message: "Select the text to encrypt first." };
   }
+  const guarded = bodyEl.querySelectorAll(
+    "[data-ssenc], .ssenc-open");
+  for (let i = 0; i < guarded.length; i++) {
+    if (range.intersectsNode(guarded[i])) {
+      return { ok: false, message: "That selection " +
+        "includes text that is already encrypted, " +
+        "and encrypted text cannot be encrypted " +
+        "again." };
+    }
+  }
   const holder = document.createElement("div");
   holder.appendChild(range.cloneContents());
-  holder.querySelectorAll(".ssenc-open").forEach(
-    function (el) {
-      el.querySelectorAll(".ssenc-relock").forEach(
-        function (chip) { chip.remove(); });
-      const parent = el.parentNode;
-      if (!parent) { return; }
-      while (el.firstChild) {
-        parent.insertBefore(el.firstChild, el);
-      }
-      el.remove();
-    });
   return { ok: true, range: range.cloneRange(),
     html: canonicalizeAttachmentPlaceholders(
       holder.innerHTML) };
@@ -65876,12 +65991,15 @@ async function ssencEncryptSelectionFlow() {
   plan.range.deleteContents();
   const block = ssencBuildBlock(out.iv, out.ct);
   plan.range.insertNode(block);
-  /* v2.91.0: the replacement can have cut an open
-     region the selection crossed. Any region left
-     standing is told to re-encrypt from its current
-     content (the cut fired no input event, so its
-     chain is stale), and records for regions the cut
-     removed are pruned before they can chain. */
+  /* v2.91.0: the replacement could once cut an open
+     region the selection crossed; since v2.93.0 such
+     a selection is refused before this point, so no
+     region can be crossed here. Any region left
+     standing beside the insert is still told to
+     re-encrypt from its current content (the insert
+     fired no input event, so its chain could be
+     stale), and records for regions no longer in the
+     body are pruned before they can chain. */
   bodyEl.querySelectorAll(".ssenc-open").forEach(
     function (region) {
       ssencScheduleRegionEncrypt(region);
@@ -65893,6 +66011,138 @@ async function ssencEncryptSelectionFlow() {
   after.collapse(true);
   sel.removeAllRanges();
   sel.addRange(after);
+  markDirty();
+}
+
+/* ---------- removing one passage's encryption ---------- */
+
+/* Find the open note's decrypted region carrying one
+   passage's ciphertext: the bridge between a locked
+   block the user pointed at and the region the
+   unlock's decrypt pass made of it. The IV and the
+   ciphertext together name the passage; a fresh IV
+   per encryption makes the pair unique in the note. */
+function ssencFindRegionByCipher(iv, ct) {
+  const bodyEl = document.getElementById("noteBody");
+  if (!bodyEl) { return null; }
+  const regions = bodyEl.querySelectorAll(".ssenc-open");
+  for (let i = 0; i < regions.length; i++) {
+    if (regions[i].getAttribute("data-ssenc-iv") === iv &&
+        regions[i].getAttribute("data-ssenc-ct") === ct) {
+      return regions[i];
+    }
+  }
+  return null;
+}
+
+/* Replace one decrypted region with its own content
+   as ordinary note text, for good: the passage's
+   encryption is removed, not merely opened. The swap
+   is composed like the table resize's commit (the
+   app's standing one undo composition): the region
+   first swaps back to its locked block, the block is
+   selected, and the passage's plain HTML is inserted
+   over it through a single insertHTML, so one Ctrl+Z
+   restores the locked block exactly. Where
+   insertHTML is unavailable or refuses, the block is
+   swapped for the parsed content directly (the
+   removal lands; only the single undo step is
+   lost). Either way the landed content then runs
+   the same fragment rebind pass a decrypt restore
+   uses, so the links, pills, and cards inside it
+   are live, not inert markup. */
+function ssencStripRegion(region) {
+  const bodyEl = document.getElementById("noteBody");
+  const parent = region.parentNode;
+  if (!bodyEl || !parent) { return; }
+  const plainHtml = ssencRegionHtml(region);
+  const block = ssencBuildBlock(
+    region.getAttribute("data-ssenc-iv") || "",
+    region.getAttribute("data-ssenc-ct") || "");
+  parent.replaceChild(block, region);
+  const rid = region.getAttribute("data-ssenc-rid");
+  if (rid) { ssencRegions.delete(rid); }
+  let done = false;
+  if (typeof document.execCommand === "function") {
+    try {
+      bodyEl.focus();
+      const sel = window.getSelection();
+      const range = document.createRange();
+      range.setStartBefore(block);
+      range.setEndAfter(block);
+      sel.removeAllRanges();
+      sel.addRange(range);
+      done = document.execCommand("insertHTML", false,
+        plainHtml) === true;
+    } catch (err) { done = false; }
+  }
+  if (!done) {
+    const holder = document.createElement("div");
+    holder.innerHTML = plainHtml;
+    const frag = document.createDocumentFragment();
+    while (holder.firstChild) {
+      frag.appendChild(holder.firstChild);
+    }
+    if (block.parentNode) {
+      block.parentNode.replaceChild(frag, block);
+    }
+  }
+  ssencRebindFragment(parent);
+}
+
+/* The Remove encryption control's action (Chris,
+   2026-11-02): strip one passage's encryption
+   permanently, leaving its content standing as
+   ordinary note text and every other passage in the
+   note untouched. The vault key is required. While
+   the vault is locked, the flow runs the normal
+   unlock dialog first and, on success, carries on
+   to the removal itself rather than stopping at the
+   unlock: the dialog's decrypt pass has turned the
+   block into a region by then, and the passage is
+   found by its ciphertext. A cancelled dialog or a
+   wrong passphrase changes nothing. While the vault
+   already stands unlocked, a block can still stand
+   (a tampered block the decrypt pass left, or one
+   an undo restored); it is decrypted directly and
+   restored through the ordinary region machinery
+   before the strip. A passage whose ciphertext
+   cannot be decrypted cannot have its encryption
+   removed either: the flow says so in a toast and
+   changes nothing. The removal marks the note
+   dirty once, so it autosaves like any edit. */
+async function ssencRemoveEncryptionFlow(block) {
+  const bodyEl = document.getElementById("noteBody");
+  if (!block || !bodyEl || !bodyEl.contains(block)) {
+    return;
+  }
+  if (bodyEl.contentEditable === "false") { return; }
+  const iv = block.getAttribute("data-ssenc-iv");
+  const ct = block.getAttribute("data-ssenc-ct");
+  let region = null;
+  if (!ssencKey) {
+    const unlocked = await ssencOpenUnlockDialog();
+    if (!unlocked) { return; }
+    region = ssencFindRegionByCipher(iv, ct);
+    if (!region) {
+      toast("That text cannot be decrypted, so its " +
+        "encryption cannot be removed.", true);
+      return;
+    }
+  } else {
+    let html = null;
+    try {
+      html = await ssencDecryptHtml(iv, ct);
+    } catch (err) {
+      toast("That text cannot be decrypted, so its " +
+        "encryption cannot be removed.", true);
+      return;
+    }
+    region = ssencBuildRegion(html, iv, ct);
+    block.parentNode.replaceChild(region, block);
+    ssencRebindFragment(region);
+  }
+  ssencStripRegion(region);
   markDirty();
 }
 
@@ -65982,8 +66232,17 @@ function wireSsencControls() {
     .addEventListener("click", function () {
       ssencCloseDialog("unlock", false);
     });
-  document.getElementById("ssencUnlockBtn")
-    .addEventListener("click", function () {
+  /* v2.93.0: the unlock dialog's confirm runs off
+     its form's submit, not the button's click. The
+     Unlock button is the form's submit button, so a
+     click arrives here as a submission, and pressing
+     Enter in the passphrase field arrives here as
+     the form's implicit submission: one path, so
+     Enter behaves exactly as the button in success
+     and in refusal alike. */
+  document.getElementById("ssencUnlockForm")
+    .addEventListener("submit", function (ev) {
+      ev.preventDefault();
       void ssencUnlockConfirm();
     });
   const bodyEl = document.getElementById("noteBody");
@@ -66004,6 +66263,18 @@ function wireSsencControls() {
     if (chip && bodyEl.contains(chip)) {
       ev.preventDefault();
       void ssencLockVault();
+      return;
+    }
+    /* v2.93.0: the block face's Remove encryption
+       control runs the removal for its own block; it
+       is judged before the block's own click (the
+       unlock door) so a press on it can never fall
+       through to merely unlocking. */
+    const removeCtl = ev.target.closest(".ssenc-remove");
+    if (removeCtl && bodyEl.contains(removeCtl)) {
+      ev.preventDefault();
+      const owner = removeCtl.closest("[data-ssenc]");
+      if (owner) { void ssencRemoveEncryptionFlow(owner); }
       return;
     }
     const block = ev.target.closest("[data-ssenc]");
