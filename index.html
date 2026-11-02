@@ -40,10 +40,27 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-11-02-SSN-V2870
-  Version: 2.87.0
+  BUILD STAMP: 2026-11-02-SSN-V2880
+  Version: 2.88.0
 
   Revision history:
+    v2.88.0 2026-11-02 One layout fix. In the event
+                      editor, each event
+                      notification now stands on
+                      a single line, as in
+                      Google Calendar's editor:
+                      the method select, the
+                      amount, the unit select,
+                      and the remove button
+                      inline together, sized to
+                      their content instead of
+                      stretched full width by
+                      the shared field rule.
+                      The line also fits a
+                      phone width dialog.
+                      Behavior is unchanged:
+                      the same rows, the same
+                      defaults, the same save.
     v2.87.0 2026-11-02 Repeating events. The
                       event editor gains a Repeat
                       control modeled on Google
@@ -9290,6 +9307,37 @@ body.dark .task-cal-more{color:var(--accent);}
 .gcal-ev-notif-remove:hover{border-color:var(--accent);}
 #gcalEvNotifAdd{font-size:13.5px;}
 
+/* v2.88: one notification stands on ONE line, as in
+   Google's editor: the method select, the amount,
+   the unit select, and the remove button inline.
+   The shared .field rule stretches a field's inputs
+   and selects to full width, which is what stacked
+   the v2.87 rows; these rules take that stretch
+   back inside this section only, sizing the selects
+   to their content and keeping the amount narrow,
+   with compact padding so the line also fits a
+   phone width dialog without sideways scrolling.
+   Colors and control dress are unchanged, so both
+   themes carry the line as they carried the rows. */
+.gcal-ev-notif-row.gcal-ev-notif-line{
+  flex-wrap:nowrap;gap:6px;
+}
+.gcal-ev-notif-line .gcal-ev-notif-method,
+.gcal-ev-notif-line .gcal-ev-notif-unit{
+  width:auto;flex:0 1 auto;min-width:0;
+  padding:8px 6px;height:38px;
+}
+.gcal-ev-notif-line .gcal-ev-notif-amount{
+  width:60px;flex:none;padding:8px 6px;height:38px;
+}
+/* The four stand at one height, so the remove
+   button, centered in the row, shares the
+   controls' top instead of floating below it; it
+   keeps its round shape at the controls' height. */
+.gcal-ev-notif-line .gcal-ev-notif-remove{
+  width:38px;height:38px;
+}
+
 /* v2.87: the event editor's Repeat extras. The weekday
    chips wear the linked chips' card language at rest
    and the primary fill while on, so the chosen days
@@ -12734,8 +12782,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-11-02-SSN-V2870";
-const APP_VERSION = "2.87.0";
+const APP_BUILD = "2026-11-02-SSN-V2880";
+const APP_VERSION = "2.88.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -25252,7 +25300,11 @@ function gcalNotifWords(minutes) {
 function buildGcalNotifRow(reminder) {
   const d = gcalNotifDisplayOf(reminder.minutes);
   const row = document.createElement("div");
-  row.className = "gcal-ev-notif-row";
+  /* v2.88: the line class stands the row's four
+     controls on one line (see the CSS beside the
+     section's styles); the row class still names
+     the row for every behavior that finds it. */
+  row.className = "gcal-ev-notif-row gcal-ev-notif-line";
   const method = document.createElement("select");
   method.className = "gcal-ev-notif-method";
   [["popup", "Notification"], ["email", "Email"]]
