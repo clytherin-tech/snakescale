@@ -40,10 +40,29 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-11-02-SSN-V2890
-  Version: 2.89.0
+  BUILD STAMP: 2026-11-02-SSN-V2900
+  Version: 2.90.0
 
   Revision history:
+    v2.90.0 2026-11-02 Contacts fix. The People API
+                      base put the People path on
+                      the www.googleapis.com host,
+                      an address that answers
+                      Google's HTML 404 page for
+                      it, so every contacts call
+                      failed from v2.84.0 on no
+                      matter what was granted; the
+                      Drive, Gmail, and Calendar
+                      APIs do live under that host,
+                      which is how the pattern
+                      slipped in. The base now
+                      names the People API's own
+                      host. Nothing else
+                      about the module changes:
+                      the same path, fields, sort
+                      order, paging, states, and
+                      the v2.85.0 Settings repair
+                      row all stand as they were.
     v2.89.0 2026-11-02 Passage encryption. Selected
                       text in a note can be
                       encrypted under one
@@ -12922,8 +12941,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-11-02-SSN-V2890";
-const APP_VERSION = "2.89.0";
+const APP_BUILD = "2026-11-02-SSN-V2900";
+const APP_VERSION = "2.90.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -27895,7 +27914,16 @@ async function confirmMailLabelDelete() {
    Contacts live in page memory only: the loaded list
    stands here and nowhere else, never in a Drive
    payload, a store file, or the device snapshot. */
-const PEOPLE_API_BASE = "https://www.googleapis.com/people/v1";
+/* v2.90.0: the People API lives on its own host.
+   Through v2.89.0 this base put the People path
+   on the www.googleapis.com host, which answers
+   Google's HTML 404 page for it, so every
+   contacts call failed no matter what was
+   granted. The Drive, Gmail, and Calendar APIs
+   do live under that host, which is how the
+   pattern slipped in; the People API does not,
+   and its own host is the literal below. */
+const PEOPLE_API_BASE = "https://people.googleapis.com/v1";
 
 let peopleStatus = "idle";
 let peopleContacts = null;
