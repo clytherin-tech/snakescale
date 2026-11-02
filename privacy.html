@@ -26,7 +26,7 @@
   </div>
 </header>
 <main>
-  <p><strong>Effective date: October 23, 2026</strong></p>
+  <p><strong>Effective date: November 2, 2026</strong></p>
 
   <p>SnakeScale Notes is a free, open source notes app developed by Chris
   Gingerich ("the developer"). The app runs entirely in your web browser.
@@ -144,6 +144,40 @@
   so signing back in is quick, and it can be removed from the
   helper's store by the developer on request. The permissions the sign in requests are the Drive permission, the calendar permission (calendar.events), and the mail permission (gmail.modify) described in this policy.</p>
 
+  <h2>Push notifications</h2>
+  <p>Notifications the app raises while it is open are made on your
+  own device, as described below. Separately, the app can register a
+  device for push notifications, so a task or note reminder can reach
+  that device even while the app is closed. Push is off until a
+  device registers for it: registering happens from the Push
+  notifications row in Settings, or on its own when you sign in on a
+  device whose browser already allows the app's notifications, and
+  it never asks for notification permission by itself.</p>
+  <p>Delivery runs through a second small helper operated by the
+  developer (a Cloudflare Worker named ssnotes-push), which shares
+  the sign-in helper's storage. When a device registers, the
+  browser's push subscription for this app (an endpoint at the push
+  service and a pair of encryption keys the push service uses) is
+  stored there. Each device registers separately, and a device's
+  registration ends when you sign out of the app on it, when you
+  remove it in your browser, or when the push service retires it;
+  signing out of the app on a device removes that device's
+  registration.</p>
+  <p>To time the pushes, the notification helper borrows the sign-in
+  helper's stored Google refresh token every five minutes and reads
+  two of the app's own files in your Drive: your tasks file (for
+  task titles and due moments) and the notes catalog (for note
+  titles and the reminders set on notes). It reads nothing else,
+  and it writes nothing to your Drive. When a reminder moment
+  arrives, it sends that reminder's notification (the task or note
+  title and its due moment) through the push service of your
+  device's platform, which is Google's push service in Chrome and
+  Android and Apple's push service on iPhone and iPad; those
+  services carry the notification's text to the device, encrypted
+  in transit. The app itself stores no subscription or push data
+  anywhere: a subscription is held only by your browser and by the
+  notification helper.</p>
+
   <h2>Services the app contacts</h2>
   <p>The app connects only to the services listed here, and only as
   described:</p>
@@ -162,6 +196,13 @@
     Cloudflare Worker operated by the developer): holds the
     sign-in refresh token described above and mints fresh
     access tokens for the app. It receives no note content.</li>
+    <li><strong>The notification helper</strong> (ssnotes-push, a
+    Cloudflare Worker operated by the developer): holds the push
+    subscriptions of devices you register and sends reminder
+    notifications to them, as described under Push notifications
+    above. It reads your tasks file and notes catalog from your
+    Drive to time the pushes and receives no other note
+    content.</li>
     <li><strong>Microlink</strong> (api.microlink.io): when you switch a web
     link inside one of your notes to its Mention or Preview display, the app
     sends that link's web address, and nothing else, to Microlink to fetch
@@ -193,9 +234,12 @@
   <p>The app contains no analytics, no advertising, and no tracking of any
   kind. No personal information is sold, rented, or shared with third
   parties for marketing. No human at the developer reads your notes.</p>
-  <p>Task reminder notifications are generated entirely on your own device
-  by your browser; nothing about your tasks is sent anywhere to deliver
-  them.</p>
+  <p>Reminder notifications the app raises while it is open are
+  generated entirely on your own device by your browser; nothing
+  about your tasks is sent anywhere to deliver those. The optional
+  push delivery described under Push notifications above is the one
+  exception, and it applies only to devices you register for
+  it.</p>
 
   <h2>Google API disclosure</h2>
   <p>SnakeScale Notes' use and transfer to any other app of information

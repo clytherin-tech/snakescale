@@ -2,7 +2,7 @@
   ==========================================================================
   SnakeScale Notes service worker
   ==========================================================================
-  BUILD STAMP: 2026-11-02-SSN-V2850
+  BUILD STAMP: 2026-11-02-SSN-V2860
   Version: 2.11.0
 
   This worker exists for exactly one job: making SnakeScale Notes
@@ -50,6 +50,15 @@
   nothing about tasks; the id travels in the notification's own
   data, set by the page when the notification was raised.
 
+  Push (v2.86): the push handler below shows the
+  notifications the ssnotes-push Worker sends when a
+  reminder's moment arrives with the app closed. The
+  payload is JSON (title, body, url, tag); nothing in
+  it is stored here either, and the click handler
+  routes it like the page's own notifications,
+  focusing a running window (navigating it to the
+  payload's URL when it differs) or opening that URL.
+
   Updates: install precaches the new shell (the new build's page
   included, fetched fresh from the network at install time) under
   the new cache name and skips waiting, and activate clears the
@@ -75,7 +84,7 @@
 
 "use strict";
 
-const CACHE_NAME = "snakescale-shell-2026-11-02-SSN-V2850";
+const CACHE_NAME = "snakescale-shell-2026-11-02-SSN-V2860";
 
 /* The shell, as paths relative to this worker's scope (the site
    root). "./" and "./index.html" are both listed: the first is the
@@ -190,6 +199,47 @@ self.addEventListener("fetch", function (event) {
      the repo, but future static files land here) passes through. */
 });
 
+/* v2.86: a push from the ssnotes-push Worker. The
+   payload is JSON (title, body, url, tag), carried
+   encrypted by the push service; a payload that does
+   not parse still shows a plain notification rather
+   than none at all. The data carries the URL alone:
+   the click handler below routes it to the app.
+   Nothing about it is stored here, like every other
+   notification this worker shows. */
+self.addEventListener("push", function (event) {
+  let payload = {};
+  if (event.data) {
+    try {
+      const parsed = event.data.json();
+      if (parsed && typeof parsed === "object") {
+        payload = parsed;
+      }
+    } catch (e) {
+      try {
+        const text = event.data.text();
+        if (text) { payload = { body: String(text) }; }
+      } catch (e2) { payload = {}; }
+    }
+  }
+  const title = typeof payload.title === "string" &&
+    payload.title ? payload.title : "SnakeScale Notes";
+  const options = {
+    body: typeof payload.body === "string"
+      ? payload.body : "",
+    icon: "icon-192.png",
+    data: {
+      url: typeof payload.url === "string" && payload.url
+        ? payload.url : "./"
+    }
+  };
+  if (typeof payload.tag === "string" && payload.tag) {
+    options.tag = payload.tag;
+  }
+  event.waitUntil(
+    self.registration.showNotification(title, options));
+});
+
 /* v2.24: a task reminder notification was clicked. The
    notification closes either way. When an app window is
    already running, it is focused and posted the task id (the
@@ -213,11 +263,13 @@ self.addEventListener("notificationclick", function (event) {
   const noteReminderId =
     typeof data.noteReminderId === "string" && data.noteReminderId
     ? data.noteReminderId : null;
-  const targetUrl = taskId
+  const pushUrl = typeof data.url === "string" && data.url
+    ? data.url : null;
+  const targetUrl = pushUrl || (taskId
     ? "./?task=" + encodeURIComponent(taskId)
     : (noteReminderId
       ? "./?noteReminder=" + encodeURIComponent(noteReminderId)
-      : "./");
+      : "./"));
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true })
       .then(function (windowClients) {
@@ -235,6 +287,18 @@ self.addEventListener("notificationclick", function (event) {
                 type: "snakescale-open-note-reminder",
                 noteReminderId: noteReminderId
               });
+            }
+            if (pushUrl && "navigate" in client &&
+                client.url !== pushUrl) {
+              return client.navigate(pushUrl)
+                .then(function (navigated) {
+                  const landed = navigated || client;
+                  return "focus" in landed
+                    ? landed.focus() : undefined;
+                })
+                .catch(function () {
+                  return client.focus();
+                });
             }
             return client.focus();
           }

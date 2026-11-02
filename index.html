@@ -40,10 +40,73 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-11-02-SSN-V2850
-  Version: 2.85.0
+  BUILD STAMP: 2026-11-02-SSN-V2860
+  Version: 2.86.0
 
   Revision history:
+    v2.86.0 2026-11-02 Web Push notifications,
+                      the app half. This device
+                      can register for push with
+                      the new ssnotes-push
+                      Worker: Settings gains a
+                      Push notifications row on
+                      the Connection tab (its
+                      state, its Enable, its
+                      Send test), registration
+                      also runs on its own when
+                      a sign in lands or the app
+                      opens signed in and the
+                      browser already allows
+                      notifications, and it
+                      never prompts outside the
+                      row's own button. The
+                      Worker checks the store
+                      every five minutes and
+                      pushes the reminders that
+                      come due, so a
+                      notification can arrive
+                      with the app closed; the
+                      service worker shows it
+                      and routes its click to
+                      the app. Signing out or
+                      disconnecting removes this
+                      device's registration. The
+                      reminders the app raises
+                      itself while open are
+                      unchanged, so with the app
+                      open at a reminder moment
+                      both may show.
+                      Subscriptions live only in
+                      the browser and at the
+                      Worker, never in Drive or
+                      on the device snapshot.
+                      The Email widget joins
+                      the default Home layout,
+                      and a stored layout that
+                      predates it gains the
+                      widget once, after the
+                      Calendar widget when the
+                      layout has one; the home
+                      data records that the
+                      introduction happened,
+                      so removing the widget
+                      afterwards sticks. The
+                      reading pane shows the
+                      opened message's
+                      location at the head of
+                      its action bar, and
+                      following an email link
+                      in a note selects that
+                      location in the mail
+                      list behind it. The
+                      Home calendar widget's
+                      Today and New event
+                      buttons are icon
+                      buttons now, a calendar
+                      with a centered dot
+                      and a calendar with a
+                      plus, their names kept
+                      as tooltips.
     v2.85.0 2026-11-02 Three fixes. Deleting a
                       tag pill from a note's
                       body now removes the tag
@@ -9381,6 +9444,8 @@ body.dark .task-cal-more{color:var(--accent);}
 .mail-read-meta{color:var(--muted);font-size:13.5px;display:flex;flex-direction:column;gap:2px;margin-bottom:12px;}
 .mail-meta-label{font-weight:700;}
 .mail-actions{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;}
+.mail-location{display:inline-flex;flex-wrap:wrap;gap:6px;align-items:center;}
+.mail-loc-chip{font-size:11px;line-height:1;padding:4px 8px;border-radius:999px;background:var(--accent-soft);color:var(--text);white-space:nowrap;}
 .mail-labels-menu{border:1px solid var(--border);border-radius:var(--radius-card);padding:10px 12px;margin-bottom:14px;display:flex;flex-direction:column;gap:6px;max-width:340px;}
 .mail-labels-menu.hidden{display:none;}
 .mail-label-row{justify-content:flex-start;}
@@ -11456,6 +11521,7 @@ body.dark .version-date{color:var(--accent);}
           <h3 id="mailReadSubject"></h3>
           <div class="mail-read-meta" id="mailReadMeta"></div>
           <div class="mail-actions">
+            <span class="mail-location" id="mailReadLocation" aria-label="Message location"></span>
             <button class="mail-icon-btn" id="mailReplyBtn" type="button" title="Reply" aria-label="Reply"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 10l-5 5 5 5"/><path d="M4 15h11a5 5 0 0 0 5-5V4"/></svg></button>
             <button class="mail-icon-btn" id="mailReplyAllBtn" type="button" title="Reply all" aria-label="Reply all"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 9l-6 5 6 5"/><path d="M20 9l-6 5 6 5"/></svg></button>
             <button class="mail-icon-btn" id="mailForwardBtn" type="button" title="Forward" aria-label="Forward"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 10l5 5-5 5"/><path d="M20 15H9a5 5 0 0 1-5-5V4"/></svg></button>
@@ -11630,6 +11696,23 @@ body.dark .version-date{color:var(--accent);}
         <div class="settings-help" id="settingsPeopleStatus">Not connected</div>
         <button class="btn hidden" id="settingsPeopleConnectBtn" type="button">Connect Contacts</button>
         <button class="btn hidden" id="settingsPeopleRetryBtn" type="button">Retry</button>
+      </div>
+      <!-- v2.86: the Push notifications row, mirroring
+           the Contacts row above it: status text filled
+           by renderPushSettingsRow, an Enable button
+           standing when this device can still be
+           registered, a Send test button standing once
+           it is, and a Retry for the unavailable state.
+           The row is about the closed app delivery the
+           ssnotes-push Worker provides; the reminders
+           the app raises itself while open keep their
+           own panel under the Notifications tab. -->
+      <div class="settings-autosync">
+        <div class="settings-help">Push notifications</div>
+        <div class="settings-help" id="settingsPushStatus">Not signed in</div>
+        <button class="btn hidden" id="settingsPushEnableBtn" type="button">Enable on this device</button>
+        <button class="btn hidden" id="settingsPushTestBtn" type="button">Send test</button>
+        <button class="btn hidden" id="settingsPushRetryBtn" type="button">Retry</button>
       </div>
       <!-- v2.16: the idle auto-sync toggle. A plain checkbox
            input (accented like the checklist boxes), so the on
@@ -12491,8 +12574,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-11-02-SSN-V2850";
-const APP_VERSION = "2.85.0";
+const APP_BUILD = "2026-11-02-SSN-V2860";
+const APP_VERSION = "2.86.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -12716,6 +12799,12 @@ const state = {
                             // could see would not be a
                             // dashboard.
     scratch: "",
+    emailIntroduced: true,  // v2.86: born with the
+                            // Email widget already
+                            // introduced (see
+                            // sanitizeHome); the
+                            // literal's layout below
+                            // carries the widget.
     scratchHeight: null,    // v2.60: the scratch pad's
                             // remembered height in whole
                             // pixels (see sanitizeHome);
@@ -12727,6 +12816,7 @@ const state = {
       { type: "shortcuts" },
       { type: "tasks" },
       { type: "calendar" },
+      { type: "email" },
       { type: "scratch" },
       { type: "filtered", searchId: null },
       { type: "tags" },
@@ -13415,6 +13505,12 @@ async function signOut() {
      key beside LS_PROVIDERS). Only the session dies; the
      refresh token stays in the Worker, so signing back in
      on this device is quick. */
+  /* v2.86: this device's push registration dies with
+     the session: the push Worker forgets the
+     subscription and the browser unsubscribes it, best
+     effort, while the session token still stands to
+     make the call. */
+  await pushSignOutCleanup();
   await workerLogout();
   clearWorkerSession();
   workerReauthNeeded = false;
@@ -21749,7 +21845,8 @@ const HOME_WIDGET_LABELS = {
 /* The default layout: every widget, in the order a fresh
    dashboard shows them (v2.43: Shortcuts after Recent
    Notes, Calendar after Tasks, the places the Home
-   upgrade's approval named). Built fresh on every call,
+   upgrade's approval named; v2.86: Email after
+   Calendar). Built fresh on every call,
    so a caller can hold the result without sharing it. */
 function defaultHomeWidgets() {
   return [
@@ -21758,6 +21855,7 @@ function defaultHomeWidgets() {
     { type: "shortcuts" },
     { type: "tasks" },
     { type: "calendar" },
+    { type: "email" },
     { type: "scratch" },
     { type: "filtered", searchId: null },
     { type: "tags" },
@@ -21824,10 +21922,16 @@ function clampHomeScratchHeight(value) {
    v2.60: the scratch pad's remembered height rides the
    same read, judged by clampHomeScratchHeight; a home
    stored before it existed has no such key and reads as
-   null, the default size. */
+   null, the default size.
+   v2.86: the home field also records the Email
+   widget's one time introduction (emailIntroduced),
+   judged in the widget branch below; a home stored
+   before it existed has no such key and reads as not
+   yet introduced. */
 function sanitizeHome(raw) {
   const out = { scratch: "", scratchHeight: null,
-    widgets: defaultHomeWidgets() };
+    widgets: defaultHomeWidgets(),
+    emailIntroduced: true };
   if (!raw || typeof raw !== "object") { return out; }
   if (typeof raw.scratch === "string") {
     out.scratch = raw.scratch;
@@ -21872,6 +21976,36 @@ function sanitizeHome(raw) {
     if (!hasNew && list.length) {
       list.push({ type: "calendar" });
       list.push({ type: "shortcuts" });
+    }
+    /* v2.86: the Email widget's one time introduction.
+       A stored layout with no Email widget gains one,
+       set after the Calendar widget when the layout
+       has one and at the end otherwise, and the home
+       field records the introduction as
+       emailIntroduced, so the gain happens exactly
+       once: a layout that already carries the widget,
+       and any layout whose home already records the
+       introduction, are left exactly as stored, which
+       is what makes removing the widget afterwards
+       stick. An explicitly empty layout is honored the
+       way the v2.43 append above honors it and gains
+       nothing, and its record stays unset. */
+    const hasEmail = list.some(function (e) {
+      return e.type === "email";
+    });
+    if (hasEmail || raw.emailIntroduced === true) {
+      out.emailIntroduced = true;
+    } else if (list.length) {
+      let emailAt = list.length;
+      for (let ei = 0; ei < list.length; ei++) {
+        if (list[ei].type === "calendar") {
+          emailAt = ei + 1; break;
+        }
+      }
+      list.splice(emailAt, 0, { type: "email" });
+      out.emailIntroduced = true;
+    } else {
+      out.emailIntroduced = false;
     }
     out.widgets = list;
   }
@@ -26767,6 +26901,415 @@ function retryPeopleContacts() {
   ensurePeopleContacts();
 }
 
+/* ----- Push notifications: the ssnotes-push module ----------- */
+
+/* Web Push, the app half (v2.86). A second small Worker,
+   ssnotes-push, is the server half: it holds the push
+   subscriptions of the account's devices in the sign in
+   helper's own storage, reads the store's tasks file and
+   notes catalog from Drive every five minutes with the
+   sign in's stored token, and sends a push when a
+   reminder moment arrives, so a notification can reach
+   this device with the app closed. This module owns the
+   device side of that: registering this device with the
+   Worker, the Settings row that reports and tests the
+   registration, and the registration's removal when the
+   session ends. The service worker owns the display
+   and the click (see sw.js). The reminder notifications
+   the app raises itself while it is open are untouched
+   by all of this.
+   Discipline, in the sibling modules' shape: one base
+   literal, one transport, and everything page memory
+   only. The subscription, its endpoint, and its keys
+   are never written to a Drive payload, a store file,
+   or the device snapshot; they travel only between the
+   browser's own push store and the push Worker's own
+   storage. The Worker is spoken to with the session
+   token alone, never the Google access token. */
+const PUSH_WORKER_BASE = "https://ssnotes-push.clytherin.workers.dev";
+
+/* The module's standing state, in the sibling modules'
+   vocabulary: idle (nothing asked yet), registered
+   (this device stands registered at the Worker),
+   unregistered (this device holds no registration the
+   Worker knows), unavailable (the Worker could not be
+   reached; the row offers a retry and nothing latches),
+   auth (the Worker refused the session; the app's own
+   auth paths own what happens next and this module
+   simply stops, as the sibling modules stop at a 401),
+   unsupported (this browser offers no push). */
+let pushStatus = "idle";
+let pushWorking = false;
+
+function pushSupported() {
+  return "serviceWorker" in navigator &&
+    "PushManager" in window && "Notification" in window;
+}
+
+function pushPermission() {
+  try {
+    return String(window.Notification.permission || "default");
+  } catch (e) { return "default"; }
+}
+
+/* Forget the module's standing state: a completed sign
+   in calls it beside its sibling resets (a landing may
+   have changed which account, and which session, the
+   registration belongs to), and the session end cleanup
+   below calls it as it leaves. */
+function resetPushState() {
+  pushStatus = "idle";
+  pushWorking = false;
+  renderPushSettingsRow();
+}
+
+/* The Settings Push notifications row, the Contacts
+   row's sibling in the Connection tab. Not signed in
+   stands plain, with no button and no fetch behind it;
+   On for this device stands with its Send test; a
+   device that can still be registered offers Enable;
+   a blocked permission is plain text, since no button
+   in the app can lift a browser block; an unreachable
+   Worker reads Unavailable with its Retry standing. */
+function renderPushSettingsRow() {
+  const statusEl = document.getElementById(
+    "settingsPushStatus");
+  if (!statusEl) { return; }
+  const enableBtn = document.getElementById(
+    "settingsPushEnableBtn");
+  const testBtn = document.getElementById(
+    "settingsPushTestBtn");
+  const retryBtn = document.getElementById(
+    "settingsPushRetryBtn");
+  function show(el, on) {
+    if (el) { el.classList.toggle("hidden", !on); }
+  }
+  show(enableBtn, false);
+  show(testBtn, false);
+  show(retryBtn, false);
+  if (!mailSignedInAble()) {
+    statusEl.textContent = "Not signed in";
+    return;
+  }
+  if (!pushSupported()) {
+    statusEl.textContent = "Not supported in this browser";
+    return;
+  }
+  const perm = pushPermission();
+  if (perm === "denied") {
+    statusEl.textContent =
+      "Blocked in this browser's site settings";
+    return;
+  }
+  if (pushStatus === "unavailable") {
+    statusEl.textContent = "Unavailable right now";
+    show(retryBtn, true);
+    return;
+  }
+  if (pushStatus === "auth") {
+    statusEl.textContent = "Not connected";
+    return;
+  }
+  if (perm === "granted" && pushStatus === "registered") {
+    statusEl.textContent = "On for this device";
+    show(testBtn, true);
+    return;
+  }
+  statusEl.textContent = "Not enabled on this device";
+  show(enableBtn, true);
+}
+
+/* One call to the push Worker, under the session token
+   (the credential the sign in helper minted; the Google
+   access token never speaks to this Worker). Settles
+   into the sibling modules' outcome vocabulary; a 401
+   is "auth" and stops the module, with no retry loop. */
+async function pushWorkerCall(path, body) {
+  const session = await getWorkerSession();
+  if (!session) {
+    return { outcome: "signed-out", status: 0, data: null };
+  }
+  let res = null;
+  try {
+    res = await fetch(PUSH_WORKER_BASE + path, {
+      method: "POST",
+      headers: {
+        "Authorization": "Bearer " + session,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(body || {})
+    });
+  } catch (e) {
+    return { outcome: "bad", status: 0, data: null };
+  }
+  let data = null;
+  try { data = await res.json(); } catch (e) { data = null; }
+  if (res.status >= 200 && res.status < 300) {
+    return { outcome: "ok", status: res.status, data: data };
+  }
+  if (res.status === 401) {
+    return { outcome: "auth", status: 401, data: data };
+  }
+  return { outcome: "bad", status: res.status, data: data };
+}
+
+/* The Worker's VAPID public key, the one unauthenticated
+   read it offers: the key pushManager.subscribe must be
+   handed, as base64url text. Null when the Worker cannot
+   be reached or answers nonsense. */
+async function pushFetchVapidKey() {
+  try {
+    const res = await fetch(PUSH_WORKER_BASE + "/vapid");
+    if (!res || res.status !== 200) { return null; }
+    const data = await res.json();
+    return data && typeof data.publicKey === "string" &&
+      data.publicKey ? data.publicKey : null;
+  } catch (e) { return null; }
+}
+
+/* base64url to bytes, the dialect every push value
+   travels in (the raw VAPID key above all). */
+function pushBase64UrlToBytes(text) {
+  let b64 = String(text).replace(/-/g, "+")
+    .replace(/_/g, "/");
+  while (b64.length % 4) { b64 += "="; }
+  const bin = atob(b64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) {
+    out[i] = bin.charCodeAt(i);
+  }
+  return out;
+}
+
+/* Whether a standing subscription was made under the
+   key the Worker currently offers: a subscription under
+   any other key can never be delivered to, so the
+   registration flow replaces it. */
+function pushServerKeyMatches(subscription, keyBytes) {
+  try {
+    const current = subscription && subscription.options
+      ? subscription.options.applicationServerKey : null;
+    if (!current) { return false; }
+    const cur = new Uint8Array(current);
+    if (cur.length !== keyBytes.length) { return false; }
+    for (let i = 0; i < cur.length; i++) {
+      if (cur[i] !== keyBytes[i]) { return false; }
+    }
+    return true;
+  } catch (e) { return false; }
+}
+
+/* The honest short label the registration carries, so
+   the Worker's records (and its test answers) can say
+   which device a subscription belongs to. */
+function pushDeviceLabel() {
+  const ua = String(navigator.userAgent || "");
+  if (/iPhone/.test(ua)) { return "iPhone"; }
+  if (/iPad/.test(ua)) { return "iPad"; }
+  if (/Android/.test(ua)) { return "Android"; }
+  return "Desktop";
+}
+
+/* The service worker registration the push calls use:
+   the app's own cached lookup first (the one its
+   notifications already ride), then the browser's
+   ready promise, which waits out a first install. */
+async function pushGetRegistration() {
+  let reg = null;
+  try { reg = await getSwRegistration(); }
+  catch (e) { reg = null; }
+  if (!reg && "serviceWorker" in navigator &&
+      navigator.serviceWorker.ready) {
+    try { reg = await navigator.serviceWorker.ready; }
+    catch (e) { reg = null; }
+  }
+  return reg;
+}
+
+/* Register this device with the push Worker: the flow
+   the sign in landing, the connected boot, Settings
+   opening, and the row's own buttons all share. It
+   proceeds only when the browser offers push and the
+   notification permission already stands granted: an
+   automatic run never prompts, ever (the row's Enable
+   is the one place a prompt may be asked, from its
+   click, before it calls this). Idempotent: a standing
+   subscription under the Worker's current key is
+   simply re-posted, so storage the Worker has lost
+   heals on the next landing; a subscription under any
+   other key is replaced. A network failure settles the
+   module unavailable and never disturbs the boot or
+   the sign in that called it; a 401 stops the module
+   until the next landing resets it. */
+async function ensurePushRegistration() {
+  if (pushWorking || pushStatus === "auth") { return; }
+  if (!mailSignedInAble()) { return; }
+  if (!pushSupported()) {
+    if (pushStatus !== "unsupported") {
+      pushStatus = "unsupported";
+      renderPushSettingsRow();
+    }
+    return;
+  }
+  if (pushPermission() !== "granted") {
+    if (pushStatus === "registered") {
+      pushStatus = "unregistered";
+      renderPushSettingsRow();
+    }
+    return;
+  }
+  pushWorking = true;
+  try {
+    const reg = await pushGetRegistration();
+    if (!reg || !reg.pushManager) {
+      pushStatus = "unsupported";
+      return;
+    }
+    const keyText = await pushFetchVapidKey();
+    if (!keyText) { pushStatus = "unavailable"; return; }
+    const keyBytes = pushBase64UrlToBytes(keyText);
+    let sub = null;
+    try { sub = await reg.pushManager.getSubscription(); }
+    catch (e) { sub = null; }
+    if (sub && !pushServerKeyMatches(sub, keyBytes)) {
+      try { await sub.unsubscribe(); }
+      catch (e) { /* it is replaced below regardless */ }
+      sub = null;
+    }
+    if (!sub) {
+      try {
+        sub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: keyBytes
+        });
+      } catch (e) {
+        pushStatus = "unavailable";
+        return;
+      }
+    }
+    const out = await pushWorkerCall("/subscribe", {
+      subscription: sub.toJSON ? sub.toJSON() : sub,
+      label: pushDeviceLabel()
+    });
+    if (out.outcome === "ok") {
+      pushStatus = "registered";
+    } else if (out.outcome === "auth") {
+      pushStatus = "auth";
+    } else if (out.outcome === "signed-out") {
+      /* The session went away mid flight; the next
+         landing asks again, and nothing here latches. */
+    } else {
+      pushStatus = "unavailable";
+    }
+  } catch (e) {
+    pushStatus = "unavailable";
+  } finally {
+    pushWorking = false;
+    renderPushSettingsRow();
+  }
+}
+
+/* The row's Enable: the one place a permission prompt
+   may be asked, from this click, as a permission
+   request must be (the app's own ask pattern). Granted
+   runs the shared registration; any other answer
+   simply re-renders the row to the state the browser
+   reports. */
+async function enablePushFromSettings() {
+  if (pushSupported() && pushPermission() === "default") {
+    try {
+      const pending = window.Notification.requestPermission(
+        function () { /* the render reads the outcome */ });
+      if (pending && typeof pending.then === "function") {
+        await pending;
+      }
+    } catch (e) {
+      /* The render below reports the state as it stands. */
+    }
+  }
+  await ensurePushRegistration();
+  renderPushSettingsRow();
+}
+
+/* The row's Retry: lift nothing, latch nothing; the
+   shared registration simply runs again. */
+function retryPushRegistration() {
+  if (pushStatus === "unavailable") { pushStatus = "idle"; }
+  renderPushSettingsRow();
+  ensurePushRegistration();
+}
+
+/* The row's Send test: the Worker pushes a test to
+   every device this account has registered, and the
+   answer is reported plainly: no devices yet, a
+   delivery count, or a failure. */
+async function sendPushTest() {
+  const out = await pushWorkerCall("/test", {});
+  if (out.outcome === "ok" && out.data) {
+    const n = typeof out.data.subscriptions === "number"
+      ? out.data.subscriptions : 0;
+    if (n === 0) {
+      toast("No devices are registered for push yet.");
+      return;
+    }
+    const results = Array.isArray(out.data.results)
+      ? out.data.results : [];
+    let accepted = 0;
+    results.forEach(function (r) {
+      if (r && r.outcome === "accepted") { accepted++; }
+    });
+    if (accepted > 0) {
+      toast("Test notification sent to " + accepted +
+        (accepted === 1 ? " device." : " devices."));
+    } else {
+      toast("The test notification could not be " +
+        "delivered.", true);
+    }
+    return;
+  }
+  if (out.outcome === "auth") {
+    pushStatus = "auth";
+    renderPushSettingsRow();
+    toast("Push is not connected right now.", true);
+    return;
+  }
+  if (out.outcome === "signed-out") {
+    toast("Push is not connected right now.", true);
+    return;
+  }
+  pushStatus = "unavailable";
+  renderPushSettingsRow();
+  toast("The push service could not be reached.", true);
+}
+
+/* The session's end drops this device's push
+   registration: the Worker forgets the subscription
+   and the browser unsubscribes it locally, both best
+   effort. Sign out and Disconnect both run it, while
+   the session token still stands to make the call; a
+   failure anywhere changes nothing about either. */
+async function pushSignOutCleanup() {
+  try {
+    if (pushSupported()) {
+      const reg = await pushGetRegistration();
+      if (reg && reg.pushManager) {
+        let sub = null;
+        try { sub = await reg.pushManager.getSubscription(); }
+        catch (e) { sub = null; }
+        if (sub) {
+          try {
+            await pushWorkerCall("/unsubscribe",
+              { endpoint: sub.endpoint });
+          } catch (e) { /* best effort, like the logout */ }
+          try { await sub.unsubscribe(); }
+          catch (e) { /* best effort */ }
+        }
+      }
+    }
+  } catch (e) { /* best effort throughout */ }
+  resetPushState();
+}
+
 /* The dropdown's standing state: the field it serves,
    its rows (contacts, or the one not connected note),
    and the highlighted row. */
@@ -27019,10 +27562,61 @@ function insertMentionMailChip(rec) {
   markDirty();
 }
 
+/* v2.86 (Part E): where an opened message lives, in
+   the reading pane's own words: the Inbox when it
+   carries INBOX, else a standing system folder when
+   one applies (Sent, Drafts, Spam, Trash), then one
+   chip per user label the message carries, and All
+   Mail only when nothing else applies. Read off the
+   open record's standing labels on every render, so
+   the words follow an archive, a trash, or a label
+   change made from the pane itself. */
+function mailLocationNames(full) {
+  const names = [];
+  const ids = full && full.labelIds ? full.labelIds : [];
+  const has = function (x) {
+    return ids.indexOf(x) !== -1;
+  };
+  if (has("INBOX")) { names.push("Inbox"); }
+  else if (has("SENT")) { names.push("Sent"); }
+  else if (has("DRAFT")) { names.push("Drafts"); }
+  else if (has("SPAM")) { names.push("Spam"); }
+  else if (has("TRASH")) { names.push("Trash"); }
+  mailUserLabels().forEach(function (l) {
+    if (has(l.id)) { names.push(l.name); }
+  });
+  if (!names.length) { names.push("All Mail"); }
+  return names;
+}
+
+/* v2.86 (Part E): the selection an email chip's
+   message opens under: the message's first user
+   label (in the label list's own order) when it
+   carries one, else All Mail when it is not in the
+   Inbox, else the Inbox. Chip only: opening from a
+   list or a search keeps the standing selection. */
+function mailChipTargetSelection(rec) {
+  const ids = rec && rec.labelIds ? rec.labelIds : [];
+  const labels = mailUserLabels();
+  for (let i = 0; i < labels.length; i++) {
+    if (ids.indexOf(labels[i].id) !== -1) {
+      return { kind: "label", id: labels[i].id,
+        name: labels[i].name };
+    }
+  }
+  if (ids.indexOf("INBOX") === -1) {
+    return { kind: "folder", id: "all" };
+  }
+  return { kind: "folder", id: "inbox" };
+}
+
 /* Follow an email chip: the message is fetched
    directly by its id first, so a message that is gone
    is a plain toast and the note is left exactly as it
-   stands; a standing message opens in the Email view. */
+   stands; a standing message opens in the Email view,
+   under the selection its own location names (Part
+   E): its first user label, else All Mail when it is
+   not in the Inbox, else the Inbox. */
 async function followMailChip(chip) {
   const id = chip.getAttribute("data-ss-mail-id") || "";
   if (!id) { return; }
@@ -27037,7 +27631,15 @@ async function followMailChip(chip) {
     toast("Could not load that email.", true);
     return;
   }
-  openMailOnMessage(id);
+  const rec = normalizeMailRow(out.data);
+  if (!mailLabels && !mailLabelsLoading) {
+    await loadMailLabels();
+  }
+  state.view = { kind: "email", value: null };
+  renderAll();
+  setMobileView("list");
+  mailChooseSelection(mailChipTargetSelection(rec));
+  openMailMessage(id);
 }
 
 /* The @@ popup's search: one messages.list ask with
@@ -28587,6 +29189,25 @@ function renderMailRead() {
     line.appendChild(document.createTextNode(pair[1]));
     meta.appendChild(line);
   });
+  /* v2.86 (Part E): the opened message's location
+     stands at the head of its action bar, rebuilt
+     from the record's standing labels on every
+     render, so it follows the message. While the
+     label list has never loaded, ask for it; its
+     landing re-renders and the label chips join. */
+  const locEl = mailEl("mailReadLocation");
+  if (locEl) {
+    locEl.innerHTML = "";
+    mailLocationNames(full).forEach(function (name) {
+      const chip = document.createElement("span");
+      chip.className = "mail-loc-chip";
+      chip.textContent = name;
+      locEl.appendChild(chip);
+    });
+  }
+  if (!mailLabels && !mailLabelsLoading) {
+    loadMailLabels();
+  }
   const inTrash = full.labelIds.indexOf("TRASH") !== -1;
   /* v2.84 (Part 2): the Trash icon button speaks
      its state in its tooltip, and the More menu's
@@ -29731,9 +30352,26 @@ function buildHomeCalendarWidget() {
   head.appendChild(next);
   const todayBtn = document.createElement("button");
   todayBtn.type = "button";
-  todayBtn.className = "btn small home-cal-today";
+  /* v2.86 (Part F): an icon button now, in the app's
+     icon button dress (the mail reading pane's
+     mail-icon-btn class, themed by its variables in
+     both themes): a calendar carrying a centered
+     dot. Its name stands in its tooltip and its
+     aria-label, and its click is the one it always
+     had. */
+  todayBtn.className = "mail-icon-btn home-cal-today";
   todayBtn.id = "homeCalToday";
-  todayBtn.textContent = "Today";
+  todayBtn.title = "Today";
+  todayBtn.setAttribute("aria-label", "Today");
+  todayBtn.innerHTML = "<svg viewBox=\"0 0 24 24\" " +
+    "width=\"17\" height=\"17\" fill=\"none\" " +
+    "stroke=\"currentColor\" stroke-width=\"1.8\" " +
+    "stroke-linecap=\"round\" stroke-linejoin=\"round\" " +
+    "aria-hidden=\"true\"><rect x=\"3.5\" y=\"5\" " +
+    "width=\"17\" height=\"16\" rx=\"2\"/>" +
+    "<path d=\"M3.5 10h17M8 3v4M16 3v4\"/>" +
+    "<circle cx=\"12\" cy=\"15.5\" r=\"1.4\" " +
+    "fill=\"currentColor\" stroke=\"none\"/></svg>";
   todayBtn.addEventListener("click", function () {
     homeCalCursor = null;
     homeCalSelected = todayStr;
@@ -29744,9 +30382,21 @@ function buildHomeCalendarWidget() {
      module's event editor for the selected day. */
   const newEventBtn = document.createElement("button");
   newEventBtn.type = "button";
-  newEventBtn.className = "btn small";
+  /* v2.86 (Part F): an icon button too, a calendar
+     with a plus, in the same dress as Today's; its
+     name stands in its tooltip and its aria-label,
+     and its click is the one it always had. */
+  newEventBtn.className = "mail-icon-btn";
   newEventBtn.id = "homeCalNewEventBtn";
-  newEventBtn.textContent = "New event";
+  newEventBtn.title = "New event";
+  newEventBtn.setAttribute("aria-label", "New event");
+  newEventBtn.innerHTML = "<svg viewBox=\"0 0 24 24\" " +
+    "width=\"17\" height=\"17\" fill=\"none\" " +
+    "stroke=\"currentColor\" stroke-width=\"1.8\" " +
+    "stroke-linecap=\"round\" stroke-linejoin=\"round\" " +
+    "aria-hidden=\"true\"><rect x=\"3.5\" y=\"5\" " +
+    "width=\"17\" height=\"16\" rx=\"2\"/>" +
+    "<path d=\"M3.5 10h17M8 3v4M16 3v4M12 13v6M9 16h6\"/></svg>";
   newEventBtn.addEventListener("click", function () {
     openGcalEventEditor(null, homeCalSelectedStr());
   });
@@ -32206,6 +32856,12 @@ async function connectAndLoad() {
         "your Google Drive. The same sign in also covers attachments.");
     return;
   }
+  /* v2.86: entering with a live sign in also settles
+     this device's push registration (the flow the sign
+     in landing and the already signed in boot share;
+     the module's own guards keep it silent, prompt
+     free, and harmless to the load). */
+  ensurePushRegistration();
   /* v2.24.6: entering with a live sign in schedules the
      proactive renewal here as well, so the guarantee does not
      rest on which restore path produced the token (the
@@ -39926,6 +40582,11 @@ function syncSettingsControls() {
      with its Connect button the cure). */
   renderPeopleSettingsRow();
   if (mailSignedInAble()) { ensurePeopleContacts(); }
+  /* v2.86: the Push notifications row likewise, and
+     opening Settings gives the registration its look,
+     like the contacts ask above it. */
+  renderPushSettingsRow();
+  if (mailSignedInAble()) { ensurePushRegistration(); }
   const gcalNowParts = taskTodayParts();
   ensureGcalMonth(gcalNowParts.y, gcalNowParts.m);
   /* v2.21: the Last load readout shows this session's boot. */
@@ -53871,6 +54532,11 @@ async function persistPendingWorkerSession() {
      forbidden state must not outlive the landing
      that cured it. */
   resetPeopleState();
+  /* v2.86: the same landing forgets the push module's
+     state: the registration below belongs to the
+     session that just landed, and a standing auth stop
+     from a dead session must not outlive it. */
+  resetPushState();
   return true;
 }
 
@@ -54863,6 +55529,10 @@ async function googleDisconnect() {
   /* v2.79.0: the Worker session dies with the disconnect
      too: the Worker's own logout first (best effort), then
      the local session store. */
+  /* v2.86: the disconnect ends the session too, so
+     this device's push registration goes with it,
+     best effort, exactly as at sign out. */
+  await pushSignOutCleanup();
   await workerLogout();
   clearWorkerSession();
   workerReauthNeeded = false;
@@ -63257,6 +63927,21 @@ function wireEvents() {
   });
   document.getElementById("settingsPeopleRetryBtn").addEventListener("click", function () {
     retryPeopleContacts();
+  });
+  /* v2.86: the Push notifications row's buttons:
+     Enable asks for permission from its click when
+     none has been given and then registers; Send test
+     asks the Worker to push a test to this account's
+     devices; Retry runs the registration again after
+     an unavailable answer. */
+  document.getElementById("settingsPushEnableBtn").addEventListener("click", function () {
+    enablePushFromSettings().catch(function () { /* reported in the row */ });
+  });
+  document.getElementById("settingsPushTestBtn").addEventListener("click", function () {
+    sendPushTest().catch(function () { /* reported in the row */ });
+  });
+  document.getElementById("settingsPushRetryBtn").addEventListener("click", function () {
+    retryPushRegistration();
   });
   /* v2.81: the calendar event editor's wiring, the
      module's second half: Save and Delete run the one
