@@ -40,10 +40,55 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-11-01-SSN-V2830
-  Version: 2.83.0
+  BUILD STAMP: 2026-11-01-SSN-V2840
+  Version: 2.84.0
 
   Revision history:
+    v2.84.0 2026-11-01 Email polish, and email
+                      links. The sidebar Email
+                      item now reads Email - (n)
+                      beside its label while
+                      unread mail stands. The
+                      reading pane's actions are
+                      icon buttons (Reply, Reply
+                      all, Forward, Archive,
+                      Trash) with a More menu
+                      carrying Labels, Mark as
+                      read or unread, and Save
+                      to note. Message rows drag
+                      onto All Mail (archive),
+                      Trash, or a label (a drag
+                      between labels moves).
+                      Archiving or trashing one
+                      message stands a five
+                      second Undo toast at the
+                      top center. A bug is
+                      fixed: quick actions in a
+                      label's list could act
+                      invisibly, because a
+                      trashed message still
+                      counted as belonging to
+                      the label's list and its
+                      row never left; labelled
+                      lists now exclude the
+                      trashed, as Gmail's label
+                      views do. Labels gain a
+                      right click menu (Rename,
+                      Delete). Compose recipient
+                      fields autocomplete from
+                      your Google Contacts, read
+                      live through the People
+                      API and held in memory
+                      only. And notes link to
+                      email: typing @@ in a note
+                      flips the @ popup into
+                      Email mode, and picking a
+                      message inserts a chip
+                      carrying only its id, with
+                      the sender and subject on
+                      its face; clicking the
+                      chip opens that message in
+                      the Email view.
     v2.83.0 2026-11-01 Links: notes and events
                       link both ways, tags
                       insert as pills, past
@@ -9199,6 +9244,91 @@ body.dark .task-cal-more{color:var(--accent);}
 .mail-row:hover .mail-row-actions{display:flex;}
 .mail-row-action{background:none;border:none;color:var(--muted);cursor:pointer;padding:4px;border-radius:6px;display:inline-flex;}
 .mail-row-action:hover{color:var(--text);background:var(--accent-soft);}
+/* v2.84: the Email polish round. The sidebar item's
+   unread suffix (Part 1): plain text after the label,
+   in the item's own type, never a pill. */
+.mail-nav-count{font-weight:600;}
+/* Part 2: the reading pane's icon bar. The five direct
+   actions are icon buttons in the app's icon style;
+   the More wrap anchors the themed dropdown that
+   carries the rest. Hover and keyboard focus both
+   show, in both themes. */
+.mail-actions{align-items:center;}
+.mail-icon-btn{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:34px;height:34px;padding:0;border-radius:8px;
+  background:var(--surface);border:1px solid var(--border);
+  color:var(--muted);cursor:pointer;
+}
+.mail-icon-btn:hover{color:var(--text);background:var(--accent-soft);border-color:var(--accent);}
+.mail-icon-btn:focus-visible{outline:2px solid var(--accent);outline-offset:1px;color:var(--text);}
+.mail-more-wrap{position:relative;display:inline-flex;}
+.mail-more-menu{
+  position:absolute;top:calc(100% + 6px);right:0;z-index:65;
+  min-width:210px;padding:6px;display:flex;flex-direction:column;gap:2px;
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius-card);box-shadow:0 10px 28px rgba(6,32,22,.28);
+}
+.mail-more-menu.hidden{display:none;}
+.mail-more-item{
+  display:flex;align-items:center;gap:9px;width:100%;
+  background:none;border:none;border-radius:7px;padding:7px 9px;
+  color:var(--text);font-size:13.5px;cursor:pointer;text-align:left;
+}
+.mail-more-item:hover,.mail-more-item:focus-visible{background:var(--accent-soft);}
+.mail-more-item svg{flex:none;color:var(--muted);}
+/* Part 3: drag and drop triage. Rows that can be
+   dragged wear the grab cursor; a folder or label
+   row lit under a dragged message wears the drop
+   dress. */
+.mail-row[draggable="true"]{cursor:grab;}
+.mail-folder.mail-drop-on{
+  background:var(--accent-soft);color:var(--text);
+  box-shadow:inset 0 0 0 2px var(--accent);
+}
+/* Part 4: the undo toast's button, riding the pill
+   form in the top center box. */
+.mail-undo-btn{
+  background:var(--accent);color:#fff;border:none;border-radius:14px;
+  padding:2px 12px;font-size:13px;font-weight:700;cursor:pointer;
+  margin-left:4px;
+}
+.mail-undo-btn:hover{filter:brightness(1.1);}
+.mail-undo-btn:focus-visible{outline:2px solid var(--text);outline-offset:1px;}
+/* Part 7: the contacts autocomplete dropdown, parked
+   under the recipient field it serves. */
+.mail-recip-field{position:relative;}
+.mail-contact-menu{
+  position:absolute;top:100%;left:0;right:0;z-index:70;
+  max-height:264px;overflow-y:auto;padding:4px;
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius-card);box-shadow:0 10px 28px rgba(6,32,22,.28);
+}
+.mail-contact-menu.hidden{display:none;}
+.mail-contact-row{
+  display:flex;flex-direction:column;gap:0;width:100%;
+  background:none;border:none;border-radius:7px;padding:6px 9px;
+  cursor:pointer;text-align:left;color:var(--text);
+}
+.mail-contact-row.current{background:var(--accent-soft);}
+.mail-contact-name{font-size:13.5px;font-weight:600;}
+.mail-contact-email{font-size:12.5px;color:var(--muted);}
+.mail-contact-note{
+  padding:7px 9px;font-size:13px;color:var(--muted);
+}
+/* Part 8: the email chip in a note body, the event
+   chip's sibling: an envelope glyph, the sender, and
+   the subject on one pill. */
+#noteBody .ss-mail-chip{
+  display:inline-flex;align-items:center;gap:6px;
+  border:1px solid var(--border);background:var(--soft);
+  border-radius:20px;padding:1px 10px 1px 7px;margin:0 1px;
+  font-size:.92em;cursor:pointer;white-space:nowrap;
+  vertical-align:baseline;user-select:none;
+}
+#noteBody .ss-mail-chip:hover{border-color:var(--accent);}
+.ss-mail-chip-icon{display:inline-flex;color:var(--muted);}
+.ss-mail-chip-label{overflow:hidden;text-overflow:ellipsis;}
 .mail-empty{padding:22px 14px;color:var(--muted);font-size:14px;text-align:center;}
 .mail-load-more{margin:10px 12px;}
 .mail-readpane{flex:1;min-width:0;overflow-y:auto;padding:18px 22px;background:var(--surface);}
@@ -10110,7 +10240,7 @@ body.dark .version-date{color:var(--accent);}
            the Inbox unread count as its pill. The top
            group order is Chris's (2026-11-01): Home,
            Email, Calendar, Tasks, All Notes. -->
-      <button class="nav-item" id="navEmail" type="button">Email <span class="count count-pill" id="countEmail"></span></button>
+      <button class="nav-item" id="navEmail" type="button">Email<span class="mail-nav-count" id="countEmail"></span></button>
       <!-- v2.81: the Calendar entry, directly above
            Tasks: it opens the Tasks view with its
            calendar mode already active, the same grid
@@ -11283,14 +11413,19 @@ body.dark .version-date{color:var(--accent);}
           <h3 id="mailReadSubject"></h3>
           <div class="mail-read-meta" id="mailReadMeta"></div>
           <div class="mail-actions">
-            <button class="btn small" id="mailReplyBtn" type="button">Reply</button>
-            <button class="btn small" id="mailReplyAllBtn" type="button">Reply all</button>
-            <button class="btn small" id="mailForwardBtn" type="button">Forward</button>
-            <button class="btn small" id="mailArchiveBtn" type="button">Archive</button>
-            <button class="btn small" id="mailTrashBtn" type="button"><span id="mailTrashBtnLabel">Trash</span></button>
-            <button class="btn small" id="mailLabelsBtn" type="button">Labels</button>
-            <button class="btn small" id="mailMarkBtn" type="button"><span id="mailMarkBtnLabel">Mark as unread</span></button>
-            <button class="btn small" id="mailSaveNoteBtn" type="button">Save to note</button>
+            <button class="mail-icon-btn" id="mailReplyBtn" type="button" title="Reply" aria-label="Reply"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 10l-5 5 5 5"/><path d="M4 15h11a5 5 0 0 0 5-5V4"/></svg></button>
+            <button class="mail-icon-btn" id="mailReplyAllBtn" type="button" title="Reply all" aria-label="Reply all"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 9l-6 5 6 5"/><path d="M20 9l-6 5 6 5"/></svg></button>
+            <button class="mail-icon-btn" id="mailForwardBtn" type="button" title="Forward" aria-label="Forward"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 10l5 5-5 5"/><path d="M20 15H9a5 5 0 0 1-5-5V4"/></svg></button>
+            <button class="mail-icon-btn" id="mailArchiveBtn" type="button" title="Archive" aria-label="Archive"><svg viewBox="0 0 20 20" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="3" width="15" height="4" rx="1"/><path d="M4 7v8a1.5 1.5 0 0 0 1.5 1.5h9A1.5 1.5 0 0 0 16 15V7M8 10h4"/></svg></button>
+            <button class="mail-icon-btn" id="mailTrashBtn" type="button" title="Trash" aria-label="Trash"><svg viewBox="0 0 20 20" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5h14M8 5V3.5A.5.5 0 0 1 8.5 3h3a.5.5 0 0 1 .5.5V5M5 5l.8 11a1.5 1.5 0 0 0 1.5 1.4h5.4A1.5 1.5 0 0 0 14.2 16L15 5M8.3 8.5v5M11.7 8.5v5"/></svg></button>
+            <span class="mail-more-wrap">
+              <button class="mail-icon-btn" id="mailMoreBtn" type="button" title="More actions" aria-label="More actions" aria-haspopup="true"><svg viewBox="0 0 20 20" width="17" height="17" fill="currentColor" aria-hidden="true"><circle cx="4" cy="10" r="1.5"/><circle cx="10" cy="10" r="1.5"/><circle cx="16" cy="10" r="1.5"/></svg></button>
+              <span class="mail-more-menu hidden" id="mailMoreMenu" role="menu" aria-label="More message actions">
+                <button class="mail-more-item" id="mailMoreLabelsBtn" type="button" role="menuitem"><svg viewBox="0 0 20 20" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 3.5H10L17 10.5 10.5 17 3.5 10Z"/><circle cx="7.3" cy="7.3" r="1.2"/></svg><span>Labels</span></button>
+                <button class="mail-more-item" id="mailMoreMarkBtn" type="button" role="menuitem"><svg viewBox="0 0 20 20" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="4" width="15" height="12" rx="1.6"/><path d="M3 5.5l7 5.5 7-5.5"/></svg><span id="mailMoreMarkLabel">Mark as unread</span></button>
+                <button class="mail-more-item" id="mailMoreSaveBtn" type="button" role="menuitem"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3h7l4 4v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M14 3v4h4"/></svg><span>Save to note</span></button>
+              </span>
+            </span>
           </div>
           <div class="mail-labels-menu hidden" id="mailLabelsMenu"></div>
           <div class="mail-attachments hidden" id="mailAttachments"></div>
@@ -11874,12 +12009,42 @@ body.dark .version-date{color:var(--accent);}
      the close prompt: Save draft, Discard, or Keep
      writing, so nothing typed is ever lost silently.
      ========================================================================== -->
+<div id="mailLabelMenu" class="note-ctx-menu hidden" role="menu" aria-label="Label actions">
+  <button type="button" class="list-menu-item" id="mailLabelRenameBtn" role="menuitem">Rename</button>
+  <button type="button" class="list-menu-item" id="mailLabelDeleteBtn" role="menuitem">Delete</button>
+</div>
+
+<div id="mailLabelRenameModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="mailLabelRenameTitle">
+  <div class="modal-card">
+    <h2 id="mailLabelRenameTitle">Rename label</h2>
+    <div class="field">
+      <label for="mailLabelRenameInput">Name</label>
+      <input id="mailLabelRenameInput" type="text" autocomplete="off">
+    </div>
+    <div class="modal-foot">
+      <button class="btn" id="mailLabelRenameCancelBtn" type="button">Cancel</button>
+      <button class="btn primary" id="mailLabelRenameSaveBtn" type="button">Save</button>
+    </div>
+  </div>
+</div>
+
+<div id="mailLabelDeleteModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="mailLabelDeleteTitle">
+  <div class="modal-card">
+    <h2 id="mailLabelDeleteTitle">Delete label</h2>
+    <p class="modal-sub" id="mailLabelDeleteText"></p>
+    <div class="modal-foot">
+      <button class="btn" id="mailLabelDeleteCancelBtn" type="button">Cancel</button>
+      <button class="btn danger" id="mailLabelDeleteConfirmBtn" type="button">Delete</button>
+    </div>
+  </div>
+</div>
+
 <div id="mailComposeModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="mailComposeTitle">
   <div class="modal-card mail-compose-card">
     <h2 id="mailComposeTitle">New mail</h2>
     <p class="modal-sub">Sent and saved through your Gmail. The app keeps no copy of it.</p>
 
-    <div class="field">
+    <div class="field mail-recip-field">
       <label for="mailToInput">To</label>
       <input id="mailToInput" type="text" autocomplete="off">
     </div>
@@ -11887,15 +12052,16 @@ body.dark .version-date{color:var(--accent);}
       <button class="btn small" id="mailCcToggleBtn" type="button">Cc / Bcc</button>
     </div>
     <div class="hidden" id="mailCcRow">
-      <div class="field">
+      <div class="field mail-recip-field">
         <label for="mailCcInput">Cc</label>
         <input id="mailCcInput" type="text" autocomplete="off">
       </div>
-      <div class="field">
+      <div class="field mail-recip-field">
         <label for="mailBccInput">Bcc</label>
         <input id="mailBccInput" type="text" autocomplete="off">
       </div>
     </div>
+    <div class="mail-contact-menu hidden" id="mailContactMenu" role="listbox" aria-label="Contact suggestions"></div>
     <div class="field">
       <label for="mailSubjectInput">Subject</label>
       <input id="mailSubjectInput" type="text" autocomplete="off">
@@ -12268,8 +12434,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-11-01-SSN-V2830";
-const APP_VERSION = "2.83.0";
+const APP_BUILD = "2026-11-01-SSN-V2840";
+const APP_VERSION = "2.84.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -25305,7 +25471,7 @@ function linkPopupHost() {
   const host = node.parentElement;
   if (!host || (host.closest && host.closest(
     "pre, a, .ss-attachment, .ss-event-chip, " +
-    ".ss-tag-pill"))) {
+    ".ss-tag-pill, .ss-mail-chip"))) {
     return null;
   }
   return { range: range, node: node };
@@ -25820,6 +25986,840 @@ function onTagLinkPopupKeydown(ev) {
   }
 }
 
+/* ---------------- v2.84: the Email polish round ------
+   Six pieces ride beside the mail module, in its own
+   discipline (reads through gmailRead, writes through
+   gmailWrite, page memory only):
+
+   - Drag and drop triage (Part 3): a dragged message
+     row dropped on All Mail archives it, on Trash
+     trashes it, and on a user label applies the label,
+     removing the source label when the drag started
+     in another label's list (Gmail's move).
+   - The undo toast (Part 4): an archive or a trash of
+     one message, from any surface, stands a pill toast
+     at the top center with an Undo button and a five
+     second life; Undo reverses the write through the
+     same transports and restores the row where it
+     stood. A newer archive or trash replaces the
+     standing toast, and the older action is then no
+     longer undoable from the UI.
+   - The label context menu (Part 6): Rename and
+     Delete for user labels, through labels.update and
+     labels.delete.
+   - Contacts autocomplete (Part 7): the People API
+     module below, and its dropdown on the compose
+     dialog's three recipient fields.
+   - Email link chips (Part 8): the chip the @@ popup
+     inserts into a note, and the travel its click
+     makes. */
+
+/* Any cached copy of a message, by id (the lists hold
+   a copy each; the first found speaks for all, since
+   the apply path moves every copy by id). */
+function mailRowById(id) {
+  const keys = Object.keys(mailLists);
+  for (let i = 0; i < keys.length; i++) {
+    const rows = mailLists[keys[i]].rows;
+    for (let j = 0; j < rows.length; j++) {
+      if (rows[j].id === id) { return rows[j]; }
+    }
+  }
+  if (mailOpenFull && mailOpenFull.id === id) {
+    return mailOpenFull;
+  }
+  return null;
+}
+
+/* ----- Part 3 and 4: triage with an undo ---------- */
+
+let mailDragState = null;
+let mailUndoState = null;
+
+/* Where a message stands in every cached list, taken
+   before a triage write, so an Undo can put its row
+   back at the very place it stood. */
+function mailCaptureRowPositions(id) {
+  const pos = [];
+  Object.keys(mailLists).forEach(function (key) {
+    const list = mailLists[key];
+    const at = list.rows.findIndex(function (r) {
+      return r.id === id;
+    });
+    if (at !== -1) { pos.push({ key: key, index: at }); }
+  });
+  return pos;
+}
+
+/* Put a message's row back at its captured places:
+   a fresh copy in every list the captured record
+   belongs to (by the membership rule, read off the
+   record itself) that no longer holds it. Returns the
+   list keys a copy landed in, so a failed reversal
+   can take them back out. */
+function mailRestoreRowPositions(clone, positions) {
+  const landed = [];
+  positions.forEach(function (p) {
+    const list = mailLists[p.key];
+    if (!list || !list.loaded) { return; }
+    const held = list.rows.some(function (r) {
+      return r.id === clone.id;
+    });
+    if (held) { return; }
+    if (!mailRowInSelection(clone, list.sel || mailFolder)) {
+      return;
+    }
+    const copy = JSON.parse(JSON.stringify(clone));
+    list.rows.splice(Math.min(p.index, list.rows.length),
+      0, copy);
+    landed.push(p.key);
+  });
+  return landed;
+}
+
+function dismissMailUndoToast() {
+  if (!mailUndoState) { return; }
+  clearTimeout(mailUndoState.timer);
+  if (mailUndoState.el && mailUndoState.el.parentNode) {
+    mailUndoState.el.parentNode.removeChild(mailUndoState.el);
+  }
+  mailUndoState = null;
+}
+
+/* The undo toast itself: the shared pill form in the
+   top center box, its saved tone and green dot like
+   every completion there, plus the Undo button. It
+   lives exactly five seconds; a newer triage replaces
+   it wholesale. */
+function showMailUndoToast(kind, snap) {
+  dismissMailUndoToast();
+  const box = document.getElementById("toastBoxTop");
+  if (!box) { return; }
+  const el = document.createElement("div");
+  el.className = "pill-form move-done mail-undo-toast";
+  el.setAttribute("data-state", "saved");
+  const dot = document.createElement("span");
+  dot.className = "save-pill-dot";
+  dot.setAttribute("aria-hidden", "true");
+  el.appendChild(dot);
+  const label = document.createElement("span");
+  label.textContent = kind === "archive"
+    ? "Archived" : "Moved to Trash";
+  el.appendChild(label);
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "mail-undo-btn";
+  btn.textContent = "Undo";
+  btn.addEventListener("click", function () {
+    mailUndoTriage(snap).catch(function () {
+      /* the reversal reports through the write paths */
+    });
+  });
+  el.appendChild(btn);
+  box.appendChild(el);
+  const timer = setTimeout(dismissMailUndoToast, 5000);
+  mailUndoState = { el: el, timer: timer, snap: snap };
+}
+
+/* Reverse one triage: the row copies go back at their
+   captured places first (so the apply that follows
+   the API's answer settles the counts off a standing
+   copy), then the reversing write runs; a refused
+   reversal takes the restored copies back out and the
+   write path's own toast names the failure. */
+async function mailUndoTriage(snap) {
+  dismissMailUndoToast();
+  const clone = JSON.parse(JSON.stringify(snap.clone));
+  const landed = mailRestoreRowPositions(clone,
+    snap.positions);
+  let ok = false;
+  if (snap.kind === "archive") {
+    ok = await mailModifyMessage(clone, ["INBOX"], [],
+      "mark");
+  } else {
+    ok = await mailTrashMessage(clone, true);
+  }
+  if (!ok) {
+    landed.forEach(function (key) {
+      const list = mailLists[key];
+      if (list) {
+        list.rows = list.rows.filter(function (r) {
+          return r.id !== snap.id;
+        });
+      }
+    });
+    if (state.view && state.view.kind === "email") {
+      renderMail();
+    }
+    return;
+  }
+  if (state.view && state.view.kind === "email") {
+    renderMail();
+  }
+}
+
+/* Archive one message behind the undo toast: the
+   snapshot (the record as it stood, and its place in
+   every list) is taken before the write, and the
+   toast stands only on the API's acceptance. */
+async function mailArchiveWithUndo(rec) {
+  if (!rec) { return false; }
+  const snap = {
+    kind: "archive", id: rec.id,
+    clone: JSON.parse(JSON.stringify(rec)),
+    positions: mailCaptureRowPositions(rec.id)
+  };
+  const ok = await mailModifyMessage(rec, [], ["INBOX"],
+    "archive");
+  if (ok) { showMailUndoToast("archive", snap); }
+  return ok;
+}
+
+/* Trash one message behind the undo toast, the same
+   shape. (Moving a message OUT of Trash is a plain
+   untrash and carries no toast: the toast belongs to
+   the archive and the trash, per the round's brief.) */
+async function mailTrashWithUndo(rec) {
+  if (!rec) { return false; }
+  const snap = {
+    kind: "trash", id: rec.id,
+    clone: JSON.parse(JSON.stringify(rec)),
+    positions: mailCaptureRowPositions(rec.id)
+  };
+  const ok = await mailTrashMessage(rec, false);
+  if (ok) { showMailUndoToast("trash", snap); }
+  return ok;
+}
+
+/* A drop lands: the message the drag carried, acted on
+   by the target it fell on. All Mail archives and
+   Trash trashes (both behind the undo toast); a user
+   label applies, and a drag that started in another
+   label's list removes that label too, which is
+   Gmail's move. A drop on the very label whose list
+   stands open is no move at all. A refused write
+   leaves the row standing and the write path's toast
+   says the move did not happen. */
+function mailDropOnTarget(target) {
+  const drag = mailDragState;
+  mailDragState = null;
+  if (!drag) { return; }
+  const rec = mailRowById(drag.id);
+  if (!rec) { return; }
+  if (target.kind === "folder" && target.id === "all") {
+    mailArchiveWithUndo(rec);
+    return;
+  }
+  if (target.kind === "folder" && target.id === "trash") {
+    mailTrashWithUndo(rec);
+    return;
+  }
+  if (target.kind === "label") {
+    if (mailFolder.kind === "label" &&
+        mailFolder.id === target.id) {
+      return;
+    }
+    const add = [target.id];
+    const remove = drag.fromSel &&
+      drag.fromSel.kind === "label" &&
+      drag.fromSel.id !== target.id
+      ? [drag.fromSel.id] : [];
+    mailModifyMessage(rec, add, remove, "label");
+  }
+}
+
+/* The drop dress on one folder column row: the drag
+   over lights it, the leave and the drop take the
+   light back. Only the round's three target kinds
+   wear it. */
+function mailArmDropTarget(el, target) {
+  el.addEventListener("dragover", function (ev) {
+    if (!mailDragState) { return; }
+    ev.preventDefault();
+    if (ev.dataTransfer) {
+      ev.dataTransfer.dropEffect = "move";
+    }
+    el.classList.add("mail-drop-on");
+  });
+  el.addEventListener("dragleave", function () {
+    el.classList.remove("mail-drop-on");
+  });
+  el.addEventListener("drop", function (ev) {
+    ev.preventDefault();
+    el.classList.remove("mail-drop-on");
+    mailDropOnTarget(target);
+  });
+}
+
+/* ----- Part 6: the label context menu ------------- */
+
+let mailLabelMenuCtx = null;
+
+function closeMailLabelMenu() {
+  const menu = mailEl("mailLabelMenu");
+  if (menu) { menu.classList.add("hidden"); }
+  mailLabelMenuCtx = null;
+  document.removeEventListener("pointerdown",
+    onMailLabelMenuDocPointerDown, true);
+  document.removeEventListener("keydown",
+    onMailLabelMenuDocKeydown, true);
+}
+
+function onMailLabelMenuDocPointerDown(ev) {
+  const menu = mailEl("mailLabelMenu");
+  if (menu && ev.target && menu.contains(ev.target)) {
+    return;
+  }
+  closeMailLabelMenu();
+}
+
+function onMailLabelMenuDocKeydown(ev) {
+  if (ev.key === "Escape") {
+    ev.preventDefault();
+    closeMailLabelMenu();
+  }
+}
+
+function openMailLabelMenu(label, x, y) {
+  closeMailLabelMenu();
+  const menu = mailEl("mailLabelMenu");
+  if (!menu) { return; }
+  mailLabelMenuCtx = { id: label.id, name: label.name };
+  menu.classList.remove("hidden");
+  placeNoteContextMenu(menu, x, y);
+  document.addEventListener("pointerdown",
+    onMailLabelMenuDocPointerDown, true);
+  document.addEventListener("keydown",
+    onMailLabelMenuDocKeydown, true);
+  const first = menu.querySelector(".list-menu-item");
+  if (first) { first.focus(); }
+}
+
+/* Rename: the dialog's Save runs labels.update with
+   the label's own id and the new name (the id is the
+   label's identity; its messages keep it). On the
+   API's acceptance the standing record takes the name
+   and every surface that speaks it re-renders: the
+   folder column, an open list of that label (its
+   standing selection and its row chips read the same
+   records). A 403 keeps the mail consent handling the
+   write paths already speak. */
+function openMailLabelRename() {
+  const ctx = mailLabelMenuCtx;
+  closeMailLabelMenu();
+  if (!ctx) { return; }
+  mailLabelMenuCtx = ctx;
+  const input = mailEl("mailLabelRenameInput");
+  if (input) { input.value = ctx.name; }
+  mailEl("mailLabelRenameModal").classList.remove("hidden");
+  if (input) { input.focus(); }
+}
+
+async function saveMailLabelRename() {
+  const ctx = mailLabelMenuCtx;
+  const input = mailEl("mailLabelRenameInput");
+  const name = input ? input.value.trim() : "";
+  if (!ctx || !name) { return; }
+  const out = await gmailWrite("PUT",
+    "/users/me/labels/" + encodeURIComponent(ctx.id),
+    { id: ctx.id, name: name });
+  mailEl("mailLabelRenameModal").classList.add("hidden");
+  mailLabelMenuCtx = null;
+  if (out.outcome !== "ok") {
+    mailToastWriteFailure(out, "Could not rename that label.");
+    return;
+  }
+  if (mailLabels) {
+    mailLabels.forEach(function (l) {
+      if (l.id === ctx.id) { l.name = name; }
+    });
+  }
+  if (mailFolder.kind === "label" &&
+      mailFolder.id === ctx.id) {
+    mailFolder.name = name;
+    const list = mailLists[mailListKey()];
+    if (list && list.sel && list.sel.kind === "label") {
+      list.sel.name = name;
+    }
+  }
+  renderMail();
+}
+
+/* Delete: the confirmation names the label and says
+   plainly that messages keep their content and only
+   lose the label. Confirming runs labels.delete; the
+   column forgets the label, its cached list goes with
+   it, and an open list of that label falls back to
+   the Inbox. */
+function openMailLabelDelete() {
+  const ctx = mailLabelMenuCtx;
+  closeMailLabelMenu();
+  if (!ctx) { return; }
+  mailLabelMenuCtx = ctx;
+  const text = mailEl("mailLabelDeleteText");
+  if (text) {
+    text.textContent = "Delete the label \"" + ctx.name +
+      "\"? Its messages keep their content and only " +
+      "lose the label.";
+  }
+  mailEl("mailLabelDeleteModal").classList.remove("hidden");
+}
+
+async function confirmMailLabelDelete() {
+  const ctx = mailLabelMenuCtx;
+  if (!ctx) { return; }
+  const out = await gmailWrite("DELETE",
+    "/users/me/labels/" + encodeURIComponent(ctx.id), null);
+  mailEl("mailLabelDeleteModal").classList.add("hidden");
+  mailLabelMenuCtx = null;
+  if (out.outcome !== "ok") {
+    mailToastWriteFailure(out, "Could not delete that label.");
+    return;
+  }
+  if (mailLabels) {
+    mailLabels = mailLabels.filter(function (l) {
+      return l.id !== ctx.id;
+    });
+  }
+  delete mailLists["label:" + ctx.id];
+  if (mailFolder.kind === "label" &&
+      mailFolder.id === ctx.id) {
+    mailChooseSelection({ kind: "folder", id: "inbox" });
+    return;
+  }
+  renderMail();
+}
+
+/* ----- Part 7: contacts, the People module -------- */
+
+/* The People API, in the mail module's discipline:
+   one base literal, one read transport, the app's own
+   Google token. A 401 renews once and retries once
+   (through the shared gmailCall-shaped settle below);
+   a 403 is this module's own state, independent of
+   mail's: contacts are simply not connected yet.
+   Contacts live in page memory only: the loaded list
+   stands here and nowhere else, never in a Drive
+   payload, a store file, or the device snapshot. */
+const PEOPLE_API_BASE = "https://www.googleapis.com/people/v1";
+
+let peopleStatus = "idle";
+let peopleContacts = null;
+let peopleLoading = false;
+
+async function peopleApiGet(path, token) {
+  const res = await fetch(PEOPLE_API_BASE + path, {
+    method: "GET",
+    headers: { "Authorization": "Bearer " + token }
+  });
+  let data = null;
+  try { data = await res.json(); } catch (e) { data = null; }
+  return { status: res.status, data: data };
+}
+
+async function peopleRead(path) {
+  let token = null;
+  try {
+    token = await getGoogleAccessToken();
+  } catch (e) {
+    if (e && e.code === "GOOGLE_SIGN_IN_REQUIRED") {
+      return { outcome: "signed-out", status: 0, data: null };
+    }
+    return { outcome: "bad", status: 0, data: null };
+  }
+  let res = null;
+  try {
+    res = await peopleApiGet(path, token);
+    if (res.status === 401) {
+      const renewed = await googleTrySilentSignIn();
+      if (renewed) {
+        const fresh = await getProviderToken("google");
+        if (fresh) { res = await peopleApiGet(path, fresh); }
+      }
+    }
+  } catch (e) {
+    return { outcome: "bad", status: 0, data: null };
+  }
+  if (res.status >= 200 && res.status < 300) {
+    return { outcome: "ok", status: res.status, data: res.data };
+  }
+  if (res.status === 403) {
+    return { outcome: "forbidden", status: 403, data: res.data };
+  }
+  return { outcome: "bad", status: res.status, data: res.data };
+}
+
+/* Load the contacts once, lazily (the recipient
+   fields' first focus or typing asks), paging the
+   connections list through to its end with a hard cap
+   of three thousand entries. A person stands in the
+   list by their first email address; a person with no
+   email cannot be a recipient and is skipped. A 403
+   settles the module into its not connected state; a
+   network failure simply leaves the fields manual and
+   lets the next focus ask again. */
+async function ensurePeopleContacts() {
+  if (peopleContacts || peopleLoading ||
+      peopleStatus === "forbidden") {
+    return;
+  }
+  peopleLoading = true;
+  const collected = [];
+  let pageToken = "";
+  let failed = "";
+  while (collected.length < 3000) {
+    let path = "/people/me/connections" +
+      "?personFields=names,emailAddresses&pageSize=1000" +
+      "&sortOrder=LAST_MODIFIED_DESCENDING";
+    if (pageToken) {
+      path += "&pageToken=" + encodeURIComponent(pageToken);
+    }
+    const out = await peopleRead(path);
+    if (out.outcome === "forbidden") {
+      failed = "forbidden";
+      break;
+    }
+    if (out.outcome !== "ok" || !out.data) {
+      failed = "bad";
+      break;
+    }
+    const conns = Array.isArray(out.data.connections)
+      ? out.data.connections : [];
+    conns.forEach(function (c) {
+      const emails = Array.isArray(c.emailAddresses)
+        ? c.emailAddresses : [];
+      if (!emails.length || !emails[0].value) { return; }
+      const names = Array.isArray(c.names) ? c.names : [];
+      collected.push({
+        name: names.length && names[0].displayName
+          ? String(names[0].displayName) : "",
+        email: String(emails[0].value)
+      });
+    });
+    pageToken = out.data.nextPageToken
+      ? String(out.data.nextPageToken) : "";
+    if (!pageToken) { break; }
+  }
+  peopleLoading = false;
+  if (failed === "forbidden") {
+    peopleStatus = "forbidden";
+    renderMailContactMenu();
+    return;
+  }
+  if (failed) { return; }
+  peopleContacts = collected.slice(0, 3000);
+  peopleStatus = "ok";
+  renderMailContactMenu();
+}
+
+/* The dropdown's standing state: the field it serves,
+   its rows (contacts, or the one not connected note),
+   and the highlighted row. */
+let mailContactField = null;
+let mailContactRows = [];
+let mailContactHighlight = 0;
+
+function mailContactFragment(input) {
+  const caret = typeof input.selectionStart === "number"
+    ? input.selectionStart : input.value.length;
+  const upto = input.value.slice(0, caret);
+  const comma = upto.lastIndexOf(",");
+  const start = comma === -1 ? 0 : comma + 1;
+  const raw = upto.slice(start);
+  const lead = raw.length - raw.replace(/^\s+/, "").length;
+  return {
+    text: raw.trim(), fragStart: start + lead,
+    caret: caret
+  };
+}
+
+function closeMailContactMenu() {
+  const menu = mailEl("mailContactMenu");
+  if (menu) { menu.classList.add("hidden"); }
+  mailContactField = null;
+  mailContactRows = [];
+  mailContactHighlight = 0;
+}
+
+/* Paint the dropdown for the standing field: the not
+   connected note when the People grant is missing,
+   nothing at all while contacts load or the fragment
+   is empty (manual typing is never blocked), and up
+   to eight matches once they stand. A match is a name
+   or an email containing the fragment, case folded. */
+function renderMailContactMenu() {
+  const menu = mailEl("mailContactMenu");
+  const input = mailContactField;
+  if (!menu || !input) { return; }
+  const frag = mailContactFragment(input);
+  if (!frag.text) { closeMailContactMenu(); return; }
+  if (peopleStatus === "forbidden") {
+    mailContactRows = [];
+    menu.innerHTML = "";
+    const note = document.createElement("div");
+    note.className = "mail-contact-note";
+    note.textContent = "Contacts are not connected yet";
+    menu.appendChild(note);
+    menu.classList.remove("hidden");
+    return;
+  }
+  if (!peopleContacts) {
+    menu.classList.add("hidden");
+    return;
+  }
+  const needle = frag.text.toLowerCase();
+  mailContactRows = peopleContacts.filter(function (c) {
+    return c.name.toLowerCase().indexOf(needle) !== -1 ||
+      c.email.toLowerCase().indexOf(needle) !== -1;
+  }).slice(0, 8);
+  if (!mailContactRows.length) {
+    menu.classList.add("hidden");
+    return;
+  }
+  if (mailContactHighlight >= mailContactRows.length) {
+    mailContactHighlight = 0;
+  }
+  menu.innerHTML = "";
+  mailContactRows.forEach(function (c, i) {
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = "mail-contact-row" +
+      (i === mailContactHighlight ? " current" : "");
+    row.setAttribute("data-mail-contact", String(i));
+    const nm = document.createElement("span");
+    nm.className = "mail-contact-name";
+    nm.textContent = c.name || c.email;
+    row.appendChild(nm);
+    if (c.name) {
+      const em = document.createElement("span");
+      em.className = "mail-contact-email";
+      em.textContent = c.email;
+      row.appendChild(em);
+    }
+    row.addEventListener("mousedown", function (ev) {
+      ev.preventDefault();
+      pickMailContact(i);
+    });
+    menu.appendChild(row);
+  });
+  menu.classList.remove("hidden");
+}
+
+/* Stand the dropdown in the field being edited: the
+   menu element moves into the field's own wrapper (it
+   is styled to park under that field), the load is
+   asked for, and the rows paint. */
+function mailContactShowFor(input) {
+  const menu = mailEl("mailContactMenu");
+  if (!menu) { return; }
+  const wrap = input.closest(".mail-recip-field");
+  if (wrap && menu.parentElement !== wrap) {
+    wrap.appendChild(menu);
+  }
+  mailContactField = input;
+  mailContactHighlight = 0;
+  ensurePeopleContacts();
+  renderMailContactMenu();
+}
+
+/* Pick a suggestion: the fragment being typed is
+   replaced by the frozen format, a named contact as
+   Name <email> and an unnamed one as the bare email,
+   with the manual separator after it, and the caret
+   lands past the separator ready for the next name. */
+function pickMailContact(i) {
+  const input = mailContactField;
+  const c = mailContactRows[i];
+  if (!input || !c) { return; }
+  const frag = mailContactFragment(input);
+  const insert = (c.name
+    ? c.name + " <" + c.email + ">" : c.email) + ", ";
+  input.value = input.value.slice(0, frag.fragStart) +
+    insert + input.value.slice(frag.caret);
+  const at = frag.fragStart + insert.length;
+  closeMailContactMenu();
+  input.focus();
+  if (input.setSelectionRange) {
+    input.setSelectionRange(at, at);
+  }
+}
+
+/* The recipient fields' keys: while the dropdown
+   stands, the arrows walk it, Enter and Tab pick, and
+   Escape closes; every other key is the field's own,
+   and the compose dialog's keys never see the ones
+   the dropdown took. Runs on the capture phase at the
+   field, ahead of the dialog's own handlers. */
+function onMailContactKeydown(ev) {
+  const menu = mailEl("mailContactMenu");
+  if (!menu || menu.classList.contains("hidden") ||
+      !mailContactRows.length) {
+    if (ev.key === "Escape") { closeMailContactMenu(); }
+    return;
+  }
+  if (ev.key === "ArrowDown" || ev.key === "ArrowUp") {
+    ev.preventDefault();
+    ev.stopPropagation();
+    const n = mailContactRows.length;
+    mailContactHighlight =
+      ((mailContactHighlight +
+        (ev.key === "ArrowDown" ? 1 : -1)) % n + n) % n;
+    renderMailContactMenu();
+  } else if (ev.key === "Enter" || ev.key === "Tab") {
+    ev.preventDefault();
+    ev.stopPropagation();
+    pickMailContact(mailContactHighlight);
+  } else if (ev.key === "Escape") {
+    ev.preventDefault();
+    ev.stopPropagation();
+    closeMailContactMenu();
+  }
+}
+
+/* Wire the three recipient fields once: focus and
+   typing stand the dropdown (and ask the lazy load),
+   and a blur that is not a pick lets it close. */
+function initMailContactFields() {
+  ["mailToInput", "mailCcInput", "mailBccInput"]
+    .forEach(function (id) {
+      const input = mailEl(id);
+      if (!input) { return; }
+      input.addEventListener("focus", function () {
+        mailContactShowFor(input);
+      });
+      input.addEventListener("input", function () {
+        mailContactShowFor(input);
+      });
+      input.addEventListener("keydown", onMailContactKeydown,
+        true);
+      input.addEventListener("blur", function () {
+        setTimeout(function () {
+          if (mailContactField === input) {
+            closeMailContactMenu();
+          }
+        }, 120);
+      });
+    });
+}
+
+/* ----- Part 8: email link chips ------------------- */
+
+const MAIL_CHIP_ICON =
+  "<svg viewBox=\"0 0 20 20\" width=\"13\" height=\"13\" " +
+  "fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" " +
+  "stroke-linecap=\"round\" stroke-linejoin=\"round\" " +
+  "aria-hidden=\"true\"><rect x=\"2.5\" y=\"4\" width=\"15\" " +
+  "height=\"12\" rx=\"1.6\"/><path d=\"M3 5.5l7 5.5 7-5.5\"/>" +
+  "</svg>";
+
+/* Build an email chip: an atomic island in the note
+   body carrying the message id alone as data; its face
+   is the envelope glyph, the sender's display name,
+   and the subject. The face is only what the note knew
+   when the chip was made; no mail content is copied. */
+function buildMailChipEl(rec) {
+  const chip = document.createElement("span");
+  chip.className = "ss-mail-chip";
+  chip.setAttribute("contenteditable", "false");
+  chip.setAttribute("data-ss-mail-id", rec.id);
+  chip.title = rec.subject || "(No subject)";
+  const icon = document.createElement("span");
+  icon.className = "ss-mail-chip-icon";
+  icon.setAttribute("aria-hidden", "true");
+  icon.innerHTML = MAIL_CHIP_ICON;
+  chip.appendChild(icon);
+  const label = document.createElement("span");
+  label.className = "ss-mail-chip-label";
+  label.textContent =
+    (rec.fromName || rec.fromAddress || "") + " · " +
+    (rec.subject || "(No subject)");
+  chip.appendChild(label);
+  return chip;
+}
+
+/* Pick from the @@ popup: the chip replaces the @@
+   token, with the trailing space every mention insert
+   leaves, and the editor's dirty flag is the receipt. */
+function insertMentionMailChip(rec) {
+  const trig = mentionTrigger;
+  const bodyEl = document.getElementById("noteBody");
+  closeMentionPopup();
+  if (!trig || !bodyEl || !bodyEl.contains(trig.node)) {
+    return;
+  }
+  const chip = buildMailChipEl(rec);
+  const end = Math.min(trig.caretOffset,
+    trig.node.nodeValue ? trig.node.nodeValue.length : 0);
+  const range = document.createRange();
+  range.setStart(trig.node, trig.atOffset);
+  range.setEnd(trig.node, end);
+  const sel = window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(range);
+  range.deleteContents();
+  range.insertNode(chip);
+  const space = document.createTextNode(" ");
+  chip.after(space);
+  placeCaretIn(space, 1);
+  markDirty();
+}
+
+/* Follow an email chip: the message is fetched
+   directly by its id first, so a message that is gone
+   is a plain toast and the note is left exactly as it
+   stands; a standing message opens in the Email view. */
+async function followMailChip(chip) {
+  const id = chip.getAttribute("data-ss-mail-id") || "";
+  if (!id) { return; }
+  const out = await gmailRead("/users/me/messages/" +
+    encodeURIComponent(id) + "?format=metadata");
+  if (out.status === 404) {
+    toast("That email no longer exists");
+    return;
+  }
+  if (out.outcome !== "ok") {
+    mailSettleLoadOutcome(out);
+    toast("Could not load that email.", true);
+    return;
+  }
+  openMailOnMessage(id);
+}
+
+/* The @@ popup's search: one messages.list ask with
+   the typed words as its q (no q while nothing is
+   typed, so the popup opens on the newest mail), then
+   each answer read in metadata form, the list loader's
+   own shape. Resolves the rows, or the consent word
+   when the standing grant does not cover mail. */
+async function mentionMailSearch(query) {
+  let path = "/users/me/messages?maxResults=8";
+  if (query) {
+    path += "&q=" + encodeURIComponent(query);
+  }
+  const out = await gmailRead(path);
+  if (out.outcome === "forbidden") {
+    mailSettleLoadOutcome(out);
+    return { outcome: "consent", rows: [] };
+  }
+  if (out.outcome !== "ok" || !out.data) {
+    return { outcome: "bad", rows: [] };
+  }
+  const items = Array.isArray(out.data.messages)
+    ? out.data.messages : [];
+  const rows = [];
+  await Promise.all(items.map(async function (m) {
+    const got = await gmailRead("/users/me/messages/" +
+      encodeURIComponent(m.id) +
+      "?format=metadata&metadataHeaders=From" +
+      "&metadataHeaders=Subject&metadataHeaders=Date");
+    if (got.outcome !== "ok" || !got.data) { return; }
+    const rec = normalizeMailRow(got.data);
+    if (rec) { rows.push(rec); }
+  }));
+  rows.sort(function (a, b) { return b.dateMs - a.dateMs; });
+  return { outcome: "ok", rows: rows };
+}
+
 /* ---------------- the Home Email widget ------------- */
 
 /* Stand in the Email view at the Inbox (the widget
@@ -26090,7 +27090,22 @@ function mailRowInSelection(rec, sel) {
   if (sel.kind === "search") { return true; }
   const label = mailSelectionLabel(sel);
   if (label) {
-    return rec.labelIds.indexOf(label) !== -1;
+    if (rec.labelIds.indexOf(label) === -1) {
+      return false;
+    }
+    /* v2.84 (Part 5): a labelled list, like
+       Gmail's own label views, never shows a
+       trashed message: the label alone used to
+       decide membership, so a message trashed
+       from a label's list still belonged there
+       and its row never left, which read as a
+       dead Trash button. The Trash folder's own
+       label is the one exception. */
+    if (label !== "TRASH" &&
+        rec.labelIds.indexOf("TRASH") !== -1) {
+      return false;
+    }
+    return true;
   }
   return rec.labelIds.indexOf("TRASH") === -1 &&
     rec.labelIds.indexOf("SPAM") === -1;
@@ -26592,7 +27607,11 @@ function updateMailBadge() {
   const dot = document.getElementById("railEmailDot");
   const n = mailStatus === "ok" ? mailInboxUnread() : null;
   if (pill) {
-    pill.textContent = n ? String(n) : "";
+    /* v2.84 (Part 1): the expanded item reads
+       Email - (n) beside its label, the suffix
+       standing where the count pill stood; at
+       zero the item is plain Email again. */
+    pill.textContent = n ? " - (" + n + ")" : "";
   }
   if (dot) {
     dot.classList.toggle("hidden", !n);
@@ -26715,6 +27734,10 @@ function renderMailFolders() {
       btn.addEventListener("click", function () {
         mailChooseSelection({ kind: "folder", id: f.id });
       });
+      if (f.id === "all" || f.id === "trash") {
+        mailArmDropTarget(btn,
+          { kind: "folder", id: f.id });
+      }
       list.appendChild(btn);
     });
     const labels = mailUserLabels();
@@ -26733,6 +27756,13 @@ function renderMailFolders() {
           mailChooseSelection({ kind: "label", id: l.id,
             name: l.name });
         });
+        btn.addEventListener("contextmenu",
+          function (ev) {
+            ev.preventDefault();
+            openMailLabelMenu(l, ev.clientX, ev.clientY);
+          });
+        mailArmDropTarget(btn,
+          { kind: "label", id: l.id });
         list.appendChild(btn);
       });
     }
@@ -26830,6 +27860,37 @@ function buildMailRowEl(rec) {
   el.className = "mail-row" + (rec.unread ? " unread" : "") +
     (mailOpenId === rec.id ? " selected" : "");
   el.setAttribute("data-mail-id", rec.id);
+  /* v2.84 (Part 3): a message row drags (a draft
+     row does not: it opens the composer, it does
+     not triage). The drag carries the message id
+     and the selection it started in, which the
+     label move reads. */
+  if (!rec.draftId) {
+    el.setAttribute("draggable", "true");
+    el.addEventListener("dragstart", function (ev) {
+      mailDragState = {
+        id: rec.id,
+        fromSel: {
+          kind: mailFolder.kind,
+          id: mailFolder.id || null
+        }
+      };
+      if (ev.dataTransfer) {
+        ev.dataTransfer.effectAllowed = "move";
+        try {
+          ev.dataTransfer.setData("text/plain", rec.id);
+        } catch (e) { /* the state above is the record */ }
+      }
+    });
+    el.addEventListener("dragend", function () {
+      mailDragState = null;
+      document.querySelectorAll(
+        ".mail-folder.mail-drop-on")
+        .forEach(function (t) {
+          t.classList.remove("mail-drop-on");
+        });
+    });
+  }
   const dot = document.createElement("span");
   dot.className = "mail-dot" + (rec.unread ? "" : " off");
   dot.setAttribute("aria-hidden", "true");
@@ -26945,9 +28006,9 @@ function mailIconMail() {
    reading view uses. */
 function mailRowQuickAction(rec, act) {
   if (act === "archive") {
-    mailModifyMessage(rec, [], ["INBOX"], "archive");
+    mailArchiveWithUndo(rec);
   } else if (act === "trash") {
-    mailTrashMessage(rec, false);
+    mailTrashWithUndo(rec);
   } else if (act === "mark") {
     if (rec.unread) {
       mailModifyMessage(rec, [], ["UNREAD"], "mark");
@@ -27042,6 +28103,7 @@ async function mailModifyMessage(rec, add, remove, kind) {
   }
   mailToastWriteFailure(out,
     kind === "archive" ? "Could not archive that message."
+      : kind === "label" ? "That move did not happen."
       : "Could not update that message.");
   return false;
 }
@@ -27271,9 +28333,13 @@ function renderMailRead() {
     meta.appendChild(line);
   });
   const inTrash = full.labelIds.indexOf("TRASH") !== -1;
-  mailEl("mailTrashBtnLabel").textContent = inTrash
-    ? "Move to Inbox" : "Trash";
-  mailEl("mailMarkBtnLabel").textContent = full.unread
+  /* v2.84 (Part 2): the Trash icon button speaks
+     its state in its tooltip, and the More menu's
+     mark item names the state it would leave. */
+  const trashBtn = mailEl("mailTrashBtn");
+  trashBtn.title = inTrash ? "Move to Inbox" : "Trash";
+  trashBtn.setAttribute("aria-label", trashBtn.title);
+  mailEl("mailMoreMarkLabel").textContent = full.unread
     ? "Mark as read" : "Mark as unread";
   const labelsMenu = mailEl("mailLabelsMenu");
   if (labelsMenu &&
@@ -27919,8 +28985,7 @@ function initMailBindings() {
   mailEl("mailArchiveBtn").addEventListener("click",
     function () {
       if (mailOpenFull) {
-        mailModifyMessage(mailOpenFull, [], ["INBOX"],
-          "archive");
+        mailArchiveWithUndo(mailOpenFull);
       }
     });
   mailEl("mailTrashBtn").addEventListener("click",
@@ -27928,10 +28993,18 @@ function initMailBindings() {
       if (!mailOpenFull) { return; }
       const inTrash = mailOpenFull.labelIds
         .indexOf("TRASH") !== -1;
-      mailTrashMessage(mailOpenFull, inTrash);
+      /* v2.84 (Part 4): a trash from the bar stands
+         the undo toast; the move back to the Inbox
+         is the plain untrash it always was. */
+      if (inTrash) {
+        mailTrashMessage(mailOpenFull, true);
+      } else {
+        mailTrashWithUndo(mailOpenFull);
+      }
     });
-  mailEl("mailMarkBtn").addEventListener("click",
+  mailEl("mailMoreMarkBtn").addEventListener("click",
     function () {
+      mailEl("mailMoreMenu").classList.add("hidden");
       if (!mailOpenFull) { return; }
       if (mailOpenFull.unread) {
         mailModifyMessage(mailOpenFull, [], ["UNREAD"],
@@ -27941,8 +29014,9 @@ function initMailBindings() {
           "mark");
       }
     });
-  mailEl("mailLabelsBtn").addEventListener("click",
+  mailEl("mailMoreLabelsBtn").addEventListener("click",
     function () {
+      mailEl("mailMoreMenu").classList.add("hidden");
       const menu = mailEl("mailLabelsMenu");
       if (!menu || !mailOpenFull) { return; }
       const opening = menu.classList.contains("hidden");
@@ -27950,22 +29024,78 @@ function initMailBindings() {
       menu.classList.toggle("hidden", !opening);
     });
   document.addEventListener("click", function (ev) {
-    const menu = mailEl("mailLabelsMenu");
-    if (!menu || menu.classList.contains("hidden")) {
-      return;
-    }
     const t = ev.target;
     if (!t || !t.closest) { return; }
-    if (t.closest("#mailLabelsMenu") ||
-        t.closest("#mailLabelsBtn")) { return; }
-    menu.classList.add("hidden");
+    const menu = mailEl("mailLabelsMenu");
+    if (menu && !menu.classList.contains("hidden") &&
+        !t.closest("#mailLabelsMenu") &&
+        !t.closest("#mailMoreLabelsBtn")) {
+      menu.classList.add("hidden");
+    }
+    /* v2.84 (Part 2): the More menu closes on an
+       outside click the same way. */
+    const more = mailEl("mailMoreMenu");
+    if (more && !more.classList.contains("hidden") &&
+        !t.closest("#mailMoreMenu") &&
+        !t.closest("#mailMoreBtn")) {
+      more.classList.add("hidden");
+    }
   });
-  mailEl("mailSaveNoteBtn").addEventListener("click",
+  mailEl("mailMoreSaveBtn").addEventListener("click",
     function () {
+      mailEl("mailMoreMenu").classList.add("hidden");
       mailSaveOpenToNote().catch(function () {
         /* reported in the function's own words */
       });
     });
+  /* v2.84 (Part 2): the More menu's own toggle, and
+     its Escape. */
+  mailEl("mailMoreBtn").addEventListener("click",
+    function () {
+      const menu = mailEl("mailMoreMenu");
+      if (menu) { menu.classList.toggle("hidden"); }
+    });
+  document.addEventListener("keydown", function (ev) {
+    if (ev.key !== "Escape") { return; }
+    const menu = mailEl("mailMoreMenu");
+    if (menu && !menu.classList.contains("hidden")) {
+      menu.classList.add("hidden");
+      const btn = mailEl("mailMoreBtn");
+      if (btn) { btn.focus(); }
+    }
+  });
+  /* v2.84 (Parts 6 and 7): the label menu's items,
+     its two dialogs, and the recipient fields'
+     autocomplete. */
+  mailEl("mailLabelRenameBtn").addEventListener("click",
+    openMailLabelRename);
+  mailEl("mailLabelDeleteBtn").addEventListener("click",
+    openMailLabelDelete);
+  mailEl("mailLabelRenameSaveBtn").addEventListener(
+    "click", function () {
+      saveMailLabelRename().catch(function () {
+        /* reported in the function's own words */
+      });
+    });
+  mailEl("mailLabelRenameCancelBtn").addEventListener(
+    "click", function () {
+      mailEl("mailLabelRenameModal")
+        .classList.add("hidden");
+      mailLabelMenuCtx = null;
+    });
+  mailEl("mailLabelDeleteConfirmBtn").addEventListener(
+    "click", function () {
+      confirmMailLabelDelete().catch(function () {
+        /* reported in the function's own words */
+      });
+    });
+  mailEl("mailLabelDeleteCancelBtn").addEventListener(
+    "click", function () {
+      mailEl("mailLabelDeleteModal")
+        .classList.add("hidden");
+      mailLabelMenuCtx = null;
+    });
+  initMailContactFields();
   mailEl("mailShowImagesBtn").addEventListener("click",
     function () {
       mailShowImages = true;
@@ -42729,6 +43859,74 @@ let mentionLastRange = null;
    every run; the trigger also records it, so a pick
    lands in the editor the user was typing in. */
 let mentionHost = "note";
+/* v2.84: the popup's mode, "notes" as it has
+   always been, or "email" while a "@@" token
+   drives it (Part 8). The mail search is
+   debounced like the event picker's, and its
+   run counter keeps a stale answer from
+   overwriting a newer ask. */
+let mentionMode = "notes";
+let mentionMailTimer = null;
+let mentionMailRun = 0;
+const MENTION_MAIL_ICON =
+  "<svg viewBox=\"0 0 24 24\" width=\"16\" height=\"16\" fill=\"none\" " +
+  "stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" " +
+  "stroke-linejoin=\"round\"><rect x=\"3\" y=\"5\" width=\"18\" " +
+  "height=\"14\" rx=\"2\"/><path d=\"M3.5 7l8.5 6 8.5-6\"/></svg>";
+
+/* Ask the mail search for the standing query and
+   paint what comes back, unless a newer ask has
+   superseded this one, the popup has closed, or
+   it has flipped back to notes. The standing
+   states paint as one quiet row the picker cannot
+   pick: the search running, the consent word, an
+   empty answer, a failed ask. */
+function scheduleMentionMailSearch() {
+  if (mentionMailTimer) {
+    clearTimeout(mentionMailTimer);
+  }
+  mentionMailTimer = setTimeout(function () {
+    mentionMailTimer = null;
+    runMentionMailSearch();
+  }, 200);
+}
+
+function runMentionMailSearch() {
+  const query = mentionEffectiveQuery();
+  const run = ++mentionMailRun;
+  /* The ask starts before the loading row
+     paints, so a paint that cannot complete
+     (a range with no geometry, in a harness or
+     an odd browser) can never strand the search
+     it announces. */
+  const asked = mentionMailSearch(query);
+  mentionRows = [{ kind: "mailstatus",
+    text: "Loading..." }];
+  mentionHighlight = 0;
+  renderMentionPopup(null);
+  asked.then(function (out) {
+    if (run !== mentionMailRun ||
+        !mentionPopupOpen() ||
+        mentionMode !== "email") { return; }
+    if (out.outcome === "consent") {
+      mentionRows = [{ kind: "mailstatus",
+        text: "Gmail is not connected" }];
+    } else if (out.outcome === "ok") {
+      mentionRows = out.rows.map(function (rec) {
+        return { kind: "mailmsg", rec: rec };
+      });
+      if (!mentionRows.length) {
+        mentionRows = [{ kind: "mailstatus",
+          text: "No matching mail" }];
+      }
+    } else {
+      mentionRows = [{ kind: "mailstatus",
+        text: "Could not search mail" }];
+    }
+    mentionHighlight = 0;
+    renderMentionPopup(null);
+  });
+}
 
 const MENTION_NOTE_ICON =
   "<svg viewBox=\"0 0 24 24\" width=\"16\" height=\"16\" fill=\"none\" " +
@@ -42776,6 +43974,12 @@ function closeMentionPopup() {
   mentionLastNode = null;
   mentionBoxQuery = null;
   mentionLastRange = null;
+  mentionMode = "notes";
+  mentionMailRun++;
+  if (mentionMailTimer) {
+    clearTimeout(mentionMailTimer);
+    mentionMailTimer = null;
+  }
   const searchEl = mentionSearchEl();
   if (searchEl) { searchEl.value = ""; }
 }
@@ -42793,7 +43997,8 @@ function mentionEffectiveQuery() {
 
 function resetMentionHighlight() {
   mentionHighlight = mentionRows.findIndex(function (row) {
-    return row.kind === "note";
+    return row.kind === "note" ||
+      row.kind === "mailmsg";
   });
   if (mentionHighlight < 0) { mentionHighlight = 0; }
 }
@@ -42818,6 +44023,7 @@ function ensureMentionChrome(popup) {
   popup.appendChild(searchWrap);
   const head = document.createElement("div");
   head.className = "mention-head";
+  head.id = "mentionHead";
   head.textContent = "Results";
   popup.appendChild(head);
   mentionListEl = document.createElement("div");
@@ -42833,6 +44039,10 @@ function onMentionSearchInput() {
   const input = mentionSearchEl();
   if (!input) { return; }
   mentionBoxQuery = input.value;
+  if (mentionMode === "email") {
+    scheduleMentionMailSearch();
+    return;
+  }
   mentionRows = mentionCandidates(mentionBoxQuery);
   resetMentionHighlight();
   renderMentionPopup(null);
@@ -42945,16 +44155,60 @@ function updateMentionPopup() {
   const before = node.nodeValue.slice(0, range.startOffset);
   const at = before.lastIndexOf("@");
   if (at < 0) { closeMentionPopup(); return; }
-  if (at > 0 && !/\s/.test(before.charAt(at - 1))) {
+  /* v2.84: a doubled "@@" in the note host is the
+     email token (Part 8): the pair starts a token
+     when what stands before the pair is the start
+     of the node or whitespace, the single "@" rule
+     read off the pair, and the trigger records
+     where the PAIR starts so a pick replaces both
+     characters. Backspacing back to one "@"
+     flips the same popup back to notes. */
+  let tokStart = at;
+  let tokMode = "notes";
+  if (mentionHost === "note" && at > 0 &&
+      before.charAt(at - 1) === "@") {
+    const pairStart = at - 1;
+    if (pairStart === 0 ||
+        /\s/.test(before.charAt(pairStart - 1))) {
+      tokStart = pairStart;
+      tokMode = "email";
+    }
+  }
+  if (tokMode === "notes" && at > 0 &&
+      !/\s/.test(before.charAt(at - 1))) {
     closeMentionPopup();
     return;
   }
   const query = before.slice(at + 1);
   if (/\s/.test(query)) { closeMentionPopup(); return; }
   mentionTrigger = {
-    node: node, atOffset: at, caretOffset: range.startOffset,
+    node: node, atOffset: tokStart,
+    caretOffset: range.startOffset,
     query: query, host: mentionHost
   };
+  /* v2.84: the mode the token stood in before this
+     pass: a flip into Email mode must search even
+     when the query text is unchanged (typing the
+     second "@" leaves the query empty, exactly
+     what the single "@" had already recorded, and
+     judging the flip by the query alone would
+     leave the notes rows standing under an Email
+     head, unsearched). */
+  const prevMentionMode = mentionMode;
+  mentionMode = tokMode;
+  if (tokMode === "email") {
+    if (query !== mentionLastQuery ||
+        node !== mentionLastNode ||
+        prevMentionMode !== "email") {
+      mentionLastQuery = query;
+      mentionLastNode = node;
+      mentionBoxQuery = null;
+      mentionHighlight = 0;
+      scheduleMentionMailSearch();
+    }
+    renderMentionPopup(range);
+    return;
+  }
   mentionRows = mentionCandidates(query);
   if (!mentionRows.length) { closeMentionPopup(); return; }
   if (query !== mentionLastQuery || node !== mentionLastNode) {
@@ -42993,9 +44247,18 @@ function renderMentionPopup(range) {
      notes alone in the description editor, notes and
      tasks in a note. */
   if (searchEl) {
-    searchEl.placeholder = mentionHost === "task"
+    searchEl.placeholder = mentionMode === "email"
+      ? "Search mail"
+      : mentionHost === "task"
       ? "Search notes" : "Search notes and tasks";
     searchEl.setAttribute("aria-label", searchEl.placeholder);
+  }
+  /* v2.84: the card's head names its mode (Email
+     while a "@@" token drives it). */
+  const headEl = document.getElementById("mentionHead");
+  if (headEl) {
+    headEl.textContent = mentionMode === "email"
+      ? "Email" : "Results";
   }
   /* v2.28.0: when the rows carry both kinds, a quiet group
      label splits them. Labels are not rows (no data-mi),
@@ -43035,14 +44298,25 @@ function renderMentionPopup(range) {
     icon.setAttribute("aria-hidden", "true");
     icon.innerHTML = row.kind === "create" ?
       MENTION_CREATE_ICON : row.kind === "task" ?
-      MENTION_TASK_ICON : MENTION_NOTE_ICON;
+      MENTION_TASK_ICON : row.kind === "mailmsg" ?
+      MENTION_MAIL_ICON : MENTION_NOTE_ICON;
     btn.appendChild(icon);
     const texts = document.createElement("span");
     texts.className = "mention-texts";
     const line1 = document.createElement("span");
     line1.className = "mention-title";
     const line2 = document.createElement("span");
-    if (row.kind === "create") {
+    if (row.kind === "mailstatus") {
+      line1.textContent = row.text;
+      line2.className = "mention-nb";
+      line2.textContent = "";
+    } else if (row.kind === "mailmsg") {
+      line1.textContent = row.rec.subject ||
+        "(No subject)";
+      line2.className = "mention-nb";
+      line2.textContent = row.rec.fromName ||
+        row.rec.fromAddress || "";
+    } else if (row.kind === "create") {
       line1.textContent = mentionEffectiveQuery();
       line2.className = "mention-create-sub";
       line2.textContent = "Create new note";
@@ -43085,7 +44359,13 @@ function renderMentionPopup(range) {
    fixed cards clamp into the viewport. */
 function positionMentionPopup(range) {
   const popup = document.getElementById("mentionPopup");
-  if (!popup || !range) { return; }
+  /* v2.84: the link popup positioner's guard, here
+     too: a range with no geometry (a harness's, or
+     an odd browser's) parks nothing instead of
+     throwing through the render it closes. */
+  if (!popup || !range ||
+      typeof range.getBoundingClientRect !==
+        "function") { return; }
   const rect = range.getBoundingClientRect();
   const width = popup.offsetWidth;
   const height = popup.offsetHeight;
@@ -43109,7 +44389,9 @@ function setMentionHighlight(i) {
     rowEl.classList.toggle("current", mine);
     const old = rowEl.querySelector(".mention-hint");
     if (old) { old.remove(); }
-    if (mine) {
+    if (mine && mentionRows[mentionHighlight] &&
+        mentionRows[mentionHighlight].kind !==
+          "mailstatus") {
       const hint = document.createElement("span");
       hint.className = "mention-hint";
       const label = document.createElement("span");
@@ -43245,6 +44527,11 @@ function createMentionTargetNote(title) {
 function pickMentionRow(i) {
   const row = mentionRows[i];
   if (!row) { return; }
+  if (row.kind === "mailstatus") { return; }
+  if (row.kind === "mailmsg") {
+    insertMentionMailChip(row.rec);
+    return;
+  }
   if (row.kind === "note") {
     insertMentionNoteLink(row.note);
     return;
@@ -62550,6 +63837,16 @@ function wireEvents() {
       ev.preventDefault();
       hideLinkBar();
       openTagFilter(tagPill.getAttribute("data-ss-tag") || "");
+      return;
+    }
+    /* v2.84: an email chip resolves here too: it
+       travels to its message in the Email view. */
+    const mailChip = (target && target.closest)
+      ? target.closest(".ss-mail-chip") : null;
+    if (mailChip) {
+      ev.preventDefault();
+      hideLinkBar();
+      followMailChip(mailChip);
       return;
     }
     const anchor = (target && target.closest) ? target.closest("a") : null;
