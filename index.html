@@ -40,10 +40,45 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-11-01-SSN-V2840
-  Version: 2.84.0
+  BUILD STAMP: 2026-11-02-SSN-V2850
+  Version: 2.85.0
 
   Revision history:
+    v2.85.0 2026-11-02 Three fixes. Deleting a
+                      tag pill from a note's
+                      body now removes the tag
+                      from the note too, once
+                      the deleted pill was the
+                      tag's last one standing in
+                      the body (Backspace,
+                      Delete, a selection range,
+                      and cut all count); a tag
+                      with another pill left
+                      keeps its place, and
+                      inserting a pill applies
+                      the tag as before.
+                      Contacts autocomplete
+                      gains its repair path: the
+                      contacts state now resets
+                      whenever a sign in lands
+                      and on sign out, so a
+                      Contacts grant given later
+                      takes effect without a
+                      reload, and Settings gains
+                      a Contacts row whose
+                      Connect button always
+                      stands, running the
+                      consent sign in that
+                      grants the permission. And
+                      the Tasks calendar's day
+                      detail lists the selected
+                      day's tasks, open and
+                      completed, beside its
+                      events, each with its
+                      working completion
+                      checkbox; through v2.84.0
+                      the detail showed only the
+                      day's events.
     v2.84.0 2026-11-01 Email polish, and email
                       links. The sidebar Email
                       item now reads Email - (n)
@@ -9092,7 +9127,15 @@ body.dark .task-cal-more{color:var(--accent);}
   margin-top:8px;padding:10px 12px;background:var(--surface);
   border:1px solid var(--border);border-radius:var(--radius-card);
 }
-#settingsGcalConnectBtn{margin-top:8px;}
+/* v2.85: the day detail's tasks box wears the events
+   box's card, so the selected day's two lists read
+   as one detail. */
+.task-cal-detail-tasks{
+  display:flex;flex-direction:column;gap:6px;
+  margin-top:8px;padding:10px 12px;background:var(--surface);
+  border:1px solid var(--border);border-radius:var(--radius-card);
+}
+#settingsGcalConnectBtn,#settingsPeopleConnectBtn,#settingsPeopleRetryBtn{margin-top:8px;}
 /* v2.81: the calendar event editor's own rules: the
    limited mode's note, the inline error line (its
    Connect button stands only on the write permission
@@ -11574,6 +11617,20 @@ body.dark .version-date{color:var(--accent);}
         <div class="settings-help" id="settingsMailStatus">Not connected</div>
         <button class="btn hidden" id="settingsMailConnectBtn" type="button">Connect Gmail</button>
       </div>
+      <!-- v2.85: the Contacts row, mirroring the rows
+           above it: status text filled by
+           renderPeopleSettingsRow. Unlike its siblings
+           its Connect button always stands while
+           signed in: the Contacts permission arrived
+           after the standing grant on installs that
+           predate it, and the button's consent forcing
+           sign in is the repair path. -->
+      <div class="settings-autosync">
+        <div class="settings-help">Contacts</div>
+        <div class="settings-help" id="settingsPeopleStatus">Not connected</div>
+        <button class="btn hidden" id="settingsPeopleConnectBtn" type="button">Connect Contacts</button>
+        <button class="btn hidden" id="settingsPeopleRetryBtn" type="button">Retry</button>
+      </div>
       <!-- v2.16: the idle auto-sync toggle. A plain checkbox
            input (accented like the checklist boxes), so the on
            or off state is the control itself, never a silently
@@ -12434,8 +12491,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-11-01-SSN-V2840";
-const APP_VERSION = "2.84.0";
+const APP_BUILD = "2026-11-02-SSN-V2850";
+const APP_VERSION = "2.85.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -13394,6 +13451,10 @@ async function signOut() {
   /* v2.17.1: divergence is session state too; none of it may
      leak into the next sign in on this device. */
   clearAllDivergenceState();
+  /* v2.85: the people module's contacts and state
+     belong to the signed in account; none of them
+     may outlive the session that loaded them. */
+  resetPeopleState();
   state.attach.googleExpiresAt = 0;
   state.attach.googleFolderId = null;
   revokeAttachmentUrls();
@@ -25935,6 +25996,100 @@ function applyTagToCurrentNote(name) {
   input.value = tags.join(", ");
 }
 
+/* Remove a tag from the note being edited, through
+   the tags field: the mirror of applyTagToCurrentNote
+   above. A spelling already there, in any case, is
+   the one removed; a tag the field does not carry
+   changes nothing. The save that follows files the
+   note without it. Returns whether the field moved. */
+function removeTagFromCurrentNote(name) {
+  const input = document.getElementById("noteTags");
+  if (!input || input.disabled) { return false; }
+  const tags = input.value.split(",")
+    .map(function (t) { return t.trim(); })
+    .filter(function (t) { return t.length > 0; });
+  const kept = tags.filter(function (t) {
+    return t.toLowerCase() !== name.toLowerCase();
+  });
+  if (kept.length === tags.length) { return false; }
+  input.value = kept.join(", ");
+  return true;
+}
+
+/* The body's tag pills counted by folded tag name:
+   the deletion watch reads the body through this
+   lens before and after an edit. */
+function tagPillCounts(bodyEl) {
+  const counts = {};
+  bodyEl.querySelectorAll(".ss-tag-pill")
+    .forEach(function (el) {
+      const name = (el.getAttribute("data-ss-tag") || "")
+        .toLowerCase();
+      if (!name) { return; }
+      counts[name] = (counts[name] || 0) + 1;
+    });
+  return counts;
+}
+
+/* v2.85: pill deletion syncs the note's tags (Chris,
+   2026-11-02: "When tags are deleted in-line, they
+   also need removed from the note"), reversing the
+   v2.83 rule that removing a pill never untagged.
+   The watch is a before and after pair, the editor's
+   own shape for keyboard deletions (the attachment
+   reconciliation at v1.7 is its elder sibling): a
+   deletion gesture's beforeinput (Backspace, Delete,
+   a range deletion, a cut: every delete* input type)
+   snapshots the body's pill counts against the open
+   note, and the input event that follows reconciles.
+   A tag whose count fell to zero in that gesture
+   leaves the note through the tags field, the same
+   path the pill's insertion applied it by. A tag
+   with another pill standing keeps its place, and a
+   tag the note never carried changes nothing. Only
+   deletion gestures arm the watch: a wholesale
+   programmatic rewrite of the body (an open, a
+   render) fires no beforeinput and never untags.
+   The tag field stands outside the body's undo
+   stack, so undoing the body's deletion brings the
+   pill back without re-applying the tag; the field
+   is the record, and it can be retyped there. */
+let tagPillDeleteWatch = null;
+
+function captureTagPillsBeforeDelete(ev) {
+  if (!ev || !ev.inputType ||
+      ev.inputType.indexOf("delete") !== 0) { return; }
+  const note = currentNote();
+  if (!note || note.trashed || note.archived) { return; }
+  const bodyEl = document.getElementById("noteBody");
+  if (!bodyEl) { return; }
+  tagPillDeleteWatch = {
+    noteId: note.id,
+    counts: tagPillCounts(bodyEl)
+  };
+}
+
+function reconcileTagPillsAfterDelete() {
+  const watch = tagPillDeleteWatch;
+  tagPillDeleteWatch = null;
+  if (!watch) { return; }
+  const note = currentNote();
+  if (!note || note.id !== watch.noteId ||
+      note.trashed || note.archived) { return; }
+  const bodyEl = document.getElementById("noteBody");
+  if (!bodyEl) { return; }
+  const now = tagPillCounts(bodyEl);
+  let changed = false;
+  Object.keys(watch.counts).forEach(function (key) {
+    if (watch.counts[key] > 0 && !now[key]) {
+      if (removeTagFromCurrentNote(key)) {
+        changed = true;
+      }
+    }
+  });
+  if (changed) { markDirty(); }
+}
+
 /* Pick a tag row: the pill replaces the "#" token, and
    the tag is applied to the note at once. */
 function pickTagLinkRow(i) {
@@ -26504,12 +26659,112 @@ async function ensurePeopleContacts() {
   if (failed === "forbidden") {
     peopleStatus = "forbidden";
     renderMailContactMenu();
+    renderPeopleSettingsRow();
     return;
   }
-  if (failed) { return; }
+  if (failed) {
+    /* v2.85: a network class failure is its own
+       standing state now (the Settings row's
+       Unavailable, with its Retry), where through
+       v2.84 it simply left the module idle. It does
+       not latch: the next ask tries again, exactly
+       as it did. */
+    peopleStatus = "unavailable";
+    renderPeopleSettingsRow();
+    return;
+  }
   peopleContacts = collected.slice(0, 3000);
   peopleStatus = "ok";
   renderMailContactMenu();
+  renderPeopleSettingsRow();
+}
+
+/* Forget everything the people module holds: the
+   loaded contacts and the standing state, a latched
+   forbidden above all. A completed sign in calls it
+   (the Contacts consent may have just been granted:
+   through v2.84 the forbidden state latched for the
+   whole session, so even a cured grant could not
+   take effect short of a full reload), and signing
+   out calls it (the contacts belong to the account
+   that loaded them). */
+function resetPeopleState() {
+  peopleContacts = null;
+  peopleLoading = false;
+  peopleStatus = "idle";
+  renderPeopleSettingsRow();
+}
+
+/* The Settings Contacts row: the calendar and mail
+   rows' sibling. Not signed in stands plain, with no
+   button and no fetch behind it; Connected counts
+   the loaded contacts; the forbidden state reads
+   Not connected; a network failure reads Unavailable
+   with its Retry standing. Unlike its siblings, its
+   Connect button ALWAYS stands while signed in:
+   the Contacts permission postdates the standing
+   grant on installs that predate it, and this
+   button, running the consent forcing sign in, is
+   the repair path the module's own surfaces could
+   not offer through v2.84. */
+function renderPeopleSettingsRow() {
+  const statusEl = document.getElementById(
+    "settingsPeopleStatus");
+  if (!statusEl) { return; }
+  const btn = document.getElementById(
+    "settingsPeopleConnectBtn");
+  const retryBtn = document.getElementById(
+    "settingsPeopleRetryBtn");
+  if (!mailSignedInAble()) {
+    statusEl.textContent = "Not signed in";
+    if (btn) { btn.classList.add("hidden"); }
+    if (retryBtn) { retryBtn.classList.add("hidden"); }
+    return;
+  }
+  let text = "Not connected";
+  let label = "Connect Contacts";
+  let showRetry = false;
+  if (peopleStatus === "ok" && peopleContacts) {
+    const n = peopleContacts.length;
+    text = "Connected (" + n +
+      (n === 1 ? " contact)" : " contacts)");
+    label = "Reconnect Contacts";
+  } else if (peopleStatus === "unavailable") {
+    text = "Unavailable right now";
+    label = "Reconnect Contacts";
+    showRetry = true;
+  }
+  statusEl.textContent = text;
+  if (btn) {
+    btn.textContent = label;
+    btn.classList.remove("hidden");
+  }
+  if (retryBtn) {
+    retryBtn.classList.toggle("hidden", !showRetry);
+  }
+}
+
+/* The Contacts consent sign in: the one seam every
+   Google connection shares (the calendar module's
+   connect is the same two lines, and the mail row's
+   button calls that one). Arm the fresh flag, so
+   the gate goes to /login?fresh=1 and Google's
+   consent screen mints a refresh token that carries
+   the Contacts scope, then run the navigation. */
+function connectPeopleContacts() {
+  workerReauthNeeded = true;
+  navigateToWorkerLogin();
+}
+
+/* The row's Retry: lift the unavailable state and
+   ask again. A forbidden state is not retried here;
+   its cure is the Connect button's consent. */
+function retryPeopleContacts() {
+  if (peopleStatus === "unavailable") {
+    peopleStatus = "idle";
+  }
+  renderPeopleSettingsRow();
+  ensurePeopleContacts();
 }
 
 /* The dropdown's standing state: the field it serves,
@@ -37585,6 +37840,28 @@ function fillTasksCalendar(body) {
     });
     strip.appendChild(newEventBtn);
     wrap.appendChild(strip);
+    /* v2.85: the selected day's tasks, listed in the
+       detail under the strip: the byDay bucket in its
+       established order, open and completed together,
+       each row the shared calendar entry whose real
+       checkbox completes through the one path. Through
+       v2.84 the detail rendered the count in the strip
+       and the events box below, but never the tasks
+       themselves as rows: the grid cells' capped chips
+       (the visible limit the tasks share with the
+       events) were the tasks' only presence, so a
+       clicked day showed its events and not its tasks
+       (Chris, live, 2026-11-02). The tasks stand
+       first, the grid's own order. */
+    if (selTasks.length) {
+      const taskBox = document.createElement("div");
+      taskBox.className = "task-cal-detail-tasks";
+      taskBox.id = "taskCalDetailTasks";
+      selTasks.forEach(function (task) {
+        taskBox.appendChild(buildTaskCalEntryEl(task));
+      });
+      wrap.appendChild(taskBox);
+    }
     /* v2.80: the selected day's Google Calendar events,
        under the strip in the same rows the
        grid cells carry. */
@@ -39642,6 +39919,13 @@ function syncSettingsControls() {
      Settings asks for the mail like any mail surface. */
   renderMailSettingsRow();
   ensureMailLoaded();
+  /* v2.85: the Contacts row likewise, and opening
+     Settings asks for the contacts while signed in,
+     so the row can say which state stands (a
+     forbidden answer is the row's Not connected,
+     with its Connect button the cure). */
+  renderPeopleSettingsRow();
+  if (mailSignedInAble()) { ensurePeopleContacts(); }
   const gcalNowParts = taskTodayParts();
   ensureGcalMonth(gcalNowParts.y, gcalNowParts.m);
   /* v2.21: the Last load readout shows this session's boot. */
@@ -53579,6 +53863,14 @@ async function persistPendingWorkerSession() {
      module's caches and state: a consent may have
      just granted (or changed) the mail permission. */
   resetMailState();
+  /* v2.85: the same landing forgets the people
+     module's state: the Contacts consent is the one
+     this reset exists for, since a normal sign in
+     reuses the standing grant and only the consent
+     forcing one widens it, and the module's latched
+     forbidden state must not outlive the landing
+     that cured it. */
+  resetPeopleState();
   return true;
 }
 
@@ -62955,6 +63247,17 @@ function wireEvents() {
   document.getElementById("settingsGcalConnectBtn").addEventListener("click", function () {
     connectGoogleCalendar();
   });
+  /* v2.85: the Contacts row's buttons: Connect runs
+     the consent forcing sign in (the Contacts
+     grant's only route, and the repair for a grant
+     the standing sign in predates), and Retry asks
+     the People API again after a network failure. */
+  document.getElementById("settingsPeopleConnectBtn").addEventListener("click", function () {
+    connectPeopleContacts();
+  });
+  document.getElementById("settingsPeopleRetryBtn").addEventListener("click", function () {
+    retryPeopleContacts();
+  });
   /* v2.81: the calendar event editor's wiring, the
      module's second half: Save and Delete run the one
      write transport, Cancel and a backdrop click close
@@ -63481,6 +63784,16 @@ function wireEvents() {
   document.getElementById("noteBody").addEventListener("input", function () {
     queueAttachmentBodyCheck();
   });
+  /* v2.85: the tag pill deletion watch: a deletion
+     gesture's beforeinput snapshots the body's pill
+     counts, and the input event that follows every
+     body edit reconciles them (a tag whose last pill
+     fell leaves the note). Separate listeners; the
+     ones above are untouched. */
+  document.getElementById("noteBody").addEventListener("beforeinput",
+    captureTagPillsBeforeDelete);
+  document.getElementById("noteBody").addEventListener("input",
+    reconcileTagPillsAfterDelete);
   /* v2.37.0: the same body input events feed the table of
      contents refresh, through its own debounce, so heading
      edits made by typing, paste, the style dropdown, undo,
