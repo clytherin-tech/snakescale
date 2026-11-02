@@ -40,10 +40,49 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-11-02-SSN-V2940
-  Version: 2.94.0
+  BUILD STAMP: 2026-11-02-SSN-V2950
+  Version: 2.95.0
 
   Revision history:
+    v2.95.0 2026-11-02 Three mail and toast items
+                      Chris reported. The Email
+                      sidebar unread count never
+                      showed in real use: its only
+                      source was the messagesUnread
+                      field of the labels list
+                      answer, and that answer (per
+                      Google's reference) carries
+                      only id, name, type, and the
+                      two visibilities, so the
+                      count stood invented at zero
+                      forever. The count now comes
+                      from a labels.get read on the
+                      INBOX label alone, asked for
+                      at the sign in landing, on
+                      the auto-sync tick's cadence,
+                      and after mail actions settle,
+                      and a failed ask leaves no
+                      number standing. The mail
+                      triage Undo button never
+                      answered a real click: its
+                      toast stands in the top
+                      center box, whose
+                      pointer-events rule is none
+                      (that box's toasts are
+                      display only by design), so
+                      clicks passed through the
+                      button; the undo toast takes
+                      events now, the cure the
+                      attachment undo toast already
+                      wore in its own box. And a
+                      drag onto a label is a move
+                      from whatever list the drag
+                      started in: the label applies
+                      and the message leaves the
+                      Inbox, behind an undo toast
+                      whose Undo restores the exact
+                      label set the message carried
+                      before the move.
     v2.94.0 2026-11-02 The encryption recovery key,
                       and the passphrase's home in
                       Settings. A recovery key (32
@@ -9851,6 +9890,18 @@ body.dark .task-cal-more{color:var(--accent);}
 }
 /* Part 4: the undo toast's button, riding the pill
    form in the top center box. */
+/* v2.95: the toast takes events. Its box is
+   pointer-events:none by design (the move toasts it
+   also carries are display only), and that rule
+   stood over this toast too, so no real click could
+   ever land on the button below: the press passed
+   through the pill to whatever stood under it. The
+   attachment undo toast wears this same cure in its
+   own box (.undo-toast has pointer-events:auto);
+   here it is scoped to the one toast that carries
+   an action, so the box's other toasts stay
+   display only. */
+.mail-undo-toast{pointer-events:auto;}
 .mail-undo-btn{
   background:var(--accent);color:#fff;border:none;border-radius:14px;
   padding:2px 12px;font-size:13px;font-weight:700;cursor:pointer;
@@ -13298,8 +13349,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-11-02-SSN-V2940";
-const APP_VERSION = "2.94.0";
+const APP_BUILD = "2026-11-02-SSN-V2950";
+const APP_VERSION = "2.95.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -14320,6 +14371,11 @@ async function signOut() {
      belong to the signed in account; none of them
      may outlive the session that loaded them. */
   resetPeopleState();
+  /* v2.95: the mail module's state likewise,
+     the badge's count above all: it must not stand
+     over a signed out screen or leak into the next
+     sign in on this device. */
+  resetMailState();
   state.attach.googleExpiresAt = 0;
   state.attach.googleFolderId = null;
   revokeAttachmentUrls();
@@ -27973,8 +28029,12 @@ function showMailUndoToast(kind, snap) {
   dot.setAttribute("aria-hidden", "true");
   el.appendChild(dot);
   const label = document.createElement("span");
+  /* v2.95: a label move names its label. */
   label.textContent = kind === "archive"
-    ? "Archived" : "Moved to Trash";
+    ? "Archived"
+    : kind === "label"
+      ? "Moved to " + (snap.labelName || "label")
+      : "Moved to Trash";
   el.appendChild(label);
   const btn = document.createElement("button");
   btn.type = "button";
@@ -28006,6 +28066,17 @@ async function mailUndoTriage(snap) {
   if (snap.kind === "archive") {
     ok = await mailModifyMessage(clone, ["INBOX"], [],
       "mark");
+  } else if (snap.kind === "label") {
+    /* v2.95: a label move's Undo restores the exact
+       label set the snapshot carried: the labels the
+       move took off and the message held go back on,
+       and the labels the move put on and the message
+       did not hold come off. Nothing is inferred
+       from where the drag started, so an undo never
+       hands a message an Inbox it did not have, nor
+       takes one it did. */
+    ok = await mailModifyMessage(clone, snap.undoAdd,
+      snap.undoRemove, "mark");
   } else {
     ok = await mailTrashMessage(clone, true);
   }
@@ -28061,15 +28132,55 @@ async function mailTrashWithUndo(rec) {
   return ok;
 }
 
+/* v2.95: a label move behind the undo toast: the
+   snapshot (the record as it stood, its place in
+   every list, and the exact label arithmetic an
+   Undo must run) is taken before the write, and the
+   toast stands only on the API's acceptance. The
+   arithmetic is computed against the label set the
+   message held before the move, so the Undo restores
+   that set exactly, from whatever list the drag
+   started in. */
+async function mailLabelMoveWithUndo(rec, target, add,
+    remove) {
+  if (!rec) { return false; }
+  const prior = rec.labelIds.slice();
+  let labelName = target.id;
+  (mailLabels || []).forEach(function (l) {
+    if (l.id === target.id) { labelName = l.name; }
+  });
+  const snap = {
+    kind: "label", id: rec.id,
+    clone: JSON.parse(JSON.stringify(rec)),
+    positions: mailCaptureRowPositions(rec.id),
+    labelName: labelName,
+    undoAdd: remove.filter(function (l) {
+      return prior.indexOf(l) !== -1;
+    }),
+    undoRemove: add.filter(function (l) {
+      return prior.indexOf(l) === -1;
+    })
+  };
+  const ok = await mailModifyMessage(rec, add, remove,
+    "label");
+  if (ok) { showMailUndoToast("label", snap); }
+  return ok;
+}
+
 /* A drop lands: the message the drag carried, acted on
    by the target it fell on. All Mail archives and
    Trash trashes (both behind the undo toast); a user
-   label applies, and a drag that started in another
-   label's list removes that label too, which is
-   Gmail's move. A drop on the very label whose list
-   stands open is no move at all. A refused write
-   leaves the row standing and the write path's toast
-   says the move did not happen. */
+   label is a move (v2.95, Chris's rule, widened by
+   him the same day): from whatever list the drag
+   started in, the label applies AND the message
+   leaves the Inbox, landing in All Mail under that
+   label; a drag that started in another label's list
+   removes that label too, the standing Gmail move.
+   The whole move stands behind the undo toast. A
+   drop on the very label whose list stands open is
+   no move at all. A refused write leaves the row
+   standing and the write path's toast says the move
+   did not happen. */
 function mailDropOnTarget(target) {
   const drag = mailDragState;
   mailDragState = null;
@@ -28090,11 +28201,20 @@ function mailDropOnTarget(target) {
       return;
     }
     const add = [target.id];
-    const remove = drag.fromSel &&
-      drag.fromSel.kind === "label" &&
-      drag.fromSel.id !== target.id
-      ? [drag.fromSel.id] : [];
-    mailModifyMessage(rec, add, remove, "label");
+    /* v2.95: the Inbox comes off on every label
+       drop, whatever list the drag started in; a
+       drag out of another label's list takes that
+       label off too. A drop on a label the message
+       already holds stays harmless: the add is a
+       no-op on the API's side and the archive half
+       is the move asked for. */
+    const remove = ["INBOX"];
+    if (drag.fromSel &&
+        drag.fromSel.kind === "label" &&
+        drag.fromSel.id !== target.id) {
+      remove.push(drag.fromSel.id);
+    }
+    mailLabelMoveWithUndo(rec, target, add, remove);
   }
 }
 
@@ -29463,6 +29583,17 @@ const MAIL_FOLDERS = [
    guards that keep renders from multiplying fetches. */
 let mailStatus = "idle";
 let mailLabels = null;
+/* v2.95: the Inbox unread count, held on its own:
+   the number the badge, the folder column, the
+   Settings row, and the Home widget all speak. It
+   is written by the one read that carries it (a
+   labels.get on the INBOX label, see
+   mailFetchInboxUnread) and by the label change
+   accounting beside an accepted write, and by
+   nothing else. Null while no true number stands:
+   never loaded, or the last ask failed. */
+let mailUnreadCount = null;
+let mailUnreadFetchInFlight = false;
 let mailOwnAddress = "";
 let mailFolder = { kind: "folder", id: "inbox" };
 let mailLists = {};
@@ -29571,18 +29702,78 @@ function mailInboxLabel() {
 }
 
 /* The Inbox unread count the badge and the folder
-   column speak: the INBOX label's own messagesUnread,
-   held current by the module's mark-read paths beside
-   the API's word. Null while unknown. */
+   column speak. Through v2.94.0 this read the INBOX
+   label record's messagesUnread as the label list
+   load had mapped it, and that mapping defaulted
+   the field to zero: the labels.list answer does
+   not carry the counts at all (Google's reference
+   for users.labels.list gives each label only an
+   id, name, messageListVisibility,
+   labelListVisibility, and type, and names
+   labels.get as the read that fetches the rest),
+   so the count stood at zero however much unread
+   mail stood in the Inbox, and the badge, written
+   only for a nonzero count, never showed. The
+   count now lives in its own store (mailUnreadCount
+   above), fed by the labels.get read below; the
+   label record still mirrors it for any reader of
+   the record itself. Null while unknown. */
 function mailInboxUnread() {
+  if (typeof mailUnreadCount === "number") {
+    return mailUnreadCount;
+  }
   const lab = mailInboxLabel();
   return lab ? lab.messagesUnread : null;
 }
 
 function mailSetInboxUnread(n) {
+  const value = Math.max(0, n || 0);
+  mailUnreadCount = value;
   const lab = mailInboxLabel();
   if (lab) {
-    lab.messagesUnread = Math.max(0, n || 0);
+    lab.messagesUnread = value;
+  }
+}
+
+/* v2.95: ask for the Inbox unread count on its own:
+   one labels.get on the INBOX label, the light read
+   that carries the counts, with no message list
+   loaded and no label list needed. It is asked for
+   at the sign in landing, on the auto-sync tick's
+   cadence, at every completed sync, inside the
+   label list load (to correct the figure that load
+   cannot carry), and after a mail action's accepted
+   write settles, so the number follows the API's
+   word. A forbidden answer raises the module's
+   consent state like any load; a failed ask clears
+   the standing number, so the badge shows nothing
+   rather than a stale count. */
+async function mailFetchInboxUnread() {
+  if (mailUnreadFetchInFlight) { return; }
+  if (!mailSignedInAble()) { return; }
+  if (mailStatus === "needs-consent") { return; }
+  mailUnreadFetchInFlight = true;
+  const out = await gmailRead("/users/me/labels/INBOX");
+  mailUnreadFetchInFlight = false;
+  if (out.outcome === "ok" && out.data &&
+      typeof out.data.messagesUnread === "number") {
+    mailSetInboxUnread(out.data.messagesUnread);
+    updateMailBadge();
+    renderMailSettingsRow();
+    return;
+  }
+  if (out.outcome === "forbidden") {
+    mailSetStatus("needs-consent");
+    return;
+  }
+  if (out.outcome === "signed-out") {
+    mailSetStatus("idle");
+    return;
+  }
+  if (mailUnreadCount !== null) {
+    mailUnreadCount = null;
+    updateMailBadge();
+    renderMailSettingsRow();
   }
 }
 
@@ -29723,6 +29914,9 @@ function mailSetStatus(next) {
    answered. */
 function resetMailState() {
   mailLabels = null;
+  /* v2.95: the count belongs to the account and the
+     landing that loaded it; a reset forgets it too. */
+  mailUnreadCount = null;
   mailOwnAddress = "";
   mailLists = {};
   mailOpenId = null;
@@ -29747,6 +29941,10 @@ function refreshMailAfterSync() {
   const wasOpen = state.view && state.view.kind === "email";
   resetMailState();
   if (wasOpen) { ensureMailLoaded(); }
+  /* v2.95: open view or not, the badge's count is
+     asked for again on its own light read, so a
+     completed sync leaves a live number standing. */
+  mailFetchInboxUnread();
 }
 
 /* The surfaces' one ask: make sure the labels and the
@@ -29792,6 +29990,12 @@ async function loadMailLabels() {
         ? raw.messagesUnread : 0
     };
   }).filter(function (l) { return !!l.id; });
+  /* v2.95: the list answer carries no counts (see
+     mailInboxUnread), so the INBOX figure the map
+     just defaulted is corrected from the one read
+     that carries it, before the state settles and
+     the badge is written. */
+  await mailFetchInboxUnread();
   mailSetStatus("ok");
   updateMailBadge();
   if (state.view && state.view.kind === "email") {
@@ -30046,13 +30250,22 @@ function mailRowLabelNames(rec) {
 }
 
 /* The sidebar badge and the rail dot: the Inbox
-   unread count once mail has loaded, nothing while
-   signed out, not connected, or unavailable. Called
-   whenever the counts or the state move. */
+   unread count once a true number stands, nothing
+   while signed out or in the consent state. Through
+   v2.94.0 the gate also demanded the module's ok
+   state, which only a mail surface's load raises,
+   so a count could not stand at the landing even
+   had one been fetched; the number is now asked for
+   at the landing itself (mailFetchInboxUnread),
+   and the gate asks only that somebody is signed in
+   and no consent state stands. Called whenever the
+   counts or the state move. */
 function updateMailBadge() {
   const pill = document.getElementById("countEmail");
   const dot = document.getElementById("railEmailDot");
-  const n = mailStatus === "ok" ? mailInboxUnread() : null;
+  const n = mailSignedInAble() &&
+      mailStatus !== "needs-consent"
+    ? mailInboxUnread() : null;
   if (pill) {
     /* v2.84 (Part 1): the expanded item reads
        Email - (n) beside its label, the suffix
@@ -30531,6 +30744,13 @@ function mailApplyLabelChange(id, add, remove, dropFromSearch) {
       mailOpenFull.labelIds.indexOf("UNREAD") !== -1;
   }
   updateMailBadge();
+  /* v2.95: the local accounting above moves the
+     count beside the accepted write; the API's own
+     word is then asked for on the light read, so
+     the standing number settles to the truth after
+     every mail action (an open's mark read, a
+     triage, a label change, an undo). */
+  mailFetchInboxUnread();
 }
 
 /* messages.modify over one record, settled honestly:
@@ -56851,6 +57071,11 @@ async function persistPendingWorkerSession() {
      module's caches and state: a consent may have
      just granted (or changed) the mail permission. */
   resetMailState();
+  /* v2.95: and the landing asks for the Inbox unread
+     count on its own light read, so the sidebar
+     badge is alive from the first screen, before
+     any mail surface is opened. */
+  mailFetchInboxUnread();
   /* v2.85: the same landing forgets the people
      module's state: the Contacts consent is the one
      this reset exists for, since a normal sign in
@@ -57704,6 +57929,14 @@ async function autoSyncTick() {
     /* A tick never surfaces an error; the next one retries. */
   } finally {
     autoSyncPollRunning = false;
+    /* v2.95: the tick is the app's standing thirty
+       second cadence while the page stands visible;
+       the mail badge's count rides it on its light
+       read, so new mail shows in the sidebar without
+       a mail surface ever being opened. The read
+       guards itself (signed in, no consent state,
+       not already in flight). */
+    mailFetchInboxUnread();
   }
 }
 
