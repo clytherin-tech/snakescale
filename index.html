@@ -40,10 +40,46 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-11-02-SSN-V2930
-  Version: 2.93.0
+  BUILD STAMP: 2026-11-02-SSN-V2940
+  Version: 2.94.0
 
   Revision history:
+    v2.94.0 2026-11-02 The encryption recovery key,
+                      and the passphrase's home in
+                      Settings. A recovery key (32
+                      characters in 8 groups of 4,
+                      160 bits) is a second wrapper
+                      on the vault key: only its
+                      salt and wrapped form are
+                      stored, in the encryption
+                      record's one new optional
+                      field, and the code itself is
+                      shown once and never stored.
+                      New vaults are shown their key
+                      during setup; an existing
+                      vault mints or regenerates one
+                      from Settings (the key must be
+                      held). The Unlock dialog gains
+                      a Use recovery key path: the
+                      code is accepted typed
+                      messily, and a right code
+                      requires a new passphrase
+                      before anything opens, the
+                      old one stops working, and
+                      the recovery key itself stays
+                      the same. Settings also
+                      becomes the passphrase's home,
+                      since it serves the whole
+                      app: a Set up passphrase
+                      control stands there before
+                      any vault exists (the encrypt
+                      flow still asks at encrypt
+                      time, unchanged), and Change
+                      passphrase rewraps the vault
+                      key under the new passphrase
+                      while the recovery wrapper,
+                      which wraps the same vault
+                      key, stays valid.
     v2.93.0 2026-11-02 Encryption polish, three items
                       Chris directed. A locked
                       passage's face gains a Remove
@@ -9667,6 +9703,13 @@ body.dark .task-cal-more{color:var(--accent);}
   vertical-align:middle;user-select:none;
 }
 #noteBody .ssenc-remove:hover{color:var(--accent);}
+/* v2.94.0: the recovery key field in its dialogs:
+   a monospace, letterspaced read so the groups of
+   four are easy to copy by hand. */
+.ssenc-recovery-code{
+  font-family:ui-monospace,Menlo,Consolas,monospace;
+  letter-spacing:.04em;
+}
 #noteBody .ss-tag-pill{
   display:inline-block;border:1px solid var(--border);
   background:var(--accent-soft);color:var(--text);
@@ -12283,10 +12326,15 @@ body.dark .version-date{color:var(--accent);}
           <option value="120">120 minutes</option>
           <option value="close">Until app or window closes</option>
         </select>
-        <div class="settings-help">How long encrypted text stays unlocked after you enter your passphrase, on this device. Locking happens sooner if you sign out or press Lock. The passphrase itself is never stored anywhere; if it is forgotten, encrypted text cannot be recovered.</div>
+        <div class="settings-help">How long encrypted text stays unlocked after you enter your passphrase, on this device. Locking happens sooner if you sign out or press Lock. The passphrase itself is never stored anywhere. If you forget it, the recovery key below can let you set a new one; if both are lost, encrypted text cannot be recovered.</div>
         <div class="settings-orphan-actions">
           <button class="btn hidden" id="settingsSsencUnlockBtn" type="button">Set up encryption</button>
           <button class="btn hidden" id="settingsSsencLockBtn" type="button">Lock</button>
+          <button class="btn hidden" id="settingsSsencChangeBtn" type="button">Change passphrase</button>
+        </div>
+        <div class="settings-help" id="settingsSsencRecoveryStatus"></div>
+        <div class="settings-orphan-actions">
+          <button class="btn hidden" id="settingsSsencRecoveryBtn" type="button">Set up recovery key</button>
         </div>
       </div>
     </section>
@@ -12704,7 +12752,7 @@ body.dark .version-date{color:var(--accent);}
 <div id="ssencSetupModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="ssencSetupTitle">
   <div class="modal-card">
     <h2 id="ssencSetupTitle">Set up encrypted text</h2>
-    <p class="modal-sub">Choose the one passphrase that will lock and unlock encrypted text in your notes. Encryption happens on this device; the passphrase is never sent or stored anywhere. If you forget it, there is no way to recover it in this version, and the encrypted text would be lost. Type it the same way twice to set it.</p>
+    <p class="modal-sub">Choose the one passphrase that will lock and unlock encrypted text in your notes. Encryption happens on this device; the passphrase is never sent or stored anywhere. After you set it, you will be shown a recovery key to save: if you ever forget the passphrase, that key lets you set a new one. If both are lost, the encrypted text would be lost. Type it the same way twice to set it.</p>
     <div class="field">
       <label for="ssencSetupPass1">Passphrase</label>
       <input id="ssencSetupPass1" type="password" autocomplete="new-password">
@@ -12736,12 +12784,95 @@ body.dark .version-date{color:var(--accent);}
         <span id="ssencUnlockErrorText"></span>
       </div>
       <div class="modal-foot">
+        <button class="btn hidden" id="ssencUnlockRecoveryBtn" type="button">Use recovery key</button>
         <button class="btn" id="ssencUnlockCancelBtn" type="button">Cancel</button>
         <button class="btn primary" id="ssencUnlockBtn" type="submit">Unlock</button>
       </div>
     </form>
   </div>
 </div>
+<!-- v2.94.0: recovery dialogs. Recover runs in
+     two steps inside its one form: the code first
+     (accepted typed messily), then the new
+     passphrase the design requires before anything
+     opens. The show dialog carries the minted code
+     exactly once, and its only door out is the
+     acknowledgement button. Change passphrase is
+     the Settings home's third dialog: current,
+     new, and confirmation, one form, one submit. -->
+<div id="ssencRecoverModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="ssencRecoverTitle">
+  <div class="modal-card">
+    <h2 id="ssencRecoverTitle">Recover encrypted text</h2>
+    <p class="modal-sub">Enter the recovery key you saved. Dashes and spaces do not matter, and neither does letter case. If the key is right, you will set a new passphrase, and the old one stops working. The recovery key itself stays the same; you can replace it later in Settings with Regenerate recovery key.</p>
+    <form id="ssencRecoverForm">
+      <div class="field" id="ssencRecoverCodeField">
+        <label for="ssencRecoverCode">Recovery key</label>
+        <input id="ssencRecoverCode" class="ssenc-recovery-code" type="text" autocomplete="off" spellcheck="false">
+      </div>
+      <div id="ssencRecoverNewFields" class="hidden">
+        <div class="field">
+          <label for="ssencRecoverPass1">New passphrase</label>
+          <input id="ssencRecoverPass1" type="password" autocomplete="new-password">
+        </div>
+        <div class="field">
+          <label for="ssencRecoverPass2">New passphrase again</label>
+          <input id="ssencRecoverPass2" type="password" autocomplete="new-password">
+        </div>
+      </div>
+      <div class="gcal-ev-error hidden" id="ssencRecoverError">
+        <span id="ssencRecoverErrorText"></span>
+      </div>
+      <div class="modal-foot">
+        <button class="btn" id="ssencRecoverCancelBtn" type="button">Back</button>
+        <button class="btn primary" id="ssencRecoverBtn" type="submit">Use recovery key</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div id="ssencRecoveryShowModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="ssencRecoveryShowTitle">
+  <div class="modal-card">
+    <h2 id="ssencRecoveryShowTitle">Save your recovery key</h2>
+    <p class="modal-sub">This is the only time this key is shown. Save it somewhere safe: if you forget your passphrase, this key is the only way back into your encrypted text. Anyone holding it can open that text, so keep it like the passphrase itself.</p>
+    <div class="field">
+      <label for="ssencRecoveryCodeText">Recovery key</label>
+      <input id="ssencRecoveryCodeText" class="ssenc-recovery-code" type="text" readonly autocomplete="off" spellcheck="false">
+    </div>
+    <div class="modal-foot">
+      <button class="btn" id="ssencRecoveryCopyBtn" type="button">Copy</button>
+      <button class="btn primary" id="ssencRecoveryAckBtn" type="button">I have saved this key</button>
+    </div>
+  </div>
+</div>
+
+<div id="ssencChangeModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="ssencChangeTitle">
+  <div class="modal-card">
+    <h2 id="ssencChangeTitle">Change passphrase</h2>
+    <p class="modal-sub">Enter your current passphrase and the new one. The encrypted text itself is not touched: the same vault key is locked under the new passphrase instead, so your recovery key keeps working. The old passphrase stops working at once.</p>
+    <form id="ssencChangeForm">
+      <div class="field">
+        <label for="ssencChangePass0">Current passphrase</label>
+        <input id="ssencChangePass0" type="password" autocomplete="current-password">
+      </div>
+      <div class="field">
+        <label for="ssencChangePass1">New passphrase</label>
+        <input id="ssencChangePass1" type="password" autocomplete="new-password">
+      </div>
+      <div class="field">
+        <label for="ssencChangePass2">New passphrase again</label>
+        <input id="ssencChangePass2" type="password" autocomplete="new-password">
+      </div>
+      <div class="gcal-ev-error hidden" id="ssencChangeError">
+        <span id="ssencChangeErrorText"></span>
+      </div>
+      <div class="modal-foot">
+        <button class="btn" id="ssencChangeCancelBtn" type="button">Cancel</button>
+        <button class="btn primary" id="ssencChangeBtn" type="submit">Change passphrase</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <div id="mailLabelMenu" class="note-ctx-menu hidden" role="menu" aria-label="Label actions">
   <button type="button" class="list-menu-item" id="mailLabelRenameBtn" role="menuitem">Rename</button>
   <button type="button" class="list-menu-item" id="mailLabelDeleteBtn" role="menuitem">Delete</button>
@@ -13167,8 +13298,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-11-02-SSN-V2930";
-const APP_VERSION = "2.93.0";
+const APP_BUILD = "2026-11-02-SSN-V2940";
+const APP_VERSION = "2.94.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -65273,6 +65404,24 @@ function insertVoiceTranscript(anchorEl, segments) {
    note text (see ssencRemoveEncryptionFlow), and
    the Unlock dialog's Enter key now submits
    through its form, exactly as its button does.
+
+   v2.94.0 adds the recovery key Chris approved,
+   superseding the no recovery paragraph above:
+   the vault key gains a second wrapper, under a
+   key derived from a 32 character recovery code
+   (see the recovery section below). The record's
+   one optional recovery field holds only a salt
+   and the wrapped key; the code is shown once and
+   stored nowhere. Losing both the passphrase and
+   the code still loses the text, by design. The
+   same build makes Settings the passphrase's home
+   (Chris's amendment): a Set up passphrase control
+   stands there before any vault exists, the
+   encrypt flow's ask at encrypt time is unchanged,
+   and Change passphrase rewraps the vault key
+   under a new passphrase, the recovery wrapper
+   riding through untouched because the vault key
+   itself does not change.
    -------------------------------------------------------------------------- */
 
 const SSENC_KDF_ITERATIONS = 600000;
@@ -65332,12 +65481,44 @@ function sanitizeEncryptionRecord(raw) {
       typeof wk.data !== "string" || !b64url.test(wk.data)) {
     return null;
   }
-  return {
+  const out = {
     version: 1,
     kdfSalt: raw.kdfSalt,
     kdfIterations: Math.trunc(iters),
     wrappedKey: { iv: wk.iv, data: wk.data }
   };
+  /* v2.94.0: the one optional field, the recovery
+     wrapper {kdfSalt, kdfIterations, wrappedKey},
+     held to the same frozen shape. A record without
+     it (every record written before v2.94.0) loads
+     exactly as it always did; a damaged one loses
+     only the field, never the record, since the
+     passphrase wrapper standing beside it is still
+     whole. Only the salt and the wrapped bytes are
+     ever stored; the code itself is not a field
+     anywhere. */
+  const rc = raw.recovery;
+  if (rc && typeof rc === "object" &&
+      !Array.isArray(rc) &&
+      typeof rc.kdfSalt === "string" &&
+      b64url.test(rc.kdfSalt)) {
+    const rIters = Number(rc.kdfIterations);
+    const rwk = rc.wrappedKey;
+    if (Number.isFinite(rIters) && rIters >= 1000 &&
+        rIters <= 10000000 &&
+        rwk && typeof rwk === "object" &&
+        typeof rwk.iv === "string" &&
+        b64url.test(rwk.iv) &&
+        typeof rwk.data === "string" &&
+        b64url.test(rwk.data)) {
+      out.recovery = {
+        kdfSalt: rc.kdfSalt,
+        kdfIterations: Math.trunc(rIters),
+        wrappedKey: { iv: rwk.iv, data: rwk.data }
+      };
+    }
+  }
+  return out;
 }
 
 function ssencHasRecord() {
@@ -65359,8 +65540,15 @@ async function ssencDeriveKek(passphrase, record) {
 }
 
 async function ssencImportVaultKey(rawBytes) {
+  /* v2.94.0: extractable, because minting the
+     recovery wrapper after an ordinary unlock must
+     wrap this key under the recovery key's own
+     derived key, and wrapping takes the raw bytes.
+     The key still lives in page memory only, is
+     never written anywhere, and the raw copy a mint
+     makes is zeroed the moment the wrap lands. */
   return crypto.subtle.importKey("raw", rawBytes,
-    { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
+    { name: "AES-GCM" }, true, ["encrypt", "decrypt"]);
 }
 
 /* Encrypt one passage's HTML under the vault key.
@@ -65800,6 +65988,522 @@ async function ssencCreateRecord(passphrase) {
   return true;
 }
 
+/* ---------- v2.94.0: the recovery key ----------
+   A second wrapper on the same vault key, under a
+   key derived from a code the user saves. The code
+   is 32 characters of an unambiguous base32
+   alphabet (Crockford's: no I, L, O, or U, so
+   nothing in it looks like anything else), 8 groups
+   of 4, 160 bits from the platform random source.
+   The record's optional recovery field holds only
+   a salt and the wrapped vault key; the code's
+   plaintext is stored nowhere, in no payload, and
+   exists only in page memory and in the one dialog
+   that shows it once. */
+
+const SSENC_RECOVERY_ALPHABET =
+  "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+
+function ssencHasRecovery() {
+  const record = sanitizeEncryptionRecord(state.encryption);
+  return !!(record && record.recovery);
+}
+
+/* 20 random bytes to 32 base32 characters, bit
+   stream packed big endian: exactly 160 bits, no
+   padding characters to explain. */
+function ssencRecoveryCodeFromBytes(bytes) {
+  let out = "";
+  let buffer = 0;
+  let bits = 0;
+  for (let i = 0; i < bytes.length; i++) {
+    buffer = (buffer << 8) | bytes[i];
+    bits += 8;
+    while (bits >= 5) {
+      bits -= 5;
+      out += SSENC_RECOVERY_ALPHABET[(buffer >>> bits) & 31];
+    }
+  }
+  return out;
+}
+
+function ssencRecoveryDisplay(code) {
+  return code.replace(/(.{4})/g, "$1-").replace(/-$/, "");
+}
+
+/* What the user typed, made canonical: case does
+   not matter, dashes and spaces (any punctuation)
+   are ignored, and the Crockford confusables are
+   read as the digits they were probably meant to
+   be (O as 0, I and L as 1). Anything that is not
+   32 alphabet characters after that is not a key. */
+function ssencNormalizeRecoveryCode(text) {
+  let out = String(text || "").toUpperCase()
+    .replace(/[^0-9A-Z]/g, "");
+  out = out.replace(/O/g, "0").replace(/[IL]/g, "1");
+  if (out.length !== 32) { return null; }
+  for (let i = 0; i < out.length; i++) {
+    if (SSENC_RECOVERY_ALPHABET.indexOf(out[i]) < 0) {
+      return null;
+    }
+  }
+  return out;
+}
+
+/* Mint (or replace) the recovery wrapper on the
+   standing record. The vault key must be held; the
+   caller arranges that. Resolves the display code,
+   or null when there is nothing to wrap or no key.
+   The record saves through the index path like
+   every other index fact. */
+async function ssencMintRecoveryKey() {
+  const record = sanitizeEncryptionRecord(state.encryption);
+  if (!record || !ssencKey) { return null; }
+  const raw = new Uint8Array(
+    await crypto.subtle.exportKey("raw", ssencKey));
+  try {
+    const code = ssencRecoveryCodeFromBytes(
+      ssencRandomBytes(20));
+    const saltB64 = ssencBytesToB64Url(
+      ssencRandomBytes(16));
+    const kek = await ssencDeriveKek(code,
+      { kdfSalt: saltB64,
+        kdfIterations: SSENC_KDF_ITERATIONS });
+    const iv = ssencRandomBytes(12);
+    const wrapped = await crypto.subtle.encrypt(
+      { name: "AES-GCM", iv: iv }, kek, raw);
+    record.recovery = {
+      kdfSalt: saltB64,
+      kdfIterations: SSENC_KDF_ITERATIONS,
+      wrappedKey: {
+        iv: ssencBytesToB64Url(iv),
+        data: ssencBytesToB64Url(
+          new Uint8Array(wrapped))
+      }
+    };
+    state.encryption = record;
+    saveIndex();
+    renderSsencSettingsRow();
+    return ssencRecoveryDisplay(code);
+  } finally {
+    raw.fill(0);
+  }
+}
+
+/* ---------- the show-it-once dialog ---------- */
+
+let ssencRecoveryShowResolve = null;
+
+/* Show a minted code exactly once. The dialog's
+   only door out is the acknowledgement button:
+   there is no cancel, and the app's modal family
+   gives it no backdrop or Escape close either. The
+   code leaves the field as the dialog closes. */
+function ssencShowRecoveryKeyDialog(code) {
+  return new Promise(function (resolve) {
+    ssencRecoveryShowResolve = resolve;
+    const input = document.getElementById(
+      "ssencRecoveryCodeText");
+    if (input) { input.value = code; }
+    const modal = document.getElementById(
+      "ssencRecoveryShowModal");
+    if (modal) { modal.classList.remove("hidden"); }
+    const ack = document.getElementById(
+      "ssencRecoveryAckBtn");
+    if (ack) { ack.focus(); }
+  });
+}
+
+function ssencCloseRecoveryShowDialog() {
+  const modal = document.getElementById(
+    "ssencRecoveryShowModal");
+  if (modal) { modal.classList.add("hidden"); }
+  const input = document.getElementById(
+    "ssencRecoveryCodeText");
+  if (input) { input.value = ""; }
+  const resolve = ssencRecoveryShowResolve;
+  ssencRecoveryShowResolve = null;
+  if (resolve) { resolve(true); }
+}
+
+function ssencCopyRecoveryCode() {
+  const input = document.getElementById(
+    "ssencRecoveryCodeText");
+  const code = input ? input.value : "";
+  if (!code) { return; }
+  if (navigator.clipboard &&
+      navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(code).then(
+      function () { toast("Recovery key copied."); },
+      function () {
+        if (input) { input.focus(); input.select(); }
+        toast("Copy did not work. Select the key " +
+          "and copy it by hand.", true);
+      });
+  } else if (input) {
+    input.focus();
+    input.select();
+  }
+}
+
+/* The Settings recovery row's door (Set up, or
+   Regenerate once one stands): the vault key must
+   be held first, through the ordinary unlock when
+   the vault is locked; then the new code is minted
+   (replacing any standing wrapper, which kills the
+   old code from that moment) and shown once. */
+async function ssencRecoverySettingsFlow() {
+  if (!ssencHasRecord()) { return; }
+  if (!ssencKey) {
+    const unlocked = await ssencOpenUnlockDialog();
+    if (!unlocked) { return; }
+  }
+  let code = null;
+  try {
+    code = await ssencMintRecoveryKey();
+  } catch (err) {
+    code = null;
+  }
+  if (!code) {
+    toast("The recovery key could not be created " +
+      "on this device.", true);
+    return;
+  }
+  await ssencShowRecoveryKeyDialog(code);
+  toast("Your recovery key is set up.");
+}
+
+/* ---------- the recover dialog ---------- */
+
+/* The vault key's raw bytes between the code's
+   proof and the new passphrase, or null. Page
+   memory only, zeroed on every exit. */
+let ssencRecoverRaw = null;
+let ssencRecoverStep = 1;
+
+function ssencShowRecoverError(message) {
+  const wrap = document.getElementById(
+    "ssencRecoverError");
+  const text = document.getElementById(
+    "ssencRecoverErrorText");
+  if (text) { text.textContent = message || ""; }
+  if (wrap) {
+    wrap.classList.toggle("hidden", !message);
+  }
+}
+
+function ssencOpenRecoverDialog() {
+  ssencRecoverStep = 1;
+  if (ssencRecoverRaw) {
+    ssencRecoverRaw.fill(0);
+    ssencRecoverRaw = null;
+  }
+  const code = document.getElementById(
+    "ssencRecoverCode");
+  const p1 = document.getElementById(
+    "ssencRecoverPass1");
+  const p2 = document.getElementById(
+    "ssencRecoverPass2");
+  if (code) { code.value = ""; }
+  if (p1) { p1.value = ""; }
+  if (p2) { p2.value = ""; }
+  document.getElementById("ssencRecoverCodeField")
+    .classList.remove("hidden");
+  document.getElementById("ssencRecoverNewFields")
+    .classList.add("hidden");
+  document.getElementById("ssencRecoverBtn")
+    .textContent = "Use recovery key";
+  ssencShowRecoverError("");
+  document.getElementById("ssencUnlockModal")
+    .classList.add("hidden");
+  document.getElementById("ssencRecoverModal")
+    .classList.remove("hidden");
+  if (code) { code.focus(); }
+}
+
+/* Back returns to the unlock dialog, whose promise
+   is still standing; nothing has been decided. */
+function ssencCloseRecoverDialog() {
+  if (ssencRecoverRaw) {
+    ssencRecoverRaw.fill(0);
+    ssencRecoverRaw = null;
+  }
+  ssencRecoverStep = 1;
+  document.getElementById("ssencRecoverModal")
+    .classList.add("hidden");
+  document.getElementById("ssencUnlockModal")
+    .classList.remove("hidden");
+  const input = document.getElementById(
+    "ssencUnlockPass");
+  if (input) { input.focus(); }
+}
+
+/* The recover form's one submit path, two steps.
+   Step 1 proves the code by unwrapping the vault
+   key with it (a wrong code fails the unwrap and
+   changes nothing, the passphrase refusal's exact
+   standing). Step 2 sets the new passphrase the
+   design requires: the vault key is rewrapped
+   under it with a fresh salt, the old passphrase
+   stops working, and the recovery wrapper is
+   carried across untouched, so the same code
+   still works afterward. Only then does the
+   unlock complete, through the unlock dialog's
+   standing promise, so whatever flow asked for
+   the unlock (the editor, Settings, or the Remove
+   encryption flow) opens as it would have. */
+async function ssencRecoverConfirm() {
+  const record = sanitizeEncryptionRecord(
+    state.encryption);
+  if (!record || !record.recovery) {
+    ssencCloseRecoverDialog();
+    return;
+  }
+  if (ssencRecoverStep === 1) {
+    const input = document.getElementById(
+      "ssencRecoverCode");
+    const code = ssencNormalizeRecoveryCode(
+      input ? input.value : "");
+    if (!code) {
+      ssencShowRecoverError("Enter the recovery " +
+        "key, all 32 characters of it.");
+      return;
+    }
+    let raw = null;
+    try {
+      const kek = await ssencDeriveKek(code,
+        record.recovery);
+      raw = new Uint8Array(await crypto.subtle
+        .decrypt(
+          { name: "AES-GCM",
+            iv: ssencB64UrlToBytes(
+              record.recovery.wrappedKey.iv) },
+          kek,
+          ssencB64UrlToBytes(
+            record.recovery.wrappedKey.data)));
+    } catch (err) {
+      raw = null;
+    }
+    if (!raw) {
+      ssencShowRecoverError("That recovery key " +
+        "does not match the one that locked " +
+        "this text.");
+      return;
+    }
+    ssencRecoverRaw = raw;
+    ssencRecoverStep = 2;
+    if (input) { input.value = ""; }
+    document.getElementById("ssencRecoverCodeField")
+      .classList.add("hidden");
+    document.getElementById("ssencRecoverNewFields")
+      .classList.remove("hidden");
+    document.getElementById("ssencRecoverBtn")
+      .textContent = "Set new passphrase";
+    ssencShowRecoverError("");
+    const p1 = document.getElementById(
+      "ssencRecoverPass1");
+    if (p1) { p1.focus(); }
+    return;
+  }
+  const p1 = document.getElementById(
+    "ssencRecoverPass1");
+  const p2 = document.getElementById(
+    "ssencRecoverPass2");
+  const a = p1 ? p1.value : "";
+  const b = p2 ? p2.value : "";
+  if (!a) {
+    ssencShowRecoverError("Enter a new passphrase.");
+    return;
+  }
+  if (a !== b) {
+    ssencShowRecoverError("The two passphrases " +
+      "do not match.");
+    return;
+  }
+  if (!ssencRecoverRaw) {
+    ssencCloseRecoverDialog();
+    return;
+  }
+  try {
+    const saltB64 = ssencBytesToB64Url(
+      ssencRandomBytes(16));
+    const kek = await ssencDeriveKek(a,
+      { kdfSalt: saltB64,
+        kdfIterations: SSENC_KDF_ITERATIONS });
+    const iv = ssencRandomBytes(12);
+    const wrapped = await crypto.subtle.encrypt(
+      { name: "AES-GCM", iv: iv }, kek,
+      ssencRecoverRaw);
+    state.encryption = {
+      version: 1,
+      kdfSalt: saltB64,
+      kdfIterations: SSENC_KDF_ITERATIONS,
+      wrappedKey: {
+        iv: ssencBytesToB64Url(iv),
+        data: ssencBytesToB64Url(
+          new Uint8Array(wrapped))
+      },
+      recovery: record.recovery
+    };
+    saveIndex();
+    ssencKey = await ssencImportVaultKey(
+      ssencRecoverRaw);
+  } catch (err) {
+    ssencShowRecoverError("Recovery could not be " +
+      "completed on this device.");
+    return;
+  }
+  ssencRecoverRaw.fill(0);
+  ssencRecoverRaw = null;
+  ssencRecoverStep = 1;
+  document.getElementById("ssencRecoverModal")
+    .classList.add("hidden");
+  ssencArmUnlockTimer();
+  await ssencDecryptOpenNoteBlocks();
+  renderSsencSettingsRow();
+  ssencCloseDialog("unlock", true);
+}
+
+/* ---------- v2.94.0 amendment: change passphrase --
+   The Settings home's own management path (Chris:
+   the passphrase serves the whole app, so it is
+   managed in Settings). The current passphrase
+   proves itself by unwrapping the vault key; the
+   new one rewraps that same key under a fresh
+   salt. The encrypted text is never touched, and
+   the recovery wrapper, which wraps the same
+   vault key, is carried across unchanged and
+   stays valid. Whether the vault stands locked or
+   unlocked makes no difference to the record; an
+   unlocked vault simply keeps its key. */
+
+function ssencShowChangeError(message) {
+  const wrap = document.getElementById(
+    "ssencChangeError");
+  const text = document.getElementById(
+    "ssencChangeErrorText");
+  if (text) { text.textContent = message || ""; }
+  if (wrap) {
+    wrap.classList.toggle("hidden", !message);
+  }
+}
+
+function ssencOpenChangeDialog() {
+  if (!ssencHasRecord()) { return; }
+  const p0 = document.getElementById(
+    "ssencChangePass0");
+  const p1 = document.getElementById(
+    "ssencChangePass1");
+  const p2 = document.getElementById(
+    "ssencChangePass2");
+  if (p0) { p0.value = ""; }
+  if (p1) { p1.value = ""; }
+  if (p2) { p2.value = ""; }
+  ssencShowChangeError("");
+  document.getElementById("ssencChangeModal")
+    .classList.remove("hidden");
+  if (p0) { p0.focus(); }
+}
+
+function ssencCloseChangeDialog() {
+  document.getElementById("ssencChangeModal")
+    .classList.add("hidden");
+  const p0 = document.getElementById(
+    "ssencChangePass0");
+  const p1 = document.getElementById(
+    "ssencChangePass1");
+  const p2 = document.getElementById(
+    "ssencChangePass2");
+  if (p0) { p0.value = ""; }
+  if (p1) { p1.value = ""; }
+  if (p2) { p2.value = ""; }
+}
+
+async function ssencChangeConfirm() {
+  const record = sanitizeEncryptionRecord(
+    state.encryption);
+  if (!record) {
+    ssencCloseChangeDialog();
+    return;
+  }
+  const p0 = document.getElementById(
+    "ssencChangePass0");
+  const p1 = document.getElementById(
+    "ssencChangePass1");
+  const p2 = document.getElementById(
+    "ssencChangePass2");
+  const cur = p0 ? p0.value : "";
+  const a = p1 ? p1.value : "";
+  const b = p2 ? p2.value : "";
+  if (!cur) {
+    ssencShowChangeError("Enter your current " +
+      "passphrase.");
+    return;
+  }
+  if (!a) {
+    ssencShowChangeError("Enter a new passphrase.");
+    return;
+  }
+  if (a !== b) {
+    ssencShowChangeError("The two new passphrases " +
+      "do not match.");
+    return;
+  }
+  let raw = null;
+  try {
+    const kek = await ssencDeriveKek(cur, record);
+    raw = new Uint8Array(await crypto.subtle
+      .decrypt(
+        { name: "AES-GCM",
+          iv: ssencB64UrlToBytes(
+            record.wrappedKey.iv) },
+        kek,
+        ssencB64UrlToBytes(record.wrappedKey.data)));
+  } catch (err) {
+    raw = null;
+  }
+  if (!raw) {
+    ssencShowChangeError("That current passphrase " +
+      "does not match the one that locked " +
+      "this text.");
+    return;
+  }
+  try {
+    const saltB64 = ssencBytesToB64Url(
+      ssencRandomBytes(16));
+    const kek = await ssencDeriveKek(a,
+      { kdfSalt: saltB64,
+        kdfIterations: SSENC_KDF_ITERATIONS });
+    const iv = ssencRandomBytes(12);
+    const wrapped = await crypto.subtle.encrypt(
+      { name: "AES-GCM", iv: iv }, kek, raw);
+    const next = {
+      version: 1,
+      kdfSalt: saltB64,
+      kdfIterations: SSENC_KDF_ITERATIONS,
+      wrappedKey: {
+        iv: ssencBytesToB64Url(iv),
+        data: ssencBytesToB64Url(
+          new Uint8Array(wrapped))
+      }
+    };
+    if (record.recovery) {
+      next.recovery = record.recovery;
+    }
+    state.encryption = next;
+    saveIndex();
+  } catch (err) {
+    raw.fill(0);
+    ssencShowChangeError("The passphrase could " +
+      "not be changed on this device.");
+    return;
+  }
+  raw.fill(0);
+  ssencCloseChangeDialog();
+  renderSsencSettingsRow();
+  toast("Your passphrase is changed.");
+}
+
 /* ---------- the setup and unlock dialogs ---------- */
 
 function ssencShowDialogError(kind, message) {
@@ -65847,6 +66551,16 @@ function ssencOpenUnlockDialog() {
     const input = document.getElementById("ssencUnlockPass");
     if (input) { input.value = ""; }
     ssencShowDialogError("unlock", "");
+    /* v2.94.0: the Use recovery key door stands
+       only when the record holds a recovery
+       wrapper; a record without one shows the
+       dialog exactly as v2.93.0 left it. */
+    const recBtn = document.getElementById(
+      "ssencUnlockRecoveryBtn");
+    if (recBtn) {
+      recBtn.classList.toggle("hidden",
+        !ssencHasRecovery());
+    }
     const modal = document.getElementById("ssencUnlockModal");
     if (modal) { modal.classList.remove("hidden"); }
     if (input) { input.focus(); }
@@ -65874,6 +66588,18 @@ async function ssencSetupConfirm() {
       "Encryption could not be set up on this device.");
     return;
   }
+  /* v2.94.0: a new vault starts with recovery in
+     place. The key is minted under the just created
+     vault and shown once, and setup completes only
+     when the user has saved it. If the mint itself
+     fails on this device, setup still completes:
+     the Settings row offers the mint again. */
+  try {
+    const code = await ssencMintRecoveryKey();
+    if (code) {
+      await ssencShowRecoveryKeyDialog(code);
+    }
+  } catch (err) { /* Set up later, from Settings. */ }
   ssencCloseDialog("setup", true);
 }
 
@@ -66035,22 +66761,176 @@ function ssencFindRegionByCipher(iv, ct) {
   return null;
 }
 
+/* Whether an element is one of the empty shells the
+   encrypt flow leaves behind when a multi-paragraph
+   selection is encrypted (the emptied source
+   paragraphs beside the new block), or an equally
+   content-free paragraph: no element children other
+   than line breaks, and no text beyond whitespace
+   and the invisible characters an editor parks in
+   an empty paragraph. Only ever consulted for an
+   element standing immediately beside a passage
+   being stripped, so a reader's own blank line
+   elsewhere in a note is never touched. */
+function ssencIsShellEl(node) {
+  if (!node || node.nodeType !== 1) { return false; }
+  if (!/^(P|DIV)$/.test(node.tagName)) { return false; }
+  for (let i = 0; i < node.childNodes.length; i++) {
+    const child = node.childNodes[i];
+    if (child.nodeType === 1) {
+      if (child.tagName !== "BR") { return false; }
+    } else if (child.nodeType === 3) {
+      if (child.nodeValue.replace(/[\s\u200B\uFEFF]/g,
+        "") !== "") {
+        return false;
+      }
+    } else {
+      return false;
+    }
+  }
+  return true;
+}
+
+/* The v2.94.0 strip's one native insert, as
+   ssencStripRegion's comment describes: replace the
+   locked block's block-level container through a
+   single insertHTML built on a clone, trailed by
+   one guard paragraph. Returns true when the insert
+   ran. The guard is found again afterward by its
+   mark: a guard still empty is removed (it was
+   scaffolding), and a guard that absorbed the
+   following content keeps that content and loses
+   only the mark. */
+function ssencStripInsert(bodyEl, block, plainHtml) {
+  /* The unit: the block's nearest block-level
+     ancestor inside the body, or a fresh paragraph
+     wrapper when the block stands in the body
+     itself (the block-form shape). */
+  let unit = block;
+  let wrapped = false;
+  if (block.parentNode !== bodyEl) {
+    let n = block.parentNode;
+    while (n && n !== bodyEl &&
+      !/^(P|LI|BLOCKQUOTE|TD|TH|H[1-6]|DIV)$/
+        .test(n.tagName)) {
+      n = n.parentNode;
+    }
+    if (n && n !== bodyEl) { unit = n; }
+  } else {
+    const wrap = document.createElement("p");
+    block.parentNode.insertBefore(wrap, block);
+    wrap.appendChild(block);
+    unit = wrap;
+    wrapped = true;
+  }
+  /* The encrypt flow's own shells beside the unit
+     go away before the insert, outside the undo
+     step, like the region swap that produced the
+     block. */
+  const host = unit.parentNode;
+  if (!host) { return false; }
+  while (ssencIsShellEl(unit.previousSibling)) {
+    host.removeChild(unit.previousSibling);
+  }
+  while (ssencIsShellEl(unit.nextSibling)) {
+    host.removeChild(unit.nextSibling);
+  }
+  /* A following sibling that is not a paragraph
+     joins the selection by clone: at a bare list,
+     table, or block boundary the insertion instead
+     pulls the content into the container or leaves
+     a ghost behind it. A paragraph sibling stays
+     out; the guard below absorbs its boundary. */
+  const sib = unit.nextElementSibling;
+  const sibIn = !!sib && sib.parentNode === host &&
+    !/^(P|H[1-6]|BLOCKQUOTE)$/.test(sib.tagName);
+  const lastUnit = sibIn ? sib : unit;
+  /* The replacement, built on clones so the live
+     tree is untouched until the one insert: the
+     unit's clone with the block swapped for the
+     parsed plain HTML (or, for a wrapped block, the
+     plain HTML itself), then the sibling's clone,
+     then the guard. */
+  const holder = document.createElement("div");
+  if (wrapped) {
+    holder.innerHTML = plainHtml;
+  } else {
+    const cUnit = unit.cloneNode(true);
+    holder.appendChild(cUnit);
+    const cBlock = holder.querySelector("[data-ssenc]");
+    if (!cBlock) { return false; }
+    const fragHolder = document.createElement("div");
+    fragHolder.innerHTML = plainHtml;
+    const cParent = cBlock.parentNode;
+    while (fragHolder.firstChild) {
+      cParent.insertBefore(fragHolder.firstChild,
+        cBlock);
+    }
+    cParent.removeChild(cBlock);
+  }
+  if (sibIn) { holder.appendChild(sib.cloneNode(true)); }
+  const replacement = holder.innerHTML +
+    "<p data-ssenc-strip-guard=\"1\"></p>";
+  const from = Array.prototype.indexOf.call(
+    host.childNodes, unit);
+  const to = Array.prototype.indexOf.call(
+    host.childNodes, lastUnit);
+  if (from < 0 || to < from) { return false; }
+  bodyEl.focus();
+  const sel = window.getSelection();
+  const range = document.createRange();
+  range.setStart(host, from);
+  range.setEnd(host, to + 1);
+  sel.removeAllRanges();
+  sel.addRange(range);
+  const ok = document.execCommand("insertHTML", false,
+    replacement) === true;
+  if (!ok) { return false; }
+  const guardEl = bodyEl.querySelector(
+    "[data-ssenc-strip-guard]");
+  if (guardEl) {
+    if (guardEl.childNodes.length === 0) {
+      guardEl.parentNode.removeChild(guardEl);
+    } else {
+      guardEl.removeAttribute("data-ssenc-strip-guard");
+    }
+  }
+  return true;
+}
+
 /* Replace one decrypted region with its own content
    as ordinary note text, for good: the passage's
-   encryption is removed, not merely opened. The swap
-   is composed like the table resize's commit (the
-   app's standing one undo composition): the region
-   first swaps back to its locked block, the block is
-   selected, and the passage's plain HTML is inserted
-   over it through a single insertHTML, so one Ctrl+Z
-   restores the locked block exactly. Where
-   insertHTML is unavailable or refuses, the block is
-   swapped for the parsed content directly (the
-   removal lands; only the single undo step is
-   lost). Either way the landed content then runs
-   the same fragment rebind pass a decrypt restore
-   uses, so the links, pills, and cards inside it
-   are live, not inert markup. */
+   encryption is removed, not merely opened.
+   v2.94.0 rebuilt the swap's composition after the
+   v2.93 form failed in a real browser (see the build
+   report's diagnosis): the region first swaps back
+   to its locked block, then the block's block-level
+   container (its paragraph, list item, or cell; a
+   fresh paragraph wrapper when the block stands in
+   the body itself) is replaced through a single
+   insertHTML whose replacement is built on a clone
+   of that container with the passage's plain HTML
+   spliced where the block stood, so the content
+   lands parented exactly the way ordinary content
+   is parented and one Ctrl+Z restores the locked
+   block. A container sibling that is not a paragraph
+   (a list, a table, another block element) joins the
+   selection by clone, because the insertion behaves
+   badly at a bare container boundary; a paragraph
+   sibling stays out, and one empty guard paragraph
+   trails the replacement to absorb the insertion's
+   end merge, so the following paragraph is never
+   fused into the passage. The empty paragraphs the
+   encrypt flow itself leaves beside a block-form
+   passage are removed beside the container first
+   (outside the undo step, like the region swap
+   above). Where insertHTML is unavailable or
+   refuses, the block is swapped for the parsed
+   content directly (the removal lands; only the
+   single undo step is lost). Either way the landed
+   content then runs the same fragment rebind pass a
+   decrypt restore uses, so the links, pills, and
+   cards inside it are live, not inert markup. */
 function ssencStripRegion(region) {
   const bodyEl = document.getElementById("noteBody");
   const parent = region.parentNode;
@@ -66065,18 +66945,35 @@ function ssencStripRegion(region) {
   let done = false;
   if (typeof document.execCommand === "function") {
     try {
-      bodyEl.focus();
-      const sel = window.getSelection();
-      const range = document.createRange();
-      range.setStartBefore(block);
-      range.setEndAfter(block);
-      sel.removeAllRanges();
-      sel.addRange(range);
-      done = document.execCommand("insertHTML", false,
-        plainHtml) === true;
+      done = ssencStripInsert(bodyEl, block, plainHtml);
     } catch (err) { done = false; }
   }
   if (!done) {
+    /* The structural fallback: the parsed content
+       takes the block's place in its parent directly.
+       The removal lands; only the single undo step
+       is lost. The encrypt flow's own shells beside
+       the block's container go away first, so the
+       fallback leaves the same end state. */
+    let anchor = block;
+    if (block.parentNode && block.parentNode !== bodyEl) {
+      let n = block.parentNode;
+      while (n && n !== bodyEl &&
+        !/^(P|LI|BLOCKQUOTE|TD|TH|H[1-6]|DIV)$/
+          .test(n.tagName)) {
+        n = n.parentNode;
+      }
+      if (n && n !== bodyEl) { anchor = n; }
+    }
+    if (anchor.parentNode) {
+      const host = anchor.parentNode;
+      while (ssencIsShellEl(anchor.previousSibling)) {
+        host.removeChild(anchor.previousSibling);
+      }
+      while (ssencIsShellEl(anchor.nextSibling)) {
+        host.removeChild(anchor.nextSibling);
+      }
+    }
     const holder = document.createElement("div");
     holder.innerHTML = plainHtml;
     const frag = document.createDocumentFragment();
@@ -66163,10 +67060,39 @@ function renderSsencSettingsRow() {
   if (select) {
     select.value = String(state.ssencUnlockChoice);
   }
+  /* v2.94.0: the Change passphrase button stands
+     whenever a vault stands, and the recovery row
+     reports and offers the recovery key under the
+     same rule (nothing at all before a vault). */
+  const changeBtn = document.getElementById(
+    "settingsSsencChangeBtn");
+  const recStatus = document.getElementById(
+    "settingsSsencRecoveryStatus");
+  const recBtn = document.getElementById(
+    "settingsSsencRecoveryBtn");
+  if (changeBtn && recStatus && recBtn) {
+    if (!ssencHasRecord()) {
+      changeBtn.classList.add("hidden");
+      recStatus.textContent = "";
+      recBtn.classList.add("hidden");
+    } else if (ssencHasRecovery()) {
+      changeBtn.classList.remove("hidden");
+      recStatus.textContent =
+        "Recovery key is set up.";
+      recBtn.textContent = "Regenerate recovery key";
+      recBtn.classList.remove("hidden");
+    } else {
+      changeBtn.classList.remove("hidden");
+      recStatus.textContent =
+        "Recovery key is not set up.";
+      recBtn.textContent = "Set up recovery key";
+      recBtn.classList.remove("hidden");
+    }
+  }
   if (!status || !lockBtn || !unlockBtn) { return; }
   if (!ssencHasRecord()) {
     status.textContent = "Not set up";
-    unlockBtn.textContent = "Set up encryption";
+    unlockBtn.textContent = "Set up passphrase";
     unlockBtn.classList.remove("hidden");
     lockBtn.classList.add("hidden");
   } else if (!ssencKey) {
@@ -66244,6 +67170,61 @@ function wireSsencControls() {
     .addEventListener("submit", function (ev) {
       ev.preventDefault();
       void ssencUnlockConfirm();
+    });
+  /* v2.94.0: the recovery doors. The Settings row's
+     Set up or Regenerate button runs the mint flow;
+     the Unlock dialog's Use recovery key button
+     swaps the dialog for the recover dialog; the
+     recover form's submit is its one confirm path,
+     like the unlock form's; the show dialog's two
+     buttons copy the code and acknowledge it. */
+  const recSettingsBtn = document.getElementById(
+    "settingsSsencRecoveryBtn");
+  if (recSettingsBtn) {
+    recSettingsBtn.addEventListener("click",
+      function () {
+        void ssencRecoverySettingsFlow();
+      });
+  }
+  document.getElementById("ssencUnlockRecoveryBtn")
+    .addEventListener("click", function () {
+      ssencOpenRecoverDialog();
+    });
+  document.getElementById("ssencRecoverCancelBtn")
+    .addEventListener("click", function () {
+      ssencCloseRecoverDialog();
+    });
+  document.getElementById("ssencRecoverForm")
+    .addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      void ssencRecoverConfirm();
+    });
+  document.getElementById("ssencRecoveryAckBtn")
+    .addEventListener("click", function () {
+      ssencCloseRecoveryShowDialog();
+    });
+  document.getElementById("ssencRecoveryCopyBtn")
+    .addEventListener("click", function () {
+      ssencCopyRecoveryCode();
+    });
+  /* v2.94.0 amendment: Change passphrase, the
+     Settings home's management path. */
+  const changeSettingsBtn = document.getElementById(
+    "settingsSsencChangeBtn");
+  if (changeSettingsBtn) {
+    changeSettingsBtn.addEventListener("click",
+      function () {
+        ssencOpenChangeDialog();
+      });
+  }
+  document.getElementById("ssencChangeCancelBtn")
+    .addEventListener("click", function () {
+      ssencCloseChangeDialog();
+    });
+  document.getElementById("ssencChangeForm")
+    .addEventListener("submit", function (ev) {
+      ev.preventDefault();
+      void ssencChangeConfirm();
     });
   const bodyEl = document.getElementById("noteBody");
   /* Edits inside a decrypted region keep its stored
