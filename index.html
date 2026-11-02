@@ -40,10 +40,38 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-11-02-SSN-V2950
-  Version: 2.95.0
+  BUILD STAMP: 2026-11-02-SSN-V2960
+  Version: 2.96.0
 
   Revision history:
+    v2.96.0 2026-11-02 The note move toasts gain an
+                      Undo. Through v2.95.0 the
+                      Trash and Archive completion
+                      toasts carried no Undo at
+                      all (the broken Undo Chris
+                      had pressed was the mail
+                      triage one, fixed there).
+                      Now a move of one or more
+                      notes to Trash or Archive,
+                      by the list menus, the
+                      editor buttons, the note
+                      drag, or a bulk selection,
+                      lands its completion as an
+                      undoable pill in the undo
+                      toast box (the box whose
+                      toasts take events), with
+                      five seconds to press Undo.
+                      Undo restores every note in
+                      the move through the
+                      standing restore paths, a
+                      note trashed out of the
+                      Archive returning to the
+                      Archive, and reports plainly
+                      how many notes came back
+                      when one of them can no
+                      longer be restored. Restore
+                      and Unarchive moves carry
+                      no Undo, as before.
     v2.95.0 2026-11-02 Three mail and toast items
                       Chris reported. The Email
                       sidebar unread count never
@@ -10415,6 +10443,18 @@ body.dark .version-date{color:var(--accent);}
   font-weight:700;cursor:pointer;
 }
 .undo-toast-btn:hover{background:var(--secondary);}
+/* v2.96: a move completion carrying an Undo wears
+   the pill form inside the undo box, whose own
+   toasts take events the same way (.undo-toast
+   above): the box stays eventless, the pill takes
+   the click. */
+.pill-form.move-undo{pointer-events:auto;}
+.move-undo-btn{
+  flex:none;border:1px solid currentColor;background:transparent;
+  color:inherit;border-radius:var(--radius-pill);padding:1px 10px;
+  font:inherit;font-weight:700;cursor:pointer;
+}
+.move-undo-btn:hover{background:rgba(255,255,255,.14);}
 .toast{
   background:var(--sidebar);color:#EAF3EC;border-radius:var(--radius-card);
   padding:10px 14px;box-shadow:var(--shadow);font-size:14px;
@@ -13349,8 +13389,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-11-02-SSN-V2950";
-const APP_VERSION = "2.95.0";
+const APP_BUILD = "2026-11-02-SSN-V2960";
+const APP_VERSION = "2.96.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -14044,7 +14084,7 @@ function toastTopCenter(message, isError) {
    wording is shown over it. Returns {shown, failed}. */
 const MOVE_PROGRESS_DELAY_MS = 350;
 
-async function withMoveProgressToast(present, past, count, work) {
+async function withMoveProgressToast(present, past, count, work, undoEntry) {
   const noun = count === 1 ? " note" : " notes";
   let progress = null;
   let timer = null;
@@ -14086,9 +14126,19 @@ async function withMoveProgressToast(present, past, count, work) {
     if (progress) { progress.dismiss(); progress = null; }
   }
   if (shown && !failed) {
-    toastTopCenter(past + " " + count + noun);
+    /* v2.96: a Trash or Archive move's completion
+       carries an Undo, so it stands in the undo
+       toast box instead of here (see
+       showMoveUndoToast); the progress it replaces
+       stood at the same top center seat. */
+    if (undoEntry) {
+      showMoveUndoToast(past + " " + count + noun, undoEntry);
+    } else {
+      toastTopCenter(past + " " + count + noun);
+    }
   }
-  return { shown: shown, failed: failed };
+  return { shown: shown, failed: failed,
+    undoShown: !!(shown && !failed && undoEntry) };
 }
 
 /* v2.70: one note's move behind the same surface, for the
@@ -14098,11 +14148,154 @@ async function withMoveProgressToast(present, past, count, work) {
    very toasts. legacyToast is the caller's own completion
    toast, kept for the runs the progress surface never
    showed on; pass null when the caller has none. */
-function moveNoteWithProgress(present, past, legacyToast, work) {
-  return withMoveProgressToast(present, past, 1, work)
+function moveNoteWithProgress(present, past, legacyToast, work, undoEntry) {
+  return withMoveProgressToast(present, past, 1, work, undoEntry)
     .then(function (outcome) {
-      if (!outcome.shown && legacyToast) { toast(legacyToast); }
+      /* v2.96: with an undo entry and a clean run,
+         the undoable completion replaces the legacy
+         toast on the runs the progress surface never
+         showed; where it showed, the completion
+         already stands with its Undo. A failed run
+         keeps today's feedback exactly. */
+      if (undoEntry && !outcome.failed) {
+        if (!outcome.shown) {
+          showMoveUndoToast(legacyToast, undoEntry);
+        }
+      } else if (!outcome.shown && legacyToast) {
+        toast(legacyToast);
+      }
     });
+}
+
+/* v2.96: Undo for the note moves to Trash and
+   Archive. A move's completion toast gains an Undo
+   button with the standing undo window (five
+   seconds, the attachment deletion's
+   PENDING_DELETE_MS measure), standing in the undo
+   toast box, whose toasts take events (.undo-toast
+   wears pointer-events:auto in that box); the move
+   completion's own home, the top center box, is
+   display only by design and never takes a click,
+   which is the defect v2.95.0 fixed on the mail
+   triage toast. The entry is captured before the
+   move runs and lives in page memory only, exactly
+   as long as its toast: the ids of the notes in
+   the move, the collection each stood in (live
+   notes or the Archive), and its notebook. */
+const MOVE_UNDO_MS = 5000;
+
+function moveUndoSnapshot(kind, notes) {
+  return {
+    kind: kind, toastEl: null, timer: null,
+    items: notes.map(function (note) {
+      return {
+        id: note.id,
+        collection: note.archived ? "archive" : "notes",
+        notebook: note.notebook || ""
+      };
+    })
+  };
+}
+
+function dismissMoveUndoToast(entry) {
+  if (entry.timer) { clearTimeout(entry.timer); entry.timer = null; }
+  if (entry.toastEl && entry.toastEl.parentNode) {
+    entry.toastEl.parentNode.removeChild(entry.toastEl);
+  }
+  entry.toastEl = null;
+}
+
+function showMoveUndoToast(message, entry) {
+  const box = document.getElementById("undoToastBox");
+  if (!box) { toast(message); return; }
+  const el = document.createElement("div");
+  el.className = "pill-form move-done move-undo";
+  el.setAttribute("data-state", "saved");
+  const dot = document.createElement("span");
+  dot.className = "save-pill-dot";
+  dot.setAttribute("aria-hidden", "true");
+  el.appendChild(dot);
+  const label = document.createElement("span");
+  label.textContent = message;
+  el.appendChild(label);
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "move-undo-btn";
+  btn.textContent = "Undo";
+  btn.addEventListener("click", function () {
+    undoNoteMove(entry).catch(function (err) {
+      toast("Undo failed: " + err.message, true);
+    });
+  });
+  el.appendChild(btn);
+  box.appendChild(el);
+  entry.toastEl = el;
+  entry.timer = setTimeout(function () {
+    dismissMoveUndoToast(entry);
+  }, MOVE_UNDO_MS);
+}
+
+/* Take a Trash or Archive move back: every note in
+   the entry returns through the standing restore
+   machinery, the same paths a manual restore runs
+   (restoreNote from Trash, unarchiveNote from the
+   Archive), so the file moves, the catalog, and
+   the index stay consistent by construction. A
+   note trashed out of the Archive is restored to
+   its notebook and then archived again, landing
+   exactly where the move took it from. Each note
+   is counted by where it stands when its turn is
+   done, so one already restored by hand inside
+   the window counts as back, and one deleted
+   forever inside the window counts as gone; the
+   follow-up toast reports the count plainly
+   either way. */
+async function undoNoteMove(entry) {
+  dismissMoveUndoToast(entry);
+  const total = entry.items.length;
+  let back = 0;
+  for (let i = 0; i < entry.items.length; i++) {
+    const item = entry.items[i];
+    try {
+      if (entry.kind === "trash") {
+        const note = state.trash.find(function (n) {
+          return n.id === item.id;
+        });
+        if (note) {
+          await restoreNote(note, true);
+          if (item.collection === "archive") {
+            await archiveNote(note, true);
+          }
+        }
+      } else {
+        const note = state.archive.find(function (n) {
+          return n.id === item.id;
+        });
+        if (note) { await unarchiveNote(note, true); }
+      }
+    } catch (err) {
+      /* Counted by where the note stands, below. */
+    }
+    const live = findNoteById(item.id);
+    if (live) {
+      if (item.collection === "archive") {
+        if (live.archived) { back += 1; }
+      } else if (!live.trashed && !live.archived) {
+        back += 1;
+      }
+    }
+  }
+  renderAll();
+  if (back === total) {
+    toast("Restored " + total +
+      (total === 1 ? " note." : " notes."));
+  } else if (back > 0) {
+    toast("Restored " + back + " of " + total +
+      " notes; the rest could not be brought back.", true);
+  } else {
+    toast("None of the " + total +
+      " moved notes could be brought back.", true);
+  }
 }
 
 /* The sync status pill in the sidebar footer. Allowed states per spec:
@@ -37248,13 +37441,13 @@ function buildSingleNoteContextItems(menu, note, kind, pointerType) {
       return moveNoteWithProgress("Archiving", "Archived",
         "Note archived.", function () {
           return archiveNote(note);
-        });
+        }, moveUndoSnapshot("archive", [note]));
     });
     noteCtxItem(menu, "Move to Trash", function () {
       return moveNoteWithProgress("Deleting", "Deleted",
         "Moved to Trash.", function () {
           return moveNoteToTrash(note, false);
-        });
+        }, moveUndoSnapshot("trash", [note]));
     });
   }
   noteCtxItem(menu, "Select", function () {
@@ -37432,20 +37625,28 @@ async function archiveSelectedNotes() {
   const pool = makeBulkPool(BULK_OP_CONCURRENCY);
   holdCatalogWrites();
   let outcome = { shown: false };
+  /* v2.96: the undo entry is captured before the
+     moves run (see moveUndoSnapshot). */
+  const undoEntry = moveUndoSnapshot("archive", targets);
   try {
     outcome = await withMoveProgressToast("Archiving", "Archived",
       count, function () {
         return runPooledOutcomes(pool, targets, function (note) {
           return archiveNote(note, true);
         });
-      });
+      }, undoEntry);
   } finally {
     releaseCatalogWrites();
   }
   renderAll();
   if (!outcome.shown) {
-    toast("Archived " + count +
-      (count === 1 ? " note." : " notes."));
+    const summary = "Archived " + count +
+      (count === 1 ? " note." : " notes.");
+    /* v2.96: the silent case carries the Undo too;
+       a failed run keeps the plain summary. */
+    if (!outcome.failed) {
+      showMoveUndoToast(summary, undoEntry);
+    } else { toast(summary); }
   }
 }
 
@@ -37467,19 +37668,27 @@ async function trashSelectedNotes() {
   const pool = makeBulkPool(BULK_OP_CONCURRENCY);
   holdCatalogWrites();
   let outcome = { shown: false };
+  /* v2.96: the undo entry is captured before the
+     moves run (see moveUndoSnapshot). */
+  const undoEntry = moveUndoSnapshot("trash", targets);
   try {
     outcome = await withMoveProgressToast("Deleting", "Deleted",
       count, function () {
         return runPooledOutcomes(pool, targets, function (note) {
           return moveNoteToTrash(note, true);
         });
-      });
+      }, undoEntry);
   } finally {
     releaseCatalogWrites();
   }
   renderAll();
   if (!outcome.shown) {
-    toast("Moved " + count + " notes to Trash.");
+    const summary = "Moved " + count + " notes to Trash.";
+    /* v2.96: the silent case carries the Undo too;
+       a failed run keeps the plain summary. */
+    if (!outcome.failed) {
+      showMoveUndoToast(summary, undoEntry);
+    } else { toast(summary); }
   }
 }
 
@@ -53251,12 +53460,14 @@ function endNoteDrag(commit) {
     moveNoteWithProgress("Deleting", "Deleted",
       "Moved to Trash.", function () {
         return moveNoteToTrash(note, false);
-      }).catch(function (err) { toast(err.message, true); });
+      }, moveUndoSnapshot("trash", [note]))
+      .catch(function (err) { toast(err.message, true); });
   } else if (action === "archive") {
     moveNoteWithProgress("Archiving", "Archived",
       "Note archived.", function () {
         return archiveNote(note);
-      }).catch(function (err) { toast(err.message, true); });
+      }, moveUndoSnapshot("archive", [note]))
+      .catch(function (err) { toast(err.message, true); });
   }
 }
 
@@ -70703,7 +70914,8 @@ function wireEvents() {
       moveNoteWithProgress("Deleting", "Deleted",
         "Moved to Trash.", function () {
           return moveNoteToTrash(note, false);
-        }).catch(function (err) { toast(err.message, true); });
+        }, moveUndoSnapshot("trash", [note]))
+        .catch(function (err) { toast(err.message, true); });
     }
   });
   document.getElementById("restoreBtn").addEventListener("click", function () {
@@ -70726,7 +70938,8 @@ function wireEvents() {
       moveNoteWithProgress("Archiving", "Archived",
         "Note archived.", function () {
           return archiveNote(note);
-        }).catch(function (err) { toast(err.message, true); });
+        }, moveUndoSnapshot("archive", [note]))
+        .catch(function (err) { toast(err.message, true); });
     }
   });
   document.getElementById("unarchiveBtn").addEventListener("click", function () {
