@@ -40,10 +40,65 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-11-02-SSN-V2860
-  Version: 2.86.0
+  BUILD STAMP: 2026-11-02-SSN-V2870
+  Version: 2.87.0
 
   Revision history:
+    v2.87.0 2026-11-02 Repeating events. The
+                      event editor gains a Repeat
+                      control modeled on Google
+                      Calendar's own: Does not
+                      repeat, Daily, Weekly,
+                      Monthly, Annually, with a
+                      Repeat every interval,
+                      weekday choices for a
+                      weekly repeat (the start
+                      day preselected, following
+                      the start date until picked
+                      by hand), and an Ends group
+                      (Never, On a date, After a
+                      number of occurrences).
+                      Monthly repeats by day of
+                      month only. Saving sends
+                      the rule to Google Calendar
+                      with the event, and a
+                      single existing event can
+                      be given a pattern the same
+                      way. The event view shows
+                      a Repeats line in plain
+                      words, and a repeating
+                      event on a writable
+                      calendar gains Delete
+                      series, behind a
+                      confirmation naming the
+                      event and saying every
+                      occurrence will be
+                      deleted; the delete runs
+                      against the series' master
+                      record. Editing an
+                      existing series stays in
+                      Google Calendar. Events
+                      gain their notifications
+                      in the editor: rows in
+                      Google Calendar's own
+                      shape (Notification or
+                      Email, an amount, and
+                      minutes, hours, days, or
+                      weeks), seeded from the
+                      calendar's defaults under
+                      a Calendar default note
+                      until touched, saving as
+                      overrides once they are;
+                      the event view lists the
+                      effective reminders in
+                      plain words. The Home
+                      calendar widget gains a
+                      New task icon button
+                      beside New event and
+                      Today, a checkbox carrying
+                      its check; it opens the
+                      task editor on the
+                      widget's selected day.
     v2.86.0 2026-11-02 Web Push notifications,
                       the app half. This device
                       can register for push with
@@ -9216,6 +9271,49 @@ body.dark .task-cal-more{color:var(--accent);}
 }
 #gcalEvOpenLink{font-size:13.5px;}
 
+/* v2.87 Part D: the Notifications section's rows, in
+   Google Calendar's own shape: a method select, an
+   amount, a unit select, and a round remove button,
+   with the Add notification link under them. Every
+   color is a theme token, so both themes carry them. */
+.gcal-ev-notif-row{
+  display:flex;align-items:center;gap:8px;
+  flex-wrap:wrap;margin:0 0 8px;
+}
+.gcal-ev-notif-row .gcal-ev-notif-amount{width:76px;}
+.gcal-ev-notif-remove{
+  border:1px solid var(--border);background:var(--soft);
+  color:var(--text);border-radius:50%;width:26px;
+  height:26px;padding:0;font-size:14px;line-height:1;
+  cursor:pointer;flex:none;
+}
+.gcal-ev-notif-remove:hover{border-color:var(--accent);}
+#gcalEvNotifAdd{font-size:13.5px;}
+
+/* v2.87: the event editor's Repeat extras. The weekday
+   chips wear the linked chips' card language at rest
+   and the primary fill while on, so the chosen days
+   are obvious at a glance; the Ends rows and the
+   inline groups lay their inputs beside their words
+   with real padding. Every color is a theme token, so
+   both themes carry them. */
+.gcal-ev-repeat-days{display:flex;flex-wrap:wrap;gap:6px;margin:2px 0 4px;}
+.gcal-ev-day-chip{
+  border:1px solid var(--border);background:var(--soft);
+  color:var(--text);border-radius:20px;padding:3px 0;width:40px;
+  font-size:13px;cursor:pointer;text-align:center;
+}
+.gcal-ev-day-chip:hover{border-color:var(--accent);}
+.gcal-ev-day-chip.active{
+  background:var(--primary);border-color:var(--primary);
+  color:#FFFFFF;font-weight:600;
+}
+.gcal-ev-repeat-inline{
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+}
+.gcal-ev-repeat-inline input[type="number"]{width:76px;}
+.gcal-ev-repeat-ends{display:flex;flex-direction:column;gap:8px;}
+
 /* v2.83: the links release. A past event fades wherever
    it renders (the shared event row in the Tasks grid,
    the day detail, and the Home agenda). The event view
@@ -12047,6 +12145,59 @@ body.dark .version-date{color:var(--accent);}
       </div>
     </div>
     <div class="field">
+      <label for="gcalEvRepeatSelect">Repeat</label>
+      <select id="gcalEvRepeatSelect">
+        <option value="none">Does not repeat</option>
+        <option value="DAILY">Daily</option>
+        <option value="WEEKLY">Weekly</option>
+        <option value="MONTHLY">Monthly</option>
+        <option value="YEARLY">Annually</option>
+      </select>
+    </div>
+    <div id="gcalEvRepeatExtras" class="hidden">
+      <div class="field">
+        <label for="gcalEvRepeatInterval">Repeat every</label>
+        <div class="gcal-ev-repeat-inline">
+          <input id="gcalEvRepeatInterval" type="number" min="1" step="1" value="1">
+          <span id="gcalEvRepeatIntervalUnit">days</span>
+        </div>
+      </div>
+      <div class="field hidden" id="gcalEvRepeatDaysRow">
+        <label>On days</label>
+        <div class="gcal-ev-repeat-days" id="gcalEvRepeatDays"></div>
+      </div>
+      <div class="field">
+        <label>Ends</label>
+        <div class="gcal-ev-repeat-ends">
+          <label class="settings-check">
+            <input type="radio" name="gcalEvRepeatEnds" id="gcalEvRepeatEndNever" value="never" checked>
+            <span>Never</span>
+          </label>
+          <div class="gcal-ev-repeat-inline">
+            <label class="settings-check">
+              <input type="radio" name="gcalEvRepeatEnds" id="gcalEvRepeatEndOn" value="date">
+              <span>On</span>
+            </label>
+            <input id="gcalEvRepeatEndDate" type="date">
+          </div>
+          <div class="gcal-ev-repeat-inline">
+            <label class="settings-check">
+              <input type="radio" name="gcalEvRepeatEnds" id="gcalEvRepeatEndAfter" value="count">
+              <span>After</span>
+            </label>
+            <input id="gcalEvRepeatEndCount" type="number" min="1" step="1" value="10">
+            <span>occurrences</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="field">
+      <label>Notifications</label>
+      <div id="gcalEvNotifRows"></div>
+      <p class="gcal-ev-note hidden" id="gcalEvNotifNote">Calendar default</p>
+      <a id="gcalEvNotifAdd" href="#">Add notification</a>
+    </div>
+    <div class="field">
       <label for="gcalEvLocationInput">Location</label>
       <input id="gcalEvLocationInput" type="text" autocomplete="off">
     </div>
@@ -12101,6 +12252,14 @@ body.dark .version-date{color:var(--accent);}
       <label>When</label>
       <p class="gcal-view-text" id="gcalViewWhen"></p>
     </div>
+    <div class="field hidden" id="gcalViewRepeatsRow">
+      <label>Repeats</label>
+      <p class="gcal-view-text" id="gcalViewRepeats"></p>
+    </div>
+    <div class="field hidden" id="gcalViewNotifRow">
+      <label>Notifications</label>
+      <p class="gcal-view-text" id="gcalViewNotif"></p>
+    </div>
     <div class="field hidden" id="gcalViewLocationRow">
       <label>Location</label>
       <p class="gcal-view-text" id="gcalViewLocation"></p>
@@ -12119,6 +12278,7 @@ body.dark .version-date{color:var(--accent);}
     </div>
 
     <div class="modal-foot">
+      <button class="btn danger hidden" id="gcalViewDeleteSeriesBtn" type="button">Delete series</button>
       <button class="btn danger hidden" id="gcalViewDeleteBtn" type="button">Delete event</button>
       <button class="btn" id="gcalViewCloseBtn" type="button">Close</button>
     </div>
@@ -12574,8 +12734,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-11-02-SSN-V2860";
-const APP_VERSION = "2.86.0";
+const APP_BUILD = "2026-11-02-SSN-V2870";
+const APP_VERSION = "2.87.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -23716,6 +23876,42 @@ function normalizeGcalEvent(raw, cal) {
     location: raw.location ? String(raw.location) : "",
     description: raw.description ? String(raw.description) : "",
     recurring: !!(raw.recurrence || raw.recurringEventId),
+    /* v2.87: the series' own identity and rule. An
+       expanded instance names its master in
+       recurringEventId (the master names itself); the
+       master record carries the recurrence rule, an
+       instance does not, so recurrence stands null on
+       an instance until its master is fetched. Delete
+       series and the view's Repeats line read these. */
+    masterId: raw.recurringEventId
+      ? String(raw.recurringEventId)
+      : String(raw.id || ""),
+    recurrence: Array.isArray(raw.recurrence)
+      ? raw.recurrence.map(function (r) {
+          return String(r);
+        })
+      : null,
+    /* v2.87 Part D: the event's reminders, as the
+       API carries them: useDefault, with the
+       calendar's own defaults standing behind it,
+       or the overrides themselves. An answer with
+       no reminders object reads as the defaults
+       case, which is the API's own default. */
+    reminders: {
+      useDefault: raw.reminders
+        ? raw.reminders.useDefault !== false
+        : true,
+      overrides: raw.reminders &&
+        Array.isArray(raw.reminders.overrides)
+        ? raw.reminders.overrides.map(function (r) {
+            return {
+              method: r && r.method === "email"
+                ? "email" : "popup",
+              minutes: Number(r && r.minutes) || 0
+            };
+          })
+        : []
+    },
     htmlLink: raw.htmlLink ? String(raw.htmlLink) : "",
     linkNoteIds: gcalLinkNoteIdsOf(raw),
     allDay: !!raw.start.date,
@@ -24265,6 +24461,21 @@ function gcalSanitizeCalendarList(items) {
       summary: String(c.summary || ""),
       color: String(c.backgroundColor || ""),
       accessRole: String(c.accessRole || ""),
+      /* v2.87 Part D: the calendar's own default
+         reminders, which the calendarList answers
+         already carry (no fields mask is in play on
+         either calendarList read in this app, so the
+         request itself needed no change), settled to
+         the shape the events' overrides wear. */
+      defaultReminders: Array.isArray(c.defaultReminders)
+        ? c.defaultReminders.map(function (r) {
+            return {
+              method: r && r.method === "email"
+                ? "email" : "popup",
+              minutes: Number(r && r.minutes) || 0
+            };
+          })
+        : [],
       primary: c.primary === true
     };
   });
@@ -24543,7 +24754,9 @@ function gcalEditorSetLimited(limited, noteText) {
    "gcalEvAllDayInput", "gcalEvStartDateInput",
    "gcalEvStartTimeInput", "gcalEvEndDateInput",
    "gcalEvEndTimeInput", "gcalEvLocationInput",
-   "gcalEvDescInput"].forEach(function (id) {
+   "gcalEvDescInput", "gcalEvRepeatSelect",
+   "gcalEvRepeatInterval", "gcalEvRepeatEndDate",
+   "gcalEvRepeatEndCount"].forEach(function (id) {
     const el = gcalEditorEl(id);
     if (el) { el.disabled = !!limited; }
   });
@@ -24586,7 +24799,20 @@ async function openGcalEventEditor(ev, dayStr) {
     ev: ev || null,
     limited: false,
     saving: false,
-    deleting: false
+    deleting: false,
+    /* v2.87: whether the user has picked the weekly
+       repeat days by hand; until they do, the chips
+       follow the start date (see gcalEditorResetRepeat). */
+    repeatDaysTouched: false,
+    /* v2.87 Part D: the Notifications section's seed
+       state: whether any row has been touched, the
+       event's own reminders kept verbatim (so an
+       untouched save returns them exactly), and
+       whether the standing seed came from the
+       calendar's defaults. */
+    notifTouched: false,
+    notifOriginal: null,
+    notifFromDefaults: false
   };
   gcalEditorState = st;
   const writable = gcalWritableCalendars();
@@ -24666,6 +24892,17 @@ async function openGcalEventEditor(ev, dayStr) {
     gcalEditorEl("gcalEvCalendarSelect").disabled = true;
   }
   gcalEditorSyncAllDay();
+  /* v2.87: the Repeat controls start at Does not
+     repeat for a create and for an edit alike (the
+     editor serves single events only; a series is
+     never edited here), the weekday chips standing on
+     the start date's own weekday. */
+  gcalEditorResetRepeat(
+    gcalEditorEl("gcalEvStartDateInput").value);
+  /* v2.87 Part D: the Notifications section seeds
+     with the editor (the event's own overrides, or
+     the calendar's defaults under their note). */
+  gcalEditorSeedNotifications(ev);
   /* v2.83: the linked notes area: on an edit it lists
      the notes this event is linked to and offers the
      Link a note button; on a create there is no event
@@ -24703,6 +24940,498 @@ function closeGcalEventEditor() {
   if (modal) { modal.classList.add("hidden"); }
   closeGcalDeleteConfirm();
   gcalEditorState = null;
+}
+
+/* ---------------- v2.87: repeating events, creation --
+   The editor gains the Repeat control Google
+   Calendar's own editor carries: a pattern select
+   (Does not repeat, Daily, Weekly, Monthly,
+   Annually), a Repeat every interval, weekday chips
+   for a weekly pattern, and an Ends group (Never, On
+   a date, After a number of occurrences). Saving
+   builds the one RRULE and sends it in the payload's
+   recurrence through the standing write path, for a
+   create and for an edit alike, so a single existing
+   event can be given a pattern here. Monthly repeats
+   by day of month only in this version; there is no
+   "third Tuesday" mode. Editing an existing series
+   (its pattern, or one instance of it) stays out of
+   scope: a repeating event still opens in the view. */
+
+/* The weekday chips' rule codes in week order, their
+   short faces on the chips, and their summary names. */
+const GCAL_DAY_CODES = ["SU", "MO", "TU", "WE",
+  "TH", "FR", "SA"];
+const GCAL_DAY_FACES = ["Su", "Mo", "Tu", "We",
+  "Th", "Fr", "Sa"];
+const GCAL_DAY_NAMES = ["Sun", "Mon", "Tue", "Wed",
+  "Thu", "Fri", "Sat"];
+
+/* Build the seven weekday chips once, on first use:
+   toggle buttons in week order. A click (wired with
+   the editor's own wiring) toggles its day and marks
+   the set as the user's own. */
+function ensureGcalRepeatDayChips() {
+  const box = gcalEditorEl("gcalEvRepeatDays");
+  if (!box || box.children.length) { return; }
+  GCAL_DAY_CODES.forEach(function (code, dow) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "gcal-ev-day-chip";
+    b.setAttribute("data-dow", String(dow));
+    b.setAttribute("aria-pressed", "false");
+    b.textContent = GCAL_DAY_FACES[dow];
+    box.appendChild(b);
+  });
+}
+
+/* The weekday numbers the chips currently choose, in
+   week order. */
+function gcalEditorRepeatDays() {
+  const box = gcalEditorEl("gcalEvRepeatDays");
+  if (!box) { return []; }
+  return Array.from(box.querySelectorAll(
+    ".gcal-ev-day-chip.active")).map(function (b) {
+    return Number(b.getAttribute("data-dow"));
+  }).sort(function (a, b) { return a - b; });
+}
+
+/* Stand the chips on the given weekday numbers. */
+function gcalEditorSetRepeatDays(dows) {
+  const box = gcalEditorEl("gcalEvRepeatDays");
+  if (!box) { return; }
+  box.querySelectorAll(".gcal-ev-day-chip")
+    .forEach(function (b) {
+      const on = dows.indexOf(
+        Number(b.getAttribute("data-dow"))) !== -1;
+      b.classList.toggle("active", on);
+      b.setAttribute("aria-pressed",
+        on ? "true" : "false");
+    });
+}
+
+/* Which Ends choice stands: "never", "date", or
+   "count". */
+function gcalEditorRepeatEndsMode() {
+  const on = gcalEditorEl("gcalEvRepeatEndOn");
+  const after = gcalEditorEl("gcalEvRepeatEndAfter");
+  if (on && on.checked) { return "date"; }
+  if (after && after.checked) { return "count"; }
+  return "never";
+}
+
+/* Each Ends input stands enabled only under its own
+   radio, so the standing choice is the only one that
+   can be typed into. */
+function gcalEditorSyncRepeatEnds() {
+  const mode = gcalEditorRepeatEndsMode();
+  const dateInput = gcalEditorEl("gcalEvRepeatEndDate");
+  const countInput = gcalEditorEl(
+    "gcalEvRepeatEndCount");
+  if (dateInput) { dateInput.disabled = mode !== "date"; }
+  if (countInput) {
+    countInput.disabled = mode !== "count";
+  }
+}
+
+/* The pattern select's effect on the extras: they
+   stand only under a pattern, the weekday chips only
+   under Weekly, and the interval's unit word names
+   the pattern's own unit. */
+function gcalEditorSyncRepeat() {
+  const sel = gcalEditorEl("gcalEvRepeatSelect");
+  const extras = gcalEditorEl("gcalEvRepeatExtras");
+  if (!sel || !extras) { return; }
+  const freq = sel.value;
+  extras.classList.toggle("hidden", freq === "none");
+  const daysRow = gcalEditorEl("gcalEvRepeatDaysRow");
+  if (daysRow) {
+    daysRow.classList.toggle("hidden",
+      freq !== "WEEKLY");
+  }
+  const unit = gcalEditorEl("gcalEvRepeatIntervalUnit");
+  if (unit) {
+    unit.textContent = freq === "DAILY" ? "days"
+      : freq === "WEEKLY" ? "weeks"
+      : freq === "MONTHLY" ? "months"
+      : freq === "YEARLY" ? "years" : "days";
+  }
+  gcalEditorSyncRepeatEnds();
+}
+
+/* The Repeat controls at the editor's open: Does not
+   repeat, every 1, ending Never, ten occurrences
+   standing behind their radio, and the weekday chips
+   on the start date's own weekday, untaken by hand, so
+   they follow the start date until the user picks. */
+function gcalEditorResetRepeat(startDayStr) {
+  ensureGcalRepeatDayChips();
+  const sel = gcalEditorEl("gcalEvRepeatSelect");
+  if (sel) { sel.value = "none"; }
+  const iv = gcalEditorEl("gcalEvRepeatInterval");
+  if (iv) { iv.value = "1"; }
+  const never = gcalEditorEl("gcalEvRepeatEndNever");
+  if (never) { never.checked = true; }
+  const endDate = gcalEditorEl("gcalEvRepeatEndDate");
+  if (endDate) { endDate.value = ""; }
+  const count = gcalEditorEl("gcalEvRepeatEndCount");
+  if (count) { count.value = "10"; }
+  if (gcalEditorState) {
+    gcalEditorState.repeatDaysTouched = false;
+  }
+  const p = parseTaskDate(startDayStr);
+  const dow = p
+    ? new Date(p.y, p.m - 1, p.d).getDay() : 0;
+  gcalEditorSetRepeatDays([dow]);
+  gcalEditorSyncRepeat();
+}
+
+/* A start date change moves the weekday chips with
+   it, until the user has picked days by hand. */
+function gcalEditorRepeatDaysFollow() {
+  const st = gcalEditorState;
+  if (!st || st.repeatDaysTouched) { return; }
+  const sel = gcalEditorEl("gcalEvRepeatSelect");
+  if (!sel || sel.value !== "WEEKLY") { return; }
+  const p = parseTaskDate(
+    gcalEditorEl("gcalEvStartDateInput").value);
+  if (!p) { return; }
+  gcalEditorSetRepeatDays(
+    [new Date(p.y, p.m - 1, p.d).getDay()]);
+}
+
+/* Build the RRULE for the editor's Repeat controls,
+   or the validation error that stops the save in the
+   editor's own error line rather than sending a bad
+   rule: an interval under 1, an occurrences count
+   under 1, a missing end date, and an end date before
+   the start date. Resolves { rrule } (empty for Does
+   not repeat) or { error }. UNTIL is exact: for an
+   all day event the chosen end date itself (yyyyMMdd);
+   for a timed event that date at the end of its local
+   day, as a UTC timestamp (yyyyMMddTHHmmssZ). A
+   weekly rule names BYDAY only when the chosen days
+   are more than the start weekday alone, which Google
+   infers from the event's start. */
+function buildGcalRepeatRule(allDay, startDateStr) {
+  const sel = gcalEditorEl("gcalEvRepeatSelect");
+  const freq = sel ? sel.value : "none";
+  if (freq === "none") { return { rrule: "" }; }
+  const interval = Math.floor(Number(
+    gcalEditorEl("gcalEvRepeatInterval").value));
+  if (!isFinite(interval) || interval < 1) {
+    return { error: "The repeat interval must be " +
+      "at least 1." };
+  }
+  const parts = ["FREQ=" + freq];
+  if (interval > 1) {
+    parts.push("INTERVAL=" + interval);
+  }
+  if (freq === "WEEKLY") {
+    const dows = gcalEditorRepeatDays();
+    const sp = parseTaskDate(startDateStr);
+    const startDow = sp
+      ? new Date(sp.y, sp.m - 1, sp.d).getDay() : -1;
+    const justStart = dows.length === 1 &&
+      dows[0] === startDow;
+    if (dows.length && !justStart) {
+      parts.push("BYDAY=" + dows.map(function (d) {
+        return GCAL_DAY_CODES[d];
+      }).join(","));
+    }
+  }
+  const mode = gcalEditorRepeatEndsMode();
+  if (mode === "date") {
+    const endStr = gcalEditorEl(
+      "gcalEvRepeatEndDate").value;
+    if (!endStr) {
+      return { error: "Enter the date the repeat " +
+        "ends on." };
+    }
+    if (endStr < startDateStr) {
+      return { error: "The repeat end date cannot " +
+        "be before the start date." };
+    }
+    if (allDay) {
+      parts.push("UNTIL=" + endStr.replace(/-/g, ""));
+    } else {
+      const p = parseTaskDate(endStr);
+      const endMs = new Date(p.y, p.m - 1, p.d,
+        23, 59, 59).getTime();
+      parts.push("UNTIL=" + new Date(endMs)
+        .toISOString().replace(/[-:]/g, "")
+        .replace(/\.\d{3}/, ""));
+    }
+  } else if (mode === "count") {
+    const n = Math.floor(Number(
+      gcalEditorEl("gcalEvRepeatEndCount").value));
+    if (!isFinite(n) || n < 1) {
+      return { error: "The number of occurrences " +
+        "must be at least 1." };
+    }
+    parts.push("COUNT=" + n);
+  }
+  return { rrule: "RRULE:" + parts.join(";") };
+}
+
+/* ---------------- v2.87 Part D: event notifications --
+   The editor's Notifications section, in Google
+   Calendar's own shape: rows of a method select
+   (Notification, the API's popup, or Email), an
+   amount, and a unit select (minutes, hours, days,
+   weeks), a remove button on each row, and an Add
+   notification link under them, standing down at
+   five rows, the API's override cap. It stands for
+   new events and single event edits alike, and so
+   covers a new repeating event too, whose reminders
+   are the series' own by nature.
+
+   The defaults model is frozen: rows seeded from a
+   calendar's own defaultReminders carry a Calendar
+   default note, which stands until any row is
+   touched. An untouched save sends the reminders
+   exactly as the event already had them (on a
+   create, useDefault true and no overrides
+   invented; on an edit, the event's own reminders
+   verbatim). A touched save sends useDefault false
+   with the rows as overrides. Switching a create's
+   calendar reseeds an untouched section from the
+   newly chosen calendar. Amounts ride the API's
+   own model, raw minutes before the event's start
+   (an all day event's start is its midnight),
+   displayed in the largest unit they divide
+   exactly. */
+
+/* The unit words and their minutes, and the cap. */
+const GCAL_NOTIF_UNIT_MINUTES = { minutes: 1,
+  hours: 60, days: 1440, weeks: 10080 };
+const GCAL_NOTIF_MAX_ROWS = 5;
+
+/* A calendar's own default reminders, from the
+   calendar list the module already holds. */
+function gcalCalendarDefaultReminders(calId) {
+  const cal = (gcalCalendars || []).filter(
+    function (c) { return c.id === calId; })[0];
+  if (!cal || !Array.isArray(cal.defaultReminders)) {
+    return [];
+  }
+  return cal.defaultReminders.map(function (r) {
+    return { method: r.method, minutes: r.minutes };
+  });
+}
+
+/* Raw minutes in their display shape: the largest
+   unit they divide exactly (weeks, then days, then
+   hours), else minutes themselves; zero stands as
+   zero minutes. */
+function gcalNotifDisplayOf(minutes) {
+  const m = Number(minutes) || 0;
+  if (m > 0 && m % 10080 === 0) {
+    return { amount: m / 10080, unit: "weeks" };
+  }
+  if (m > 0 && m % 1440 === 0) {
+    return { amount: m / 1440, unit: "days" };
+  }
+  if (m > 0 && m % 60 === 0) {
+    return { amount: m / 60, unit: "hours" };
+  }
+  return { amount: m, unit: "minutes" };
+}
+
+/* Raw minutes as plain words, for the view's
+   Notifications line: "10 minutes before", "1 day
+   before", "0 minutes before". */
+function gcalNotifWords(minutes) {
+  const d = gcalNotifDisplayOf(minutes);
+  const unit = d.amount === 1
+    ? d.unit.slice(0, -1) : d.unit;
+  return d.amount + " " + unit + " before";
+}
+
+/* One Notifications row, in Google's shape. */
+function buildGcalNotifRow(reminder) {
+  const d = gcalNotifDisplayOf(reminder.minutes);
+  const row = document.createElement("div");
+  row.className = "gcal-ev-notif-row";
+  const method = document.createElement("select");
+  method.className = "gcal-ev-notif-method";
+  [["popup", "Notification"], ["email", "Email"]]
+    .forEach(function (pair) {
+      const opt = document.createElement("option");
+      opt.value = pair[0];
+      opt.textContent = pair[1];
+      method.appendChild(opt);
+    });
+  method.value = reminder.method === "email"
+    ? "email" : "popup";
+  row.appendChild(method);
+  const amount = document.createElement("input");
+  amount.type = "number";
+  amount.className = "gcal-ev-notif-amount";
+  amount.min = "0";
+  amount.step = "1";
+  amount.value = String(d.amount);
+  row.appendChild(amount);
+  const unit = document.createElement("select");
+  unit.className = "gcal-ev-notif-unit";
+  ["minutes", "hours", "days", "weeks"].forEach(
+    function (u) {
+      const opt = document.createElement("option");
+      opt.value = u;
+      opt.textContent = u;
+      unit.appendChild(opt);
+    });
+  unit.value = d.unit;
+  row.appendChild(unit);
+  const remove = document.createElement("button");
+  remove.type = "button";
+  remove.className = "gcal-ev-notif-remove";
+  remove.setAttribute("aria-label",
+    "Remove notification");
+  remove.textContent = "\u00d7";
+  row.appendChild(remove);
+  return row;
+}
+
+function gcalNotifRowCount() {
+  const box = gcalEditorEl("gcalEvNotifRows");
+  return box ? box.querySelectorAll(
+    ".gcal-ev-notif-row").length : 0;
+}
+
+/* The Add notification link stands down at the
+   five row cap. */
+function gcalEditorSyncNotifAdd() {
+  const add = gcalEditorEl("gcalEvNotifAdd");
+  if (add) {
+    add.classList.toggle("hidden",
+      gcalNotifRowCount() >= GCAL_NOTIF_MAX_ROWS);
+  }
+}
+
+/* Stand the section's rows on a seed list. */
+function renderGcalNotifRows(list) {
+  const box = gcalEditorEl("gcalEvNotifRows");
+  if (!box) { return; }
+  box.innerHTML = "";
+  (list || []).slice(0, GCAL_NOTIF_MAX_ROWS)
+    .forEach(function (r) {
+      box.appendChild(buildGcalNotifRow(r));
+    });
+  gcalEditorSyncNotifAdd();
+}
+
+/* The Calendar default note stands while the
+   section shows a calendar's own defaults and no
+   row has been touched in this open. */
+function gcalEditorSyncNotifNote() {
+  const note = gcalEditorEl("gcalEvNotifNote");
+  const st = gcalEditorState;
+  if (!note || !st) { return; }
+  note.classList.toggle("hidden",
+    !(st.notifFromDefaults && !st.notifTouched));
+}
+
+/* The first touch of any row, in any form, drops
+   the note and arms the overrides save. */
+function gcalEditorNotifTouch() {
+  const st = gcalEditorState;
+  if (!st) { return; }
+  st.notifTouched = true;
+  gcalEditorSyncNotifNote();
+}
+
+/* Seed the section: an event's own overrides when
+   it carries them, a calendar's defaults otherwise
+   (the event's calendar on an edit, the chosen one
+   on a create), the note standing on the defaults
+   path. Runs at the editor's open, and again when
+   a create's calendar changes under an untouched
+   section. */
+function gcalEditorSeedNotifications(ev) {
+  const st = gcalEditorState;
+  if (!st) { return; }
+  st.notifTouched = false;
+  st.notifOriginal = ev && ev.reminders ? {
+    useDefault: ev.reminders.useDefault,
+    overrides: ev.reminders.overrides.map(
+      function (r) {
+        return { method: r.method,
+          minutes: r.minutes };
+      })
+  } : null;
+  let seed, fromDefaults;
+  if (ev && ev.reminders &&
+      !ev.reminders.useDefault) {
+    seed = st.notifOriginal.overrides;
+    fromDefaults = false;
+  } else {
+    const sel = gcalEditorEl("gcalEvCalendarSelect");
+    const calId = ev ? ev.calendarId
+      : (sel ? sel.value : st.calendarId);
+    seed = gcalCalendarDefaultReminders(calId);
+    fromDefaults = true;
+  }
+  st.notifFromDefaults = fromDefaults;
+  renderGcalNotifRows(seed);
+  gcalEditorSyncNotifNote();
+}
+
+/* Read the section at save. Untouched: the
+   reminders the event already had (a create takes
+   useDefault true, nothing invented). Touched: the
+   rows as overrides; an amount that is not a
+   non-negative number stops the save here, in the
+   editor's own validation pattern, and zero
+   minutes is allowed, the notification at the
+   event's start. */
+function readGcalEditorReminders() {
+  const st = gcalEditorState;
+  if (!st || !st.notifTouched) {
+    if (st && st.mode === "edit" &&
+        st.notifOriginal) {
+      if (st.notifOriginal.useDefault) {
+        return { reminders: { useDefault: true } };
+      }
+      return { reminders: {
+        useDefault: false,
+        overrides: st.notifOriginal.overrides.map(
+          function (r) {
+            return { method: r.method,
+              minutes: r.minutes };
+          })
+      } };
+    }
+    return { reminders: { useDefault: true } };
+  }
+  const box = gcalEditorEl("gcalEvNotifRows");
+  const rows = box ? box.querySelectorAll(
+    ".gcal-ev-notif-row") : [];
+  const overrides = [];
+  for (let i = 0; i < rows.length; i++) {
+    const amountEl = rows[i].querySelector(
+      ".gcal-ev-notif-amount");
+    const raw = amountEl ? amountEl.value : "";
+    const amount = Number(raw);
+    if (raw === "" || !isFinite(amount) ||
+        amount < 0) {
+      return { error: "Enter a number for each " +
+        "notification amount." };
+    }
+    const unitEl = rows[i].querySelector(
+      ".gcal-ev-notif-unit");
+    const methodEl = rows[i].querySelector(
+      ".gcal-ev-notif-method");
+    const factor = GCAL_NOTIF_UNIT_MINUTES[
+      unitEl ? unitEl.value : "minutes"] || 1;
+    overrides.push({
+      method: methodEl && methodEl.value === "email"
+        ? "email" : "popup",
+      minutes: Math.round(amount * factor)
+    });
+  }
+  return { reminders: { useDefault: false,
+    overrides: overrides } };
 }
 
 /* Read the editor's fields into a create/edit payload,
@@ -24744,15 +25473,29 @@ function readGcalEditorPayload() {
     end = { dateTime: gcalRfc3339Local(eMs),
       timeZone: tz };
   }
-  return {
-    payload: {
-      summary: gcalEditorEl("gcalEvTitleInput").value,
-      location: gcalEditorEl("gcalEvLocationInput").value,
-      description: gcalEditorEl("gcalEvDescInput").value,
-      start: start,
-      end: end
-    }
+  /* v2.87: the Repeat controls settle into the same
+     read: a bad rule is a validation error here, a
+     good one rides the payload's recurrence, and Does
+     not repeat adds nothing at all. */
+  const rep = buildGcalRepeatRule(allDay, sd);
+  if (rep.error) { return { error: rep.error }; }
+  const payload = {
+    summary: gcalEditorEl("gcalEvTitleInput").value,
+    location: gcalEditorEl("gcalEvLocationInput").value,
+    description: gcalEditorEl("gcalEvDescInput").value,
+    start: start,
+    end: end
   };
+  if (rep.rrule) { payload.recurrence = [rep.rrule]; }
+  /* v2.87 Part D: the Notifications section settles
+     into the same read: an invalid amount is a
+     validation error here, and the reminders ride
+     the payload in whichever of the section's two
+     shapes the touch state names. */
+  const nr = readGcalEditorReminders();
+  if (nr.error) { return { error: nr.error }; }
+  payload.reminders = nr.reminders;
+  return { payload: payload };
 }
 
 /* A write landed: forget the module's cache and re-ask
@@ -25016,6 +25759,128 @@ function gcalViewWhenText(ev) {
     gcalEventTimeLabel(ev);
 }
 
+/* v2.87: one line of plain words for an event's
+   recurrence, for the view's Repeats row: the pattern
+   ("Repeats annually", "Repeats every 2 weeks"), a
+   weekly rule's days ("on Mon, Wed"), and its end
+   (", ends Dec 31, 2027", ", 10 times"). A rule this
+   cannot read returns an empty string, and the view
+   then shows no Repeats line at all rather than
+   guessing. */
+function gcalRepeatsSummary(recurrence) {
+  if (!Array.isArray(recurrence)) { return ""; }
+  let rule = null;
+  for (let i = 0; i < recurrence.length; i++) {
+    const s = String(recurrence[i] || "");
+    if (s.indexOf("RRULE:") === 0) {
+      rule = s.slice(6);
+      break;
+    }
+  }
+  if (!rule) { return ""; }
+  const kv = {};
+  rule.split(";").forEach(function (part) {
+    const eq = part.indexOf("=");
+    if (eq > 0) {
+      kv[part.slice(0, eq).toUpperCase()] =
+        part.slice(eq + 1).toUpperCase();
+    }
+  });
+  const units = { DAILY: "days", WEEKLY: "weeks",
+    MONTHLY: "months", YEARLY: "years" };
+  if (!units[kv.FREQ]) { return ""; }
+  const interval = kv.INTERVAL
+    ? Number(kv.INTERVAL) : 1;
+  if (!isFinite(interval) || interval < 1 ||
+      Math.floor(interval) !== interval) {
+    return "";
+  }
+  let text;
+  if (interval === 1) {
+    text = "Repeats " + { DAILY: "daily",
+      WEEKLY: "weekly", MONTHLY: "monthly",
+      YEARLY: "annually" }[kv.FREQ];
+  } else {
+    text = "Repeats every " + interval + " " +
+      units[kv.FREQ];
+  }
+  if (kv.FREQ === "WEEKLY" && kv.BYDAY) {
+    const found = [];
+    const codes = kv.BYDAY.split(",");
+    for (let i = 0; i < codes.length; i++) {
+      const code = codes[i].replace(/^[+-]?\d+/, "");
+      const idx = GCAL_DAY_CODES.indexOf(code);
+      if (idx === -1) { return ""; }
+      found.push(idx);
+    }
+    found.sort(function (a, b) { return a - b; });
+    text += " on " + found.map(function (idx) {
+      return GCAL_DAY_NAMES[idx];
+    }).join(", ");
+  }
+  if (kv.UNTIL) {
+    const m = /^(\d{4})(\d{2})(\d{2})/.exec(kv.UNTIL);
+    if (!m) { return ""; }
+    const d = new Date(Number(m[1]),
+      Number(m[2]) - 1, Number(m[3]));
+    text += ", ends " + d.toLocaleDateString(
+      undefined, { month: "short", day: "numeric",
+        year: "numeric" });
+  } else if (kv.COUNT) {
+    const n = Number(kv.COUNT);
+    if (!isFinite(n) || n < 1) { return ""; }
+    text += ", " + n + (n === 1 ? " time" : " times");
+  }
+  return text;
+}
+
+/* Stand the view's Notifications line on the
+   event's effective reminders: its overrides when
+   it carries them, else its calendar's defaults
+   under a calendar default marker. An event with
+   neither shows no line. */
+function fillGcalViewNotifications(ev) {
+  const row = document.getElementById(
+    "gcalViewNotifRow");
+  const el = document.getElementById("gcalViewNotif");
+  if (!row || !el) { return; }
+  let list = [], marker = false;
+  if (ev.reminders && !ev.reminders.useDefault &&
+      ev.reminders.overrides.length) {
+    list = ev.reminders.overrides;
+  } else if (!ev.reminders || ev.reminders.useDefault) {
+    list = gcalCalendarDefaultReminders(
+      ev.calendarId);
+    marker = list.length > 0;
+  }
+  if (!list.length) {
+    el.textContent = "";
+    row.classList.add("hidden");
+    return;
+  }
+  el.textContent = list.map(function (r) {
+    return (r.method === "email"
+      ? "Email" : "Notification") + " " +
+      gcalNotifWords(r.minutes);
+  }).join(", ") + (marker
+    ? " (calendar default)" : "");
+  row.classList.remove("hidden");
+}
+
+/* Stand the view's Repeats row on the event's rule,
+   or hide it when the rule says nothing this can
+   read. */
+function fillGcalViewRepeats(ev) {
+  const row = document.getElementById(
+    "gcalViewRepeatsRow");
+  const el = document.getElementById("gcalViewRepeats");
+  if (!row || !el) { return; }
+  const text = ev
+    ? gcalRepeatsSummary(ev.recurrence) : "";
+  el.textContent = text;
+  row.classList.toggle("hidden", !text);
+}
+
 /* Fill a linked notes chip row (the editor's and the
    view's share this): one chip per linked note, its
    current title resolved from the store; a note that
@@ -25066,6 +25931,29 @@ function openGcalEventView(ev) {
     ev.calendarName || ""));
   document.getElementById("gcalViewWhen").textContent =
     gcalViewWhenText(ev);
+  /* v2.87: the Repeats line. A record that carries
+     its own rule (the master, or an event fetched
+     whole) fills it at once; an expanded instance
+     carries none, so its master is fetched directly
+     and the line fills when that lands, the view
+     still standing on this event (a failed fetch
+     simply leaves the line out). */
+  fillGcalViewRepeats(ev);
+  fillGcalViewNotifications(ev);
+  if (ev.recurring && !ev.recurrence && ev.masterId &&
+      ev.masterId !== ev.id) {
+    const viewEv = ev;
+    gcalFetchEventById(ev.calendarId, ev.masterId)
+      .then(function (got) {
+        if (!gcalViewState ||
+            gcalViewState.ev !== viewEv) { return; }
+        if (got.outcome === "ok" && got.ev &&
+            got.ev.recurrence) {
+          viewEv.recurrence = got.ev.recurrence;
+          fillGcalViewRepeats(viewEv);
+        }
+      }).catch(function () { /* the line stays out */ });
+  }
   const locRow = document.getElementById(
     "gcalViewLocationRow");
   if (ev.location) {
@@ -25115,6 +26003,15 @@ function openGcalEventView(ev) {
       !(!ev.recurring &&
         gcalCalendarIsWritable(ev.calendarId)));
   }
+  /* v2.87: Delete series stands for a repeating event
+     on a writable calendar, and nowhere else. */
+  const delSeries = document.getElementById(
+    "gcalViewDeleteSeriesBtn");
+  if (delSeries) {
+    delSeries.classList.toggle("hidden",
+      !(ev.recurring &&
+        gcalCalendarIsWritable(ev.calendarId)));
+  }
   modal.classList.remove("hidden");
 }
 
@@ -25151,6 +26048,41 @@ function deleteGcalEventFromView() {
       "\"? This cannot be undone.";
   }
   const modal = document.getElementById("gcalDeleteModal");
+  if (modal) { modal.classList.remove("hidden"); }
+}
+
+/* The view's Delete series button: the shared delete
+   confirmation, naming the event and saying plainly
+   that every occurrence of the series will be
+   deleted. The write targets the series' master
+   record: deleting an expanded instance would remove
+   only that one occurrence in the API's eyes, while
+   the master takes the whole series with it. The
+   shared confirmation's view branch then settles the
+   outcome exactly as a single delete from the view
+   does (the view closes, the caches forget, the
+   deleted toast stands). */
+function deleteGcalSeriesFromView() {
+  const st = gcalViewState;
+  if (!st || st.deleting) { return; }
+  if (!st.ev.recurring ||
+      !gcalCalendarIsWritable(st.ev.calendarId)) {
+    return;
+  }
+  gcalDeleteCtx = {
+    calendarId: st.ev.calendarId,
+    eventId: st.ev.masterId || st.ev.id,
+    source: "view"
+  };
+  const text = document.getElementById("gcalDeleteText");
+  if (text) {
+    text.textContent = "Delete the series \"" +
+      (st.ev.title || "(No title)") +
+      "\"? Every occurrence of this repeating " +
+      "event will be deleted. This cannot be undone.";
+  }
+  const modal = document.getElementById(
+    "gcalDeleteModal");
   if (modal) { modal.classList.remove("hidden"); }
 }
 
@@ -30401,6 +31333,31 @@ function buildHomeCalendarWidget() {
     openGcalEventEditor(null, homeCalSelectedStr());
   });
   head.appendChild(newEventBtn);
+  /* v2.87 (Part C): the New task button, a third icon
+     button in the same dress: a checkbox carrying its
+     check, the app's own task mark. Its click mirrors
+     New event's selected day courtesy through the
+     standing task creation path (openTaskEditor's due
+     date preset; the selected day falls back to today
+     in homeCalSelectedStr, as it does for events). */
+  const newTaskBtn = document.createElement("button");
+  newTaskBtn.type = "button";
+  newTaskBtn.className = "mail-icon-btn";
+  newTaskBtn.id = "homeCalNewTaskBtn";
+  newTaskBtn.title = "New task";
+  newTaskBtn.setAttribute("aria-label", "New task");
+  newTaskBtn.innerHTML = "<svg viewBox=\"0 0 24 24\" " +
+    "width=\"17\" height=\"17\" fill=\"none\" " +
+    "stroke=\"currentColor\" stroke-width=\"1.8\" " +
+    "stroke-linecap=\"round\" stroke-linejoin=\"round\" " +
+    "aria-hidden=\"true\"><rect x=\"4\" y=\"4\" " +
+    "width=\"16\" height=\"16\" rx=\"3\"/>" +
+    "<path d=\"M8.5 12.5l2.5 2.5 4.5-5.5\"/></svg>";
+  newTaskBtn.addEventListener("click", function () {
+    openTaskEditor(null, null, null,
+      homeCalSelectedStr());
+  });
+  head.appendChild(newTaskBtn);
   parts.body.appendChild(head);
 
   const week = document.createElement("div");
@@ -63971,6 +64928,74 @@ function wireEvents() {
   });
   document.getElementById("gcalEvAllDayInput").addEventListener("change", function () {
     gcalEditorSyncAllDay();
+  });
+  /* v2.87: the Repeat controls' wiring, and the view's
+     Delete series: the select shows and hides the
+     extras, each Ends radio arms its own input, a
+     weekday chip click toggles its day (and marks the
+     set as picked by hand), and an unpicked weekday
+     set follows the start date. */
+  document.getElementById("gcalEvRepeatSelect").addEventListener("change", function () {
+    gcalEditorSyncRepeat();
+  });
+  ["gcalEvRepeatEndNever", "gcalEvRepeatEndOn",
+   "gcalEvRepeatEndAfter"].forEach(function (id) {
+    document.getElementById(id).addEventListener("change", function () {
+      gcalEditorSyncRepeatEnds();
+    });
+  });
+  document.getElementById("gcalEvRepeatDays").addEventListener("click", function (ev) {
+    const btn = ev.target.closest(".gcal-ev-day-chip");
+    if (!btn) { return; }
+    if (gcalEditorState) {
+      gcalEditorState.repeatDaysTouched = true;
+    }
+    const on = !btn.classList.contains("active");
+    btn.classList.toggle("active", on);
+    btn.setAttribute("aria-pressed", on ? "true" : "false");
+  });
+  document.getElementById("gcalEvStartDateInput").addEventListener("change", function () {
+    gcalEditorRepeatDaysFollow();
+  });
+  document.getElementById("gcalViewDeleteSeriesBtn").addEventListener("click", function () {
+    deleteGcalSeriesFromView();
+  });
+  /* v2.87 Part D: the Notifications section's
+     wiring: any row edit is the section's first
+     touch, a row's remove button takes the row out,
+     the Add link appends a row under the cap, and a
+     create's calendar change reseeds an untouched
+     section from the newly chosen calendar. */
+  document.getElementById("gcalEvNotifRows").addEventListener("input", function () {
+    gcalEditorNotifTouch();
+  });
+  document.getElementById("gcalEvNotifRows").addEventListener("change", function () {
+    gcalEditorNotifTouch();
+  });
+  document.getElementById("gcalEvNotifRows").addEventListener("click", function (ev) {
+    const btn = ev.target.closest(".gcal-ev-notif-remove");
+    if (!btn) { return; }
+    const row = btn.closest(".gcal-ev-notif-row");
+    if (row) { row.remove(); }
+    gcalEditorNotifTouch();
+    gcalEditorSyncNotifAdd();
+  });
+  document.getElementById("gcalEvNotifAdd").addEventListener("click", function (ev) {
+    ev.preventDefault();
+    const box = document.getElementById("gcalEvNotifRows");
+    if (!box || gcalNotifRowCount() >= GCAL_NOTIF_MAX_ROWS) {
+      return;
+    }
+    box.appendChild(buildGcalNotifRow(
+      { method: "popup", minutes: 30 }));
+    gcalEditorNotifTouch();
+    gcalEditorSyncNotifAdd();
+  });
+  document.getElementById("gcalEvCalendarSelect").addEventListener("change", function () {
+    const st = gcalEditorState;
+    if (st && st.mode === "create" && !st.notifTouched) {
+      gcalEditorSeedNotifications(null);
+    }
   });
   document.getElementById("gcalEventModal").addEventListener("click", function (ev) {
     if (ev.target === ev.currentTarget) { closeGcalEventEditor(); }
