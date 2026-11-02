@@ -40,10 +40,60 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-11-01-SSN-V2810
-  Version: 2.81.0
+  BUILD STAMP: 2026-11-01-SSN-V2820
+  Version: 2.82.0
 
   Revision history:
+    v2.82.0 2026-11-01 Email: a full Gmail
+                      client inside the app, at
+                      Chris's word and in his
+                      workshop's design. The
+                      sidebar gains an Email
+                      entry directly under Home
+                      (the top group now runs
+                      Home, Email, Calendar,
+                      Tasks, All Notes), with
+                      the Inbox unread count as
+                      its badge. The Email view
+                      keeps the app sidebar and
+                      carries its own folder
+                      column (Inbox, Sent,
+                      Drafts, All Mail, Trash,
+                      then his Gmail labels; a
+                      folder picker on the
+                      phone), a message list,
+                      and a reading pane. It
+                      reads and searches his
+                      mail, triages it (mark
+                      read or unread, archive,
+                      labels, trash; the sign
+                      in's gmail.modify
+                      permission cannot
+                      permanently delete, by
+                      design), composes,
+                      replies, forwards, keeps
+                      drafts on Gmail, and
+                      sends, and a Save to note
+                      button files one message
+                      as a note, on that click
+                      alone. Message bodies are
+                      cleaned by the app's own
+                      web clip sanitizer before
+                      they show, and remote
+                      images stay blocked until
+                      a message's Show images is
+                      pressed. Mail is fetched
+                      live and held in page
+                      memory only, never stored
+                      in Drive or on the device.
+                      The same release adds a
+                      right click menu to
+                      calendar days on both
+                      calendar surfaces,
+                      offering New task (the day
+                      preset as its due date)
+                      and New event (the day in
+                      the event editor).
     v2.81.0 2026-11-01 Calendar Phase 2: events
                       can be created, edited,
                       and deleted from inside
@@ -8963,6 +9013,86 @@ body.dark .task-cal-more{color:var(--accent);}
   margin:4px 0 2px;
 }
 #gcalEvOpenLink{font-size:13.5px;}
+
+/* v2.82: the Email view. The pane is a flex sibling of
+   the tasks and home panes; inside it, the workshop
+   layout: a folder column (its own, the app sidebar
+   untouched), the message list at roughly the notes
+   list's width, and the reading pane filling the
+   rest. Unread rows speak in bold with the green dot;
+   every control follows the app's theming in both
+   themes, like everything else. */
+#mailpane{flex:1;display:flex;flex-direction:column;overflow:hidden;background:var(--bg);}
+.mail-layout{flex:1;display:flex;min-height:0;}
+.mail-folders{width:208px;flex:0 0 208px;border-right:1px solid var(--border);background:var(--surface);padding:12px 10px;overflow-y:auto;display:flex;flex-direction:column;gap:2px;}
+.mail-new-btn{width:100%;margin-bottom:10px;}
+.mail-folder{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;text-align:left;background:none;border:none;border-radius:8px;padding:8px 10px;font-size:14px;color:var(--text);cursor:pointer;}
+.mail-folder:hover{background:var(--accent-soft);}
+.mail-folder.active{background:var(--accent-soft);font-weight:700;box-shadow:inset 3px 0 0 var(--accent);}
+.mail-folder-divider{border-top:1px solid var(--border);margin:8px 2px;}
+.mail-listpane{width:370px;flex:0 0 370px;border-right:1px solid var(--border);background:var(--surface);display:flex;flex-direction:column;min-height:0;}
+.mail-search-row{display:flex;gap:8px;align-items:center;padding:10px 12px;border-bottom:1px solid var(--border);}
+.mail-search-row input{flex:1;min-width:0;}
+.mail-folder-picker-row{display:none;padding:10px 12px 0;}
+.mail-folder-picker-row select{width:100%;}
+.mail-status-line{display:flex;align-items:center;gap:10px;padding:8px 12px;color:var(--muted);font-size:13.5px;border-bottom:1px solid var(--border);}
+.mail-list{flex:1;overflow-y:auto;min-height:0;}
+.mail-row{position:relative;display:flex;gap:9px;padding:10px 12px;border-bottom:1px solid var(--border);cursor:pointer;}
+.mail-row:hover{background:var(--accent-soft);}
+.mail-row.selected{background:var(--accent-soft);box-shadow:inset 3px 0 0 var(--accent);}
+.mail-dot{flex:0 0 8px;width:8px;height:8px;border-radius:50%;background:var(--accent);margin-top:7px;}
+.mail-dot.off{background:transparent;}
+.mail-row-main{flex:1;min-width:0;}
+.mail-row-top{display:flex;justify-content:space-between;gap:10px;align-items:baseline;}
+.mail-row-from{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.mail-row-time{font-size:12px;color:var(--muted);white-space:nowrap;}
+.mail-row-subject{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px;}
+.mail-row-snippet{font-size:13px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px;}
+.mail-row.unread .mail-row-from,.mail-row.unread .mail-row-subject{font-weight:700;}
+.mail-row-chips{display:flex;gap:6px;align-items:center;margin-top:4px;}
+.mail-chip{font-size:11.5px;color:var(--muted);border:1px solid var(--border);border-radius:20px;padding:1px 8px;}
+.mail-clip{color:var(--muted);display:inline-flex;}
+.mail-row-actions{position:absolute;top:8px;right:10px;display:none;gap:2px;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:2px;}
+.mail-row:hover .mail-row-actions{display:flex;}
+.mail-row-action{background:none;border:none;color:var(--muted);cursor:pointer;padding:4px;border-radius:6px;display:inline-flex;}
+.mail-row-action:hover{color:var(--text);background:var(--accent-soft);}
+.mail-empty{padding:22px 14px;color:var(--muted);font-size:14px;text-align:center;}
+.mail-load-more{margin:10px 12px;}
+.mail-readpane{flex:1;min-width:0;overflow-y:auto;padding:18px 22px;background:var(--surface);}
+.mail-read-empty{color:var(--muted);font-size:14.5px;padding-top:30px;text-align:center;}
+.mail-back-btn{display:none;margin-bottom:10px;}
+.mail-read h3{margin:0 0 8px;font-size:19px;}
+.mail-read-meta{color:var(--muted);font-size:13.5px;display:flex;flex-direction:column;gap:2px;margin-bottom:12px;}
+.mail-meta-label{font-weight:700;}
+.mail-actions{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;}
+.mail-labels-menu{border:1px solid var(--border);border-radius:var(--radius-card);padding:10px 12px;margin-bottom:14px;display:flex;flex-direction:column;gap:6px;max-width:340px;}
+.mail-labels-menu.hidden{display:none;}
+.mail-label-row{justify-content:flex-start;}
+.mail-labels-none{color:var(--muted);font-size:13.5px;}
+.mail-attachments{display:flex;flex-direction:column;gap:6px;margin-bottom:14px;}
+.mail-attachments.hidden{display:none;}
+.mail-att-row{display:flex;align-items:center;gap:10px;font-size:13.5px;}
+.mail-body{font-size:14.5px;line-height:1.55;overflow-wrap:break-word;}
+.mail-body img{max-width:100%;height:auto;}
+.mail-blocked-img{display:inline-block;min-width:60px;min-height:18px;border:1px dashed var(--border);border-radius:6px;}
+#mailShowImagesBtn{margin-bottom:12px;}
+.mail-panel{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:30px;text-align:center;}
+.mail-panel p{font-size:16px;color:var(--muted);margin:0;}
+.mail-compose-card{max-width:640px;width:100%;}
+.mail-compose-card textarea{width:100%;}
+.rail-mail-dot{position:absolute;top:5px;right:5px;width:9px;height:9px;border-radius:50%;background:var(--accent);border:2px solid var(--surface);}
+#railEmailBtn{position:relative;}
+@media (max-width:900px){
+  .mail-folders{display:none;}
+  .mail-folder-picker-row{display:block;}
+  .mail-listpane{flex:1;width:auto;border-right:none;}
+  .mail-readpane{display:none;}
+  #mailpane.mail-show-read .mail-listpane{display:none;}
+  #mailpane.mail-show-read .mail-readpane{display:block;}
+  .mail-back-btn{display:inline-block;}
+  .mail-row-actions{display:none !important;}
+}
+
 @media (max-width:700px){
   .task-cal-day{min-height:64px;padding:4px 3px 5px;}
   .task-cal-entry-title{font-size:11px;}
@@ -9423,11 +9553,12 @@ body.dark .version-date{color:var(--accent);}
   }
   #mobileBar .brand-mini{font-size:17px;font-weight:800;margin-right:auto;}
   #mobileBar .brand-mini span{color:var(--accent);}
-  #sidebar,#listpane,#editorpane,#taskspane,#homepane{width:100%;flex:1 1 auto;display:none;min-height:0;}
+  #sidebar,#listpane,#editorpane,#taskspane,#homepane,#mailpane{width:100%;flex:1 1 auto;display:none;min-height:0;}
   body.view-nav #sidebar{display:flex;}
   body.view-list #listpane{display:flex;}
   body.view-list #taskspane{display:flex;}
   body.view-list #homepane{display:flex;}
+  body.view-list #mailpane{display:flex;}
   body.view-editor #editorpane{display:flex;}
   .gate{padding:20px 12px;}
   .gate-card{padding:24px 20px 20px;}
@@ -9831,18 +9962,23 @@ body.dark .version-date{color:var(--accent);}
            homepane section below); a returning boot lands
            there unless Settings say the notes list. -->
       <button class="nav-item" id="navHome" type="button">Home</button>
-      <button class="nav-item" id="navAll" type="button">All Notes <span class="count count-pill" id="countAll"></span></button>
+      <!-- v2.82: the Email entry, directly under Home:
+           the full Gmail client in its own view, with
+           the Inbox unread count as its pill. The top
+           group order is Chris's (2026-11-01): Home,
+           Email, Calendar, Tasks, All Notes. -->
+      <button class="nav-item" id="navEmail" type="button">Email <span class="count count-pill" id="countEmail"></span></button>
       <!-- v2.81: the Calendar entry, directly above
            Tasks: it opens the Tasks view with its
            calendar mode already active, the same grid
-           the view's own Calendar segment shows. The
-           order is Chris's: Home, Calendar, Tasks
-           (Email joins between Home and Calendar in
-           v2.82.0). -->
+           the view's own Calendar segment shows. -->
       <button class="nav-item" id="navCalendar" type="button">Calendar</button>
       <!-- v2.24: the Tasks view's entry, directly under All
            Notes, with the open task count as its pill. -->
       <button class="nav-item" id="navTasks" type="button">Tasks <span class="count count-pill" id="countTasks"></span></button>
+      <!-- v2.82: All Notes, moved to directly under
+           Tasks, completing Chris's top group order. -->
+      <button class="nav-item" id="navAll" type="button">All Notes <span class="count count-pill" id="countAll"></span></button>
       <button class="nav-item" id="navPinned" type="button">Pinned <span class="count count-pill" id="countPinned"></span></button>
       <!-- v2.35: the Reminders view's entry, under Pinned:
            every note carrying a reminder, sorted by its
@@ -9976,6 +10112,7 @@ body.dark .version-date{color:var(--accent);}
          as it always has. -->
     <button class="rail-btn rail-expand-btn" id="railExpandBtn" type="button" title="Click to expand" aria-label="Click to expand">&gt;</button>
     <button class="rail-btn" id="railNewNoteBtn" type="button" title="New Note" aria-label="New Note"><svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true" focusable="false"><path d="M10 3v14M3 10h14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" fill="none"/></svg></button>
+    <button class="rail-btn" id="railEmailBtn" type="button" title="Email" aria-label="Email"><svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true" focusable="false"><rect x="2.5" y="4" width="15" height="12" rx="1.8" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M3.2 5.8l6.8 5.4 6.8-5.4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="rail-mail-dot hidden" id="railEmailDot" aria-hidden="true"></span></button>
     <button class="rail-btn" id="railAllBtn" type="button" title="All Notes" aria-label="All Notes"><svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true" focusable="false"><path d="M3 5.5h14M3 10h14M3 14.5h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" fill="none"/></svg></button>
     <button class="rail-btn" id="railCalendarBtn" type="button" title="Calendar" aria-label="Calendar"><svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true" focusable="false"><rect x="3" y="4.6" width="14" height="12.4" rx="1.8" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M3 8.4h14M6.8 2.8v3.4M13.2 2.8v3.4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" fill="none"/></svg></button>
     <button class="rail-btn" id="railPinnedBtn" type="button" title="Pinned" aria-label="Pinned"><svg viewBox="0 0 20 20" width="20" height="20" aria-hidden="true" focusable="false"><rect x="7.2" y="2.2" width="8.6" height="8.6" rx="2.2" transform="rotate(45 11.5 6.5)" fill="currentColor" stroke="none"/><path d="M7.6 10.4L3 17" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" fill="none"/></svg></button>
@@ -10955,6 +11092,70 @@ body.dark .version-date{color:var(--accent);}
     </div>
   </section>
 
+  <!-- v2.82: the Email view, a full Gmail client in the
+       app (Chris's 2026-11-01 workshop design): the app
+       sidebar stands as it always does, and the view
+       carries its own folder column (a folder picker on
+       the phone), a message list, and a reading pane.
+       Everything the view shows is fetched live from
+       Gmail and held in page memory only; the module
+       (its own script section) carries the rules. The
+       panel states (signed out, not connected) stand in
+       the layout's place; the layout itself renders the
+       folders, the search, the rows, and the open
+       message. -->
+  <section id="mailpane" class="hidden">
+    <div class="mail-panel hidden" id="mailPanel">
+      <p id="mailPanelText">Sign in to see your mail.</p>
+      <button class="btn primary hidden" id="mailPanelConnectBtn" type="button">Connect Gmail</button>
+      <button class="btn hidden" id="mailPanelRetryBtn" type="button">Retry</button>
+    </div>
+    <div class="mail-layout" id="mailLayout">
+      <div class="mail-folders" id="mailFolders">
+        <button class="btn primary mail-new-btn" id="mailNewBtn" type="button">+ New mail</button>
+        <div id="mailFolderList"></div>
+      </div>
+      <div class="mail-listpane" id="mailListPane">
+        <div class="mail-folder-picker-row">
+          <select id="mailFolderPicker" aria-label="Mail folder"></select>
+        </div>
+        <div class="mail-search-row">
+          <input id="mailSearchInput" type="search" placeholder="Search mail" aria-label="Search mail">
+          <button class="btn small hidden" id="mailSearchClearBtn" type="button">Clear</button>
+        </div>
+        <div class="mail-status-line hidden" id="mailStatusLine">
+          <span id="mailStatusText">Gmail unavailable</span>
+          <button class="btn small" id="mailStatusRetryBtn" type="button">Retry</button>
+        </div>
+        <div class="mail-list" id="mailList"></div>
+        <div class="mail-empty hidden" id="mailEmpty">No messages here.</div>
+        <button class="btn mail-load-more hidden" id="mailLoadMoreBtn" type="button">Load more</button>
+      </div>
+      <div class="mail-readpane" id="mailReadPane">
+        <div class="mail-read-empty" id="mailReadEmpty">Pick a message to read it here.</div>
+        <div class="mail-read hidden" id="mailRead">
+          <button type="button" class="btn small mail-back-btn" id="mailBackBtn">Back</button>
+          <h3 id="mailReadSubject"></h3>
+          <div class="mail-read-meta" id="mailReadMeta"></div>
+          <div class="mail-actions">
+            <button class="btn small" id="mailReplyBtn" type="button">Reply</button>
+            <button class="btn small" id="mailReplyAllBtn" type="button">Reply all</button>
+            <button class="btn small" id="mailForwardBtn" type="button">Forward</button>
+            <button class="btn small" id="mailArchiveBtn" type="button">Archive</button>
+            <button class="btn small" id="mailTrashBtn" type="button"><span id="mailTrashBtnLabel">Trash</span></button>
+            <button class="btn small" id="mailLabelsBtn" type="button">Labels</button>
+            <button class="btn small" id="mailMarkBtn" type="button"><span id="mailMarkBtnLabel">Mark as unread</span></button>
+            <button class="btn small" id="mailSaveNoteBtn" type="button">Save to note</button>
+          </div>
+          <div class="mail-labels-menu hidden" id="mailLabelsMenu"></div>
+          <div class="mail-attachments hidden" id="mailAttachments"></div>
+          <button class="btn small hidden" id="mailShowImagesBtn" type="button">Show images</button>
+          <div class="mail-body" id="mailBody"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <!-- v2.57: the save status as a floating pill, its visible
        home now (see renderSavePill in the script). It sits
        inside #app so it renders only while the app screen
@@ -11081,6 +11282,17 @@ body.dark .version-date{color:var(--accent);}
         <div class="settings-help">Google Calendar</div>
         <div class="settings-help" id="settingsGcalStatus">Not connected</div>
         <button class="btn hidden" id="settingsGcalConnectBtn" type="button">Connect Google Calendar</button>
+      </div>
+      <!-- v2.82: the Email row, mirroring the Calendar
+           row above it: status text filled by
+           renderMailSettingsRow, and the Connect button
+           standing only in the not connected state,
+           where it runs the consent forcing sign in (the
+           one seam every Google connection shares). -->
+      <div class="settings-autosync">
+        <div class="settings-help">Email</div>
+        <div class="settings-help" id="settingsMailStatus">Not connected</div>
+        <button class="btn hidden" id="settingsMailConnectBtn" type="button">Connect Gmail</button>
       </div>
       <!-- v2.16: the idle auto-sync toggle. A plain checkbox
            input (accented like the checklist boxes), so the on
@@ -11450,6 +11662,90 @@ body.dark .version-date{color:var(--accent);}
   </div>
 </div>
 <!-- ==========================================================================
+     v2.82: the mail compose dialog, and its close prompt.
+     The one dialog the Email view composes in: a new
+     message, a reply or reply all, a forward, or a draft
+     reopened from the Drafts folder. Plain text only in
+     this build. Send and Save draft write straight to
+     Gmail through the mail module's one write transport;
+     a failure keeps the dialog open over the fields
+     exactly as typed, with the reason in its error line
+     and a Connect button when the sign in does not hold
+     the mail permission yet. Closing with the fields
+     moved from how they opened (or last saved) raises
+     the close prompt: Save draft, Discard, or Keep
+     writing, so nothing typed is ever lost silently.
+     ========================================================================== -->
+<div id="mailComposeModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="mailComposeTitle">
+  <div class="modal-card mail-compose-card">
+    <h2 id="mailComposeTitle">New mail</h2>
+    <p class="modal-sub">Sent and saved through your Gmail. The app keeps no copy of it.</p>
+
+    <div class="field">
+      <label for="mailToInput">To</label>
+      <input id="mailToInput" type="text" autocomplete="off">
+    </div>
+    <div class="field">
+      <button class="btn small" id="mailCcToggleBtn" type="button">Cc / Bcc</button>
+    </div>
+    <div class="hidden" id="mailCcRow">
+      <div class="field">
+        <label for="mailCcInput">Cc</label>
+        <input id="mailCcInput" type="text" autocomplete="off">
+      </div>
+      <div class="field">
+        <label for="mailBccInput">Bcc</label>
+        <input id="mailBccInput" type="text" autocomplete="off">
+      </div>
+    </div>
+    <div class="field">
+      <label for="mailSubjectInput">Subject</label>
+      <input id="mailSubjectInput" type="text" autocomplete="off">
+    </div>
+    <div class="field">
+      <label for="mailBodyInput">Message</label>
+      <textarea id="mailBodyInput" rows="10"></textarea>
+    </div>
+    <div class="gcal-ev-error hidden" id="mailComposeError">
+      <span id="mailComposeErrorText"></span>
+      <button class="btn small hidden" id="mailComposeConnectBtn" type="button">Connect</button>
+    </div>
+
+    <div class="modal-foot">
+      <button class="btn danger" id="mailDiscardBtn" type="button">Discard</button>
+      <button class="btn" id="mailComposeCancelBtn" type="button">Cancel</button>
+      <button class="btn" id="mailSaveDraftBtn" type="button">Save draft</button>
+      <button class="btn primary" id="mailSendBtn" type="button">Send</button>
+    </div>
+  </div>
+</div>
+
+<div id="mailCloseModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="mailCloseTitle">
+  <div class="modal-card">
+    <h2 id="mailCloseTitle">Save this draft?</h2>
+    <p class="modal-sub">This message has words in it that are not saved yet. Save it as a draft on Gmail, discard it, or keep writing.</p>
+    <div class="modal-foot">
+      <button class="btn danger" id="mailCloseDiscardBtn" type="button">Discard</button>
+      <button class="btn" id="mailCloseKeepBtn" type="button">Keep writing</button>
+      <button class="btn primary" id="mailCloseSaveBtn" type="button">Save draft</button>
+    </div>
+  </div>
+</div>
+
+<!-- v2.82: the calendar day menu. The custom right
+     click menu for calendar days on both calendar
+     surfaces (the Tasks grid and the Home widget's
+     grid), in the note context menu's own dress. Its
+     two items create on the clicked day: a task with
+     the day preset as its due date, or an event
+     through the calendar module's editor. The module
+     (its own script section) carries the wiring. -->
+<div id="calDayMenu" class="note-ctx-menu cal-day-menu hidden" role="menu" aria-label="Day actions">
+  <button type="button" class="list-menu-item" id="calDayNewTaskBtn" role="menuitem">New task</button>
+  <button type="button" class="list-menu-item" id="calDayNewEventBtn" role="menuitem">New event</button>
+</div>
+
+<!-- ==========================================================================
      v2.35: the note reminder panel.
      The one panel both reminder surfaces open (the notes list
      menu's Reminder item and the editor footer's Reminder
@@ -11774,8 +12070,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-11-01-SSN-V2810";
-const APP_VERSION = "2.81.0";
+const APP_BUILD = "2026-11-01-SSN-V2820";
+const APP_VERSION = "2.82.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -16615,6 +16911,7 @@ async function syncNow(showToast) {
      everything else (page memory only; a standing
      consent state is left to its Connect path). */
   refreshGcalAfterSync();
+  refreshMailAfterSync();
     /* v2.20: the drop box imports inside the sync, after the
        load and before the render, so what it brought in shows
        up in this same pass (and an auto-sync cycle imports
@@ -23975,6 +24272,2186 @@ async function confirmGcalEventDelete() {
   gcalSettleWriteFailure(outcome);
 }
 
+/* ---------------- v2.82: Email, the Gmail client ----
+   The Email view: a full Gmail client inside the app,
+   designed with Chris in his 2026-11-01 workshop and
+   built on the calendar connection's rails. The sidebar
+   gains an Email entry directly under Home; the view
+   keeps the app sidebar standing and carries its own
+   folder column (a folder picker on the phone), a
+   message list, and a reading pane. It reads, searches,
+   triages (mark read or unread, archive, labels, trash;
+   never a permanent delete, which the sign in's
+   gmail.modify permission cannot perform anyway),
+   composes, replies, forwards, keeps drafts on Gmail,
+   sends, and can file one message as a note.
+
+   The rules, mirroring the calendar module's:
+
+   - The token is the app's own Google access token,
+     from the one token source (getGoogleAccessToken).
+     Every read goes through gmailApiGet and every
+     write through gmailApiSend, both against the one
+     API base below; a static scan of this file (part
+     of the build's test record) proves the Gmail write
+     verbs reach the API only through gmailApiSend. A
+     401 runs the standing silent renewal once and
+     retries once. A 403 is this module's own consent
+     state, distinct from the calendar's: either can be
+     connected while the other is not. Anything else
+     failed is the unavailable state.
+   - Mail data lives in page memory only: the label
+     list, the per-folder and per-search list caches,
+     the open message, and the account's own address
+     (asked for once, for Reply all). Nothing
+     mail-shaped is written to Drive, to the notes
+     store's files, or to the device snapshot; the one
+     exception is Save to note, which files a message
+     as a note through the ordinary creation path when,
+     and only when, its button is clicked.
+   - Message bodies are shown only after the app's own
+     web clip sanitizer has cleaned them, and remote
+     images stay blocked until the message's own Show
+     images action loads them.
+   - The consent route is the calendar module's seam
+     (connectGoogleCalendar): it arms the fresh flag
+     and runs the one navigation, and the sign in it
+     starts asks for every permission the sign-in
+     helper offers, mail included. Nothing in this
+     module ever navigates on its own. */
+
+const GMAIL_API_BASE = "https://www.googleapis.com/gmail/v1";
+
+/* The standing folders, in the column's order. Each
+   maps to the messages.list labelIds it stands for;
+   All Mail names none (the API's default listing
+   already leaves spam and trash out, which is the
+   all-mail reading). Drafts lists through the drafts
+   endpoints instead (see mailFetchListPage). */
+const MAIL_FOLDERS = [
+  { id: "inbox", name: "Inbox", label: "INBOX" },
+  { id: "sent", name: "Sent", label: "SENT" },
+  { id: "drafts", name: "Drafts", label: "DRAFT" },
+  { id: "all", name: "All Mail", label: null },
+  { id: "trash", name: "Trash", label: "TRASH" }
+];
+
+/* The module's standing state. mailStatus is one of
+   "idle" (nothing asked yet, or signed out), "ok",
+   "needs-consent", or "unavailable". mailFolder is
+   the standing selection: {kind: "folder", id} for a
+   standing folder, {kind: "label", id, name} for one
+   of the user's labels, {kind: "search", q} for a
+   search. The rest is page memory only, per the
+   header: the label list once loaded, the account's
+   own address, the list caches by their key, the
+   open message and its reading state, and the load
+   guards that keep renders from multiplying fetches. */
+let mailStatus = "idle";
+let mailLabels = null;
+let mailOwnAddress = "";
+let mailFolder = { kind: "folder", id: "inbox" };
+let mailLists = {};
+let mailOpenId = null;
+let mailOpenFull = null;
+let mailShowImages = false;
+let mailLabelsLoading = false;
+let mailListLoadingKey = "";
+let mailCompose = null;
+
+/* A mail credential stands when the same trio the
+   calendar module reads stands: a Worker session in
+   memory or in its store, or a recorded provider
+   token. When none stands the user is signed out and
+   the module stays silent. */
+function mailSignedInAble() {
+  if (workerSessionToken || loadWorkerSessionBlob()) {
+    return true;
+  }
+  const blob = loadProviderTokenBlob();
+  return !!(blob && blob.google);
+}
+
+function mailFolderDef(id) {
+  for (let i = 0; i < MAIL_FOLDERS.length; i++) {
+    if (MAIL_FOLDERS[i].id === id) { return MAIL_FOLDERS[i]; }
+  }
+  return MAIL_FOLDERS[0];
+}
+
+/* The cache key a selection's list stands under. */
+function mailListKey(sel) {
+  if (!sel) { sel = mailFolder; }
+  if (sel.kind === "label") { return "label:" + sel.id; }
+  if (sel.kind === "search") { return "search:" + sel.q; }
+  return "folder:" + sel.id;
+}
+
+/* The selection's display name (a folder's own name,
+   a label's name, or the search's wording). */
+function mailSelectionName(sel) {
+  if (!sel) { sel = mailFolder; }
+  if (sel.kind === "label") { return sel.name || "Label"; }
+  if (sel.kind === "search") {
+    return "Search: " + sel.q;
+  }
+  return mailFolderDef(sel.id).name;
+}
+
+/* The one label a selection lists by, or null for the
+   selections that list without one (All Mail, a
+   search): the standing folder's label, or a user
+   label's own id. */
+function mailSelectionLabel(sel) {
+  if (!sel) { sel = mailFolder; }
+  if (sel.kind === "label") { return sel.id; }
+  if (sel.kind === "folder") {
+    return mailFolderDef(sel.id).label;
+  }
+  return null;
+}
+
+/* Whether a message record belongs in a selection's
+   list, from its standing labels: a labelled selection
+   holds the messages carrying its label; All Mail
+   holds everything the API's default listing holds
+   (nothing in spam or trash); a search's membership
+   is the API's own answer and is not re-derived here
+   (search rows stand as fetched). */
+function mailRowInSelection(rec, sel) {
+  if (!rec) { return false; }
+  if (sel.kind === "search") { return true; }
+  const label = mailSelectionLabel(sel);
+  if (label) {
+    return rec.labelIds.indexOf(label) !== -1;
+  }
+  return rec.labelIds.indexOf("TRASH") === -1 &&
+    rec.labelIds.indexOf("SPAM") === -1;
+}
+
+/* The Inbox label record, standing in the loaded
+   label list, or null before it loads. */
+function mailInboxLabel() {
+  if (!mailLabels) { return null; }
+  for (let i = 0; i < mailLabels.length; i++) {
+    if (mailLabels[i].id === "INBOX") {
+      return mailLabels[i];
+    }
+  }
+  return null;
+}
+
+/* The Inbox unread count the badge and the folder
+   column speak: the INBOX label's own messagesUnread,
+   held current by the module's mark-read paths beside
+   the API's word. Null while unknown. */
+function mailInboxUnread() {
+  const lab = mailInboxLabel();
+  return lab ? lab.messagesUnread : null;
+}
+
+function mailSetInboxUnread(n) {
+  const lab = mailInboxLabel();
+  if (lab) {
+    lab.messagesUnread = Math.max(0, n || 0);
+  }
+}
+
+/* One Gmail API read. Resolves with the status and
+   the parsed body (null when the body does not
+   parse); a network failure rejects, and the caller
+   reads that as the unavailable outcome. */
+async function gmailApiGet(path, token) {
+  const res = await fetch(GMAIL_API_BASE + path, {
+    method: "GET",
+    headers: { "Authorization": "Bearer " + token }
+  });
+  let data = null;
+  try { data = await res.json(); } catch (e) { data = null; }
+  return { status: res.status, data: data };
+}
+
+/* One Gmail API write, the transport every triage,
+   compose, draft, and send goes through: the method,
+   a JSON body when the call carries one, and the
+   same lenient answer reading as the read transport.
+   Resolves with the status and the parsed body; a
+   network failure rejects, and the caller reads that
+   as its bad outcome. */
+async function gmailApiSend(method, path, bodyObj, token) {
+  const opts = {
+    method: method,
+    headers: { "Authorization": "Bearer " + token }
+  };
+  if (bodyObj) {
+    opts.headers["Content-Type"] = "application/json";
+    opts.body = JSON.stringify(bodyObj);
+  }
+  const res = await fetch(GMAIL_API_BASE + path, opts);
+  let data = null;
+  try { data = await res.json(); } catch (e) { data = null; }
+  return { status: res.status, data: data };
+}
+
+/* One Gmail call, settled into the module's outcome
+   words: "ok" (a success status), "forbidden" (a
+   403: the standing grant does not cover mail, this
+   module's consent state), "signed-out" (no token is
+   coming until a sign in), or "bad" (a network
+   failure or any other answer). A 401 runs the
+   standing silent renewal once and retries once, the
+   calendar loader's own discipline; a second 401 is
+   bad. Reads ride gmailApiGet and writes gmailApiSend,
+   so the scan's rule (write verbs only through
+   gmailApiSend) holds by construction. */
+async function gmailCall(method, path, bodyObj) {
+  let token = null;
+  try {
+    token = await getGoogleAccessToken();
+  } catch (e) {
+    if (e && e.code === "GOOGLE_SIGN_IN_REQUIRED") {
+      return { outcome: "signed-out", status: 0, data: null };
+    }
+    return { outcome: "bad", status: 0, data: null };
+  }
+  const attempt = function (tok) {
+    return method === "GET"
+      ? gmailApiGet(path, tok)
+      : gmailApiSend(method, path, bodyObj, tok);
+  };
+  let res = null;
+  try {
+    res = await attempt(token);
+    if (res.status === 401) {
+      const renewed = await googleTrySilentSignIn();
+      if (renewed) {
+        const fresh = await getProviderToken("google");
+        if (fresh) { res = await attempt(fresh); }
+      }
+    }
+  } catch (e) {
+    return { outcome: "bad", status: 0, data: null };
+  }
+  if (res.status >= 200 && res.status < 300) {
+    return { outcome: "ok", status: res.status, data: res.data };
+  }
+  if (res.status === 403) {
+    return { outcome: "forbidden", status: 403, data: res.data };
+  }
+  if (res.status === 401) {
+    return { outcome: "bad", status: 401, data: res.data };
+  }
+  return { outcome: "bad", status: res.status, data: res.data };
+}
+
+function gmailRead(path) {
+  return gmailCall("GET", path, null);
+}
+
+function gmailWrite(method, path, bodyObj) {
+  return gmailCall(method, path, bodyObj || null);
+}
+
+/* Settle a load outcome into the standing state: a
+   forbidden answer raises this module's consent
+   state, a bad one the unavailable state, and a
+   signed-out answer returns the module to its idle
+   silence (the gate owns sign in). Returns true when
+   the caller may go on (its answer was ok). */
+function mailSettleLoadOutcome(outcome) {
+  if (outcome.outcome === "ok") { return true; }
+  if (outcome.outcome === "forbidden") {
+    mailSetStatus("needs-consent");
+  } else if (outcome.outcome === "signed-out") {
+    mailSetStatus("idle");
+  } else {
+    mailSetStatus("unavailable");
+  }
+  return false;
+}
+
+function mailSetStatus(next) {
+  if (mailStatus === next) {
+    renderMailSettingsRow();
+    return;
+  }
+  mailStatus = next;
+  renderMailSettingsRow();
+  updateMailBadge();
+  if (state.view && state.view.kind === "email") {
+    renderMail();
+  }
+}
+
+/* Forget everything the module holds. A completed
+   sign in calls it (a consent may have just changed
+   what the API will answer), and a sync calls the
+   refresh below. The standing selection survives: it
+   names where the user is standing, not what Google
+   answered. */
+function resetMailState() {
+  mailLabels = null;
+  mailOwnAddress = "";
+  mailLists = {};
+  mailOpenId = null;
+  mailOpenFull = null;
+  mailShowImages = false;
+  mailLabelsLoading = false;
+  mailListLoadingKey = "";
+  if (mailStatus !== "idle") {
+    mailStatus = "idle";
+    renderMailSettingsRow();
+    updateMailBadge();
+  }
+}
+
+/* A completed sync refreshes the mail with everything
+   else: forget the caches and, when the Email view
+   stands, ask again. The consent state is left
+   standing: only a sign in reopens it, and its
+   Connect button is the path. */
+function refreshMailAfterSync() {
+  if (mailStatus === "needs-consent") { return; }
+  const wasOpen = state.view && state.view.kind === "email";
+  resetMailState();
+  if (wasOpen) { ensureMailLoaded(); }
+}
+
+/* The surfaces' one ask: make sure the labels and the
+   standing selection's list are on their way. Starts
+   the loads unless they stand, are already in flight,
+   the consent state stands (only a sign in reopens
+   it), or nobody is signed in. */
+function ensureMailLoaded() {
+  if (!mailSignedInAble()) { return; }
+  if (mailStatus === "needs-consent") { return; }
+  if (!mailLabels) {
+    loadMailLabels();
+    return;
+  }
+  const key = mailListKey();
+  const list = mailLists[key];
+  if ((!list || !list.loaded) &&
+      mailListLoadingKey !== key) {
+    loadMailList(key, false);
+  }
+}
+
+/* The label list (the folder column's user labels and
+   the badge's unread count ride on it), then the
+   account's own address, asked for once per session
+   and non-fatally (Reply all simply keeps every
+   recipient until it is known), then the standing
+   list. */
+async function loadMailLabels() {
+  if (mailLabelsLoading) { return; }
+  mailLabelsLoading = true;
+  const out = await gmailRead("/users/me/labels");
+  mailLabelsLoading = false;
+  if (!mailSettleLoadOutcome(out)) { return; }
+  const items = out.data && Array.isArray(out.data.labels)
+    ? out.data.labels : [];
+  mailLabels = items.map(function (raw) {
+    return {
+      id: String(raw.id || ""),
+      name: String(raw.name || raw.id || ""),
+      type: String(raw.type || ""),
+      messagesUnread: typeof raw.messagesUnread === "number"
+        ? raw.messagesUnread : 0
+    };
+  }).filter(function (l) { return !!l.id; });
+  mailSetStatus("ok");
+  updateMailBadge();
+  if (state.view && state.view.kind === "email") {
+    renderMail();
+  }
+  if (!mailOwnAddress) {
+    gmailRead("/users/me/profile").then(function (prof) {
+      if (prof.outcome === "ok" && prof.data &&
+          prof.data.emailAddress) {
+        mailOwnAddress = String(prof.data.emailAddress);
+      }
+    }).catch(function () { /* non-fatal, per the header */ });
+  }
+  const key = mailListKey();
+  if (!mailLists[key] || !mailLists[key].loaded) {
+    loadMailList(key, false);
+  }
+}
+
+/* One page of a selection's list: the messages (or,
+   in Drafts, the drafts, whose rows are their
+   messages in metadata form), each settled into the
+   module's row shape. Appending keeps the standing
+   rows and adds the page's; a fresh load replaces
+   them. The page token the API returns is the Load
+   more button's standing. */
+async function loadMailList(key, append) {
+  if (mailListLoadingKey === key) { return; }
+  mailListLoadingKey = key;
+  const sel = mailFolder;
+  let list = mailLists[key];
+  if (!list) {
+    list = mailLists[key] = {
+      rows: [], nextPageToken: null, loaded: false,
+      sel: sel
+    };
+  }
+  list.sel = sel;
+  const pageToken = append ? list.nextPageToken : null;
+  const out = await mailFetchListPage(sel, pageToken);
+  if (mailListLoadingKey === key) { mailListLoadingKey = ""; }
+  if (!out) { return; }
+  if (!append) { list.rows = []; }
+  out.rows.forEach(function (rec) {
+    const at = list.rows.findIndex(function (r) {
+      return r.id === rec.id;
+    });
+    if (at === -1) { list.rows.push(rec); }
+    else { list.rows[at] = rec; }
+  });
+  list.nextPageToken = out.nextPageToken;
+  list.loaded = true;
+  if (state.view && state.view.kind === "email" &&
+      mailListKey() === key) {
+    renderMail();
+  }
+  updateMailBadge();
+}
+
+/* The API half of one list page, or null when the
+   load settled into a standing state instead (the
+   outcome rules above). The Drafts folder lists
+   drafts and reads each draft's message in metadata
+   form, so its rows carry the draft id beside the
+   message id (opening one opens the draft, not the
+   message). Every other selection lists messages by
+   its label or its search words, then reads each in
+   metadata form with the three headers the rows
+   speak. */
+async function mailFetchListPage(sel, pageToken) {
+  const isDrafts = sel.kind === "folder" && sel.id === "drafts";
+  let ids = [];
+  let nextPageToken = null;
+  if (isDrafts) {
+    let path = "/users/me/drafts?maxResults=50";
+    if (pageToken) {
+      path += "&pageToken=" + encodeURIComponent(pageToken);
+    }
+    const out = await gmailRead(path);
+    if (!mailSettleLoadOutcome(out)) { return null; }
+    const items = out.data && Array.isArray(out.data.drafts)
+      ? out.data.drafts : [];
+    ids = items.map(function (d) {
+      return {
+        draftId: String(d.id || ""),
+        messageId: d.message ? String(d.message.id || "") : ""
+      };
+    }).filter(function (x) { return !!x.messageId; });
+    nextPageToken = out.data && out.data.nextPageToken
+      ? String(out.data.nextPageToken) : null;
+  } else {
+    let path = "/users/me/messages?maxResults=50";
+    const label = mailSelectionLabel(sel);
+    if (sel.kind === "search") {
+      path += "&q=" + encodeURIComponent(sel.q);
+    } else if (label) {
+      path += "&labelIds=" + encodeURIComponent(label);
+    }
+    if (pageToken) {
+      path += "&pageToken=" + encodeURIComponent(pageToken);
+    }
+    const out = await gmailRead(path);
+    if (!mailSettleLoadOutcome(out)) { return null; }
+    const items = out.data && Array.isArray(out.data.messages)
+      ? out.data.messages : [];
+    ids = items.map(function (m) {
+      return { draftId: null, messageId: String(m.id || "") };
+    }).filter(function (x) { return !!x.messageId; });
+    nextPageToken = out.data && out.data.nextPageToken
+      ? String(out.data.nextPageToken) : null;
+  }
+  const rows = [];
+  await Promise.all(ids.map(async function (entry) {
+    const path = isDrafts
+      ? "/users/me/drafts/" + encodeURIComponent(entry.draftId) +
+        "?format=metadata&metadataHeaders=From" +
+        "&metadataHeaders=Subject&metadataHeaders=Date"
+      : "/users/me/messages/" +
+        encodeURIComponent(entry.messageId) +
+        "?format=metadata&metadataHeaders=From" +
+        "&metadataHeaders=Subject&metadataHeaders=Date";
+    const out = await gmailRead(path);
+    if (out.outcome !== "ok" || !out.data) { return; }
+    const raw = isDrafts ? out.data.message : out.data;
+    if (!raw) { return; }
+    const rec = normalizeMailRow(raw);
+    if (!rec) { return; }
+    rec.draftId = entry.draftId;
+    rows.push(rec);
+  }));
+  /* The list answer's order is the API's (newest
+     first); Promise.all settles its reads in its own
+     order, so the page is re-sorted by the messages'
+     own internal dates, newest first. */
+  rows.sort(function (a, b) { return b.dateMs - a.dateMs; });
+  return { rows: rows, nextPageToken: nextPageToken };
+}
+
+/* A message's headers as a name-to-value map, names
+   lowercased (the API's casing is its own). */
+function mailHeaderMap(raw) {
+  const map = {};
+  const headers = raw && raw.payload &&
+    Array.isArray(raw.payload.headers)
+    ? raw.payload.headers : [];
+  headers.forEach(function (h) {
+    if (h && h.name) {
+      map[String(h.name).toLowerCase()] =
+        String(h.value || "");
+    }
+  });
+  return map;
+}
+
+/* A From header's display name and address: the name
+   the sender wrote (quotes stripped), falling back
+   to the address itself, which is also the fallback
+   when the header is a bare address. */
+function mailParseFrom(value) {
+  const text = String(value || "").trim();
+  const m = /^(.*)<([^>]+)>\s*$/.exec(text);
+  if (m) {
+    const name = m[1].trim()
+      .replace(/^"|"$/g, "").trim();
+    return {
+      name: name || m[2].trim(),
+      address: m[2].trim()
+    };
+  }
+  return { name: text, address: text };
+}
+
+/* Whether any part of the payload carries a filename
+   (the row's paperclip), walking the part tree. */
+function mailPayloadHasAttachment(part) {
+  if (!part) { return false; }
+  if (part.filename) { return true; }
+  const parts = Array.isArray(part.parts) ? part.parts : [];
+  return parts.some(mailPayloadHasAttachment);
+}
+
+/* Settle one raw message (metadata or full form) into
+   the module's row shape, or null when it carries no
+   id. The date is the API's internalDate (its own
+   arrival order), the snippet its own words. */
+function normalizeMailRow(raw) {
+  if (!raw || !raw.id) { return null; }
+  const headers = mailHeaderMap(raw);
+  const from = mailParseFrom(headers.from || "");
+  const labelIds = Array.isArray(raw.labelIds)
+    ? raw.labelIds.map(String) : [];
+  return {
+    id: String(raw.id),
+    draftId: null,
+    threadId: String(raw.threadId || ""),
+    snippet: String(raw.snippet || ""),
+    labelIds: labelIds,
+    fromName: from.name,
+    fromAddress: from.address,
+    subject: headers.subject || "",
+    dateMs: Number(raw.internalDate) || 0,
+    unread: labelIds.indexOf("UNREAD") !== -1,
+    hasAttachment: mailPayloadHasAttachment(raw.payload)
+  };
+}
+
+/* A row's time words: the local time of day on the
+   day itself, the app's date words on any other day
+   (the calendar module's label helpers, reused). */
+function mailRowTimeLabel(rec) {
+  const d = new Date(rec.dateMs);
+  const today = taskTodayParts();
+  if (d.getFullYear() === today.y &&
+      d.getMonth() + 1 === today.m &&
+      d.getDate() === today.d) {
+    return gcalTimeOfDayLabel(rec.dateMs);
+  }
+  return taskDateLabel(gcalLocalDayStr(d));
+}
+
+/* The user's own labels (type "user"), sorted the
+   way the sidebar sorts names. */
+function mailUserLabels() {
+  if (!mailLabels) { return []; }
+  return mailLabels.filter(function (l) {
+    return l.type === "user";
+  }).sort(function (a, b) {
+    return compareSidebarNames(a.name, b.name);
+  });
+}
+
+/* A message's chips: its user labels' names, in the
+   label list's own order. */
+function mailRowLabelNames(rec) {
+  const users = mailUserLabels();
+  const names = [];
+  users.forEach(function (l) {
+    if (rec.labelIds.indexOf(l.id) !== -1) {
+      names.push(l.name);
+    }
+  });
+  return names;
+}
+
+/* The sidebar badge and the rail dot: the Inbox
+   unread count once mail has loaded, nothing while
+   signed out, not connected, or unavailable. Called
+   whenever the counts or the state move. */
+function updateMailBadge() {
+  const pill = document.getElementById("countEmail");
+  const dot = document.getElementById("railEmailDot");
+  const n = mailStatus === "ok" ? mailInboxUnread() : null;
+  if (pill) {
+    pill.textContent = n ? String(n) : "";
+  }
+  if (dot) {
+    dot.classList.toggle("hidden", !n);
+  }
+}
+
+/* The Settings Connection row's standing state,
+   mirroring the calendar row: Connected with the
+   Inbox unread count, Not connected (its Connect
+   button standing only in the consent state, where a
+   click is the cure), or Unavailable. */
+function renderMailSettingsRow() {
+  const statusEl = document.getElementById(
+    "settingsMailStatus");
+  if (!statusEl) { return; }
+  const btn = document.getElementById(
+    "settingsMailConnectBtn");
+  let text = "Not connected";
+  let showBtn = false;
+  if (mailStatus === "ok") {
+    const n = mailInboxUnread();
+    text = "Connected" + (n === null ? ""
+      : " (" + n + " unread)");
+  } else if (mailStatus === "needs-consent") {
+    text = "Not connected";
+    showBtn = true;
+  } else if (mailStatus === "unavailable") {
+    text = "Unavailable right now";
+  }
+  statusEl.textContent = text;
+  if (btn) { btn.classList.toggle("hidden", !showBtn); }
+}
+
+function mailEl(id) { return document.getElementById(id); }
+
+/* The Email view's render: the panel states (signed
+   out, not connected) stand in place of the layout;
+   every other state renders the layout, with the
+   unavailable line standing over it when the last
+   load failed. Renders are cheap and idempotent: the
+   loaders guard the fetches, so a render never
+   multiplies them. */
+function renderMail() {
+  const pane = mailEl("mailpane");
+  if (!pane) { return; }
+  const signedIn = mailSignedInAble();
+  const panel = mailEl("mailPanel");
+  const layout = mailEl("mailLayout");
+  const showPanel = !signedIn ||
+    mailStatus === "needs-consent";
+  if (panel) {
+    panel.classList.toggle("hidden", !showPanel);
+  }
+  if (layout) {
+    layout.classList.toggle("hidden", showPanel);
+  }
+  if (showPanel) {
+    const text = mailEl("mailPanelText");
+    const connect = mailEl("mailPanelConnectBtn");
+    if (text) {
+      text.textContent = signedIn
+        ? "Gmail is not connected"
+        : "Sign in to see your mail.";
+    }
+    if (connect) {
+      connect.classList.toggle("hidden", !signedIn);
+    }
+    return;
+  }
+  const statusLine = mailEl("mailStatusLine");
+  if (statusLine) {
+    const un = mailStatus === "unavailable";
+    statusLine.classList.toggle("hidden", !un);
+    if (un) {
+      const span = mailEl("mailStatusText");
+      if (span) { span.textContent = "Gmail unavailable"; }
+    }
+  }
+  renderMailFolders();
+  renderMailList();
+  renderMailRead();
+}
+
+/* The folder column and the phone's folder picker:
+   the standing folders (Inbox with its unread
+   count), a divider, then the user's labels. The
+   active selection carries the highlight; a search
+   leaves nothing highlighted, standing in the picker
+   as its own line. */
+function renderMailFolders() {
+  const list = mailEl("mailFolderList");
+  const picker = mailEl("mailFolderPicker");
+  const sel = mailFolder;
+  function activeFolder(id) {
+    return sel.kind === "folder" && sel.id === id;
+  }
+  function activeLabel(id) {
+    return sel.kind === "label" && sel.id === id;
+  }
+  if (list) {
+    list.innerHTML = "";
+    MAIL_FOLDERS.forEach(function (f) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "mail-folder" +
+        (activeFolder(f.id) ? " active" : "");
+      btn.setAttribute("data-mail-folder", f.id);
+      const name = document.createElement("span");
+      name.textContent = f.name;
+      btn.appendChild(name);
+      if (f.id === "inbox") {
+        const n = mailInboxUnread();
+        if (n) {
+          const count = document.createElement("span");
+          count.className = "count count-pill";
+          count.textContent = String(n);
+          btn.appendChild(count);
+        }
+      }
+      btn.addEventListener("click", function () {
+        mailChooseSelection({ kind: "folder", id: f.id });
+      });
+      list.appendChild(btn);
+    });
+    const labels = mailUserLabels();
+    if (labels.length) {
+      const div = document.createElement("div");
+      div.className = "mail-folder-divider";
+      list.appendChild(div);
+      labels.forEach(function (l) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "mail-folder" +
+          (activeLabel(l.id) ? " active" : "");
+        btn.setAttribute("data-mail-label", l.id);
+        btn.textContent = l.name;
+        btn.addEventListener("click", function () {
+          mailChooseSelection({ kind: "label", id: l.id,
+            name: l.name });
+        });
+        list.appendChild(btn);
+      });
+    }
+  }
+  if (picker) {
+    picker.innerHTML = "";
+    if (sel.kind === "search") {
+      const opt = document.createElement("option");
+      opt.value = "__search";
+      opt.textContent = "Search results";
+      picker.appendChild(opt);
+    }
+    MAIL_FOLDERS.forEach(function (f) {
+      const opt = document.createElement("option");
+      opt.value = "folder:" + f.id;
+      opt.textContent = f.name;
+      picker.appendChild(opt);
+    });
+    mailUserLabels().forEach(function (l) {
+      const opt = document.createElement("option");
+      opt.value = "label:" + l.id;
+      opt.textContent = l.name;
+      picker.appendChild(opt);
+    });
+    picker.value = sel.kind === "search" ? "__search"
+      : sel.kind === "label" ? "label:" + sel.id
+      : "folder:" + sel.id;
+  }
+}
+
+/* Stand in a selection: the standing folder, label,
+   or search changes; its list loads if it has not;
+   the view re-renders. Choosing the selection that
+   already stands just re-renders. */
+function mailChooseSelection(sel) {
+  mailFolder = sel;
+  mailOpenId = null;
+  mailOpenFull = null;
+  const pane = mailEl("mailpane");
+  if (pane) { pane.classList.remove("mail-show-read"); }
+  renderMail();
+  ensureMailLoaded();
+}
+
+/* The list pane: the standing selection's rows, its
+   loading and empty words, and the Load more button
+   while a further page stands. The search field is
+   static furniture above it and is not touched here,
+   so a render never eats what is being typed. */
+function renderMailList() {
+  const listEl = mailEl("mailList");
+  if (!listEl) { return; }
+  const clearBtn = mailEl("mailSearchClearBtn");
+  if (clearBtn) {
+    clearBtn.classList.toggle("hidden",
+      mailFolder.kind !== "search");
+  }
+  const key = mailListKey();
+  const list = mailLists[key];
+  listEl.innerHTML = "";
+  const empty = mailEl("mailEmpty");
+  const more = mailEl("mailLoadMoreBtn");
+  if (!list || !list.loaded) {
+    if (empty) {
+      empty.textContent = mailListLoadingKey === key
+        ? "Loading..." : "";
+      empty.classList.toggle("hidden",
+        mailListLoadingKey !== key);
+    }
+    if (more) { more.classList.add("hidden"); }
+    return;
+  }
+  list.rows.forEach(function (rec) {
+    listEl.appendChild(buildMailRowEl(rec));
+  });
+  if (empty) {
+    empty.textContent = "No messages here.";
+    empty.classList.toggle("hidden", list.rows.length > 0);
+  }
+  if (more) {
+    more.classList.toggle("hidden", !list.nextPageToken);
+  }
+}
+
+/* One message row: the unread dot and bold words, the
+   sender, the subject (its fallback is the display's,
+   like the calendar's), the snippet, the time, the
+   paperclip when a part carries a filename, and the
+   message's user label chips. On desktop the hover
+   quick actions stand at the row's right: archive,
+   trash, and mark read or unread. A click opens the
+   message (in Drafts, the draft). */
+function buildMailRowEl(rec) {
+  const el = document.createElement("div");
+  el.className = "mail-row" + (rec.unread ? " unread" : "") +
+    (mailOpenId === rec.id ? " selected" : "");
+  el.setAttribute("data-mail-id", rec.id);
+  const dot = document.createElement("span");
+  dot.className = "mail-dot" + (rec.unread ? "" : " off");
+  dot.setAttribute("aria-hidden", "true");
+  el.appendChild(dot);
+  const main = document.createElement("div");
+  main.className = "mail-row-main";
+  const top = document.createElement("div");
+  top.className = "mail-row-top";
+  const from = document.createElement("span");
+  from.className = "mail-row-from";
+  from.textContent = rec.fromName || rec.fromAddress;
+  top.appendChild(from);
+  const time = document.createElement("span");
+  time.className = "mail-row-time";
+  time.textContent = mailRowTimeLabel(rec);
+  top.appendChild(time);
+  main.appendChild(top);
+  const subject = document.createElement("div");
+  subject.className = "mail-row-subject";
+  subject.textContent = rec.subject || "(No subject)";
+  main.appendChild(subject);
+  const snippet = document.createElement("div");
+  snippet.className = "mail-row-snippet";
+  snippet.textContent = rec.snippet;
+  main.appendChild(snippet);
+  const names = mailRowLabelNames(rec);
+  if (names.length || rec.hasAttachment) {
+    const chips = document.createElement("div");
+    chips.className = "mail-row-chips";
+    names.forEach(function (n) {
+      const chip = document.createElement("span");
+      chip.className = "mail-chip";
+      chip.textContent = n;
+      chips.appendChild(chip);
+    });
+    if (rec.hasAttachment) {
+      const clip = document.createElement("span");
+      clip.className = "mail-clip";
+      clip.title = "Has attachments";
+      clip.setAttribute("aria-label", "Has attachments");
+      clip.innerHTML = "<svg viewBox=\"0 0 24 24\" " +
+        "width=\"13\" height=\"13\" fill=\"none\" " +
+        "stroke=\"currentColor\" stroke-width=\"2\" " +
+        "stroke-linecap=\"round\" stroke-linejoin=\"round\" " +
+        "aria-hidden=\"true\"><path d=\"M21 12.5l-8.5 8.5" +
+        "a5.5 5.5 0 0 1-7.8-7.8L13 5a3.7 3.7 0 0 1 5.2 " +
+        "5.2l-8.2 8.2a1.85 1.85 0 0 1-2.6-2.6L15.5 7\"/>" +
+        "</svg>";
+      chips.appendChild(clip);
+    }
+    main.appendChild(chips);
+  }
+  el.appendChild(main);
+  const actions = document.createElement("span");
+  actions.className = "mail-row-actions";
+  [["archive", "Archive", mailIconArchive()],
+   ["trash", "Move to trash", mailIconTrash()],
+   ["mark", rec.unread ? "Mark as read" : "Mark as unread",
+     mailIconMail()]].forEach(function (spec) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "mail-row-action";
+    btn.setAttribute("data-mail-act", spec[0]);
+    btn.title = spec[1];
+    btn.setAttribute("aria-label", spec[1]);
+    btn.innerHTML = spec[2];
+    btn.addEventListener("click", function (ev) {
+      ev.stopPropagation();
+      mailRowQuickAction(rec, spec[0]);
+    });
+    actions.appendChild(btn);
+  });
+  el.appendChild(actions);
+  el.addEventListener("click", function () {
+    if (rec.draftId) { openMailDraft(rec); }
+    else { openMailMessage(rec.id); }
+  });
+  return el;
+}
+
+function mailIconArchive() {
+  return "<svg viewBox=\"0 0 20 20\" width=\"15\" " +
+    "height=\"15\" fill=\"none\" stroke=\"currentColor\" " +
+    "stroke-width=\"1.6\" stroke-linecap=\"round\" " +
+    "stroke-linejoin=\"round\" aria-hidden=\"true\">" +
+    "<rect x=\"2.5\" y=\"3\" width=\"15\" height=\"4\" " +
+    "rx=\"1\"/><path d=\"M4 7v8a1.5 1.5 0 0 0 1.5 1.5h9" +
+    "A1.5 1.5 0 0 0 16 15V7M8 10h4\"/></svg>";
+}
+
+function mailIconTrash() {
+  return "<svg viewBox=\"0 0 20 20\" width=\"15\" " +
+    "height=\"15\" fill=\"none\" stroke=\"currentColor\" " +
+    "stroke-width=\"1.6\" stroke-linecap=\"round\" " +
+    "stroke-linejoin=\"round\" aria-hidden=\"true\">" +
+    "<path d=\"M3 5h14M8 5V3.5A.5.5 0 0 1 8.5 3h3a.5.5 " +
+    "0 0 1 .5.5V5M5 5l.8 11a1.5 1.5 0 0 0 1.5 1.4h5.4" +
+    "A1.5 1.5 0 0 0 14.2 16L15 5M8.3 8.5v5M11.7 " +
+    "8.5v5\"/></svg>";
+}
+
+function mailIconMail() {
+  return "<svg viewBox=\"0 0 20 20\" width=\"15\" " +
+    "height=\"15\" fill=\"none\" stroke=\"currentColor\" " +
+    "stroke-width=\"1.6\" stroke-linecap=\"round\" " +
+    "stroke-linejoin=\"round\" aria-hidden=\"true\">" +
+    "<rect x=\"2.5\" y=\"4\" width=\"15\" height=\"12\" " +
+    "rx=\"1.6\"/><path d=\"M3 5.5l7 5.5 7-5.5\"/></svg>";
+}
+
+/* A row's hover quick action, run against the row's
+   own record through the same write paths the
+   reading view uses. */
+function mailRowQuickAction(rec, act) {
+  if (act === "archive") {
+    mailModifyMessage(rec, [], ["INBOX"], "archive");
+  } else if (act === "trash") {
+    mailTrashMessage(rec, false);
+  } else if (act === "mark") {
+    if (rec.unread) {
+      mailModifyMessage(rec, [], ["UNREAD"], "mark");
+    } else {
+      mailModifyMessage(rec, ["UNREAD"], [], "mark");
+    }
+  }
+}
+
+/* Apply a label change the API has accepted to every
+   cached copy of a message, and to the standing
+   counts: its label set moves, its unread flag
+   follows, and rows fall out of the lists they no
+   longer belong to (a search's rows stand as
+   fetched, per mailRowInSelection, except when the
+   change was a trash or an untrash, which visibly
+   moves the message out of wherever it stood). */
+function mailApplyLabelChange(id, add, remove, dropFromSearch) {
+  /* The Inbox unread count moves once per change,
+     however many cached lists carry a copy of the
+     message: the first copy settles it, from whether
+     the message stood unread in the Inbox before the
+     change and stands so after (a mark, an archive,
+     a trash, an untrash all read off that one
+     before and after). */
+  let countSettled = false;
+  Object.keys(mailLists).forEach(function (key) {
+    const list = mailLists[key];
+    list.rows.forEach(function (rec) {
+      if (rec.id !== id) { return; }
+      const wasUnreadInInbox = rec.unread &&
+        rec.labelIds.indexOf("INBOX") !== -1;
+      add.forEach(function (l) {
+        if (rec.labelIds.indexOf(l) === -1) {
+          rec.labelIds.push(l);
+        }
+      });
+      remove.forEach(function (l) {
+        const at = rec.labelIds.indexOf(l);
+        if (at !== -1) { rec.labelIds.splice(at, 1); }
+      });
+      rec.unread = rec.labelIds.indexOf("UNREAD") !== -1;
+      if (!countSettled) {
+        countSettled = true;
+        const isUnreadInInbox = rec.unread &&
+          rec.labelIds.indexOf("INBOX") !== -1;
+        if (wasUnreadInInbox && !isUnreadInInbox) {
+          mailSetInboxUnread((mailInboxUnread() || 0) - 1);
+        } else if (!wasUnreadInInbox && isUnreadInInbox) {
+          mailSetInboxUnread((mailInboxUnread() || 0) + 1);
+        }
+      }
+    });
+    list.rows = list.rows.filter(function (rec) {
+      if (rec.id !== id) { return true; }
+      if (list.sel && list.sel.kind === "search") {
+        return !dropFromSearch;
+      }
+      return mailRowInSelection(rec, list.sel || mailFolder);
+    });
+  });
+  if (mailOpenFull && mailOpenFull.id === id) {
+    add.forEach(function (l) {
+      if (mailOpenFull.labelIds.indexOf(l) === -1) {
+        mailOpenFull.labelIds.push(l);
+      }
+    });
+    remove.forEach(function (l) {
+      const at = mailOpenFull.labelIds.indexOf(l);
+      if (at !== -1) { mailOpenFull.labelIds.splice(at, 1); }
+    });
+    mailOpenFull.unread =
+      mailOpenFull.labelIds.indexOf("UNREAD") !== -1;
+  }
+  updateMailBadge();
+}
+
+/* messages.modify over one record, settled honestly:
+   on acceptance the caches move (above); on failure
+   a toast names it and nothing has moved, so the
+   rows already told the truth. */
+async function mailModifyMessage(rec, add, remove, kind) {
+  const out = await gmailWrite("POST",
+    "/users/me/messages/" + encodeURIComponent(rec.id) +
+    "/modify", { addLabelIds: add, removeLabelIds: remove });
+  if (out.outcome === "ok") {
+    mailApplyLabelChange(rec.id, add, remove, false);
+    if (state.view && state.view.kind === "email") {
+      renderMail();
+    }
+    return true;
+  }
+  mailToastWriteFailure(out,
+    kind === "archive" ? "Could not archive that message."
+      : "Could not update that message.");
+  return false;
+}
+
+/* Trash or untrash one record (the trash endpoints,
+   never a delete: the permission cannot permanently
+   delete, by design). Trashing also lifts the
+   message out of the Inbox locally, as Gmail does;
+   untrashing hands it back its place in the Trash
+   list's opposite. */
+async function mailTrashMessage(rec, untrash) {
+  const out = await gmailWrite("POST",
+    "/users/me/messages/" + encodeURIComponent(rec.id) +
+    (untrash ? "/untrash" : "/trash"), null);
+  if (out.outcome === "ok") {
+    if (untrash) {
+      mailApplyLabelChange(rec.id, [], ["TRASH"], true);
+    } else {
+      mailApplyLabelChange(rec.id, ["TRASH"], ["INBOX"],
+        true);
+    }
+    if (state.view && state.view.kind === "email") {
+      renderMail();
+    }
+    return true;
+  }
+  mailToastWriteFailure(out, untrash
+    ? "Could not move that message to the Inbox."
+    : "Could not move that message to trash.");
+  return false;
+}
+
+/* A failed triage write, in words: the consent line
+   for a grant that does not cover mail yet, the
+   plain failure otherwise. */
+function mailToastWriteFailure(out, fallback) {
+  if (out.outcome === "forbidden") {
+    toast("Google has not granted mail permission yet. " +
+      "Use the Connect button to grant it.", true);
+  } else {
+    toast(fallback || "That did not go through.", true);
+  }
+}
+
+/* Decode one MIME body part's data (base64url) to
+   text. */
+function mailDecodeBase64Url(data) {
+  const b64 = String(data || "").replace(/-/g, "+")
+    .replace(/_/g, "/");
+  const padded = b64 + "=".repeat(
+    (4 - (b64.length % 4)) % 4);
+  const bin = atob(padded);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) {
+    bytes[i] = bin.charCodeAt(i);
+  }
+  return new TextDecoder("utf-8").decode(bytes);
+}
+
+/* Walk a message payload once, gathering what the
+   reading view and the composer's quoting need: the
+   first HTML part, the first plain text part, and
+   every attachment (a part carrying a filename and
+   an attachment id). */
+function mailWalkPayload(payload) {
+  const found = { html: null, text: null, attachments: [] };
+  function walk(part) {
+    if (!part) { return; }
+    const mime = String(part.mimeType || "");
+    if (part.filename && part.body &&
+        part.body.attachmentId) {
+      found.attachments.push({
+        attachmentId: String(part.body.attachmentId),
+        filename: String(part.filename),
+        mimeType: mime,
+        size: Number(part.body.size) || 0
+      });
+    } else if (part.body && part.body.data) {
+      if (mime === "text/html" && found.html === null) {
+        found.html = mailDecodeBase64Url(part.body.data);
+      } else if (mime === "text/plain" &&
+          found.text === null) {
+        found.text = mailDecodeBase64Url(part.body.data);
+      }
+    }
+    const parts = Array.isArray(part.parts) ? part.parts : [];
+    parts.forEach(walk);
+  }
+  walk(payload);
+  return found;
+}
+
+/* Settle a full message into the reading shape: the
+   row's facts plus its headers, its decoded parts,
+   and the address lists the reply paths read. */
+function normalizeMailFull(raw) {
+  const row = normalizeMailRow(raw);
+  if (!row) { return null; }
+  const headers = mailHeaderMap(raw);
+  const parts = mailWalkPayload(raw.payload);
+  row.messageIdHeader = headers["message-id"] || "";
+  row.references = headers.references || "";
+  row.toHeader = headers.to || "";
+  row.ccHeader = headers.cc || "";
+  row.dateHeader = headers.date || "";
+  row.html = parts.html;
+  row.text = parts.text;
+  row.attachments = parts.attachments;
+  row.cleanHtml = null;
+  row.hasRemoteImages = false;
+  return row;
+}
+
+/* The display HTML for a message body: the web clip
+   sanitizer's cleaning first (scripts, handlers, and
+   foreign attributes never survive it), then, while
+   images are blocked, every remote image's source
+   set aside (held on the element, so Show images is
+   a re-render, not a refetch). The cleaned form is
+   cached on the message; the blocked form is derived
+   from it per render. */
+function mailCleanHtml(full, showImages) {
+  if (full.cleanHtml === null) {
+    full.cleanHtml = sanitizeWebClipHtml(
+      full.html || "").html;
+    const probe = document.createElement("div");
+    probe.innerHTML = full.cleanHtml;
+    full.hasRemoteImages = Array.prototype.some.call(
+      probe.querySelectorAll("img"), function (img) {
+        return /^https?:\/\//i.test(
+          img.getAttribute("src") || "");
+      });
+  }
+  if (showImages || !full.hasRemoteImages) {
+    return full.cleanHtml;
+  }
+  const holder = document.createElement("div");
+  holder.innerHTML = full.cleanHtml;
+  holder.querySelectorAll("img").forEach(function (img) {
+    const src = img.getAttribute("src") || "";
+    if (/^https?:\/\//i.test(src)) {
+      img.setAttribute("data-mail-blocked-src", src);
+      img.removeAttribute("src");
+      img.classList.add("mail-blocked-img");
+      if (!img.getAttribute("alt")) {
+        img.setAttribute("alt", "Image blocked");
+      }
+    }
+  });
+  return holder.innerHTML;
+}
+
+/* A plain text body as display HTML: escaped, its
+   line breaks kept, paragraph-shaped like the
+   app's other plain text. */
+function mailTextToHtml(text) {
+  return "<p>" + escapeHtml(String(text || ""))
+    .replace(/\n/g, "<br>") + "</p>";
+}
+
+/* Open a message: fetch it in full, stand it in the
+   reading pane, and mark it read (the modify call,
+   the row and the badge following only on the API's
+   acceptance). A read that settles into a standing
+   state (consent, unavailable) leaves the list as it
+   stood. */
+async function openMailMessage(id) {
+  const out = await gmailRead("/users/me/messages/" +
+    encodeURIComponent(id) + "?format=full");
+  if (!mailSettleLoadOutcome(out)) { return; }
+  const full = normalizeMailFull(out.data);
+  if (!full) { return; }
+  mailOpenFull = full;
+  mailOpenId = id;
+  mailShowImages = false;
+  const pane = mailEl("mailpane");
+  if (pane) { pane.classList.add("mail-show-read"); }
+  renderMail();
+  if (full.unread) {
+    const marked = await gmailWrite("POST",
+      "/users/me/messages/" + encodeURIComponent(id) +
+      "/modify", { addLabelIds: [],
+        removeLabelIds: ["UNREAD"] });
+    if (marked.outcome === "ok") {
+      mailApplyLabelChange(id, [], ["UNREAD"], false);
+      renderMail();
+    }
+  }
+}
+
+/* The reading pane: the empty words until a message
+   stands; then its subject, its header lines, its
+   action bar (the Trash action reading Move to
+   Inbox while the message stands in Trash, the mark
+   action naming the state it would leave), its
+   attachments, its Show images offer while remote
+   images are blocked, and its cleaned body. */
+function renderMailRead() {
+  const empty = mailEl("mailReadEmpty");
+  const read = mailEl("mailRead");
+  if (!read) { return; }
+  const full = mailOpenFull;
+  if (!full) {
+    if (empty) { empty.classList.remove("hidden"); }
+    read.classList.add("hidden");
+    return;
+  }
+  if (empty) { empty.classList.add("hidden"); }
+  read.classList.remove("hidden");
+  mailEl("mailReadSubject").textContent =
+    full.subject || "(No subject)";
+  const meta = mailEl("mailReadMeta");
+  meta.innerHTML = "";
+  [["From", full.fromName &&
+      full.fromName !== full.fromAddress
+      ? full.fromName + " <" + full.fromAddress + ">"
+      : full.fromAddress],
+   ["To", full.toHeader],
+   ["Date", full.dateHeader]].forEach(function (pair) {
+    if (!pair[1]) { return; }
+    const line = document.createElement("div");
+    const label = document.createElement("span");
+    label.className = "mail-meta-label";
+    label.textContent = pair[0] + ": ";
+    line.appendChild(label);
+    line.appendChild(document.createTextNode(pair[1]));
+    meta.appendChild(line);
+  });
+  const inTrash = full.labelIds.indexOf("TRASH") !== -1;
+  mailEl("mailTrashBtnLabel").textContent = inTrash
+    ? "Move to Inbox" : "Trash";
+  mailEl("mailMarkBtnLabel").textContent = full.unread
+    ? "Mark as read" : "Mark as unread";
+  const labelsMenu = mailEl("mailLabelsMenu");
+  if (labelsMenu &&
+      !labelsMenu.classList.contains("hidden")) {
+    buildMailLabelsMenu(full);
+  }
+  const attWrap = mailEl("mailAttachments");
+  attWrap.innerHTML = "";
+  attWrap.classList.toggle("hidden",
+    !full.attachments.length);
+  full.attachments.forEach(function (att) {
+    const row = document.createElement("div");
+    row.className = "mail-att-row";
+    const name = document.createElement("span");
+    name.className = "mail-att-name";
+    name.textContent = att.filename + " (" +
+      humanSize(att.size) + ")";
+    row.appendChild(name);
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "btn small";
+    btn.textContent = "Download";
+    btn.setAttribute("data-mail-att",
+      att.attachmentId);
+    btn.addEventListener("click", function () {
+      mailDownloadAttachment(full, att);
+    });
+    row.appendChild(btn);
+    attWrap.appendChild(row);
+  });
+  const bodyHtml = full.html !== null
+    ? mailCleanHtml(full, mailShowImages)
+    : mailTextToHtml(full.text || "");
+  const showBtn = mailEl("mailShowImagesBtn");
+  if (showBtn) {
+    showBtn.classList.toggle("hidden",
+      !(full.hasRemoteImages && !mailShowImages));
+  }
+  mailEl("mailBody").innerHTML = bodyHtml;
+}
+
+/* Download one attachment: the API hands its bytes
+   back base64url-encoded; the browser saves them
+   under the part's own filename. */
+async function mailDownloadAttachment(full, att) {
+  const out = await gmailRead("/users/me/messages/" +
+    encodeURIComponent(full.id) + "/attachments/" +
+    encodeURIComponent(att.attachmentId));
+  if (out.outcome !== "ok" || !out.data ||
+      !out.data.data) {
+    toast("Could not download that attachment.", true);
+    return;
+  }
+  try {
+    const b64 = String(out.data.data).replace(/-/g, "+")
+      .replace(/_/g, "/");
+    const padded = b64 + "=".repeat(
+      (4 - (b64.length % 4)) % 4);
+    const bin = atob(padded);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) {
+      bytes[i] = bin.charCodeAt(i);
+    }
+    const blob = new Blob([bytes],
+      { type: att.mimeType || "application/octet-stream" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = att.filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(function () {
+      URL.revokeObjectURL(url);
+    }, 4000);
+  } catch (e) {
+    toast("Could not download that attachment.", true);
+  }
+}
+
+/* The labels menu's contents for the open message:
+   one checkbox per user label, checked where the
+   message carries it; a change runs one modify with
+   exactly that label's move. */
+function buildMailLabelsMenu(full) {
+  const menu = mailEl("mailLabelsMenu");
+  if (!menu) { return; }
+  menu.innerHTML = "";
+  const labels = mailUserLabels();
+  if (!labels.length) {
+    const none = document.createElement("div");
+    none.className = "mail-labels-none";
+    none.textContent = "No labels yet.";
+    menu.appendChild(none);
+    return;
+  }
+  labels.forEach(function (l) {
+    const row = document.createElement("label");
+    row.className = "settings-check mail-label-row";
+    const box = document.createElement("input");
+    box.type = "checkbox";
+    box.checked = full.labelIds.indexOf(l.id) !== -1;
+    box.setAttribute("data-mail-label-id", l.id);
+    box.addEventListener("change", function () {
+      mailToggleLabel(full, l.id, box.checked);
+    });
+    row.appendChild(box);
+    const span = document.createElement("span");
+    span.textContent = l.name;
+    row.appendChild(span);
+    menu.appendChild(row);
+  });
+}
+
+async function mailToggleLabel(full, labelId, on) {
+  const add = on ? [labelId] : [];
+  const remove = on ? [] : [labelId];
+  const out = await gmailWrite("POST",
+    "/users/me/messages/" + encodeURIComponent(full.id) +
+    "/modify", { addLabelIds: add, removeLabelIds: remove });
+  if (out.outcome === "ok") {
+    mailApplyLabelChange(full.id, add, remove, false);
+    renderMail();
+    return;
+  }
+  mailToastWriteFailure(out, "Could not update labels.");
+  renderMail();
+}
+
+/* Save to note: the one place mail content is
+   copied, on this explicit click alone. The note is
+   made through the ordinary creation pieces (the
+   made note, the default notebook, the fresh save),
+   titled with the subject, holding the cleaned body
+   (or the plain text), and the user stays in the
+   Email view, told where it landed. */
+async function mailSaveOpenToNote() {
+  const full = mailOpenFull;
+  if (!full) { return; }
+  const body = full.html !== null
+    ? mailCleanHtml(full, true)
+    : mailTextToHtml(full.text || "");
+  const slug = fallbackNotebookSlug();
+  const note = makeNote(slug,
+    full.subject || "(No subject)", body);
+  state.notes.unshift(note);
+  saveCache();
+  renderSidebar();
+  try {
+    await saveNoteToRepo(note,
+      { skipConflictCheck: true, fresh: true });
+    saveCache();
+    const nb = notebookForSlug(slug);
+    toastTopCenter("Saved to " +
+      (nb ? nb.name : "your notebook"));
+  } catch (err) {
+    toast("Note created locally; save failed: " +
+      err.message, true);
+  }
+}
+
+/* An address list header (To, Cc) as its entries:
+   each formatted as the sender wrote it (a name and
+   address, or a bare address), with the address
+   beside it for the reply paths' own-address
+   exclusion. A simple comma split: quoted names
+   carrying commas are vanishingly rare in the lists
+   this reads, and a split inside one still yields
+   entries the user can see and fix in the compose
+   fields before sending. */
+function mailParseAddressList(value) {
+  return String(value || "").split(",")
+    .map(function (piece) { return piece.trim(); })
+    .filter(function (piece) { return !!piece; })
+    .map(function (piece) {
+      const parsed = mailParseFrom(piece);
+      return {
+        formatted: parsed.name &&
+            parsed.name !== parsed.address
+          ? parsed.name + " <" + parsed.address + ">"
+          : parsed.address,
+        address: parsed.address
+      };
+    });
+}
+
+function mailFormattedFrom(full) {
+  return full.fromName &&
+      full.fromName !== full.fromAddress
+    ? full.fromName + " <" + full.fromAddress + ">"
+    : full.fromAddress;
+}
+
+/* Open the compose dialog: a new message, a reply or
+   reply all, a forward, or a draft reopened. The
+   state stands beside the fields (mode, draft id,
+   threading), and the field snapshot taken here is
+   the close prompt's measure: the dialog asks before
+   closing only when the fields have moved from the
+   snapshot (a save refreshes it). */
+function openMailCompose(opts) {
+  opts = opts || {};
+  mailCompose = {
+    mode: opts.mode || "new",
+    draftId: opts.draftId || null,
+    threadId: opts.threadId || "",
+    inReplyTo: opts.inReplyTo || "",
+    references: opts.references || "",
+    saving: false,
+    savedSnapshot: ""
+  };
+  const titles = { "new": "New mail", reply: "Reply",
+    replyall: "Reply all", forward: "Forward",
+    draft: "Draft" };
+  mailEl("mailComposeTitle").textContent =
+    titles[mailCompose.mode] || "New mail";
+  mailEl("mailToInput").value = opts.to || "";
+  mailEl("mailCcInput").value = opts.cc || "";
+  mailEl("mailBccInput").value = opts.bcc || "";
+  mailEl("mailSubjectInput").value = opts.subject || "";
+  mailEl("mailBodyInput").value = opts.body || "";
+  mailEl("mailCcRow").classList.toggle("hidden",
+    !(opts.cc || opts.bcc));
+  mailComposeSetError(null);
+  mailCompose.savedSnapshot = mailComposeSnapshot();
+  mailEl("mailComposeModal").classList.remove("hidden");
+  const to = mailEl("mailToInput");
+  if (to) { to.focus(); }
+}
+
+function mailComposeFields() {
+  return {
+    to: mailEl("mailToInput").value,
+    cc: mailEl("mailCcInput").value,
+    bcc: mailEl("mailBccInput").value,
+    subject: mailEl("mailSubjectInput").value,
+    body: mailEl("mailBodyInput").value
+  };
+}
+
+function mailComposeSnapshot() {
+  return JSON.stringify(mailComposeFields());
+}
+
+function mailComposeDirty() {
+  if (!mailCompose) { return false; }
+  return mailComposeSnapshot() !==
+    mailCompose.savedSnapshot;
+}
+
+/* The compose error line: cleared with null; the
+   consent wording with its Connect button when the
+   grant does not cover mail; the could-not-reach
+   wording (with the entry still standing) otherwise,
+   the event editor's own pair. */
+function mailComposeSetError(out) {
+  const wrap = mailEl("mailComposeError");
+  const text = mailEl("mailComposeErrorText");
+  const btn = mailEl("mailComposeConnectBtn");
+  if (!wrap) { return; }
+  if (!out) {
+    wrap.classList.add("hidden");
+    if (btn) { btn.classList.add("hidden"); }
+    return;
+  }
+  wrap.classList.remove("hidden");
+  if (out.outcome === "forbidden") {
+    text.textContent =
+      "Google has not granted mail permission yet.";
+    if (btn) { btn.classList.remove("hidden"); }
+  } else {
+    text.textContent = "Could not reach Gmail. " +
+      "Your message is still here.";
+    if (btn) { btn.classList.add("hidden"); }
+  }
+}
+
+/* The RFC 822 text of the compose fields: the
+   address and subject headers, the threading
+   headers on a reply, and the plain text body. */
+function mailBuildRaw(fields, st) {
+  const lines = [];
+  lines.push("To: " + fields.to);
+  if (fields.cc) { lines.push("Cc: " + fields.cc); }
+  if (fields.bcc) { lines.push("Bcc: " + fields.bcc); }
+  lines.push("Subject: " + fields.subject);
+  if (st && st.inReplyTo) {
+    lines.push("In-Reply-To: " + st.inReplyTo);
+  }
+  if (st && st.references) {
+    lines.push("References: " + st.references);
+  }
+  lines.push("MIME-Version: 1.0");
+  lines.push("Content-Type: text/plain; charset=\"UTF-8\"");
+  return lines.join("\r\n") + "\r\n\r\n" +
+    String(fields.body || "").replace(/\n/g, "\r\n");
+}
+
+/* base64url of a text's UTF-8 bytes, the raw shape
+   the send and draft calls carry. */
+function mailBase64UrlEncode(text) {
+  const bytes = new TextEncoder().encode(text);
+  let bin = "";
+  bytes.forEach(function (b) {
+    bin += String.fromCharCode(b);
+  });
+  return btoa(bin).replace(/\+/g, "-")
+    .replace(/\//g, "_").replace(/=+$/, "");
+}
+
+/* Send from the compose dialog. A reopened draft is
+   updated first, then sent as the draft it is (so
+   what sends is what stands in the fields); anything
+   else sends as a new message, threaded when the
+   state carries a thread. A failure keeps the dialog
+   open over the fields exactly as typed. */
+async function sendMailFromCompose() {
+  const st = mailCompose;
+  if (!st || st.saving) { return; }
+  st.saving = true;
+  mailComposeSetError(null);
+  const fields = mailComposeFields();
+  const raw = mailBase64UrlEncode(
+    mailBuildRaw(fields, st));
+  let out = null;
+  if (st.draftId) {
+    out = await gmailWrite("PUT",
+      "/users/me/drafts/" +
+        encodeURIComponent(st.draftId),
+      { message: { raw: raw,
+        threadId: st.threadId || undefined } });
+    if (out.outcome === "ok") {
+      out = await gmailWrite("POST",
+        "/users/me/drafts/send", { id: st.draftId });
+    }
+  } else {
+    const body = { raw: raw };
+    if (st.threadId) { body.threadId = st.threadId; }
+    out = await gmailWrite("POST",
+      "/users/me/messages/send", body);
+  }
+  st.saving = false;
+  if (!mailCompose) { return; }
+  if (out.outcome === "ok") {
+    const wasDraft = !!st.draftId;
+    closeMailCompose();
+    toastTopCenter("Message sent");
+    if (wasDraft) {
+      delete mailLists["folder:drafts"];
+    }
+    delete mailLists["folder:sent"];
+    if (state.view && state.view.kind === "email") {
+      const key = mailListKey();
+      if (mailLists[key]) {
+        mailLists[key].loaded = false;
+      }
+      renderMail();
+      ensureMailLoaded();
+    }
+    return;
+  }
+  mailComposeSetError(out);
+}
+
+/* Save the compose fields as a draft on Gmail: a
+   create, or an update of the draft this dialog
+   already stands for. Success refreshes the field
+   snapshot (closing afterwards asks nothing) and
+   drops the Drafts list's cache, so the folder
+   shows the draft when it is next opened. */
+async function saveMailDraftFromCompose() {
+  const st = mailCompose;
+  if (!st || st.saving) { return false; }
+  st.saving = true;
+  mailComposeSetError(null);
+  const fields = mailComposeFields();
+  const message = { raw: mailBase64UrlEncode(
+    mailBuildRaw(fields, st)) };
+  if (st.threadId) { message.threadId = st.threadId; }
+  const out = st.draftId
+    ? await gmailWrite("PUT", "/users/me/drafts/" +
+        encodeURIComponent(st.draftId),
+        { message: message })
+    : await gmailWrite("POST", "/users/me/drafts",
+        { message: message });
+  st.saving = false;
+  if (!mailCompose) { return false; }
+  if (out.outcome === "ok") {
+    if (out.data && out.data.id) {
+      st.draftId = String(out.data.id);
+      st.mode = "draft";
+    }
+    st.savedSnapshot = mailComposeSnapshot();
+    delete mailLists["folder:drafts"];
+    toastTopCenter("Draft saved");
+    return true;
+  }
+  mailComposeSetError(out);
+  return false;
+}
+
+/* Close the compose dialog outright: the caller has
+   already settled the content (sent, saved by the
+   prompt's own save, discarded, or never dirty). */
+function closeMailCompose() {
+  const modal = mailEl("mailComposeModal");
+  if (modal) { modal.classList.add("hidden"); }
+  const close = mailEl("mailCloseModal");
+  if (close) { close.classList.add("hidden"); }
+  mailCompose = null;
+}
+
+/* Ask before closing when the fields have moved:
+   the prompt offers Save draft, Discard, and Keep
+   writing, so nothing typed is ever lost silently.
+   A dialog whose fields stand as opened (or as last
+   saved) closes without asking. */
+function requestCloseMailCompose() {
+  if (!mailCompose || mailCompose.saving) { return; }
+  if (mailComposeDirty()) {
+    mailEl("mailCloseModal").classList.remove("hidden");
+    return;
+  }
+  closeMailCompose();
+}
+
+/* The prompt's Save draft: save, and close on the
+   save's success (a failure keeps the compose open
+   with its error line, the prompt already gone). */
+async function mailClosePromptSave() {
+  mailEl("mailCloseModal").classList.add("hidden");
+  const saved = await saveMailDraftFromCompose();
+  if (saved) { closeMailCompose(); }
+}
+
+/* The prompt's Discard: an existing draft is
+   deleted from Gmail (draft deletion only, never a
+   message delete); a never-saved compose simply
+   closes. Either way the dialog closes: the words
+   were the draft's own, or were never saved anywhere
+   and the Discard was the user's explicit word. */
+async function mailClosePromptDiscard() {
+  const st = mailCompose;
+  mailEl("mailCloseModal").classList.add("hidden");
+  if (st && st.draftId) {
+    const out = await gmailWrite("DELETE",
+      "/users/me/drafts/" +
+        encodeURIComponent(st.draftId), null);
+    if (out.outcome === "ok") {
+      delete mailLists["folder:drafts"];
+    } else {
+      mailToastWriteFailure(out,
+        "Could not delete that draft.");
+    }
+  }
+  closeMailCompose();
+}
+
+/* Reply and Reply all, from the reading view: the
+   sender becomes the recipient; Reply all adds the
+   original To and Cc recipients, minus the
+   account's own address and minus repeats. The
+   original stands quoted under its On line, and the
+   threading headers ride along so Gmail threads the
+   answer. */
+function mailOpenReply(all) {
+  const full = mailOpenFull;
+  if (!full) { return; }
+  let cc = "";
+  if (all) {
+    const list = [];
+    const seen = {};
+    [full.toHeader, full.ccHeader].forEach(
+      function (header) {
+        mailParseAddressList(header).forEach(
+          function (entry) {
+            const key = entry.address.toLowerCase();
+            if (!entry.address || seen[key]) { return; }
+            if (mailOwnAddress &&
+                key === mailOwnAddress.toLowerCase()) {
+              return;
+            }
+            seen[key] = true;
+            list.push(entry.formatted);
+          });
+      });
+    cc = list.join(", ");
+  }
+  const subject = /^re:\s*/i.test(full.subject || "")
+    ? full.subject
+    : "Re: " + (full.subject || "");
+  const body = "\n\nOn " +
+    (full.dateHeader ||
+      new Date(full.dateMs).toString()) + ", " +
+    (full.fromName || full.fromAddress) + " wrote:\n" +
+    (full.text !== null ? full.text
+      : htmlToText(full.html || ""));
+  openMailCompose({
+    mode: all ? "replyall" : "reply",
+    to: mailFormattedFrom(full),
+    cc: cc,
+    subject: subject,
+    body: body,
+    threadId: full.threadId,
+    inReplyTo: full.messageIdHeader,
+    references: ((full.references || "") + " " +
+      (full.messageIdHeader || "")).trim()
+  });
+}
+
+/* Forward, from the reading view: the forwarded
+   block (its own marker line and header lines) over
+   the original's plain text. */
+function mailOpenForward() {
+  const full = mailOpenFull;
+  if (!full) { return; }
+  const subject = /^fwd:\s*/i.test(full.subject || "")
+    ? full.subject
+    : "Fwd: " + (full.subject || "");
+  const body = "\n\n---------- Forwarded message ---------\n" +
+    "From: " + mailFormattedFrom(full) + "\n" +
+    "Date: " + (full.dateHeader || "") + "\n" +
+    "Subject: " + (full.subject || "") + "\n" +
+    "To: " + (full.toHeader || "") + "\n\n" +
+    (full.text !== null ? full.text
+      : htmlToText(full.html || ""));
+  openMailCompose({ mode: "forward", subject: subject,
+    body: body });
+}
+
+/* Open a draft in the compose dialog, populated from
+   the draft itself (its own get, in full form): the
+   fields are the draft's message's headers and plain
+   text, and the dialog stands as a draft (Send sends
+   the draft, Save updates it, Discard deletes it). */
+async function openMailDraft(rec) {
+  const out = await gmailRead("/users/me/drafts/" +
+    encodeURIComponent(rec.draftId) + "?format=full");
+  if (!mailSettleLoadOutcome(out)) { return; }
+  const msg = out.data && out.data.message;
+  if (!msg) { return; }
+  const full = normalizeMailFull(msg);
+  if (!full) { return; }
+  const headers = mailHeaderMap(msg);
+  openMailCompose({
+    mode: "draft",
+    draftId: rec.draftId,
+    threadId: full.threadId,
+    to: full.toHeader,
+    cc: full.ccHeader,
+    bcc: headers.bcc || "",
+    subject: full.subject,
+    body: full.text !== null ? full.text
+      : htmlToText(full.html || "")
+  });
+}
+
+/* The unavailable state's Retry, from the panel line
+   or the view's status line: re-ask for whichever
+   load is missing (the labels, or the standing
+   list). */
+function mailRetryLoad() {
+  if (mailStatus === "needs-consent") { return; }
+  if (!mailLabels) {
+    mailSetStatus("idle");
+    loadMailLabels();
+    return;
+  }
+  const key = mailListKey();
+  if (mailLists[key]) { mailLists[key].loaded = false; }
+  mailSetStatus("idle");
+  loadMailList(key, false);
+}
+
+/* The Email view's static wiring, called once from
+   wireEvents beside the calendar day menu's init:
+   the sidebar entry, the panel and status buttons,
+   the search field, the reading action bar, and the
+   compose dialog with its close prompt. The dynamic
+   furniture (folder rows, message rows, label
+   checkboxes, attachment buttons) wires itself at
+   render, in the module above. */
+function initMailBindings() {
+  mailEl("navEmail").addEventListener("click",
+    function () {
+      state.view = { kind: "email", value: null };
+      renderAll();
+      setMobileView("list");
+    });
+  mailEl("settingsMailConnectBtn").addEventListener(
+    "click", function () { connectGoogleCalendar(); });
+  mailEl("mailPanelConnectBtn").addEventListener(
+    "click", function () { connectGoogleCalendar(); });
+  mailEl("mailPanelRetryBtn").addEventListener(
+    "click", function () { mailRetryLoad(); });
+  mailEl("mailStatusRetryBtn").addEventListener(
+    "click", function () { mailRetryLoad(); });
+  mailEl("mailNewBtn").addEventListener("click",
+    function () { openMailCompose({ mode: "new" }); });
+  mailEl("mailFolderPicker").addEventListener(
+    "change", function (ev) {
+      const v = ev.target.value || "";
+      if (v.indexOf("folder:") === 0) {
+        mailChooseSelection({ kind: "folder",
+          id: v.slice(7) });
+      } else if (v.indexOf("label:") === 0) {
+        const id = v.slice(6);
+        const found = mailUserLabels().filter(
+          function (l) { return l.id === id; })[0];
+        mailChooseSelection({ kind: "label", id: id,
+          name: found ? found.name : "Label" });
+      }
+    });
+  const searchInput = mailEl("mailSearchInput");
+  searchInput.addEventListener("keydown", function (ev) {
+    if (ev.key !== "Enter") { return; }
+    ev.preventDefault();
+    const q = searchInput.value.trim();
+    if (q) {
+      mailChooseSelection({ kind: "search", q: q });
+    }
+  });
+  mailEl("mailSearchClearBtn").addEventListener(
+    "click", function () {
+      searchInput.value = "";
+      mailChooseSelection({ kind: "folder", id: "inbox" });
+    });
+  mailEl("mailLoadMoreBtn").addEventListener("click",
+    function () { loadMailList(mailListKey(), true); });
+  mailEl("mailBackBtn").addEventListener("click",
+    function () {
+      const pane = mailEl("mailpane");
+      if (pane) {
+        pane.classList.remove("mail-show-read");
+      }
+    });
+  mailEl("mailReplyBtn").addEventListener("click",
+    function () { mailOpenReply(false); });
+  mailEl("mailReplyAllBtn").addEventListener("click",
+    function () { mailOpenReply(true); });
+  mailEl("mailForwardBtn").addEventListener("click",
+    function () { mailOpenForward(); });
+  mailEl("mailArchiveBtn").addEventListener("click",
+    function () {
+      if (mailOpenFull) {
+        mailModifyMessage(mailOpenFull, [], ["INBOX"],
+          "archive");
+      }
+    });
+  mailEl("mailTrashBtn").addEventListener("click",
+    function () {
+      if (!mailOpenFull) { return; }
+      const inTrash = mailOpenFull.labelIds
+        .indexOf("TRASH") !== -1;
+      mailTrashMessage(mailOpenFull, inTrash);
+    });
+  mailEl("mailMarkBtn").addEventListener("click",
+    function () {
+      if (!mailOpenFull) { return; }
+      if (mailOpenFull.unread) {
+        mailModifyMessage(mailOpenFull, [], ["UNREAD"],
+          "mark");
+      } else {
+        mailModifyMessage(mailOpenFull, ["UNREAD"], [],
+          "mark");
+      }
+    });
+  mailEl("mailLabelsBtn").addEventListener("click",
+    function () {
+      const menu = mailEl("mailLabelsMenu");
+      if (!menu || !mailOpenFull) { return; }
+      const opening = menu.classList.contains("hidden");
+      if (opening) { buildMailLabelsMenu(mailOpenFull); }
+      menu.classList.toggle("hidden", !opening);
+    });
+  document.addEventListener("click", function (ev) {
+    const menu = mailEl("mailLabelsMenu");
+    if (!menu || menu.classList.contains("hidden")) {
+      return;
+    }
+    const t = ev.target;
+    if (!t || !t.closest) { return; }
+    if (t.closest("#mailLabelsMenu") ||
+        t.closest("#mailLabelsBtn")) { return; }
+    menu.classList.add("hidden");
+  });
+  mailEl("mailSaveNoteBtn").addEventListener("click",
+    function () {
+      mailSaveOpenToNote().catch(function () {
+        /* reported in the function's own words */
+      });
+    });
+  mailEl("mailShowImagesBtn").addEventListener("click",
+    function () {
+      mailShowImages = true;
+      renderMailRead();
+    });
+  /* The compose dialog and its close prompt. */
+  mailEl("mailSendBtn").addEventListener("click",
+    function () {
+      sendMailFromCompose().catch(function () {
+        /* reported in the dialog */
+      });
+    });
+  mailEl("mailSaveDraftBtn").addEventListener("click",
+    function () {
+      saveMailDraftFromCompose().catch(function () {
+        /* reported in the dialog */
+      });
+    });
+  mailEl("mailDiscardBtn").addEventListener("click",
+    function () {
+      if (!mailCompose) { return; }
+      if (mailCompose.draftId || mailComposeDirty()) {
+        mailEl("mailCloseModal")
+          .classList.remove("hidden");
+      } else {
+        closeMailCompose();
+      }
+    });
+  mailEl("mailComposeCancelBtn").addEventListener(
+    "click", function () { requestCloseMailCompose(); });
+  mailEl("mailComposeModal").addEventListener("click",
+    function (ev) {
+      if (ev.target === ev.currentTarget) {
+        requestCloseMailCompose();
+      }
+    });
+  mailEl("mailCcToggleBtn").addEventListener("click",
+    function () {
+      mailEl("mailCcRow").classList.toggle("hidden");
+    });
+  mailEl("mailComposeConnectBtn").addEventListener(
+    "click", function () { connectGoogleCalendar(); });
+  mailEl("mailCloseSaveBtn").addEventListener("click",
+    function () {
+      mailClosePromptSave().catch(function () {
+        /* reported in the dialog */
+      });
+    });
+  mailEl("mailCloseDiscardBtn").addEventListener(
+    "click", function () {
+      mailClosePromptDiscard().catch(function () {
+        /* reported in its own words */
+      });
+    });
+  mailEl("mailCloseKeepBtn").addEventListener("click",
+    function () {
+      mailEl("mailCloseModal").classList.add("hidden");
+    });
+}
+
+/* ---------------- v2.82: the calendar day menu ----
+   A custom right click menu for calendar days, on
+   both calendar surfaces (the Tasks calendar's month
+   grid and the Home widget's grid), at Chris's word
+   on 2026-11-01. Two actions: New task, opening the
+   task editor as a create with the clicked day
+   preset as its due date (the editor's one new
+   optional preset), and New event, opening the
+   calendar module's event editor as a create on the
+   clicked day, through its existing seam. The menu
+   is the note context menu's pattern (its placement
+   helper, its document listeners, its close rules:
+   an outside press or Escape closes it), and the
+   cells it serves include the neighbouring month's
+   filler days, acting on each cell's own date. A
+   press on an entry inside a cell keeps the entry's
+   standing answer (the suppression guard's first
+   branch) and opens nothing; the cells are not text
+   surfaces, so the app wide suppression keeps the
+   browser's menu away while this one shows. A right
+   click never selects: the day selection stays
+   exactly where the last ordinary click left it. */
+
+let calDayMenuDate = null;
+
+function openCalDayMenu(dateStr, x, y) {
+  closeCalDayMenu();
+  const menu = document.getElementById("calDayMenu");
+  if (!menu) { return; }
+  calDayMenuDate = dateStr;
+  menu.classList.remove("hidden");
+  placeNoteContextMenu(menu, x, y);
+  document.addEventListener("pointerdown",
+    onCalDayMenuDocPointerDown, true);
+  document.addEventListener("keydown",
+    onCalDayMenuDocKeydown, true);
+  const first = menu.querySelector(".list-menu-item");
+  if (first) { first.focus(); }
+}
+
+function closeCalDayMenu() {
+  const menu = document.getElementById("calDayMenu");
+  if (menu) { menu.classList.add("hidden"); }
+  calDayMenuDate = null;
+  document.removeEventListener("pointerdown",
+    onCalDayMenuDocPointerDown, true);
+  document.removeEventListener("keydown",
+    onCalDayMenuDocKeydown, true);
+}
+
+function onCalDayMenuDocPointerDown(ev) {
+  const menu = document.getElementById("calDayMenu");
+  if (menu && ev.target && menu.contains(ev.target)) {
+    return;
+  }
+  closeCalDayMenu();
+}
+
+function onCalDayMenuDocKeydown(ev) {
+  if (ev.key === "Escape") {
+    ev.preventDefault();
+    closeCalDayMenu();
+  }
+}
+
+/* Wire the day menu once, from wireEvents beside the
+   mail bindings: one delegated contextmenu listener
+   per calendar pane (both grids rebuild their cells
+   on every render, so only delegation survives),
+   plus the menu's own two items. */
+function initCalDayMenus() {
+  const onContext = function (ev) {
+    const t = ev.target;
+    if (!t || !t.closest) { return; }
+    if (t.closest(".task-cal-entry")) { return; }
+    const cell = t.closest(".task-cal-day, .home-cal-day");
+    if (!cell) { return; }
+    const dateStr = cell.getAttribute("data-date");
+    if (!dateStr || !parseTaskDate(dateStr)) { return; }
+    ev.preventDefault();
+    openCalDayMenu(dateStr, ev.clientX, ev.clientY);
+  };
+  ["taskspane", "homepane"].forEach(function (id) {
+    const pane = document.getElementById(id);
+    if (pane) {
+      pane.addEventListener("contextmenu", onContext);
+    }
+  });
+  document.getElementById("calDayNewTaskBtn")
+    .addEventListener("click", function () {
+      const day = calDayMenuDate;
+      closeCalDayMenu();
+      if (day) { openTaskEditor(null, null, null, day); }
+    });
+  document.getElementById("calDayNewEventBtn")
+    .addEventListener("click", function () {
+      const day = calDayMenuDate;
+      closeCalDayMenu();
+      if (day) {
+        openGcalEventEditor(null, day)
+          .catch(function () { /* the editor reports */ });
+      }
+    });
+}
+
 /* ---------------- v2.43: the Calendar widget ----------
    Evernote's Home calendar widget renders a connected
    calendar account's events. This app has no calendar
@@ -27050,6 +29527,11 @@ function syncTasksPane() {
      editor panes hide, and the open note survives the
      trip exactly as it does for Tasks. */
   const homeActive = state.view.kind === "home";
+  /* v2.82: Email is a full main area view like Home
+     and Tasks: its pane shows, the list and editor
+     panes hide, and the standing mail renders and
+     loads as the pane lands. */
+  const mailActive = state.view.kind === "email";
   /* v2.60.1: the moment the view stops being Home,
      bank and settle the Scratch Pad's height, while
      the pane is still laid out (the hidden class
@@ -27063,17 +29545,26 @@ function syncTasksPane() {
   homeViewWasActive = homeActive;
   document.body.classList.toggle("tasks-view", tasksActive);
   document.body.classList.toggle("home-view", homeActive);
+  document.body.classList.toggle("email-view", mailActive);
   const pane = document.getElementById("taskspane");
   if (pane) { pane.classList.toggle("hidden", !tasksActive); }
   const home = document.getElementById("homepane");
   if (home) { home.classList.toggle("hidden", !homeActive); }
+  const mail = document.getElementById("mailpane");
+  if (mail) { mail.classList.toggle("hidden", !mailActive); }
   const list = document.getElementById("listpane");
   if (list) {
-    list.classList.toggle("hidden", tasksActive || homeActive);
+    list.classList.toggle("hidden",
+      tasksActive || homeActive || mailActive);
   }
   const editor = document.getElementById("editorpane");
   if (editor) {
-    editor.classList.toggle("hidden", tasksActive || homeActive);
+    editor.classList.toggle("hidden",
+      tasksActive || homeActive || mailActive);
+  }
+  if (mailActive) {
+    renderMail();
+    ensureMailLoaded();
   }
 }
 
@@ -27617,6 +30108,12 @@ function renderSidebar() {
      where Evernote keeps its own. */
   document.getElementById("navHome").classList.toggle("active",
     state.view.kind === "home");
+  /* v2.82: the Email entry's highlight is its own
+     view's, and every sidebar render also settles the
+     mail badge (the counts move under it). */
+  document.getElementById("navEmail").classList.toggle("active",
+    state.view.kind === "email");
+  updateMailBadge();
   document.getElementById("navAll").classList.toggle("active",
     state.view.kind === "all");
   /* v2.81: the Calendar entry is the Tasks view in its
@@ -27776,6 +30273,8 @@ function renderRailChrome() {
      button at its foot; both run setSidebarRail directly. */
   const marks = [
     ["railAllBtn", state.view.kind === "all"],
+    /* v2.82: the rail's Email button marks with its view. */
+    ["railEmailBtn", state.view.kind === "email"],
     /* v2.81: the rail's Calendar button marks with the
        Tasks view's calendar mode, like its sidebar
        counterpart. */
@@ -32526,7 +35025,7 @@ function fillTaskNoteSelect(selectedNoteId) {
   select.value = selectedNoteId || "";
 }
 
-function openTaskEditor(taskId, presetNotebook, presetNoteId) {
+function openTaskEditor(taskId, presetNotebook, presetNoteId, presetDueDate) {
   const modal = document.getElementById("taskModal");
   if (!modal) { return; }
   /* v2.44: the pre load gate (see toggleTaskComplete).
@@ -32556,7 +35055,12 @@ function openTaskEditor(taskId, presetNotebook, presetNoteId) {
     document.getElementById("taskTitleInput").value = "";
     fillTaskNoteSelect(presetNoteId || "");
     document.getElementById("taskDescInput").innerHTML = "";
-    document.getElementById("taskDueDateInput").value = "";
+    /* v2.82: a create may arrive with its due date
+       preset (the calendar day menu's New task passes
+       the clicked day); without one the field starts
+       empty, exactly as before. */
+    document.getElementById("taskDueDateInput").value =
+      presetDueDate || "";
     document.getElementById("taskDueTimeInput").value = "";
     document.getElementById("taskRecurrenceSelect").value = "none";
     document.getElementById("taskPrioritySelect").value = "medium";
@@ -34323,6 +36827,10 @@ function syncSettingsControls() {
      connection's state, and opening Settings asks for the
      current month like any calendar surface. */
   renderGcalSettingsRow();
+  /* v2.82: the Email row likewise, and opening
+     Settings asks for the mail like any mail surface. */
+  renderMailSettingsRow();
+  ensureMailLoaded();
   const gcalNowParts = taskTodayParts();
   ensureGcalMonth(gcalNowParts.y, gcalNowParts.m);
   /* v2.21: the Last load readout shows this session's boot. */
@@ -48084,6 +50592,10 @@ async function persistPendingWorkerSession() {
      forget the calendar module's cache and state so the
      next calendar surface asks fresh. */
   resetGcalState();
+  /* v2.82: the same landing forgets the mail
+     module's caches and state: a consent may have
+     just granted (or changed) the mail permission. */
+  resetMailState();
   return true;
 }
 
@@ -57746,6 +60258,10 @@ function wireEvents() {
   initTagNestDrag();
   initNoteContextMenu();
   initNativeMenuSuppression();
+  /* v2.82: the Email view's wiring, and the calendar
+     day menu's. */
+  initMailBindings();
+  initCalDayMenus();
 
   /* Mobile bar. */
   document.getElementById("mobileNavBtn").addEventListener("click", function () { setMobileView("nav"); });
@@ -57915,7 +60431,8 @@ function wireEvents() {
      Collapse sidebar menu item, is gone, and the button now
      runs setSidebarRail directly, the same single toggle the
      new footer collapse button runs. */
-  [["railNewNoteBtn", "newNoteBtn"], ["railAllBtn", "navAll"],
+  [["railNewNoteBtn", "newNoteBtn"],
+   ["railEmailBtn", "navEmail"], ["railAllBtn", "navAll"],
    ["railCalendarBtn", "navCalendar"],
    ["railPinnedBtn", "navPinned"], ["railRemindersBtn", "navReminders"], ["railTrashBtn", "navTrash"],
    ["railArchiveBtn", "navArchive"], ["railLockBtn", "sidebarSignOutItem"]
