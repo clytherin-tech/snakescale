@@ -40,10 +40,45 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-11-02-SSN-V2960
-  Version: 2.96.0
+  BUILD STAMP: 2026-11-02-SSN-V2970
+  Version: 2.97.0
 
   Revision history:
+    v2.97.0 2026-11-02 Two editor items Chris
+                      directed. The Remove encryption
+                      control now stands on an open
+                      decrypted passage too, beside
+                      its lock chip (through v2.96.0
+                      it stood on locked blocks
+                      only, so a passage Chris had
+                      unlocked offered no way to
+                      strip its encryption; he
+                      corrected that reading with a
+                      screenshot). Using it there
+                      dissolves the passage for
+                      good, exactly as the locked
+                      block's control does: the
+                      content stands as ordinary
+                      note text, never re-encrypts,
+                      and one undo restores the
+                      passage as its locked block.
+                      And typing in a code block
+                      works again: Chromium gives
+                      the caret position after a
+                      trailing newline in a pre no
+                      real insertion point (typed
+                      characters land before the
+                      newline, and the delete keys
+                      act on the wrong characters),
+                      so the app now takes the
+                      typed character and the two
+                      delete gestures itself at
+                      that one caret position in a
+                      code block, through a
+                      beforeinput guard; every
+                      other position and every
+                      other block keeps the
+                      browser's own editing.
     v2.96.0 2026-11-02 The note move toasts gain an
                       Undo. Through v2.95.0 the
                       Trash and Archive completion
@@ -9770,6 +9805,10 @@ body.dark .task-cal-more{color:var(--accent);}
   vertical-align:middle;user-select:none;
 }
 #noteBody .ssenc-remove:hover{color:var(--accent);}
+/* v2.97.0: on an open region the control stands
+   beside the lock chip, with the chip's own
+   breathing room before the passage's text. */
+#noteBody .ssenc-open > .ssenc-remove{margin-right:5px;}
 /* v2.94.0: the recovery key field in its dialogs:
    a monospace, letterspaced read so the groups of
    four are easy to copy by hand. */
@@ -13389,8 +13428,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-11-02-SSN-V2960";
-const APP_VERSION = "2.96.0";
+const APP_BUILD = "2026-11-02-SSN-V2970";
+const APP_VERSION = "2.97.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -50165,6 +50204,86 @@ function insertPlainTextIntoCode(pre, text) {
   return true;
 }
 
+
+/* v2.97.0: the caret the code block Enter leaves
+   behind cannot take typed text in Chromium.
+   Diagnosis (reproduced in a real browser, rig
+   probes on file with this build): the app's Enter
+   inserts a plain newline at the caret and parks
+   the caret after it; when that newline is the
+   block's last character, the position after it is
+   not an editing position Chromium honors. Its
+   canonical editing position for the start of the
+   empty last line sits BEFORE the trailing newline,
+   so a typed character lands before the newline and
+   the line being typed piles onto the previous one
+   (Chris: "I hit enter, it doesn't go to the next
+   line"), a Backspace there eats the last character
+   of the line above instead of the break, and a
+   forward Delete can pull the next block's text
+   into the pre. No caret placement escapes it (a
+   text point, an element point, inside the code
+   element or loose in the pre all behave the same),
+   because the position itself is what the engine
+   remaps. So at that one caret position, and
+   nowhere else, the app takes the gesture itself:
+   this beforeinput handler claims a typed character
+   (insertText) and the two delete gestures while
+   the collapsed caret stands at the very end of a
+   code block whose text ends in a newline, and
+   performs them through the block's own text model
+   (the paste route's insertion for characters; for
+   the deletes, dropping the trailing newline, which
+   is the gesture's plain meaning on an empty last
+   line: the caret lands at the end of the text that
+   remains). Composition input is never claimed (an
+   IME session owns its gestures), a selection is
+   never claimed, and every other position in the
+   block and every position outside it keeps the
+   browser's own editing exactly as before. Returns
+   true when the gesture was the app's. */
+function handleCodeBlockBeforeInput(ev) {
+  if (!ev || ev.isComposing) { return false; }
+  const type = ev.inputType;
+  if (type !== "insertText" &&
+      type !== "deleteContentBackward" &&
+      type !== "deleteContentForward") {
+    return false;
+  }
+  const pre = codeBlockAtSelection();
+  if (!pre) { return false; }
+  const sel = window.getSelection();
+  if (!sel || !sel.rangeCount) { return false; }
+  const range = sel.getRangeAt(0);
+  if (!range.collapsed) { return false; }
+  const text = codePreText(pre);
+  if (!text || text.charAt(text.length - 1) !== "\n") {
+    return false;
+  }
+  const off = codeOffsetInPre(pre, range.startContainer,
+    range.startOffset);
+  if (off !== text.length) { return false; }
+  if (type === "insertText") {
+    if (typeof ev.data !== "string" || !ev.data) {
+      return false;
+    }
+    return insertPlainTextIntoCode(pre, ev.data);
+  }
+  const note = currentNote();
+  if (!note || note.trashed || note.archived) {
+    return false;
+  }
+  const bodyEl = document.getElementById("noteBody");
+  if (!bodyEl || bodyEl.contentEditable === "false") {
+    return false;
+  }
+  const textNode0 = flattenCodePre(pre);
+  const node = setCodePreText(pre, textNode0,
+    text.slice(0, -1));
+  setCodeCaret(node, node.data.length, node.data.length);
+  markDirty();
+  return true;
+}
 /* ----- v2.37.0: the table of contents block --------------------------------
    Evernote parity (phase 3, release 2), modeled on Evernote's
    automatic table of contents (its help page "How to create a
@@ -65866,6 +65985,18 @@ function insertVoiceTranscript(anchorEl, segments) {
    under a new passphrase, the recovery wrapper
    riding through untouched because the vault key
    itself does not change.
+   v2.97.0 completes the Remove control's standing:
+   an open decrypted region carries it too, beside
+   its lock chip (see ssencBuildRegion), and using
+   it there dissolves the passage through the same
+   strip the locked block's control ends in (see
+   ssencRemoveOpenRegionFlow). Through v2.96.0 the
+   control stood on locked blocks only; Chris
+   corrected that reading with a screenshot of an
+   open passage offering no removal, his earlier
+   words "unencrypted text blocks" having meant
+   passages standing decrypted after unlock all
+   along.
    -------------------------------------------------------------------------- */
 
 const SSENC_KDF_ITERATIONS = 600000;
@@ -66091,6 +66222,23 @@ function ssencBuildRegion(html, iv, ct) {
   chip.setAttribute("title", "Lock encrypted text");
   chip.innerHTML = SSENC_LOCK_SVG;
   region.appendChild(chip);
+  /* v2.97.0: the Remove encryption control stands
+     on the open region too, beside the lock chip,
+     in the same dress the locked block's face wears
+     (runtime furniture like the chip: non editable,
+     and stripped from the region's HTML before
+     anything is encrypted or measured, see
+     ssencRegionHtml). Using it dissolves this
+     passage permanently (see
+     ssencRemoveOpenRegionFlow); through v2.96.0 it
+     stood on locked blocks only, so a passage
+     standing open offered no way to strip its
+     encryption. */
+  const rmHolder = document.createElement("div");
+  rmHolder.innerHTML = ssencRemoveControlHtml();
+  const rmCtl = rmHolder.firstChild;
+  rmCtl.setAttribute("contenteditable", "false");
+  region.appendChild(rmCtl);
   const holder = document.createElement("div");
   holder.innerHTML = html;
   while (holder.firstChild) {
@@ -66158,7 +66306,8 @@ function ssencRebindFragment(region) {
    with the runtime lock chip removed. */
 function ssencRegionHtml(region) {
   const clone = region.cloneNode(true);
-  clone.querySelectorAll(".ssenc-relock").forEach(
+  clone.querySelectorAll(
+    ".ssenc-relock, .ssenc-remove").forEach(
     function (el) { el.remove(); });
   return clone.innerHTML;
 }
@@ -67487,6 +67636,38 @@ async function ssencRemoveEncryptionFlow(block) {
   markDirty();
 }
 
+/* The open region's own Remove encryption control
+   (v2.97.0, Chris's correction): a passage standing
+   decrypted gains the same permanent removal the
+   locked block's face offers. The region's chains
+   are flushed first, so the ciphertext its strip
+   swap builds the locked block from is the
+   passage's current text, edits made while it stood
+   open included; the strip itself (see
+   ssencStripRegion) then peels the wrapper away and
+   leaves the content standing as ordinary note
+   text, the region's record dropped, so no later
+   collect, lock, or save can re-encrypt it. One
+   undo restores the passage as its locked block,
+   the same restore the locked block's removal
+   leaves behind (the strip composes through the
+   block in both flows); where the strip's fallback
+   ran, the removal stands without an undo step,
+   again as in the locked flow. The removal marks
+   the note dirty once, so it autosaves like any
+   edit. */
+async function ssencRemoveOpenRegionFlow(region) {
+  const bodyEl = document.getElementById("noteBody");
+  if (!region || !bodyEl || !bodyEl.contains(region)) {
+    return;
+  }
+  if (bodyEl.contentEditable === "false") { return; }
+  await ssencFlushEditorRegions();
+  if (!region.isConnected) { return; }
+  ssencStripRegion(region);
+  markDirty();
+}
+
 /* ---------- Settings ---------- */
 
 /* The Encrypted text row (Settings, Editor tab): the
@@ -67700,6 +67881,15 @@ function wireSsencControls() {
       ev.preventDefault();
       const owner = removeCtl.closest("[data-ssenc]");
       if (owner) { void ssencRemoveEncryptionFlow(owner); }
+      /* v2.97.0: the open region's Remove control
+         runs its own dissolution; it is judged here
+         too, before the block test below, so a press
+         on it can never fall through to anything
+         else. */
+      const openRegion = removeCtl.closest(".ssenc-open");
+      if (openRegion) {
+        void ssencRemoveOpenRegionFlow(openRegion);
+      }
       return;
     }
     const block = ev.target.closest("[data-ssenc]");
@@ -70828,6 +71018,18 @@ function wireEvents() {
     }
   });
 
+
+  /* v2.97.0: typed characters and the delete keys at
+     the one caret position a code block Enter leaves
+     in Chromium (see handleCodeBlockBeforeInput in
+     the editor section): the app takes those gestures
+     there, through the block's own text model, and
+     steps aside everywhere else. */
+  noteBodyEl.addEventListener("beforeinput", function (ev) {
+    if (handleCodeBlockBeforeInput(ev)) {
+      ev.preventDefault();
+    }
+  });
   /* v2.25: Backspace or Delete in an empty line beside an
      image removes only the empty line, never the image (see
      emptyLineDeleteGuard in the attachments section). The
