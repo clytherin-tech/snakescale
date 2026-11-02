@@ -40,10 +40,61 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-11-01-SSN-V2820
-  Version: 2.82.0
+  BUILD STAMP: 2026-11-01-SSN-V2830
+  Version: 2.83.0
 
   Revision history:
+    v2.83.0 2026-11-01 Links: notes and events
+                      link both ways, tags
+                      insert as pills, past
+                      events fade into a read
+                      only view, and Home gains
+                      its Email widget. Typing ^
+                      in a note opens an event
+                      picker (upcoming events by
+                      default; an Include past
+                      events checkbox widens it)
+                      and inserts an atomic
+                      event chip; the link is
+                      also written onto the
+                      event itself as private
+                      app only data, and an
+                      event's editor and view
+                      list its linked notes,
+                      with a Link a note button
+                      of their own. A chip click
+                      travels to the Calendar,
+                      fetches the event
+                      directly, and opens it.
+                      Typing # opens the tag
+                      picker: the pill it
+                      inserts also applies the
+                      tag to the note, and
+                      clicking a pill opens the
+                      tag's list. A past event
+                      (its end not after now)
+                      renders faded on both
+                      calendars and opens in a
+                      new read only event view
+                      with no fields at all,
+                      whose only action is
+                      Delete, standing for a
+                      single event on a writable
+                      calendar; repeating events
+                      and read only calendar
+                      events open in that same
+                      view, and the event
+                      editor's limited mode is
+                      retired. The Home Email
+                      widget, workshopped for
+                      the previous release and
+                      left out of its brief,
+                      arrives here: it shows the
+                      Inbox unread count and the
+                      latest unread messages,
+                      fetched live through the
+                      mail module and held in
+                      page memory only.
     v2.82.0 2026-11-01 Email: a full Gmail
                       client inside the app, at
                       Chris's word and in his
@@ -9014,6 +9065,98 @@ body.dark .task-cal-more{color:var(--accent);}
 }
 #gcalEvOpenLink{font-size:13.5px;}
 
+/* v2.83: the links release. A past event fades wherever
+   it renders (the shared event row in the Tasks grid,
+   the day detail, and the Home agenda). The event view
+   is a read only sibling of the event editor: plain text
+   rows, never a field. The linked notes chips are shared
+   by the editor and the view. In a note body, an event
+   chip and a tag pill are atomic islands (contenteditable
+   false), dressed in the app's own tokens so both themes
+   carry them. The two editor popups (the "^" event
+   picker and the "#" tag picker) wear the mention popup's
+   card, and the Home Email widget wears the Home card
+   language like its neighbours. */
+.gcal-past{opacity:.52;}
+.gcal-view-text{margin:0;font-size:14.5px;color:var(--text);}
+#gcalViewCalendar{display:flex;align-items:center;gap:8px;}
+.gcal-linked-chips{display:flex;flex-wrap:wrap;gap:6px;margin:2px 0 8px;}
+.gcal-linked-chip{
+  border:1px solid var(--border);background:var(--soft);
+  color:var(--text);border-radius:20px;padding:3px 11px;
+  font-size:13px;cursor:pointer;max-width:100%;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.gcal-linked-chip:hover{border-color:var(--accent);}
+.gcal-linked-gone{font-size:13px;color:var(--muted);font-style:italic;}
+#noteBody .ss-event-chip{
+  display:inline-flex;align-items:center;gap:6px;
+  border:1px solid var(--border);background:var(--soft);
+  border-radius:20px;padding:1px 10px 1px 7px;margin:0 1px;
+  font-size:.92em;cursor:pointer;white-space:nowrap;
+  vertical-align:baseline;user-select:none;
+}
+#noteBody .ss-event-chip:hover{border-color:var(--accent);}
+.ss-event-chip-dot{
+  flex:none;width:8px;height:8px;border-radius:50%;
+  background:var(--accent);
+}
+.ss-event-chip-label{overflow:hidden;text-overflow:ellipsis;}
+#noteBody .ss-tag-pill{
+  display:inline-block;border:1px solid var(--border);
+  background:var(--accent-soft);color:var(--text);
+  border-radius:20px;padding:0 9px;margin:0 1px;
+  font-size:.92em;cursor:pointer;white-space:nowrap;
+  user-select:none;
+}
+#noteBody .ss-tag-pill:hover{border-color:var(--accent);}
+#eventLinkPopup,#tagLinkPopup{
+  position:fixed;z-index:63;width:min(340px,94vw);padding:6px;
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius-card);box-shadow:0 10px 28px rgba(6,32,22,.28);
+}
+#eventLinkPopup.hidden,#tagLinkPopup.hidden{display:none;}
+.event-link-past{
+  display:flex;align-items:center;gap:8px;
+  padding:4px 10px 6px;font-size:13px;color:var(--text);
+  cursor:pointer;
+}
+.event-link-past input{accent-color:var(--accent);}
+.event-link-row-main{
+  flex:1;min-width:0;display:flex;align-items:center;gap:9px;
+}
+.event-link-row.gcal-past .event-link-row-main{opacity:.52;}
+.event-link-past-label{
+  flex:none;font-size:11px;font-weight:700;letter-spacing:.04em;
+  color:var(--surface);background:var(--muted);
+  border-radius:10px;padding:1px 8px;white-space:nowrap;
+}
+.event-link-status{
+  font-size:13px;color:var(--muted);padding:8px 10px;
+}
+.home-email-head{cursor:pointer;}
+.home-mail-count{
+  margin-left:auto;font-size:12px;font-weight:700;
+  color:var(--surface);background:var(--accent);
+  border-radius:12px;padding:2px 9px;white-space:nowrap;
+}
+.home-mail-row{
+  display:flex;align-items:baseline;gap:8px;width:100%;
+  text-align:left;background:none;border:none;cursor:pointer;
+  color:var(--text);padding:7px 4px;border-radius:8px;
+  font-size:13.5px;
+}
+.home-mail-row:hover{background:var(--accent-soft);}
+.home-mail-from{font-weight:700;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis;max-width:38%;}
+.home-mail-subject{flex:1;min-width:0;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis;}
+.home-mail-time{flex:none;font-size:12px;color:var(--muted);}
+.home-mail-connect{
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  font-size:13.5px;color:var(--muted);padding:4px;
+}
+
 /* v2.82: the Email view. The pane is a flex sibling of
    the tasks and home panes; inside it, the workshop
    layout: a folder column (its own, the app sidebar
@@ -10731,6 +10874,8 @@ body.dark .version-date{color:var(--accent);}
                able to hide it (v2.28.2). It can never be saved
                into a note. Hidden by default. -->
           <div id="mentionPopup" class="hidden" role="listbox" aria-label="Link a note"></div>
+          <div id="eventLinkPopup" class="hidden" role="listbox" aria-label="Link an event"></div>
+          <div id="tagLinkPopup" class="hidden" role="listbox" aria-label="Insert a tag"></div>
           <!-- v2.23: the Paste options popup, modeled on the
                Word popup in Chris's screenshot. After a paste
                carrying HTML lands, this card floats at the end
@@ -11638,6 +11783,11 @@ body.dark .version-date{color:var(--accent);}
     <div class="field hidden" id="gcalEvOpenRow">
       <a id="gcalEvOpenLink" target="_blank" rel="noopener">Open in Google Calendar</a>
     </div>
+    <div class="field hidden" id="gcalEvLinksWrap">
+      <label>Linked notes</label>
+      <div id="gcalEvLinks" class="gcal-linked-chips"></div>
+      <button class="btn small" id="gcalEvLinkNoteBtn" type="button">Link a note</button>
+    </div>
     <div class="gcal-ev-error hidden" id="gcalEvError">
       <span id="gcalEvErrorText"></span>
       <button class="btn small hidden" id="gcalEvConnectBtn" type="button">Connect</button>
@@ -11651,6 +11801,54 @@ body.dark .version-date{color:var(--accent);}
   </div>
 </div>
 
+<!-- ==========================================================================
+     v2.83: the event view. A read only sibling of the
+     event editor: a past event, a repeating event, or an
+     event on a calendar the sign in may only read opens
+     here instead. Every fact stands as plain text (there
+     is no input element in this dialog); the only actions
+     are following a linked note, opening the event in
+     Google Calendar, and deleting it, and Delete stands
+     only for a single event on a writable calendar,
+     behind the same confirmation the editor uses. A past
+     event never offers Link a note (for a past event the
+     only ability is Delete, plus navigation, at Chris's
+     word); a future event that lands here for another
+     reason keeps the button, its backlink write simply
+     reported when the event cannot carry it.
+     ========================================================================== -->
+<div id="gcalViewModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="gcalViewTitle">
+  <div class="modal-card gcal-event-card">
+    <h2 id="gcalViewTitle">Event</h2>
+    <p class="modal-sub" id="gcalViewCalendar"></p>
+
+    <div class="field">
+      <label>When</label>
+      <p class="gcal-view-text" id="gcalViewWhen"></p>
+    </div>
+    <div class="field hidden" id="gcalViewLocationRow">
+      <label>Location</label>
+      <p class="gcal-view-text" id="gcalViewLocation"></p>
+    </div>
+    <div class="field hidden" id="gcalViewDescRow">
+      <label>Description</label>
+      <p class="gcal-view-text" id="gcalViewDesc"></p>
+    </div>
+    <div class="field" id="gcalViewLinksWrap">
+      <label>Linked notes</label>
+      <div id="gcalViewLinks" class="gcal-linked-chips"></div>
+      <button class="btn small" id="gcalViewLinkNoteBtn" type="button">Link a note</button>
+    </div>
+    <div class="field hidden" id="gcalViewOpenRow">
+      <a id="gcalViewOpenLink" target="_blank" rel="noopener">Open in Google Calendar</a>
+    </div>
+
+    <div class="modal-foot">
+      <button class="btn danger hidden" id="gcalViewDeleteBtn" type="button">Delete event</button>
+      <button class="btn" id="gcalViewCloseBtn" type="button">Close</button>
+    </div>
+  </div>
+</div>
 <div id="gcalDeleteModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="gcalDeleteTitle">
   <div class="modal-card">
     <h2 id="gcalDeleteTitle">Delete event</h2>
@@ -12070,8 +12268,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-11-01-SSN-V2820";
-const APP_VERSION = "2.82.0";
+const APP_BUILD = "2026-11-01-SSN-V2830";
+const APP_VERSION = "2.83.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -21312,13 +21510,13 @@ function confirmDeleteSavedSearch(entry) {
 
 const HOME_WIDGET_TYPES = ["pinned", "recent", "shortcuts",
   "tasks", "calendar", "scratch", "filtered", "tags",
-  "notebooks"];
+  "notebooks", "email"];
 const HOME_WIDGET_LABELS = {
   pinned: "Pinned Notes", recent: "Recent Notes",
   shortcuts: "Shortcuts", tasks: "Tasks",
   calendar: "Calendar", scratch: "Scratch Pad",
   filtered: "Filtered Notes", tags: "Tags",
-  notebooks: "Notebooks"
+  notebooks: "Notebooks", email: "Email"
 };
 
 /* The default layout: every widget, in the order a fresh
@@ -23158,6 +23356,7 @@ function normalizeGcalEvent(raw, cal) {
     description: raw.description ? String(raw.description) : "",
     recurring: !!(raw.recurrence || raw.recurringEventId),
     htmlLink: raw.htmlLink ? String(raw.htmlLink) : "",
+    linkNoteIds: gcalLinkNoteIdsOf(raw),
     allDay: !!raw.start.date,
     startMs: 0,
     endMs: 0,
@@ -23526,10 +23725,15 @@ function gcalEventTimeLabel(ev) {
    half), stopping the click from reaching the day cell
    under it; through v2.80 the click opened the event in
    Google Calendar instead, and that link now lives
-   inside the editor. */
+   inside the editor. v2.83: a past event wears the
+   faded dress (gcal-past), and the click's destination
+   follows the routing rule: the editor for a single,
+   future, writable event, the read only event view for
+   the rest (see the links section below). */
 function buildGcalEventEl(ev) {
   const el = document.createElement("div");
-  el.className = "task-cal-entry gcal-entry";
+  el.className = "task-cal-entry gcal-entry" +
+    (gcalEventIsPast(ev) ? " gcal-past" : "");
   el.setAttribute("data-gcal-id", ev.uid);
   el.title = ev.title;
   const head = document.createElement("span");
@@ -23994,11 +24198,23 @@ function gcalEditorSetLimited(limited, noteText) {
    calendar (else the first writable), timed, the next
    whole hour, one hour long. An edit loads the event's
    own facts; an all day event's end date shows as its
-   inclusive last day. A repeating event, or one on a
-   read only calendar, opens in the limited mode. */
+   inclusive last day. A repeating event, an event
+   on a read only calendar, or a past event opens in
+   the read only event view instead (v2.83). */
 async function openGcalEventEditor(ev, dayStr) {
   const modal = gcalEditorEl("gcalEventModal");
   if (!modal) { return; }
+  /* v2.83 routing: a past event, a repeating event, or
+     an event on a calendar the sign in may only read
+     opens in the read only event view, not here; the
+     editor below serves single, future, writable
+     events. Every caller (the surfaces' rows, the
+     event chip's travel) comes through this door, so
+     the rule stands in this one place. */
+  if (ev && gcalEventOpensInView(ev)) {
+    openGcalEventView(ev);
+    return;
+  }
   await gcalEnsureCalendarList();
   const st = {
     mode: ev ? "edit" : "create",
@@ -24006,6 +24222,7 @@ async function openGcalEventEditor(ev, dayStr) {
     calendarId: ev ? ev.calendarId : "",
     uid: ev ? ev.uid : "",
     title: ev ? ev.title : "",
+    ev: ev || null,
     limited: false,
     saving: false,
     deleting: false
@@ -24072,22 +24289,37 @@ async function openGcalEventEditor(ev, dayStr) {
   }
   gcalEditorEl("gcalEvDeleteBtn").classList
     .toggle("hidden", !ev);
-  let limitedNote = "";
-  if (ev && ev.recurring) {
-    limitedNote = "This is a repeating event. " +
-      "Edit it in Google Calendar.";
-  } else if (ev && !gcalCalendarIsWritable(ev.calendarId)) {
-    limitedNote = "This calendar is read only here. " +
-      "Edit it in Google Calendar.";
-  }
-  st.limited = !!limitedNote;
-  gcalEditorSetLimited(st.limited, limitedNote);
+  /* v2.83: the limited mode is retired. The routing
+     at this function's head sends a past event, a
+     repeating event, and an event on a read only
+     calendar to the event view instead, so an event
+     that reaches this point is single, future, and
+     writable, and the limited state simply never
+     stands; the call below keeps the fields enabled,
+     as it always did out of the limited mode. */
+  st.limited = false;
+  gcalEditorSetLimited(false, "");
   if (ev) {
     /* Editing never moves an event between calendars:
        the select is disabled on edit, in every mode. */
     gcalEditorEl("gcalEvCalendarSelect").disabled = true;
   }
   gcalEditorSyncAllDay();
+  /* v2.83: the linked notes area: on an edit it lists
+     the notes this event is linked to and offers the
+     Link a note button; on a create there is no event
+     to link yet, so the area stays hidden. */
+  const evLinksWrap = gcalEditorEl("gcalEvLinksWrap");
+  if (evLinksWrap) {
+    evLinksWrap.classList.toggle("hidden", !ev);
+  }
+  if (ev) {
+    fillGcalLinkedChips(gcalEditorEl("gcalEvLinks"), ev,
+      function (id) {
+        closeGcalEventEditor();
+        followNoteLink(id);
+      });
+  }
   clearGcalEditorError();
   if (!ev && !writable.length) {
     showGcalEditorError(
@@ -24240,6 +24472,12 @@ async function saveGcalEventEditor() {
 function deleteGcalEventFromEditor() {
   const st = gcalEditorState;
   if (!st || st.mode !== "edit" || st.limited) { return; }
+  /* v2.83: the confirmation's standing target, shared
+     with the event view's Delete (see gcalDeleteCtx). */
+  gcalDeleteCtx = {
+    calendarId: st.calendarId, eventId: st.eventId,
+    source: "editor"
+  };
   const text = gcalEditorEl("gcalDeleteText");
   if (text) {
     text.textContent = "Delete the event \"" +
@@ -24256,13 +24494,39 @@ function closeGcalDeleteConfirm() {
 }
 
 async function confirmGcalEventDelete() {
-  const st = gcalEditorState;
+  /* v2.83: the confirmation serves both surfaces that
+     can ask (the editor, and the event view); the
+     standing context names the target and the asker,
+     and each surface settles its own success and
+     failure exactly as it did. With no context standing
+     nothing runs, as it was when no editor stood. */
+  const ctx = gcalDeleteCtx;
+  gcalDeleteCtx = null;
   closeGcalDeleteConfirm();
+  if (!ctx) { return; }
+  const path = "/calendars/" +
+    encodeURIComponent(ctx.calendarId) + "/events/" +
+    encodeURIComponent(ctx.eventId);
+  if (ctx.source === "view") {
+    const vst = gcalViewState;
+    if (!vst || vst.deleting) { return; }
+    vst.deleting = true;
+    const vOutcome = await gcalSendWithRenewal(
+      "DELETE", path, null);
+    vst.deleting = false;
+    if (vOutcome.outcome === "ok") {
+      closeGcalEventView();
+      gcalAfterWriteSuccess("deleted");
+      return;
+    }
+    toast("Could not delete that event.", true);
+    return;
+  }
+  const st = gcalEditorState;
   if (!st || st.mode !== "edit" || st.deleting) { return; }
   st.deleting = true;
   const outcome = await gcalSendWithRenewal("DELETE",
-    "/calendars/" + encodeURIComponent(st.calendarId) +
-      "/events/" + encodeURIComponent(st.eventId), null);
+    path, null);
   st.deleting = false;
   if (outcome.outcome === "ok") {
     closeGcalEventEditor();
@@ -24270,6 +24534,1409 @@ async function confirmGcalEventDelete() {
     return;
   }
   gcalSettleWriteFailure(outcome);
+}
+
+
+/* ---------------- v2.83: links, the event view, and the
+   Home Email widget -------------------------------------
+   The links release, in Chris's frozen 2026-11-01
+   design. Four pieces ride on the calendar and mail
+   modules above:
+
+   - Past events. An event is past when its end is not
+     after now (an all day event for today is not past,
+     and neither is an event still running). Past events
+     render faded everywhere they render, and clicking
+     one opens the event VIEW below, never the editor.
+     The view is also where a repeating event and an
+     event on a read only calendar land, at any time:
+     the v2.81 editor's limited mode is retired, and the
+     editor now serves single, future, writable events
+     only. The view holds no input element: its facts
+     stand as plain text, and its actions are following
+     a linked note, opening the event in Google
+     Calendar, and deleting it. Delete stands only for
+     a single event on a writable calendar, behind the
+     editor's own confirmation; a past event never
+     offers Link a note (for a past event the only
+     ability is Delete, plus navigation, at Chris's
+     word).
+   - Note and event links, both directions. Typing "^"
+     in a note opens an event picker (the mention
+     popup's machinery, a search field, and an Include
+     past events checkbox that starts unchecked at
+     every open); picking an event inserts an atomic
+     event chip into the body and, when the event can
+     carry it, writes this note's id into the event's
+     private extended properties (the key ssnotes_notes,
+     a JSON list of note ids, the app's own scratch
+     space on the event that only this app reads).
+     From an event, Link a note runs the same write and
+     lands the chip in that note. A chip click travels:
+     the Calendar surface, the event's month, a direct
+     fetch of the event, and then the editor or the
+     view by the routing rule above; an event that no
+     longer exists answers with a plain toast and the
+     note is left untouched. Event data still lives in
+     page memory only; the one thing that persists is
+     the link itself, as the chip in the note and the
+     note id on the event.
+   - Tag pills. Typing "#" in a note opens the tag
+     picker on the same machinery; picking a tag (or
+     the Create row, which names a new one) inserts an
+     atomic pill and applies the tag to the note through
+     the tags field, so the note files under it at once.
+     Removing a pill from the body never untags the
+     note; clicking a pill opens the notes list filtered
+     by that tag.
+   - The Home Email widget, the piece workshopped for
+     v2.82.0 that that build's brief left out: an Email
+     card for the Home layout, showing the Inbox unread
+     count and the latest unread messages, fetched
+     through the mail module and held in page memory
+     only, like everything mail shaped. */
+
+/* Whether an event is past: its end is not after now.
+   The normalized end is the API's own (an all day
+   event's exclusive end date at local midnight), so an
+   all day event for today and an event still running
+   both stand in the future by this measure. */
+function gcalEventIsPast(ev) {
+  return !!ev && ev.endMs <= Date.now();
+}
+
+/* The routing rule: the view takes a past event, a
+   repeating event, and an event on a calendar the sign
+   in may only read; the editor takes the rest. */
+function gcalEventOpensInView(ev) {
+  return gcalEventIsPast(ev) || !!ev.recurring ||
+    !gcalCalendarIsWritable(ev.calendarId);
+}
+
+/* The linked note ids an event carries, from its
+   private extended property: a JSON list of note id
+   strings, read defensively (anything else is no
+   links), capped at fifty. */
+function gcalLinkNoteIdsOf(raw) {
+  try {
+    const priv = raw && raw.extendedProperties &&
+      raw.extendedProperties.private;
+    const text = priv ? priv.ssnotes_notes : null;
+    if (typeof text !== "string" || !text) { return []; }
+    const parsed = JSON.parse(text);
+    if (!Array.isArray(parsed)) { return []; }
+    return parsed.filter(function (x) {
+      return typeof x === "string" && !!x;
+    }).slice(0, 50);
+  } catch (e) { return []; }
+}
+
+/* ---------------- the event view -------------------- */
+
+/* The view's standing state: null while it is closed,
+   else { ev, deleting }. */
+let gcalViewState = null;
+
+/* The view's When line: the day named, then the event's
+   own time words (an all day event names its span, its
+   last day being the exclusive end's day before). */
+function gcalViewWhenText(ev) {
+  if (ev.allDay) {
+    const first = ev.days[0];
+    const last = ev.days[ev.days.length - 1];
+    if (first === last) {
+      return taskDateLabel(first) + " · All day";
+    }
+    return taskDateLabel(first) + " - " +
+      taskDateLabel(last) + " · All day";
+  }
+  return taskDateLabel(
+    gcalLocalDayStr(new Date(ev.startMs))) + " · " +
+    gcalEventTimeLabel(ev);
+}
+
+/* Fill a linked notes chip row (the editor's and the
+   view's share this): one chip per linked note, its
+   current title resolved from the store; a note that
+   exists nowhere renders as the muted line. Following
+   a chip is the caller's closer plus followNoteLink. */
+function fillGcalLinkedChips(box, ev, onFollow) {
+  if (!box) { return; }
+  box.innerHTML = "";
+  (ev.linkNoteIds || []).forEach(function (id) {
+    const note = findNoteById(id);
+    if (!note) {
+      const gone = document.createElement("span");
+      gone.className = "gcal-linked-gone";
+      gone.textContent = "A note that no longer exists";
+      box.appendChild(gone);
+      return;
+    }
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "gcal-linked-chip";
+    chip.setAttribute("data-note-id", id);
+    chip.textContent = note.title || "Untitled note";
+    chip.addEventListener("click", function () {
+      onFollow(id);
+    });
+    box.appendChild(chip);
+  });
+}
+
+/* Open the event view on an event: every fact as text,
+   its linked notes, the Open in Google Calendar link,
+   and Delete standing only under the rule in this
+   section's header. */
+function openGcalEventView(ev) {
+  const modal = document.getElementById("gcalViewModal");
+  if (!modal || !ev) { return; }
+  gcalViewState = { ev: ev, deleting: false };
+  document.getElementById("gcalViewTitle").textContent =
+    ev.title;
+  const calEl = document.getElementById("gcalViewCalendar");
+  calEl.innerHTML = "";
+  const dot = document.createElement("span");
+  dot.className = "gcal-chip";
+  dot.setAttribute("aria-hidden", "true");
+  if (ev.color) { dot.style.backgroundColor = ev.color; }
+  calEl.appendChild(dot);
+  calEl.appendChild(document.createTextNode(
+    ev.calendarName || ""));
+  document.getElementById("gcalViewWhen").textContent =
+    gcalViewWhenText(ev);
+  const locRow = document.getElementById(
+    "gcalViewLocationRow");
+  if (ev.location) {
+    document.getElementById("gcalViewLocation")
+      .textContent = ev.location;
+    locRow.classList.remove("hidden");
+  } else {
+    locRow.classList.add("hidden");
+  }
+  const descRow = document.getElementById("gcalViewDescRow");
+  if (ev.description) {
+    document.getElementById("gcalViewDesc")
+      .textContent = ev.description;
+    descRow.classList.remove("hidden");
+  } else {
+    descRow.classList.add("hidden");
+  }
+  fillGcalLinkedChips(
+    document.getElementById("gcalViewLinks"), ev,
+    function (id) {
+      closeGcalEventView();
+      followNoteLink(id);
+    });
+  const past = gcalEventIsPast(ev);
+  const linkBtn = document.getElementById(
+    "gcalViewLinkNoteBtn");
+  if (linkBtn) {
+    linkBtn.classList.toggle("hidden", past);
+  }
+  const wrap = document.getElementById("gcalViewLinksWrap");
+  if (wrap) {
+    wrap.classList.toggle("hidden",
+      past && !(ev.linkNoteIds && ev.linkNoteIds.length));
+  }
+  const openRow = document.getElementById("gcalViewOpenRow");
+  const openLink = document.getElementById("gcalViewOpenLink");
+  if (ev.htmlLink) {
+    openLink.href = ev.htmlLink;
+    openRow.classList.remove("hidden");
+  } else {
+    openLink.removeAttribute("href");
+    openRow.classList.add("hidden");
+  }
+  const del = document.getElementById("gcalViewDeleteBtn");
+  if (del) {
+    del.classList.toggle("hidden",
+      !(!ev.recurring &&
+        gcalCalendarIsWritable(ev.calendarId)));
+  }
+  modal.classList.remove("hidden");
+}
+
+function closeGcalEventView() {
+  const modal = document.getElementById("gcalViewModal");
+  if (modal) { modal.classList.add("hidden"); }
+  gcalViewState = null;
+}
+
+/* ---------------- linking notes and events ---------- */
+
+/* The delete confirmation's standing target, set by
+   whichever surface asks (the editor, or the view):
+   { calendarId, eventId, source }. The confirmation
+   and its outcomes read it, so both surfaces delete
+   under the one dialog and the one success path. */
+let gcalDeleteCtx = null;
+
+/* The view's Delete button: the editor's confirmation,
+   naming the event, over the view. */
+function deleteGcalEventFromView() {
+  const st = gcalViewState;
+  if (!st || st.deleting) { return; }
+  if (st.ev.recurring ||
+      !gcalCalendarIsWritable(st.ev.calendarId)) { return; }
+  gcalDeleteCtx = {
+    calendarId: st.ev.calendarId, eventId: st.ev.id,
+    source: "view"
+  };
+  const text = document.getElementById("gcalDeleteText");
+  if (text) {
+    text.textContent = "Delete the event \"" +
+      (st.ev.title || "(No title)") +
+      "\"? This cannot be undone.";
+  }
+  const modal = document.getElementById("gcalDeleteModal");
+  if (modal) { modal.classList.remove("hidden"); }
+}
+
+/* Write a note's id onto an event's private extended
+   property (the backlink), through the calendar write
+   transport beside every other event write. Resolves
+   "ok" (the property stands, the id appended without
+   duplicating, the oldest dropped past fifty), "skipped"
+   (a repeating event, or a calendar the sign in may
+   only read: the event cannot carry the property), or
+   "failed" (the write was refused or unreachable).
+   The event's own record of its links moves with an ok. */
+async function gcalAddNoteLinkToEvent(ev, noteId) {
+  if (!ev || ev.recurring ||
+      !gcalCalendarIsWritable(ev.calendarId)) {
+    return "skipped";
+  }
+  const ids = (ev.linkNoteIds || []).slice();
+  if (ids.indexOf(noteId) !== -1) { return "ok"; }
+  ids.push(noteId);
+  while (ids.length > 50) { ids.shift(); }
+  const body = {
+    extendedProperties: {
+      private: { ssnotes_notes: JSON.stringify(ids) }
+    }
+  };
+  const outcome = await gcalSendWithRenewal("PATCH",
+    "/calendars/" + encodeURIComponent(ev.calendarId) +
+      "/events/" + encodeURIComponent(ev.id), body);
+  if (outcome.outcome === "ok") {
+    ev.linkNoteIds = ids;
+    return "ok";
+  }
+  return "failed";
+}
+
+/* One event fetched directly, by its calendar and id
+   (a chip click's ask, independent of the month
+   caches), settled into outcomes: "ok" with the
+   normalized event, "gone" (a 404, or an answer that
+   does not stand as an event), or "bad". The 401 runs
+   the standing silent renewal once and retries once,
+   like every other calendar read. */
+async function gcalFetchEventById(calId, eventId) {
+  await gcalEnsureCalendarList();
+  let token = null;
+  try { token = await getGoogleAccessToken(); }
+  catch (e) { return { outcome: "bad", ev: null }; }
+  const path = "/calendars/" + encodeURIComponent(calId) +
+    "/events/" + encodeURIComponent(eventId);
+  let res = null;
+  try {
+    res = await gcalApiGet(path, token);
+    if (res.status === 401) {
+      const renewed = await googleTrySilentSignIn();
+      if (renewed) {
+        const fresh = await getProviderToken("google");
+        if (fresh) {
+          res = await gcalApiGet(path, fresh);
+        }
+      }
+    }
+  } catch (e) { return { outcome: "bad", ev: null }; }
+  if (res && res.status === 404) {
+    return { outcome: "gone", ev: null };
+  }
+  if (!res || res.status !== 200 || !res.data) {
+    return { outcome: "bad", ev: null };
+  }
+  const cal = (gcalCalendars || []).filter(function (c) {
+    return c.id === calId;
+  })[0] || {
+    id: calId, summary: "", color: "",
+    accessRole: "", primary: false
+  };
+  const ev = normalizeGcalEvent(res.data, cal);
+  if (!ev) { return { outcome: "gone", ev: null }; }
+  return { outcome: "ok", ev: ev };
+}
+
+/* An event chip's short face words: the day, then the
+   time of day (or All day). The chip's face and the
+   event picker's rows share these. */
+function eventChipWhenLabel(ev) {
+  const day = new Date(ev.startMs).toLocaleDateString(
+    undefined, { month: "short", day: "numeric" });
+  if (ev.allDay) { return day + ", All day"; }
+  return day + ", " + gcalTimeOfDayLabel(ev.startMs);
+}
+
+/* Build an event chip: an atomic island in the note
+   body (contenteditable false), carrying the calendar
+   id, the event id, and the event's start as its data;
+   its face is the calendar's color dot, the title, and
+   the short day and time. The data is the link; the
+   face is only what the note knew when it was made. */
+function buildEventChipEl(ev) {
+  const chip = document.createElement("span");
+  chip.className = "ss-event-chip";
+  chip.setAttribute("contenteditable", "false");
+  chip.setAttribute("data-ss-event-cal", ev.calendarId);
+  chip.setAttribute("data-ss-event-id", ev.id);
+  chip.setAttribute("data-ss-event-start",
+    new Date(ev.startMs).toISOString());
+  chip.title = ev.title;
+  const dot = document.createElement("span");
+  dot.className = "ss-event-chip-dot";
+  dot.setAttribute("aria-hidden", "true");
+  if (ev.color) { dot.style.backgroundColor = ev.color; }
+  chip.appendChild(dot);
+  const label = document.createElement("span");
+  label.className = "ss-event-chip-label";
+  label.textContent = ev.title + " · " +
+    eventChipWhenLabel(ev);
+  chip.appendChild(label);
+  return chip;
+}
+
+/* The chip as a paragraph of body HTML, for the path
+   that lands a chip in a note that is not open (built
+   as elements, serialized once, the codebase's string
+   free construction rule kept). */
+function eventChipParagraphHtml(ev) {
+  const wrap = document.createElement("div");
+  const p = document.createElement("p");
+  p.appendChild(buildEventChipEl(ev));
+  wrap.appendChild(p);
+  return wrap.innerHTML;
+}
+
+/* Land an event chip in a note, from an event surface's
+   Link a note: into the live editor at the caret when
+   the note stands open there (appended at the end when
+   the caret is not in the body), otherwise appended as
+   a closing paragraph through the note's normal load
+   and save path. */
+async function addEventChipToNote(note, ev) {
+  const open = currentNote();
+  const bodyEl = document.getElementById("noteBody");
+  if (open && open.id === note.id && bodyEl) {
+    const sel = window.getSelection();
+    let placed = false;
+    if (sel && sel.rangeCount) {
+      const range = sel.getRangeAt(0);
+      if (bodyEl.contains(range.commonAncestorContainer)) {
+        const chip = buildEventChipEl(ev);
+        range.deleteContents();
+        range.insertNode(chip);
+        const space = document.createTextNode(" ");
+        chip.after(space);
+        placeCaretIn(space, 1);
+        placed = true;
+      }
+    }
+    if (!placed) {
+      const p = document.createElement("p");
+      p.appendChild(buildEventChipEl(ev));
+      bodyEl.appendChild(p);
+    }
+    markDirty();
+    return;
+  }
+  note.body = (note.body || "") + eventChipParagraphHtml(ev);
+  try {
+    await saveNoteToRepo(note);
+    saveCache();
+    renderNoteList();
+  } catch (e) {
+    toast("The event link could not be added to that " +
+      "note: " + e.message, true);
+  }
+}
+
+/* The Link a note context: the event surface (the
+   editor, or the view) that opened the note picker, and
+   its event. closeNoteLinkPicker clears it, so a
+   cancelled pick can never leak into a later insert. */
+let gcalNoteLinkCtx = null;
+
+function openGcalLinkNotePicker(ev, surface) {
+  if (!ev) { return; }
+  gcalNoteLinkCtx = { ev: ev, surface: surface };
+  noteLinkRetargetAnchor = null;
+  noteLinkPending = null;
+  const search = document.getElementById("noteLinkSearch");
+  search.value = "";
+  renderNoteLinkResults("");
+  document.getElementById("noteLinkModal")
+    .classList.remove("hidden");
+  search.focus();
+}
+
+/* A pick in the event link mode: the chip lands in the
+   chosen note, the backlink is written onto the event,
+   and a backlink that could not be saved (skipped or
+   failed alike) is said plainly. The surface that asked
+   re-reads the event's links when it still stands. */
+async function gcalPickEventNote(target) {
+  const ctx = gcalNoteLinkCtx;
+  gcalNoteLinkCtx = null;
+  closeNoteLinkPicker();
+  if (!ctx || !ctx.ev) { return; }
+  const ev = ctx.ev;
+  await addEventChipToNote(target, ev);
+  const res = await gcalAddNoteLinkToEvent(ev, target.id);
+  if (res !== "ok") {
+    toast("The backlink could not be saved to the " +
+      "event.", true);
+  }
+  if (ctx.surface === "editor" && gcalEditorState &&
+      gcalEditorState.ev === ev) {
+    fillGcalLinkedChips(
+      document.getElementById("gcalEvLinks"), ev,
+      function (id) {
+        closeGcalEventEditor();
+        followNoteLink(id);
+      });
+  }
+  if (ctx.surface === "view" && gcalViewState &&
+      gcalViewState.ev === ev) {
+    openGcalEventView(ev);
+  }
+}
+
+/* Follow an event chip (a click in a note body): travel
+   to the Calendar surface standing on the event's
+   month, fetch the event directly, and open it by the
+   routing rule. A gone event is a plain toast, and the
+   note is left exactly as it stands. */
+async function followEventChip(chip) {
+  const calId = chip.getAttribute("data-ss-event-cal") || "";
+  const eventId = chip.getAttribute("data-ss-event-id") || "";
+  const startIso = chip.getAttribute(
+    "data-ss-event-start") || "";
+  if (!calId || !eventId) { return; }
+  const startMs = Date.parse(startIso);
+  state.view = { kind: "tasks", value: null };
+  state.tasksView.mode = "calendar";
+  if (isFinite(startMs)) {
+    const d = new Date(startMs);
+    state.tasksView.calCursor = {
+      y: d.getFullYear(), m: d.getMonth() + 1
+    };
+    state.tasksView.calSelected = gcalLocalDayStr(d);
+  }
+  renderAll();
+  setMobileView("list");
+  const got = await gcalFetchEventById(calId, eventId);
+  if (got.outcome === "gone") {
+    toast("That event no longer exists");
+    return;
+  }
+  if (got.outcome !== "ok") {
+    toast("Could not load that event.", true);
+    return;
+  }
+  openGcalEventEditor(got.ev, got.ev.days[0]);
+}
+
+/* Open the notes list filtered by a tag (a tag pill's
+   click): the tag view the sidebar's own rows open. */
+function openTagFilter(tag) {
+  if (!tag) { return; }
+  state.view = { kind: "tag", value: tag };
+  renderAll();
+  setMobileView("list");
+}
+
+/* ---------------- the "^" event picker -------------- */
+
+/* Search and list events for the picker, across every
+   participating calendar: the window is now through
+   sixty days out, widened to a year back when past
+   events are included (the API's timeMin bounds an
+   event's end, so the default window holds exactly the
+   events that are not past, in progress ones included).
+   A typed query rides the API's q parameter. Merged,
+   ordered by start, capped at fifty. Outcomes mirror
+   the read loader's: "ok", "consent" (a 403), or "bad". */
+async function gcalSearchEvents(query, includePast) {
+  if (!gcalSignedInAble()) {
+    return { outcome: "bad", events: [] };
+  }
+  await gcalEnsureCalendarList();
+  if (!gcalCalendars) {
+    return { outcome: "bad", events: [] };
+  }
+  let token = null;
+  try { token = await getGoogleAccessToken(); }
+  catch (e) { return { outcome: "bad", events: [] }; }
+  const nowMs = Date.now();
+  const timeMin = new Date(includePast
+    ? nowMs - 365 * 86400000 : nowMs).toISOString();
+  const timeMax = new Date(
+    nowMs + 60 * 86400000).toISOString();
+  async function attempt(tok) {
+    let saw401 = false, saw403 = false, sawBad = false;
+    const collected = [];
+    await Promise.all(gcalCalendars.map(function (cal) {
+      let path = "/calendars/" +
+        encodeURIComponent(cal.id) +
+        "/events?singleEvents=true&orderBy=startTime" +
+        "&maxResults=250" +
+        "&timeMin=" + encodeURIComponent(timeMin) +
+        "&timeMax=" + encodeURIComponent(timeMax);
+      if (query) {
+        path += "&q=" + encodeURIComponent(query);
+      }
+      return gcalApiGet(path, tok).then(function (res) {
+        if (res.status === 401) { saw401 = true; return; }
+        if (res.status === 403) { saw403 = true; return; }
+        if (res.status !== 200 || !res.data) {
+          sawBad = true; return;
+        }
+        const items = Array.isArray(res.data.items)
+          ? res.data.items : [];
+        items.forEach(function (raw) {
+          const ev = normalizeGcalEvent(raw, cal);
+          if (ev) { collected.push(ev); }
+        });
+      }).catch(function () { sawBad = true; });
+    }));
+    return {
+      saw401: saw401, saw403: saw403, sawBad: sawBad,
+      collected: collected
+    };
+  }
+  let r = await attempt(token);
+  if (r.saw401) {
+    const renewed = await googleTrySilentSignIn();
+    if (renewed) {
+      const fresh = await getProviderToken("google");
+      if (fresh) { r = await attempt(fresh); }
+    }
+  }
+  if (r.saw403) { return { outcome: "consent", events: [] }; }
+  if (r.saw401 || r.sawBad) {
+    return { outcome: "bad", events: [] };
+  }
+  r.collected.sort(function (a, b) {
+    return a.startMs - b.startMs;
+  });
+  return {
+    outcome: "ok", events: r.collected.slice(0, 50)
+  };
+}
+
+/* The picker's standing state, the mention popup's
+   shape: the tracked "^" token, the rows (normalized
+   events), the highlight, the search box's own query
+   once it drives (null while the token drives), the
+   last caret range, the load state ("", "loading",
+   "consent", "bad"), and the run counter that keeps a
+   stale answer from overwriting a newer ask. */
+let eventLinkTrigger = null;
+let eventLinkRows = [];
+let eventLinkHighlight = 0;
+let eventLinkBoxQuery = null;
+let eventLinkListEl = null;
+let eventLinkLastRange = null;
+let eventLinkStatus = "";
+let eventLinkRunId = 0;
+let eventLinkSearchTimer = null;
+let eventLinkLastQuery = null;
+
+function eventLinkPopupOpen() {
+  const popup = document.getElementById("eventLinkPopup");
+  return !!popup && !popup.classList.contains("hidden");
+}
+
+function closeEventLinkPopup() {
+  const popup = document.getElementById("eventLinkPopup");
+  if (popup) { popup.classList.add("hidden"); }
+  eventLinkTrigger = null;
+  eventLinkRows = [];
+  eventLinkHighlight = 0;
+  eventLinkBoxQuery = null;
+  eventLinkLastRange = null;
+  eventLinkStatus = "";
+  eventLinkLastQuery = null;
+  eventLinkRunId++;
+  if (eventLinkSearchTimer) {
+    clearTimeout(eventLinkSearchTimer);
+    eventLinkSearchTimer = null;
+  }
+  const searchEl = document.getElementById(
+    "eventLinkSearch");
+  if (searchEl) { searchEl.value = ""; }
+}
+
+function eventLinkEffectiveQuery() {
+  if (eventLinkBoxQuery !== null) {
+    return eventLinkBoxQuery;
+  }
+  return eventLinkTrigger ? eventLinkTrigger.query : "";
+}
+
+function eventLinkPastChecked() {
+  const box = document.getElementById("eventLinkPastInput");
+  return !!(box && box.checked);
+}
+
+/* The picker's fixed chrome, built once like the
+   mention popup's: the search box, the Include past
+   events checkbox under it (themed, and reset to
+   unchecked at every open by the tracker), the Events
+   header, and the list container. Only the rows are
+   rebuilt per render. */
+function ensureEventLinkChrome(popup) {
+  if (eventLinkListEl && popup.contains(eventLinkListEl)) {
+    return;
+  }
+  popup.innerHTML = "";
+  const searchWrap = document.createElement("div");
+  searchWrap.className = "mention-search";
+  const input = document.createElement("input");
+  input.type = "text";
+  input.id = "eventLinkSearch";
+  input.placeholder = "Search events";
+  input.setAttribute("aria-label", "Search events");
+  input.setAttribute("autocomplete", "off");
+  input.addEventListener("input", onEventLinkSearchInput);
+  searchWrap.appendChild(input);
+  popup.appendChild(searchWrap);
+  const pastRow = document.createElement("label");
+  pastRow.className = "event-link-past";
+  const pastBox = document.createElement("input");
+  pastBox.type = "checkbox";
+  pastBox.id = "eventLinkPastInput";
+  pastBox.addEventListener("change", function () {
+    runEventLinkSearch();
+  });
+  pastRow.appendChild(pastBox);
+  const pastText = document.createElement("span");
+  pastText.textContent = "Include past events";
+  pastRow.appendChild(pastText);
+  popup.appendChild(pastRow);
+  const head = document.createElement("div");
+  head.className = "mention-head";
+  head.textContent = "Events";
+  popup.appendChild(head);
+  eventLinkListEl = document.createElement("div");
+  eventLinkListEl.className = "mention-list";
+  popup.appendChild(eventLinkListEl);
+}
+
+/* Typing in the picker's search box drives the same
+   search the token drives (debounced, since every ask
+   is an API round trip); the token, and so the
+   insertion point, is untouched. */
+function onEventLinkSearchInput() {
+  const input = document.getElementById("eventLinkSearch");
+  if (!input) { return; }
+  eventLinkBoxQuery = input.value;
+  scheduleEventLinkSearch();
+}
+
+function scheduleEventLinkSearch() {
+  if (eventLinkSearchTimer) {
+    clearTimeout(eventLinkSearchTimer);
+  }
+  eventLinkSearchTimer = setTimeout(function () {
+    eventLinkSearchTimer = null;
+    runEventLinkSearch();
+  }, 200);
+}
+
+/* Ask for the standing query and paint what comes back,
+   unless a newer ask has superseded this one or the
+   popup has closed meanwhile. */
+function runEventLinkSearch() {
+  const query = eventLinkEffectiveQuery();
+  const includePast = eventLinkPastChecked();
+  const run = ++eventLinkRunId;
+  eventLinkStatus = "loading";
+  eventLinkRows = [];
+  renderEventLinkPopup(null);
+  gcalSearchEvents(query, includePast)
+    .then(function (out) {
+      if (run !== eventLinkRunId ||
+          !eventLinkPopupOpen()) { return; }
+      if (out.outcome === "ok") {
+        eventLinkStatus = "";
+        eventLinkRows = out.events;
+      } else {
+        eventLinkStatus = out.outcome;
+        eventLinkRows = [];
+      }
+      eventLinkHighlight = 0;
+      renderEventLinkPopup(null);
+    });
+}
+
+/* The token both editor popups in this release share:
+   the caret's text node in a live, unlocked note body,
+   outside any code block, link, attachment, or island.
+   Null everywhere else, which closes the popups. */
+function linkPopupHost() {
+  const bodyEl = document.getElementById("noteBody");
+  const note = currentNote();
+  if (!note || note.trashed || note.archived || !bodyEl ||
+      bodyEl.contentEditable === "false") {
+    return null;
+  }
+  const sel = window.getSelection();
+  if (!sel || !sel.rangeCount) { return null; }
+  const range = sel.getRangeAt(0);
+  const node = range.startContainer;
+  if (!range.collapsed || !node || node.nodeType !== 3 ||
+      !bodyEl.contains(node)) {
+    return null;
+  }
+  const host = node.parentElement;
+  if (!host || (host.closest && host.closest(
+    "pre, a, .ss-attachment, .ss-event-chip, " +
+    ".ss-tag-pill"))) {
+    return null;
+  }
+  return { range: range, node: node };
+}
+
+/* The token under the caret for one trigger character,
+   the mention popup's rule: the character at the start
+   of its text node or after whitespace, and the query
+   the run of non-whitespace characters to the caret. */
+function linkTokenAt(node, caretOffset, ch) {
+  const before = node.nodeValue.slice(0, caretOffset);
+  const at = before.lastIndexOf(ch);
+  if (at < 0) { return null; }
+  if (at > 0 && !/\s/.test(before.charAt(at - 1))) {
+    return null;
+  }
+  const query = before.slice(at + 1);
+  if (/\s/.test(query)) { return null; }
+  return {
+    node: node, atOffset: at, caretOffset: caretOffset,
+    query: query
+  };
+}
+
+/* Park a fixed popup under the caret's line, the
+   mention popup's placement (flipped above the line
+   near the window's bottom). */
+function positionLinkPopup(popup, range) {
+  if (!popup || !range) { return; }
+  let rect = null;
+  if (typeof range.getBoundingClientRect === "function") {
+    rect = range.getBoundingClientRect();
+  }
+  if (!rect) {
+    const bodyEl = document.getElementById("noteBody");
+    if (!bodyEl) { return; }
+    rect = bodyEl.getBoundingClientRect();
+  }
+  const width = popup.offsetWidth;
+  const height = popup.offsetHeight;
+  let left = Math.min(rect.left,
+    window.innerWidth - width - 8);
+  left = Math.max(8, left);
+  let top = rect.bottom + 6;
+  if (top + height > window.innerHeight - 8) {
+    top = Math.max(8, rect.top - height - 6);
+  }
+  popup.style.left = left + "px";
+  popup.style.top = top + "px";
+}
+
+/* The event picker's tracker, on the mention popup's
+   wiring: typing, deleting, and caret moves re-evaluate
+   the "^" token; while the picker's search box holds
+   focus it stands down, as the mention tracker does. A
+   fresh token resets the filter to the token, restarts
+   the highlight, unchecks Include past events (it
+   starts unchecked at every open), and asks at once; a
+   changed query on a standing token asks debounced. */
+function updateEventLinkPopup() {
+  const popup = document.getElementById("eventLinkPopup");
+  if (!popup) { return; }
+  const searchEl = document.getElementById(
+    "eventLinkSearch");
+  if (eventLinkPopupOpen() && searchEl &&
+      document.activeElement === searchEl) {
+    return;
+  }
+  const host = linkPopupHost();
+  if (!host) { closeEventLinkPopup(); return; }
+  const tok = linkTokenAt(host.node,
+    host.range.startOffset, "^");
+  if (!tok) { closeEventLinkPopup(); return; }
+  const fresh = !eventLinkTrigger ||
+    eventLinkTrigger.node !== tok.node ||
+    eventLinkTrigger.atOffset !== tok.atOffset;
+  eventLinkTrigger = tok;
+  eventLinkLastRange = host.range;
+  if (fresh) {
+    ensureEventLinkChrome(popup);
+    eventLinkBoxQuery = null;
+    eventLinkHighlight = 0;
+    eventLinkLastQuery = tok.query;
+    const pastBox = document.getElementById(
+      "eventLinkPastInput");
+    if (pastBox) { pastBox.checked = false; }
+    runEventLinkSearch();
+    return;
+  }
+  if (tok.query !== eventLinkLastQuery) {
+    eventLinkLastQuery = tok.query;
+    eventLinkBoxQuery = null;
+    scheduleEventLinkSearch();
+  }
+  renderEventLinkPopup(host.range);
+}
+
+function eventLinkStatusEl(text) {
+  const el = document.createElement("div");
+  el.className = "event-link-status";
+  el.textContent = text;
+  return el;
+}
+
+function renderEventLinkPopup(range) {
+  const popup = document.getElementById("eventLinkPopup");
+  if (!popup) { return; }
+  ensureEventLinkChrome(popup);
+  if (range) { eventLinkLastRange = range; }
+  const searchEl = document.getElementById(
+    "eventLinkSearch");
+  if (searchEl && document.activeElement !== searchEl) {
+    searchEl.value = eventLinkEffectiveQuery();
+  }
+  const list = eventLinkListEl;
+  list.innerHTML = "";
+  if (eventLinkStatus === "loading") {
+    list.appendChild(eventLinkStatusEl("Loading events..."));
+  } else if (eventLinkStatus === "consent") {
+    list.appendChild(eventLinkStatusEl(
+      "Google Calendar is not connected"));
+  } else if (eventLinkStatus === "bad") {
+    list.appendChild(eventLinkStatusEl(
+      "Google Calendar unavailable"));
+  } else if (!eventLinkRows.length) {
+    list.appendChild(eventLinkStatusEl("No events found"));
+  } else {
+    eventLinkRows.forEach(function (ev, i) {
+      const past = gcalEventIsPast(ev);
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "mention-row event-link-row" +
+        (past ? " gcal-past" : "");
+      btn.setAttribute("data-ei", String(i));
+      btn.setAttribute("role", "option");
+      const main = document.createElement("span");
+      main.className = "event-link-row-main";
+      const dot = document.createElement("span");
+      dot.className = "ss-event-chip-dot";
+      dot.setAttribute("aria-hidden", "true");
+      if (ev.color) {
+        dot.style.backgroundColor = ev.color;
+      }
+      main.appendChild(dot);
+      const texts = document.createElement("span");
+      texts.className = "mention-texts";
+      const line1 = document.createElement("span");
+      line1.className = "mention-title";
+      line1.textContent = ev.title;
+      const line2 = document.createElement("span");
+      line2.className = "mention-nb";
+      line2.textContent = eventChipWhenLabel(ev) +
+        (ev.calendarName ? " · " + ev.calendarName : "");
+      texts.appendChild(line1);
+      texts.appendChild(line2);
+      main.appendChild(texts);
+      btn.appendChild(main);
+      if (past) {
+        const flag = document.createElement("span");
+        flag.className = "event-link-past-label";
+        flag.textContent = "Past Event";
+        btn.appendChild(flag);
+      }
+      list.appendChild(btn);
+    });
+  }
+  popup.classList.remove("hidden");
+  setEventLinkHighlight(eventLinkHighlight);
+  positionLinkPopup(popup, range || eventLinkLastRange);
+}
+
+function setEventLinkHighlight(i) {
+  const popup = document.getElementById("eventLinkPopup");
+  if (!popup || !eventLinkRows.length) { return; }
+  eventLinkHighlight =
+    ((i % eventLinkRows.length) + eventLinkRows.length) %
+    eventLinkRows.length;
+  popup.querySelectorAll(".event-link-row")
+    .forEach(function (rowEl) {
+      const mine = Number(
+        rowEl.getAttribute("data-ei")) === eventLinkHighlight;
+      rowEl.classList.toggle("current", mine);
+      const old = rowEl.querySelector(".mention-hint");
+      if (old) { old.remove(); }
+      if (mine) {
+        const hint = document.createElement("span");
+        hint.className = "mention-hint";
+        const label = document.createElement("span");
+        label.textContent = "enter to add";
+        hint.appendChild(label);
+        const icon = document.createElement("span");
+        icon.setAttribute("aria-hidden", "true");
+        icon.innerHTML = MENTION_ENTER_ICON;
+        hint.appendChild(icon);
+        rowEl.appendChild(hint);
+      }
+    });
+}
+
+/* Replace the tracked token with an element and a
+   trailing space, the mention insert's shape, shared by
+   the event chip and the tag pill. False when the token
+   no longer stands in the body. */
+function replaceLinkToken(trig, el) {
+  const bodyEl = document.getElementById("noteBody");
+  if (!trig || !bodyEl || !bodyEl.contains(trig.node)) {
+    return false;
+  }
+  const end = Math.min(trig.caretOffset,
+    trig.node.nodeValue ? trig.node.nodeValue.length : 0);
+  const range = document.createRange();
+  range.setStart(trig.node, trig.atOffset);
+  range.setEnd(trig.node, end);
+  const sel = window.getSelection();
+  sel.removeAllRanges();
+  sel.addRange(range);
+  range.deleteContents();
+  range.insertNode(el);
+  const space = document.createTextNode(" ");
+  el.after(space);
+  placeCaretIn(space, 1);
+  return true;
+}
+
+/* Pick an event row: the chip replaces the "^" token,
+   and the backlink write follows (its failure is a
+   plain toast; a repeating or read only event skips it
+   silently, per the design). */
+function pickEventLinkRow(i) {
+  const ev = eventLinkRows[i];
+  if (!ev) { return; }
+  const trig = eventLinkTrigger;
+  const note = currentNote();
+  closeEventLinkPopup();
+  if (!replaceLinkToken(trig, buildEventChipEl(ev))) {
+    return;
+  }
+  markDirty();
+  if (note) {
+    gcalAddNoteLinkToEvent(ev, note.id)
+      .then(function (res) {
+        if (res === "failed") {
+          toast("Linked here. The backlink could not " +
+            "be saved to the event.", true);
+        }
+      });
+  }
+}
+
+/* The event picker's keys, on the capture phase like
+   the mention popup's: Escape hands the caret back to
+   the editor; the arrows walk; Enter and Tab pick. */
+function onEventLinkPopupKeydown(ev) {
+  if (!eventLinkPopupOpen()) { return; }
+  if (ev.key === "Escape") {
+    const trig = eventLinkTrigger;
+    closeEventLinkPopup();
+    const bodyEl = document.getElementById("noteBody");
+    if (trig && bodyEl && bodyEl.contains(trig.node)) {
+      bodyEl.focus();
+      placeCaretIn(trig.node, Math.min(trig.caretOffset,
+        trig.node.nodeValue ? trig.node.nodeValue.length : 0));
+    }
+    ev.preventDefault();
+    ev.stopPropagation();
+    return;
+  }
+  if (ev.key !== "ArrowDown" && ev.key !== "ArrowUp" &&
+      ev.key !== "Enter" && ev.key !== "Tab") { return; }
+  const bodyEl = document.getElementById("noteBody");
+  const searchEl = document.getElementById(
+    "eventLinkSearch");
+  const fromSearch = !!searchEl && ev.target === searchEl;
+  if (fromSearch && ev.key === "Tab") { return; }
+  if (!bodyEl || !ev.target ||
+      (!bodyEl.contains(ev.target) && !fromSearch)) {
+    return;
+  }
+  ev.preventDefault();
+  ev.stopPropagation();
+  if (ev.key === "ArrowDown") {
+    setEventLinkHighlight(eventLinkHighlight + 1);
+  } else if (ev.key === "ArrowUp") {
+    setEventLinkHighlight(eventLinkHighlight - 1);
+  } else {
+    pickEventLinkRow(eventLinkHighlight);
+  }
+}
+
+/* ---------------- the "#" tag picker ---------------- */
+
+/* The tag picker's standing state, the mention popup's
+   shape again: the tracked "#" token, the rows (a tag,
+   or the Create row naming a new tag), and the
+   highlight. No fetch stands behind it: the app's tags
+   are already in the room. */
+let tagLinkTrigger = null;
+let tagLinkRows = [];
+let tagLinkHighlight = 0;
+let tagLinkListEl = null;
+let tagLinkLastRange = null;
+
+function tagLinkPopupOpen() {
+  const popup = document.getElementById("tagLinkPopup");
+  return !!popup && !popup.classList.contains("hidden");
+}
+
+function closeTagLinkPopup() {
+  const popup = document.getElementById("tagLinkPopup");
+  if (popup) { popup.classList.add("hidden"); }
+  tagLinkTrigger = null;
+  tagLinkRows = [];
+  tagLinkHighlight = 0;
+  tagLinkLastRange = null;
+}
+
+/* The rows for one query: the known tags the query
+   matches (a case insensitive substring, the mention
+   rule), up to eight, then the Create row carrying the
+   typed name while it names no existing tag exactly. */
+function tagLinkCandidates(query) {
+  const needle = String(query || "").toLowerCase();
+  const rows = [];
+  knownTags().filter(function (t) {
+    return t.toLowerCase().indexOf(needle) >= 0;
+  }).slice(0, 8).forEach(function (t) {
+    rows.push({ kind: "tag", tag: t });
+  });
+  const q = String(query || "").trim();
+  if (q && !knownTags().some(function (t) {
+    return t.toLowerCase() === q.toLowerCase();
+  })) {
+    rows.push({ kind: "create", name: q });
+  }
+  return rows;
+}
+
+function ensureTagLinkChrome(popup) {
+  if (tagLinkListEl && popup.contains(tagLinkListEl)) {
+    return;
+  }
+  popup.innerHTML = "";
+  const head = document.createElement("div");
+  head.className = "mention-head";
+  head.textContent = "Tags";
+  popup.appendChild(head);
+  tagLinkListEl = document.createElement("div");
+  tagLinkListEl.className = "mention-list";
+  popup.appendChild(tagLinkListEl);
+}
+
+/* The tag picker's tracker, the event picker's sibling:
+   the "#" token under the caret in a live note, or the
+   popup closes. */
+function updateTagLinkPopup() {
+  const popup = document.getElementById("tagLinkPopup");
+  if (!popup) { return; }
+  const host = linkPopupHost();
+  if (!host) { closeTagLinkPopup(); return; }
+  const tok = linkTokenAt(host.node,
+    host.range.startOffset, "#");
+  if (!tok) { closeTagLinkPopup(); return; }
+  const fresh = !tagLinkTrigger ||
+    tagLinkTrigger.node !== tok.node ||
+    tagLinkTrigger.atOffset !== tok.atOffset ||
+    tagLinkTrigger.query !== tok.query;
+  tagLinkTrigger = tok;
+  tagLinkRows = tagLinkCandidates(tok.query);
+  if (!tagLinkRows.length) {
+    closeTagLinkPopup();
+    return;
+  }
+  if (fresh) { tagLinkHighlight = 0; }
+  renderTagLinkPopup(host.range);
+}
+
+function renderTagLinkPopup(range) {
+  const popup = document.getElementById("tagLinkPopup");
+  if (!popup) { return; }
+  ensureTagLinkChrome(popup);
+  if (range) { tagLinkLastRange = range; }
+  const list = tagLinkListEl;
+  list.innerHTML = "";
+  tagLinkRows.forEach(function (row, i) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "mention-row" +
+      (row.kind === "create" ? " mention-create" : "");
+    btn.setAttribute("data-ti", String(i));
+    btn.setAttribute("role", "option");
+    const texts = document.createElement("span");
+    texts.className = "mention-texts";
+    const line1 = document.createElement("span");
+    line1.className = "mention-title";
+    const line2 = document.createElement("span");
+    if (row.kind === "create") {
+      line1.textContent = "#" + row.name;
+      line2.className = "mention-create-sub";
+      line2.textContent = "Create tag";
+    } else {
+      line1.textContent = "#" + row.tag;
+      line2.className = "mention-nb";
+      line2.textContent = "Tag";
+    }
+    texts.appendChild(line1);
+    texts.appendChild(line2);
+    btn.appendChild(texts);
+    list.appendChild(btn);
+  });
+  popup.classList.remove("hidden");
+  setTagLinkHighlight(tagLinkHighlight);
+  positionLinkPopup(popup, range || tagLinkLastRange);
+}
+
+function setTagLinkHighlight(i) {
+  const popup = document.getElementById("tagLinkPopup");
+  if (!popup || !tagLinkRows.length) { return; }
+  tagLinkHighlight =
+    ((i % tagLinkRows.length) + tagLinkRows.length) %
+    tagLinkRows.length;
+  popup.querySelectorAll(".mention-row")
+    .forEach(function (rowEl) {
+      const mine = Number(
+        rowEl.getAttribute("data-ti")) === tagLinkHighlight;
+      rowEl.classList.toggle("current", mine);
+      const old = rowEl.querySelector(".mention-hint");
+      if (old) { old.remove(); }
+      if (mine) {
+        const hint = document.createElement("span");
+        hint.className = "mention-hint";
+        const label = document.createElement("span");
+        label.textContent = "enter to add";
+        hint.appendChild(label);
+        const icon = document.createElement("span");
+        icon.setAttribute("aria-hidden", "true");
+        icon.innerHTML = MENTION_ENTER_ICON;
+        hint.appendChild(icon);
+        rowEl.appendChild(hint);
+      }
+    });
+}
+
+/* Apply a tag to the note being edited, through the
+   tags field, the editor's own tag assignment path: the
+   field gains the tag (a spelling already there, in any
+   case, stands), and the save that follows files the
+   note under it. A tag the app has never seen is born
+   by this application, the Create row's whole job. */
+function applyTagToCurrentNote(name) {
+  const input = document.getElementById("noteTags");
+  if (!input || input.disabled) { return; }
+  const tags = input.value.split(",")
+    .map(function (t) { return t.trim(); })
+    .filter(function (t) { return t.length > 0; });
+  if (tags.some(function (t) {
+    return t.toLowerCase() === name.toLowerCase();
+  })) {
+    return;
+  }
+  tags.push(name);
+  input.value = tags.join(", ");
+}
+
+/* Pick a tag row: the pill replaces the "#" token, and
+   the tag is applied to the note at once. */
+function pickTagLinkRow(i) {
+  const row = tagLinkRows[i];
+  if (!row) { return; }
+  const name = row.kind === "create" ? row.name : row.tag;
+  const trig = tagLinkTrigger;
+  closeTagLinkPopup();
+  const pill = document.createElement("span");
+  pill.className = "ss-tag-pill";
+  pill.setAttribute("contenteditable", "false");
+  pill.setAttribute("data-ss-tag", name);
+  pill.textContent = "#" + name;
+  if (!replaceLinkToken(trig, pill)) { return; }
+  applyTagToCurrentNote(name);
+  markDirty();
+}
+
+/* The tag picker's keys, the event picker's twin. */
+function onTagLinkPopupKeydown(ev) {
+  if (!tagLinkPopupOpen()) { return; }
+  if (ev.key === "Escape") {
+    const trig = tagLinkTrigger;
+    closeTagLinkPopup();
+    const bodyEl = document.getElementById("noteBody");
+    if (trig && bodyEl && bodyEl.contains(trig.node)) {
+      bodyEl.focus();
+      placeCaretIn(trig.node, Math.min(trig.caretOffset,
+        trig.node.nodeValue ? trig.node.nodeValue.length : 0));
+    }
+    ev.preventDefault();
+    ev.stopPropagation();
+    return;
+  }
+  if (ev.key !== "ArrowDown" && ev.key !== "ArrowUp" &&
+      ev.key !== "Enter" && ev.key !== "Tab") { return; }
+  const bodyEl = document.getElementById("noteBody");
+  if (!bodyEl || !ev.target || !bodyEl.contains(ev.target)) {
+    return;
+  }
+  ev.preventDefault();
+  ev.stopPropagation();
+  if (ev.key === "ArrowDown") {
+    setTagLinkHighlight(tagLinkHighlight + 1);
+  } else if (ev.key === "ArrowUp") {
+    setTagLinkHighlight(tagLinkHighlight - 1);
+  } else {
+    pickTagLinkRow(tagLinkHighlight);
+  }
+}
+
+/* ---------------- the Home Email widget ------------- */
+
+/* Stand in the Email view at the Inbox (the widget
+   header's destination, and the message rows' first
+   step). */
+function openMailInbox() {
+  state.view = { kind: "email", value: null };
+  renderAll();
+  setMobileView("list");
+  mailChooseSelection({ kind: "folder", id: "inbox" });
+}
+
+/* Open one message in the Email view (a widget row's
+   destination). */
+function openMailOnMessage(id) {
+  openMailInbox();
+  openMailMessage(id);
+}
+
+/* The Home Email widget: the card the v2.82.0 workshop
+   drew and that build's brief left out. The header
+   carries the Inbox unread count and opens the Email
+   view at the Inbox; the body lists the five most
+   recent unread Inbox messages (a click opens the
+   message), or the state's own words: the not
+   connected line with its Connect button, the
+   unavailable line, the quiet loading line, or No
+   unread mail. Mail is asked for through the mail
+   module's lazy load and read from its page memory
+   caches; signed out, nothing is fetched and no error
+   shows, only the sign in hint. */
+function buildHomeEmailWidget() {
+  const parts = homeWidgetShell("email", "Email");
+  parts.head.classList.add("home-email-head");
+  parts.head.title = "Open Email";
+  parts.head.addEventListener("click", function () {
+    if (homeCustomSession) { return; }
+    openMailInbox();
+  });
+  if (mailStatus === "ok") {
+    const unread = mailInboxUnread();
+    if (typeof unread === "number" && unread > 0) {
+      const pill = document.createElement("span");
+      pill.className = "home-mail-count";
+      pill.textContent = unread + " unread";
+      parts.head.appendChild(pill);
+    }
+  }
+  if (!mailSignedInAble()) {
+    parts.body.appendChild(
+      homeHint("Sign in to see your mail."));
+    return parts.widget;
+  }
+  if (mailStatus === "needs-consent") {
+    const line = document.createElement("div");
+    line.className = "home-mail-connect";
+    const text = document.createElement("span");
+    text.textContent = "Gmail is not connected";
+    line.appendChild(text);
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "btn small";
+    btn.textContent = "Connect";
+    btn.addEventListener("click", function (ev) {
+      ev.stopPropagation();
+      connectGoogleCalendar();
+    });
+    line.appendChild(btn);
+    parts.body.appendChild(line);
+    return parts.widget;
+  }
+  if (mailStatus === "unavailable") {
+    parts.body.appendChild(homeHint("Gmail unavailable"));
+    return parts.widget;
+  }
+  const inboxKey = mailListKey({ kind: "folder", id: "inbox" });
+  const inboxList = mailLists[inboxKey];
+  if (!inboxList || !inboxList.loaded) {
+    if (mailFolder.kind === "folder" &&
+        mailFolder.id === "inbox") {
+      ensureMailLoaded();
+    } else {
+      mailChooseSelection({ kind: "folder", id: "inbox" });
+    }
+    parts.body.appendChild(homeHint("Loading..."));
+    return parts.widget;
+  }
+  const unreadRows = inboxList.rows.filter(function (r) {
+    return r.unread;
+  }).slice(0, 5);
+  if (!unreadRows.length) {
+    parts.body.appendChild(homeHint("No unread mail"));
+    return parts.widget;
+  }
+  unreadRows.forEach(function (rec) {
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = "home-mail-row";
+    row.setAttribute("data-mail-id", rec.id);
+    const from = document.createElement("span");
+    from.className = "home-mail-from";
+    from.textContent = rec.fromName || rec.fromAddress;
+    row.appendChild(from);
+    const subj = document.createElement("span");
+    subj.className = "home-mail-subject";
+    subj.textContent = rec.subject || "(No subject)";
+    row.appendChild(subj);
+    const time = document.createElement("span");
+    time.className = "home-mail-time";
+    time.textContent = mailRowTimeLabel(rec);
+    row.appendChild(time);
+    row.addEventListener("click", function () {
+      openMailOnMessage(rec.id);
+    });
+    parts.body.appendChild(row);
+  });
+  return parts.widget;
 }
 
 /* ---------------- v2.82: Email, the Gmail client ----
@@ -24581,6 +26248,9 @@ function mailSetStatus(next) {
   if (state.view && state.view.kind === "email") {
     renderMail();
   }
+  if (state.view && state.view.kind === "home") {
+    renderAll();
+  }
 }
 
 /* Forget everything the module holds. A completed
@@ -24665,6 +26335,11 @@ async function loadMailLabels() {
   if (state.view && state.view.kind === "email") {
     renderMail();
   }
+  /* v2.83: the Home Email widget reads these caches;
+     a landing load repaints Home too. */
+  if (state.view && state.view.kind === "home") {
+    renderHome();
+  }
   if (!mailOwnAddress) {
     gmailRead("/users/me/profile").then(function (prof) {
       if (prof.outcome === "ok" && prof.data &&
@@ -24715,6 +26390,10 @@ async function loadMailList(key, append) {
   if (state.view && state.view.kind === "email" &&
       mailListKey() === key) {
     renderMail();
+  }
+  /* v2.83: the Home Email widget, as above. */
+  if (state.view && state.view.kind === "home") {
+    renderHome();
   }
   updateMailBadge();
 }
@@ -27150,6 +28829,8 @@ function renderHome() {
       el = buildHomeTagsWidget();
     } else if (entry.type === "notebooks") {
       el = buildHomeNotebooksWidget();
+    } else if (entry.type === "email") {
+      el = buildHomeEmailWidget();
     }
     if (el) { grid.appendChild(el); }
   });
@@ -40292,6 +41973,9 @@ function closeNoteLinkPicker() {
   document.getElementById("noteLinkModal").classList.add("hidden");
   noteLinkPending = null;
   noteLinkRetargetAnchor = null;
+  /* v2.83: a closed picker holds no event link mode
+     either, whatever way it closed. */
+  gcalNoteLinkCtx = null;
 }
 
 /* v2.10: open the picker to retarget the link bar's note link
@@ -40362,7 +42046,12 @@ function renderNoteLinkResults(filterText) {
   const host = currentNote();
   const needle = (filterText || "").trim().toLowerCase();
   const matches = state.notes.filter(function (note) {
-    if (host && note.id === host.id) { return false; }
+    /* v2.83: in the event link mode the picker serves
+       an event, not the open note, so the host note is
+       a fair target like any other. */
+    if (!gcalNoteLinkCtx && host && note.id === host.id) {
+      return false;
+    }
     if (!needle) { return true; }
     return (note.title || "").toLowerCase().indexOf(needle) >= 0;
   }).slice().sort(function (a, b) {
@@ -40405,6 +42094,13 @@ function renderNoteLinkResults(filterText) {
    captured range is no longer usable, the same fallback the
    attachment placeholder inserter uses. */
 function pickNoteLinkTarget(target) {
+  /* v2.83: in the event link mode the pick serves the
+     event surface that opened the picker; its handler
+     closes the picker itself. */
+  if (gcalNoteLinkCtx) {
+    gcalPickEventNote(target);
+    return;
+  }
   /* v2.10: a retarget pick rewrites the existing link instead
      of inserting a new one; applyNoteLinkRetarget closes the
      picker itself. */
@@ -59054,6 +60750,14 @@ function wireEvents() {
       mentionPopupHome.parentElement !== document.body) {
     document.body.appendChild(mentionPopupHome);
   }
+  /* v2.83: the "^" and "#" popups take the same move,
+     for the same reason. */
+  ["eventLinkPopup", "tagLinkPopup"].forEach(function (id) {
+    const el = document.getElementById(id);
+    if (el && el.parentElement !== document.body) {
+      document.body.appendChild(el);
+    }
+  });
 
   /* Setup form (v2.0): there is nothing to fill in. Submitting
      creates this device's local encryption key, saves the (Google
@@ -59999,6 +61703,27 @@ function wireEvents() {
   document.getElementById("gcalDeleteModal").addEventListener("click", function (ev) {
     if (ev.target === ev.currentTarget) { closeGcalDeleteConfirm(); }
   });
+  /* v2.83: the event view's wiring, and the two Link a
+     note buttons (the editor's and the view's). */
+  document.getElementById("gcalEvLinkNoteBtn").addEventListener("click", function () {
+    if (gcalEditorState && gcalEditorState.ev) {
+      openGcalLinkNotePicker(gcalEditorState.ev, "editor");
+    }
+  });
+  document.getElementById("gcalViewCloseBtn").addEventListener("click", function () {
+    closeGcalEventView();
+  });
+  document.getElementById("gcalViewDeleteBtn").addEventListener("click", function () {
+    deleteGcalEventFromView();
+  });
+  document.getElementById("gcalViewLinkNoteBtn").addEventListener("click", function () {
+    if (gcalViewState && gcalViewState.ev) {
+      openGcalLinkNotePicker(gcalViewState.ev, "view");
+    }
+  });
+  document.getElementById("gcalViewModal").addEventListener("click", function (ev) {
+    if (ev.target === ev.currentTarget) { closeGcalEventView(); }
+  });
   /* v2.65: the orphaned attachments scan button. The scan
      runs only from this press; the function's own guard
      and its error state carry the outcomes, so the catch
@@ -60576,6 +62301,87 @@ function wireEvents() {
   document.addEventListener("keydown", onMentionPopupKeydown, true);
   document.querySelector(".editor-scroll").addEventListener("scroll",
     function () { closeMentionPopup(); });
+
+  /* v2.83: the "^" event picker and the "#" tag picker
+     take the mention popup's wiring: the same input and
+     selection trackers, capture phase keys, the scroll
+     close, and the outside click close. Their mousedown
+     is swallowed so a row click never moves the editor
+     selection before the click lands; the event
+     picker's search box and its Include past events
+     checkbox keep their mousedown, like the mention
+     search box does. */
+  document.getElementById("noteBody").addEventListener("input",
+    updateEventLinkPopup);
+  document.getElementById("noteBody").addEventListener("input",
+    updateTagLinkPopup);
+  document.addEventListener("selectionchange",
+    updateEventLinkPopup);
+  document.addEventListener("selectionchange",
+    updateTagLinkPopup);
+  document.addEventListener("keydown",
+    onEventLinkPopupKeydown, true);
+  document.addEventListener("keydown",
+    onTagLinkPopupKeydown, true);
+  document.querySelector(".editor-scroll").addEventListener("scroll",
+    function () { closeEventLinkPopup(); closeTagLinkPopup(); });
+  document.addEventListener("click", function (ev) {
+    const target = ev.target;
+    if (!target || !target.closest) { return; }
+    if (eventLinkPopupOpen() &&
+        !target.closest("#eventLinkPopup") &&
+        !target.closest("#noteBody")) {
+      closeEventLinkPopup();
+    }
+    if (tagLinkPopupOpen() &&
+        !target.closest("#tagLinkPopup") &&
+        !target.closest("#noteBody")) {
+      closeTagLinkPopup();
+    }
+  });
+  const eventLinkPopupEl = document.getElementById("eventLinkPopup");
+  eventLinkPopupEl.addEventListener("mousedown", function (ev) {
+    const t = ev.target;
+    if (t && t.closest && t.closest(
+      ".mention-search, .event-link-past")) { return; }
+    ev.preventDefault();
+  });
+  eventLinkPopupEl.addEventListener("click", function (ev) {
+    const target = ev.target;
+    const rowEl = target && target.closest ?
+      target.closest("[data-ei]") : null;
+    if (rowEl) {
+      pickEventLinkRow(Number(rowEl.getAttribute("data-ei")));
+    }
+  });
+  eventLinkPopupEl.addEventListener("mouseover", function (ev) {
+    const target = ev.target;
+    const rowEl = target && target.closest ?
+      target.closest("[data-ei]") : null;
+    if (rowEl) {
+      setEventLinkHighlight(Number(rowEl.getAttribute("data-ei")));
+    }
+  });
+  const tagLinkPopupEl = document.getElementById("tagLinkPopup");
+  tagLinkPopupEl.addEventListener("mousedown", function (ev) {
+    ev.preventDefault();
+  });
+  tagLinkPopupEl.addEventListener("click", function (ev) {
+    const target = ev.target;
+    const rowEl = target && target.closest ?
+      target.closest("[data-ti]") : null;
+    if (rowEl) {
+      pickTagLinkRow(Number(rowEl.getAttribute("data-ti")));
+    }
+  });
+  tagLinkPopupEl.addEventListener("mouseover", function (ev) {
+    const target = ev.target;
+    const rowEl = target && target.closest ?
+      target.closest("[data-ti]") : null;
+    if (rowEl) {
+      setTagLinkHighlight(Number(rowEl.getAttribute("data-ti")));
+    }
+  });
   document.addEventListener("click", function (ev) {
     if (!mentionPopupOpen()) { return; }
     const target = ev.target;
@@ -60726,6 +62532,26 @@ function wireEvents() {
      through the mouseover listener below. */
   document.getElementById("noteBody").addEventListener("click", function (ev) {
     const target = ev.target;
+    /* v2.83: an event chip and a tag pill resolve here,
+       ahead of the anchor branches: a chip travels to
+       its event, a pill opens the tag's list, and
+       neither ever summons the link bar. */
+    const evChip = (target && target.closest)
+      ? target.closest(".ss-event-chip") : null;
+    if (evChip) {
+      ev.preventDefault();
+      hideLinkBar();
+      followEventChip(evChip);
+      return;
+    }
+    const tagPill = (target && target.closest)
+      ? target.closest(".ss-tag-pill") : null;
+    if (tagPill) {
+      ev.preventDefault();
+      hideLinkBar();
+      openTagFilter(tagPill.getAttribute("data-ss-tag") || "");
+      return;
+    }
     const anchor = (target && target.closest) ? target.closest("a") : null;
     if (!anchor) {
       hideLinkBar();

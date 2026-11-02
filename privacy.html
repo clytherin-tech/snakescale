@@ -58,8 +58,15 @@
   Google, when you save or confirm them. Event data is never
   stored by the app: events are fetched live from Google, held
   only in the app's memory while it is open, and never stored in
-  your Drive, in the app's files, or on your device. You can
-  withdraw the permission at any time on your Google account's
+  your Drive, in the app's files, or on your device. One
+  exception is a link you make between a note and an event:
+  the link is stored as a small marker inside the note
+  itself, and as private app-only data on the event (the ids
+  of the notes linked to it) that only SnakeScale Notes
+  reads and that Google Calendar does not display. Beyond
+  the link ids a note itself carries, the app stores no
+  event data. You can withdraw the permission at any time
+  on your Google account's
   permissions page; the app then simply shows its calendars
   without events.</p>
 
