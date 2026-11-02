@@ -40,10 +40,43 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-11-02-SSN-V2880
-  Version: 2.88.0
+  BUILD STAMP: 2026-11-02-SSN-V2890
+  Version: 2.89.0
 
   Revision history:
+    v2.89.0 2026-11-02 Passage encryption. Selected
+                      text in a note can be
+                      encrypted under one
+                      passphrase for everything
+                      (the More menu's Encrypt
+                      selected text), Evernote
+                      style. Encryption happens
+                      on the device with
+                      WebCrypto: a random vault
+                      key, wrapped under a key
+                      the passphrase derives,
+                      and its record kept in
+                      index.json. A passage
+                      travels and syncs as a
+                      locked block; while
+                      unlocked it decrypts in
+                      place in the editor and
+                      can be edited, and every
+                      save writes it back as
+                      ciphertext. Locked
+                      passages give no text to
+                      previews or search; note
+                      titles stay visible. How
+                      long text stays unlocked
+                      is a Settings choice (10
+                      to 120 minutes, 30 by
+                      default, or until the app
+                      or window closes), and
+                      signing out locks at
+                      once. There is no
+                      recovery for a forgotten
+                      passphrase in this
+                      version.
     v2.88.0 2026-11-02 One layout fix. In the event
                       editor, each event
                       notification now stands on
@@ -9399,6 +9432,37 @@ body.dark .task-cal-more{color:var(--accent);}
   background:var(--accent);
 }
 .ss-event-chip-label{overflow:hidden;text-overflow:ellipsis;}
+/* v2.89.0: passage encryption faces. A locked passage
+   is an inline pill in the tag pill's dress (a border,
+   the soft accent ground, a lock glyph and its label),
+   so it reads as furniture, never as text. A decrypted
+   passage is a tinted, dashed outlined region, so
+   unlocked text can never be mistaken for ordinary
+   text while it stands open. Both follow the theme
+   through the standing tokens, in light and dark. */
+#noteBody .ssenc-block{
+  display:inline-flex;align-items:center;gap:6px;
+  border:1px solid var(--border);
+  background:var(--soft);color:var(--muted);
+  border-radius:20px;padding:0 9px;margin:0 1px;
+  font-size:.92em;cursor:pointer;white-space:nowrap;
+  user-select:none;vertical-align:baseline;
+}
+#noteBody .ssenc-block:hover{border-color:var(--accent);}
+#noteBody .ssenc-block.ssenc-error{
+  border-style:dashed;color:var(--text);
+}
+#noteBody .ssenc-open{
+  background:var(--accent-soft);border-radius:4px;
+  outline:1.5px dashed var(--accent);outline-offset:1px;
+  padding:0 2px;
+}
+#noteBody .ssenc-relock{
+  display:inline-flex;align-items:center;
+  color:var(--accent);cursor:pointer;
+  margin-right:5px;vertical-align:middle;
+  user-select:none;
+}
 #noteBody .ss-tag-pill{
   display:inline-block;border:1px solid var(--border);
   background:var(--accent-soft);color:var(--text);
@@ -11079,6 +11143,7 @@ body.dark .version-date{color:var(--accent);}
                   <button type="button" data-more="indent">Indent</button>
                   <button type="button" data-more="outdent">Outdent</button>
                   <button type="button" data-more="clear">Remove formatting</button>
+                  <button type="button" data-more="encrypt">Encrypt selected text</button>
                 </div>
               </span>
             </div>
@@ -11962,6 +12027,32 @@ body.dark .version-date{color:var(--accent);}
         </select>
         <div class="settings-help">Which speech model reads a recording when you Transcribe it, on this device. The model downloads the first time it is used and is cached on this device after that. Fast is the smallest download and the quickest read; Normal reads more accurately; Best reads the most accurately and is the largest download. Changing this never re-reads a recording: it applies to the next transcription you start.</div>
       </div>
+      <!-- v2.89.0: passage encryption. The state line
+           names the vault's standing state on this
+           device (Not set up, Locked, or Unlocked, from
+           renderSsencSettingsRow), the select is the
+           unlock duration (this device only, like the
+           model choice above), and the two buttons are
+           the manual doors: Unlock (or Set up encryption
+           before a passphrase exists) and Lock, each
+           standing only in the state it serves. -->
+      <div class="field">
+        <label for="settingsSsencUnlockSelect">Keep encrypted text unlocked for</label>
+        <div class="settings-help" id="settingsSsencStatus">Not set up</div>
+        <select id="settingsSsencUnlockSelect">
+          <option value="10">10 minutes</option>
+          <option value="15">15 minutes</option>
+          <option value="30">30 minutes</option>
+          <option value="60">60 minutes</option>
+          <option value="120">120 minutes</option>
+          <option value="close">Until app or window closes</option>
+        </select>
+        <div class="settings-help">How long encrypted text stays unlocked after you enter your passphrase, on this device. Locking happens sooner if you sign out or press Lock. The passphrase itself is never stored anywhere; if it is forgotten, encrypted text cannot be recovered.</div>
+        <div class="settings-orphan-actions">
+          <button class="btn hidden" id="settingsSsencUnlockBtn" type="button">Set up encryption</button>
+          <button class="btn hidden" id="settingsSsencLockBtn" type="button">Lock</button>
+        </div>
+      </div>
     </section>
 
     <section class="settings-section hidden" id="settingsPanelHistory" role="tabpanel" data-settings-panel="history" aria-labelledby="settingsHistoryTitle">
@@ -12357,6 +12448,55 @@ body.dark .version-date{color:var(--accent);}
      the close prompt: Save draft, Discard, or Keep
      writing, so nothing typed is ever lost silently.
      ========================================================================== -->
+<!-- ==========================================================================
+     v2.89.0: the passage encryption dialogs. Setup asks
+     for a passphrase and its confirmation and says in
+     plain words, before anything is created, that this
+     version has no way to recover a forgotten
+     passphrase. Unlock asks for the one passphrase;
+     a wrong one is answered in the dialog's error line
+     and changes no state. The passphrase is read from
+     the field at the confirm click and never stored.
+     ========================================================================== -->
+<div id="ssencSetupModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="ssencSetupTitle">
+  <div class="modal-card">
+    <h2 id="ssencSetupTitle">Set up encrypted text</h2>
+    <p class="modal-sub">Choose the one passphrase that will lock and unlock encrypted text in your notes. Encryption happens on this device; the passphrase is never sent or stored anywhere. If you forget it, there is no way to recover it in this version, and the encrypted text would be lost. Type it the same way twice to set it.</p>
+    <div class="field">
+      <label for="ssencSetupPass1">Passphrase</label>
+      <input id="ssencSetupPass1" type="password" autocomplete="new-password">
+    </div>
+    <div class="field">
+      <label for="ssencSetupPass2">Passphrase again</label>
+      <input id="ssencSetupPass2" type="password" autocomplete="new-password">
+    </div>
+    <div class="gcal-ev-error hidden" id="ssencSetupError">
+      <span id="ssencSetupErrorText"></span>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" id="ssencSetupCancelBtn" type="button">Cancel</button>
+      <button class="btn primary" id="ssencSetupSaveBtn" type="button">Set up encryption</button>
+    </div>
+  </div>
+</div>
+
+<div id="ssencUnlockModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="ssencUnlockTitle">
+  <div class="modal-card">
+    <h2 id="ssencUnlockTitle">Unlock encrypted text</h2>
+    <p class="modal-sub">Enter the passphrase you set up for encrypted text. It stays unlocked for the time chosen in Settings, on this device only.</p>
+    <div class="field">
+      <label for="ssencUnlockPass">Passphrase</label>
+      <input id="ssencUnlockPass" type="password" autocomplete="current-password">
+    </div>
+    <div class="gcal-ev-error hidden" id="ssencUnlockError">
+      <span id="ssencUnlockErrorText"></span>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" id="ssencUnlockCancelBtn" type="button">Cancel</button>
+      <button class="btn primary" id="ssencUnlockBtn" type="button">Unlock</button>
+    </div>
+  </div>
+</div>
 <div id="mailLabelMenu" class="note-ctx-menu hidden" role="menu" aria-label="Label actions">
   <button type="button" class="list-menu-item" id="mailLabelRenameBtn" role="menuitem">Rename</button>
   <button type="button" class="list-menu-item" id="mailLabelDeleteBtn" role="menuitem">Delete</button>
@@ -12782,8 +12922,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-11-02-SSN-V2880";
-const APP_VERSION = "2.88.0";
+const APP_BUILD = "2026-11-02-SSN-V2890";
+const APP_VERSION = "2.89.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -13071,6 +13211,37 @@ const state = {
                             // edited in the Settings
                             // modal, NOT in the synced
                             // index.
+  encryption: null,         // v2.89: the passage
+                            // encryption record (see
+                            // sanitizeEncryptionRecord):
+                            // {version, kdfSalt,
+                            // kdfIterations, wrappedKey},
+                            // the vault key wrapped
+                            // under the user's one
+                            // passphrase. It lives in
+                            // index.json (see
+                            // buildIndexObject), NOT in
+                            // settings, for the same
+                            // reason the tag parent map
+                            // does: every device must
+                            // find the same record to
+                            // unlock the same passages.
+                            // It holds nothing secret
+                            // shaped; the passphrase
+                            // and the unwrapped key
+                            // live only in page memory.
+  ssencUnlockChoice: 30,    // v2.89: how long encrypted
+                            // text stays unlocked on
+                            // this device, in minutes,
+                            // or "close" for until the
+                            // app or window closes. The
+                            // default is 30 and the
+                            // Settings select offers
+                            // nothing under 10. Per
+                            // device (remembered in
+                            // settings), because the
+                            // unlock itself is a device
+                            // session fact.
   transcriptionModel: "fast", // v2.76: the transcription
                             // model choice ("fast",
                             // "normal", or "best"; see
@@ -13228,6 +13399,13 @@ function escapeHtml(value) {
 function htmlToText(html) {
   const div = document.createElement("div");
   div.innerHTML = html || "";
+  /* v2.89: a locked encrypted passage contributes no
+     text at all (neither its face nor, obviously, its
+     contents), so previews and search never carry a
+     word of it; the note's other text derives exactly
+     as before. */
+  div.querySelectorAll("[data-ssenc]").forEach(
+    function (el) { el.remove(); });
   return (div.textContent || "").replace(/\s+/g, " ").trim();
 }
 
@@ -13693,6 +13871,13 @@ async function signOut() {
      Drive, so nothing is lost by leaving. */
   cancelAllPendingAttachmentDeletes();
 
+  /* v2.89: signing out locks the encryption vault,
+     always and immediately: the open note's decrypted
+     passages are re-encrypted in place first, then
+     the key is cleared, before any of the wipes below
+     run. */
+  await ssencLockVault();
+
   let googleToken = state.providerTokens.google || null;
   if (!googleToken) {
     try { googleToken = await getProviderToken("google"); }
@@ -13968,6 +14153,16 @@ function loadSettings() {
       s.transcriptionModel === "best") {
     state.transcriptionModel = s.transcriptionModel;
   }
+  /* v2.89: the encrypted text unlock duration. Only
+     the values the Settings select offers are honored
+     (10, 15, 30, 60, or 120 minutes, or "close");
+     anything else (an absent field from an older
+     build, a damaged value) leaves the 30 minute
+     default in place. */
+  if (s.ssencUnlockChoice === "close" ||
+      [10, 15, 30, 60, 120].indexOf(s.ssencUnlockChoice) >= 0) {
+    state.ssencUnlockChoice = s.ssencUnlockChoice;
+  }
 }
 
 
@@ -13992,7 +14187,8 @@ function saveSettings() {
     noteReminderFired: state.noteReminderFired,   // v2.35: the fired stamps
     startView: state.startView,   // v2.33: the When opening choice
     defaultNotebook: state.defaultNotebook,   // v2.72: the default notebook
-    transcriptionModel: state.transcriptionModel   // v2.76: the transcription model choice
+    transcriptionModel: state.transcriptionModel,   // v2.76: the transcription model choice
+    ssencUnlockChoice: state.ssencUnlockChoice   // v2.89: the encrypted text unlock duration
   }));
 }
 
@@ -14061,6 +14257,11 @@ function cacheSnapshot() {
     /* v2.38: the custom templates ride it too, so a cache
        first paint can open the same gallery. */
     templates: state.templates,
+    /* v2.89: the passage encryption record rides it
+       too (it is ciphertext and bookkeeping, never key
+       material), so a cache first paint knows whether
+       encrypted text is set up here. */
+    encryption: state.encryption,
     /* v2.44: the tasks ride it as well, the field v2.24
        never plumbed in, so a cache first paint shows the
        same Tasks view and Home widgets the store load
@@ -14108,6 +14309,10 @@ function applyCacheSnapshot(c) {
      list, exactly like an index.json written before
      v2.38 does. */
   state.templates = sanitizeTemplates(c.templates);
+  /* v2.89: snapshots written before passage encryption
+     existed have no record; they load as not set up,
+     exactly like an index.json written before v2.89. */
+  state.encryption = sanitizeEncryptionRecord(c.encryption);
   /* v2.44: snapshots written before tasks rode the cache
      have no list; they load as an empty Tasks view,
      exactly like an index.json written before v2.24
@@ -15219,6 +15424,11 @@ function buildIndexObject() {
     /* v2.38: the custom templates, on the same reasoning
        once more: no unrelated save can drop them either. */
     templates: state.templates,
+    /* v2.89: the passage encryption record, on the same
+       reasoning once more: no unrelated save can drop
+       it, or every encrypted passage in the store
+       becomes unreadable. */
+    encryption: state.encryption,
     updated: new Date().toISOString()
   };
 }
@@ -15344,7 +15554,7 @@ function buildIndexFromFolders(folderSlugs) {
      too, for the same reason. */
   /* v2.38: the custom templates are carried across the
      same way again, for the same reason. */
-  return { version: 1, notebooks: rebuilt, tagParents: state.tagParents, shortcuts: state.shortcuts, savedSearches: state.savedSearches, home: state.home, templates: state.templates, updated: new Date().toISOString() };
+  return { version: 1, notebooks: rebuilt, tagParents: state.tagParents, shortcuts: state.shortcuts, savedSearches: state.savedSearches, home: state.home, templates: state.templates, encryption: state.encryption, updated: new Date().toISOString() };
 }
 
 /* --------------------------------------------------------------------------
@@ -17407,6 +17617,12 @@ async function loadAllFromRepo() {
     if (index && index.templates) {
       state.templates = sanitizeTemplates(index.templates);
     }
+    /* v2.89: the passage encryption record is salvaged
+       the same way, ahead of the rebuild that would
+       otherwise drop it. */
+    if (index && index.encryption) {
+      state.encryption = sanitizeEncryptionRecord(index.encryption);
+    }
     index = buildIndexFromFolders(folderSlugs);
     state.notebooks = index.notebooks;
     /* v2.63: the parent fields are sanitized on this
@@ -17448,6 +17664,11 @@ async function loadAllFromRepo() {
        before templates existed has no field and loads
        as an empty My templates list. */
     state.templates = sanitizeTemplates(index.templates);
+    /* v2.89: the passage encryption record loads with
+       the index too, sanitized on the way in; an index
+       written before passage encryption existed has no
+       field and loads as not set up. */
+    state.encryption = sanitizeEncryptionRecord(index.encryption);
     state.index = index;
     /* A notebook folder with no index entry still gets listed, so notes
        are never hidden by a stale index. */
@@ -38157,7 +38378,7 @@ function syncShouldRefillOpenNote(note) {
     title: document.getElementById("noteTitle").value.trim() ||
       "Untitled note",
     body: canonicalizeAttachmentPlaceholders(
-      document.getElementById("noteBody").innerHTML),
+      ssencSerializedBodyHtml()),
     tags: document.getElementById("noteTags").value
       .split(",")
       .map(function (t) { return t.trim(); })
@@ -41056,6 +41277,11 @@ function renderEditor() {
        the rule buildTaskRowEl already keeps) until the
        landed load's own render replaces them. */
     refreshNoteTaskBlocks(document.getElementById("noteBody"), note);
+    /* v2.89: the note's encrypted passages take their
+       standing form for this session: while the vault
+       is unlocked they decrypt in place; while locked
+       the stored blocks already show their faces. */
+    ssencDecorateEditorBody();
     setSaveState(note.trashed ? "In Trash" :
       (note.archived ? "Archived" : "Saved"));
     /* v1.2: fill the attachment placeholders from the providers. This is
@@ -41596,6 +41822,9 @@ function syncSettingsControls() {
      like the contacts ask above it. */
   renderPushSettingsRow();
   if (mailSignedInAble()) { ensurePushRegistration(); }
+  /* v2.89: the Encrypted text row shows the vault's
+     standing state and this device's unlock duration. */
+  renderSsencSettingsRow();
   const gcalNowParts = taskTodayParts();
   ensureGcalMonth(gcalNowParts.y, gcalNowParts.m);
   /* v2.21: the Last load readout shows this session's boot. */
@@ -42660,7 +42889,7 @@ function editorContentSnapshot(note) {
       .map(function (t) { return t.trim(); })
       .filter(function (t) { return t.length > 0; }),
     body: canonicalizeAttachmentPlaceholders(
-      document.getElementById("noteBody").innerHTML),
+      ssencSerializedBodyHtml()),
     attachments: sanitizeAttachments(cloneVersionValue(note.attachments || []))
   };
 }
@@ -43462,9 +43691,13 @@ function collectEditor(note) {
      exactly as it sits on the note object (set by the Pin note /
      Unpin note item in the notes list toolbar menu), and editing a
      pinned note through any save path can never unpin it. */
-  /* v1.2: the stored body always carries canonical placeholders. */
+  /* v1.2: the stored body always carries canonical placeholders.
+     v2.89: the read goes through the encrypted text
+     serializer, which substitutes every decrypted
+     region with its locked block, so a collect can
+     never fold a decrypted passage into the note. */
   note.body = canonicalizeAttachmentPlaceholders(
-    document.getElementById("noteBody").innerHTML);
+    ssencSerializedBodyHtml());
   /* v1.2: attachment metadata is edited through the attachment actions,
      not the form fields, but re-sanitize here so the saved note always
      carries a clean array on the object. */
@@ -51823,6 +52056,12 @@ async function runEditorAutosave() {
   }
   const previousPath = notePath(note);
   const previousNotebook = note.notebook;
+  /* v2.89: any decrypted passage in the editor is
+     re-encrypted to its current text before the
+     collect below reads the body, so the save writes
+     the passage's present words as ciphertext, never
+     a stale snapshot and never plaintext. */
+  await ssencFlushEditorRegions();
   collectEditor(note);
   /* v2.50: the edit count this save collected. The settle
      below raises the settled count only to here, so an
@@ -54931,6 +55170,14 @@ function runMoreAction(kind) {
     document.execCommand("outdent", false, null);
   } else if (kind === "clear") {
     clearFormattingExtended();
+  } else if (kind === "encrypt") {
+    /* v2.89: passage encryption. The flow is async
+       (it may walk the setup or unlock dialog first)
+       and marks the note dirty itself when a block
+       lands, so this branch returns ahead of the
+       shared markDirty below. */
+    void ssencEncryptSelectionFlow();
+    return;
   }
   markDirty();
 }
@@ -63984,6 +64231,835 @@ function insertVoiceTranscript(anchorEl, segments) {
 /* --------------------------------------------------------------------------
    12. Screen flow and event wiring
    -------------------------------------------------------------------------- */
+/* --------------------------------------------------------------------------
+   v2.89.0: passage encryption (Evernote's encrypted text,
+   Chris's design as approved 2026-11-02).
+
+   Selected text in a note can be encrypted under ONE
+   passphrase for everything. The cryptography is
+   WebCrypto only, on this device:
+
+   - At setup a random 256 bit vault key is generated.
+     The passphrase derives a key encryption key through
+     PBKDF2-HMAC-SHA-256 (600000 iterations, a random
+     16 byte salt), and the vault key is wrapped with
+     AES-GCM under it. The wrapping record {version,
+     kdfSalt, kdfIterations, wrappedKey{iv, data}} lives
+     in index.json (state.encryption, plumbed through
+     buildIndexObject, the folder rebuild, both index
+     load branches, and the cache snapshot like every
+     other index field) and holds nothing secret shaped:
+     the passphrase and the unwrapped vault key live
+     only in this page's memory, and only while
+     unlocked. A successful AES-GCM unwrap IS the
+     passphrase check; a wrong passphrase fails it and
+     changes no state.
+   - Each passage is encrypted with the vault key
+     directly, AES-GCM with a fresh random 12 byte IV
+     per encryption, its inner HTML as the plaintext,
+     so formatting round trips exactly. In a stored
+     body a passage is one atomic span.ssenc-block
+     (contenteditable false) carrying data-ssenc="1"
+     and the base64url iv and ciphertext in data
+     attributes, its face reading "Encrypted text".
+     Locked passages contribute no text to previews or
+     search (htmlToText strips them), are opaque to
+     sync, conflict copies, versions, and the drop box,
+     and are never decrypted anywhere but this editor.
+   - While unlocked, a passage in the open note is
+     decrypted in place into a span.ssenc-open region
+     (visually distinct, with a lock chip at its head
+     that locks the vault again). The region element
+     carries the passage's latest ciphertext in its own
+     data-ssenc-iv and data-ssenc-ct attributes, kept
+     current by an encryption chain that re-encrypts
+     the region's HTML as it is edited, and
+     collectEditor serializes a CLONE in which every
+     region is replaced by its locked block, so no
+     save, snapshot comparison, export, or move can
+     ever write a decrypted passage. runEditorAutosave
+     additionally awaits ssencFlushEditorRegions before
+     it collects, so the ciphertext a save writes is
+     the region's current text, not a stale snapshot.
+   - The vault locks when the Settings duration
+     expires (the timer runs from the unlock moment),
+     on sign out (always, immediately), and from the
+     manual Lock control in Settings. Locking first
+     re-encrypts the open note's regions in place,
+     then clears the key. The duration is a per device
+     setting (state.ssencUnlockChoice): 10, 15, 30
+     (the default), 60, or 120 minutes, or "close"
+     (until the app or window closes, no timer).
+   - This version has NO recovery: a forgotten
+     passphrase loses the encrypted text. The setup
+     dialog says so in plain words before anything is
+     created. (Chris directed that a recovery option
+     be designed for the NEXT version; nothing of it
+     is prebuilt here.) Whole note encryption,
+     encrypted attachments, a passphrase change
+     control, and hidden titles are likewise out of
+     scope; note titles stay visible as always.
+
+   Refusal rule for the Encrypt action (stated in the
+   delivery report): the selection must be non empty,
+   must sit inside one block of the note body, and
+   must not touch an attachment placeholder, a table,
+   a code block, a table of contents block, or an
+   existing encrypted or decrypted passage; anything
+   else is refused with a toast rather than mangled.
+   -------------------------------------------------------------------------- */
+
+const SSENC_KDF_ITERATIONS = 600000;
+const SSENC_UNLOCK_CHOICES = [10, 15, 30, 60, 120, "close"];
+
+/* The unwrapped vault key (a CryptoKey) while unlocked,
+   or null. Page memory only, by design. */
+let ssencKey = null;
+/* The expiry timer for the standing unlock, or null
+   (no timer under the "close" choice or while locked). */
+let ssencUnlockTimer = null;
+/* Decrypted region bookkeeping, by region id:
+   {el, running, queuedHtml, chain}. The ciphertext
+   itself rides the region element's data attributes;
+   this map only tracks the encryption chains. */
+const ssencRegions = new Map();
+let ssencRegionSeq = 0;
+/* The resolver of the setup or unlock dialog currently
+   open, or null: {kind, resolve}. One dialog at a time. */
+let ssencDialogPending = null;
+
+function ssencBytesToB64Url(bytes) {
+  return bytesToBase64(bytes).replace(/\+/g, "-")
+    .replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function ssencB64UrlToBytes(text) {
+  let b64 = String(text || "").replace(/-/g, "+")
+    .replace(/_/g, "/");
+  while (b64.length % 4) { b64 += "="; }
+  return base64ToBytes(b64);
+}
+
+function ssencRandomBytes(n) {
+  return crypto.getRandomValues(new Uint8Array(n));
+}
+
+/* The index record's sanitizer, in the house pattern:
+   only the frozen shape is honored; anything damaged
+   (a hand edited index, an older build's field)
+   degrades to no record, which reads as "not set up"
+   and can never half unlock anything. */
+function sanitizeEncryptionRecord(raw) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return null;
+  }
+  if (raw.version !== 1) { return null; }
+  const b64url = /^[A-Za-z0-9_-]+$/;
+  if (typeof raw.kdfSalt !== "string" ||
+      !b64url.test(raw.kdfSalt)) { return null; }
+  const iters = Number(raw.kdfIterations);
+  if (!Number.isFinite(iters) || iters < 1000 ||
+      iters > 10000000) { return null; }
+  const wk = raw.wrappedKey;
+  if (!wk || typeof wk !== "object" ||
+      typeof wk.iv !== "string" || !b64url.test(wk.iv) ||
+      typeof wk.data !== "string" || !b64url.test(wk.data)) {
+    return null;
+  }
+  return {
+    version: 1,
+    kdfSalt: raw.kdfSalt,
+    kdfIterations: Math.trunc(iters),
+    wrappedKey: { iv: wk.iv, data: wk.data }
+  };
+}
+
+function ssencHasRecord() {
+  return !!sanitizeEncryptionRecord(state.encryption);
+}
+
+function ssencIsUnlocked() { return !!ssencKey; }
+
+async function ssencDeriveKek(passphrase, record) {
+  const material = await crypto.subtle.importKey(
+    "raw", new TextEncoder().encode(String(passphrase)),
+    "PBKDF2", false, ["deriveKey"]);
+  return crypto.subtle.deriveKey(
+    { name: "PBKDF2", salt: ssencB64UrlToBytes(record.kdfSalt),
+      iterations: record.kdfIterations, hash: "SHA-256" },
+    material,
+    { name: "AES-GCM", length: 256 },
+    false, ["encrypt", "decrypt"]);
+}
+
+async function ssencImportVaultKey(rawBytes) {
+  return crypto.subtle.importKey("raw", rawBytes,
+    { name: "AES-GCM" }, false, ["encrypt", "decrypt"]);
+}
+
+/* Encrypt one passage's HTML under the vault key.
+   Resolves {iv, ct} in base64url. */
+async function ssencEncryptHtml(html) {
+  const iv = ssencRandomBytes(12);
+  const cipher = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv: iv }, ssencKey,
+    new TextEncoder().encode(String(html)));
+  return { iv: ssencBytesToB64Url(iv),
+    ct: ssencBytesToB64Url(new Uint8Array(cipher)) };
+}
+
+/* Decrypt one passage back to its HTML. Rejects when
+   the ciphertext does not authenticate (tampered, or
+   wrapped under another vault). */
+async function ssencDecryptHtml(ivB64, ctB64) {
+  const plain = await crypto.subtle.decrypt(
+    { name: "AES-GCM", iv: ssencB64UrlToBytes(ivB64) },
+    ssencKey, ssencB64UrlToBytes(ctB64));
+  return new TextDecoder().decode(plain);
+}
+
+/* The locked block element for one passage, the only
+   shape a stored body ever carries for it. */
+const SSENC_LOCK_SVG =
+  "<svg viewBox=\"0 0 24 24\" width=\"13\" height=\"13\" " +
+  "fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" " +
+  "stroke-linecap=\"round\" stroke-linejoin=\"round\" " +
+  "aria-hidden=\"true\" focusable=\"false\">" +
+  "<rect x=\"4\" y=\"11\" width=\"16\" height=\"10\" rx=\"2\"/>" +
+  "<path d=\"M8 11V7a4 4 0 0 1 8 0v4\"/></svg>";
+
+function ssencBuildBlock(iv, ct) {
+  const block = document.createElement("span");
+  block.className = "ssenc-block";
+  block.setAttribute("data-ssenc", "1");
+  block.setAttribute("data-ssenc-iv", iv);
+  block.setAttribute("data-ssenc-ct", ct);
+  block.setAttribute("contenteditable", "false");
+  block.setAttribute("role", "button");
+  block.setAttribute("aria-label", "Encrypted text");
+  block.setAttribute("title", "Encrypted text");
+  block.innerHTML = SSENC_LOCK_SVG +
+    "<span class=\"ssenc-face-text\">Encrypted text</span>";
+  return block;
+}
+
+/* The decrypted region for one passage: the passage's
+   HTML in an editable, visually distinct span, headed
+   by a small lock chip (runtime furniture, stripped
+   before anything is encrypted or measured) whose
+   click locks the vault. The region carries the
+   passage's current ciphertext in its own data
+   attributes, refreshed by its encryption chain, so
+   collectEditor's substitution needs nothing else. */
+function ssencBuildRegion(html, iv, ct) {
+  ssencRegionSeq += 1;
+  const rid = "ssenc-r" + ssencRegionSeq;
+  const region = document.createElement("span");
+  region.className = "ssenc-open";
+  region.setAttribute("data-ssenc-open", "1");
+  region.setAttribute("data-ssenc-rid", rid);
+  region.setAttribute("data-ssenc-iv", iv);
+  region.setAttribute("data-ssenc-ct", ct);
+  const chip = document.createElement("span");
+  chip.className = "ssenc-relock";
+  chip.setAttribute("contenteditable", "false");
+  chip.setAttribute("role", "button");
+  chip.setAttribute("aria-label", "Lock encrypted text");
+  chip.setAttribute("title", "Lock encrypted text");
+  chip.innerHTML = SSENC_LOCK_SVG;
+  region.appendChild(chip);
+  const holder = document.createElement("div");
+  holder.innerHTML = html;
+  while (holder.firstChild) {
+    region.appendChild(holder.firstChild);
+  }
+  ssencRegions.set(rid, {
+    el: region, running: false, queuedHtml: null,
+    chain: Promise.resolve()
+  });
+  return region;
+}
+
+/* One region's encryptable content: its inner HTML
+   with the runtime lock chip removed. */
+function ssencRegionHtml(region) {
+  const clone = region.cloneNode(true);
+  clone.querySelectorAll(".ssenc-relock").forEach(
+    function (el) { el.remove(); });
+  return clone.innerHTML;
+}
+
+/* Keep one region's stored ciphertext current with
+   its content. Runs as a per region chain: each new
+   snapshot is encrypted in order, and the region's
+   data attributes land when its encryption does, so
+   the attributes always name a ciphertext OF the
+   region (the newest landed one). */
+function ssencScheduleRegionEncrypt(region) {
+  const rid = region.getAttribute("data-ssenc-rid");
+  const rec = ssencRegions.get(rid);
+  if (!rec || !ssencKey) { return; }
+  rec.queuedHtml = ssencRegionHtml(region);
+  if (rec.running) { return; }
+  rec.running = true;
+  rec.chain = (async function () {
+    try {
+      while (rec.queuedHtml !== null && ssencKey) {
+        const snap = rec.queuedHtml;
+        rec.queuedHtml = null;
+        const out = await ssencEncryptHtml(snap);
+        if (!region.isConnected) { break; }
+        region.setAttribute("data-ssenc-iv", out.iv);
+        region.setAttribute("data-ssenc-ct", out.ct);
+        const now = ssencRegionHtml(region);
+        if (now !== snap && rec.queuedHtml === null) {
+          rec.queuedHtml = now;
+        }
+      }
+    } catch (err) {
+      /* A failed re-encryption keeps the previous
+         ciphertext standing; the flush below retries
+         before any save collects. */
+      console.warn("Passage re-encryption failed:", err);
+    }
+    rec.running = false;
+  })();
+}
+
+/* Await every region chain in the open note, then
+   re-encrypt any region whose content moved past its
+   landed ciphertext, until the open note's regions
+   are all current. Called before the autosave
+   collects, and before the vault locks. */
+async function ssencFlushEditorRegions() {
+  const bodyEl = document.getElementById("noteBody");
+  if (!bodyEl || !ssencKey) { return; }
+  for (let pass = 0; pass < 4; pass++) {
+    const regions = Array.from(
+      bodyEl.querySelectorAll(".ssenc-open"));
+    regions.forEach(ssencScheduleRegionEncrypt);
+    await Promise.all(regions.map(function (region) {
+      const rec = ssencRegions.get(
+        region.getAttribute("data-ssenc-rid"));
+      return rec ? rec.chain : null;
+    }));
+    const stale = regions.some(function (region) {
+      const rec = ssencRegions.get(
+        region.getAttribute("data-ssenc-rid"));
+      return rec && rec.queuedHtml !== null;
+    });
+    if (!stale) { return; }
+  }
+}
+
+/* The body HTML a save may serialize: the editor's
+   body with every decrypted region replaced by its
+   locked block, built from the region's own current
+   ciphertext attributes. Decrypted HTML itself never
+   leaves through here, at any timing. */
+function ssencSerializedBodyHtml() {
+  const bodyEl = document.getElementById("noteBody");
+  if (!bodyEl) { return ""; }
+  if (!bodyEl.querySelector(".ssenc-open")) {
+    return bodyEl.innerHTML;
+  }
+  const clone = bodyEl.cloneNode(true);
+  clone.querySelectorAll(".ssenc-open").forEach(
+    function (region) {
+      const block = ssencBuildBlock(
+        region.getAttribute("data-ssenc-iv") || "",
+        region.getAttribute("data-ssenc-ct") || "");
+      region.parentNode.replaceChild(block, region);
+    });
+  return clone.innerHTML;
+}
+
+/* Decrypt every locked block in the open note, in
+   place. A block whose ciphertext does not
+   authenticate keeps its place and its payload and
+   gains an error face; the rest of the note is
+   untouched and nothing throws. */
+async function ssencDecryptOpenNoteBlocks() {
+  const bodyEl = document.getElementById("noteBody");
+  if (!bodyEl || !ssencKey) { return; }
+  const blocks = Array.from(
+    bodyEl.querySelectorAll("[data-ssenc]"));
+  for (let i = 0; i < blocks.length; i++) {
+    const block = blocks[i];
+    if (!block.isConnected) { continue; }
+    try {
+      const html = await ssencDecryptHtml(
+        block.getAttribute("data-ssenc-iv"),
+        block.getAttribute("data-ssenc-ct"));
+      const region = ssencBuildRegion(html,
+        block.getAttribute("data-ssenc-iv"),
+        block.getAttribute("data-ssenc-ct"));
+      block.parentNode.replaceChild(region, block);
+    } catch (err) {
+      block.classList.add("ssenc-error");
+      const face = block.querySelector(".ssenc-face-text");
+      if (face) {
+        face.textContent =
+          "Encrypted text (cannot be decrypted)";
+      }
+    }
+  }
+}
+
+/* Replace the open note's decrypted regions with
+   their locked blocks, from the regions' own current
+   ciphertext. The first half of locking, in order:
+   this runs before the key is ever cleared. */
+function ssencRelockOpenNoteRegions() {
+  const bodyEl = document.getElementById("noteBody");
+  if (!bodyEl) { return; }
+  Array.from(bodyEl.querySelectorAll(".ssenc-open"))
+    .forEach(function (region) {
+      const block = ssencBuildBlock(
+        region.getAttribute("data-ssenc-iv") || "",
+        region.getAttribute("data-ssenc-ct") || "");
+      region.parentNode.replaceChild(block, region);
+    });
+}
+
+/* renderEditor's fill calls this once the body stands:
+   while unlocked, the note's passages open in place;
+   while locked, the stored blocks already show their
+   faces and nothing runs. */
+function ssencDecorateEditorBody() {
+  if (ssencKey) { void ssencDecryptOpenNoteBlocks(); }
+}
+
+/* Drop the chain records of regions no longer in the
+   document (a note switch replaced the body wholesale;
+   the outgoing note was settled and flushed first). */
+function ssencPruneRegions() {
+  ssencRegions.forEach(function (rec, rid) {
+    if (!rec.el.isConnected) { ssencRegions.delete(rid); }
+  });
+}
+
+function ssencClearUnlockTimer() {
+  if (ssencUnlockTimer !== null) {
+    clearTimeout(ssencUnlockTimer);
+    ssencUnlockTimer = null;
+  }
+}
+
+/* The duration runs from the unlock moment, as Chris
+   scoped it; the "close" choice arms no timer. */
+function ssencArmUnlockTimer() {
+  ssencClearUnlockTimer();
+  const choice = state.ssencUnlockChoice;
+  if (typeof choice === "number" && Number.isFinite(choice)) {
+    ssencUnlockTimer = setTimeout(function () {
+      void ssencLockVault();
+    }, choice * 60000);
+  }
+}
+
+/* Lock the vault: flush and re-encrypt the open note
+   first, then clear the key, in that order. Safe to
+   call while already locked. */
+async function ssencLockVault() {
+  ssencClearUnlockTimer();
+  if (!ssencKey) { renderSsencSettingsRow(); return; }
+  await ssencFlushEditorRegions();
+  ssencRelockOpenNoteRegions();
+  ssencKey = null;
+  ssencPruneRegions();
+  renderSsencSettingsRow();
+}
+
+/* Try a passphrase against the standing record. On
+   success the vault is unlocked (timer armed, the
+   open note's passages decrypted, the Settings row
+   refreshed); on failure nothing at all changes. */
+async function ssencTryUnlock(passphrase) {
+  const record = sanitizeEncryptionRecord(state.encryption);
+  if (!record) { return false; }
+  try {
+    const kek = await ssencDeriveKek(passphrase, record);
+    const raw = await crypto.subtle.decrypt(
+      { name: "AES-GCM",
+        iv: ssencB64UrlToBytes(record.wrappedKey.iv) },
+      kek, ssencB64UrlToBytes(record.wrappedKey.data));
+    ssencKey = await ssencImportVaultKey(new Uint8Array(raw));
+  } catch (err) {
+    return false;
+  }
+  ssencArmUnlockTimer();
+  await ssencDecryptOpenNoteBlocks();
+  renderSsencSettingsRow();
+  return true;
+}
+
+/* Create the record from a fresh passphrase and stand
+   unlocked under it. The record saves through the
+   index path like every other index fact. */
+async function ssencCreateRecord(passphrase) {
+  const salt = ssencRandomBytes(16);
+  const partial = {
+    version: 1,
+    kdfSalt: ssencBytesToB64Url(salt),
+    kdfIterations: SSENC_KDF_ITERATIONS,
+    wrappedKey: { iv: "", data: "" }
+  };
+  const kek = await ssencDeriveKek(passphrase, partial);
+  const vaultRaw = ssencRandomBytes(32);
+  const iv = ssencRandomBytes(12);
+  const wrapped = await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv: iv }, kek, vaultRaw);
+  const record = {
+    version: 1,
+    kdfSalt: partial.kdfSalt,
+    kdfIterations: SSENC_KDF_ITERATIONS,
+    wrappedKey: {
+      iv: ssencBytesToB64Url(iv),
+      data: ssencBytesToB64Url(new Uint8Array(wrapped))
+    }
+  };
+  state.encryption = record;
+  saveIndex();
+  ssencKey = await ssencImportVaultKey(vaultRaw);
+  ssencArmUnlockTimer();
+  renderSsencSettingsRow();
+  return true;
+}
+
+/* ---------- the setup and unlock dialogs ---------- */
+
+function ssencShowDialogError(kind, message) {
+  const wrap = document.getElementById(
+    kind === "setup" ? "ssencSetupError" : "ssencUnlockError");
+  const text = document.getElementById(
+    kind === "setup" ? "ssencSetupErrorText"
+      : "ssencUnlockErrorText");
+  if (text) { text.textContent = message || ""; }
+  if (wrap) {
+    wrap.classList.toggle("hidden", !message);
+  }
+}
+
+function ssencCloseDialog(kind, value) {
+  const modal = document.getElementById(
+    kind === "setup" ? "ssencSetupModal" : "ssencUnlockModal");
+  if (modal) { modal.classList.add("hidden"); }
+  const pending = ssencDialogPending;
+  ssencDialogPending = null;
+  if (pending && pending.kind === kind) {
+    pending.resolve(value);
+  }
+}
+
+/* Both dialogs resolve a promise: true when the vault
+   stands unlocked because of them, false on cancel. */
+function ssencOpenSetupDialog() {
+  return new Promise(function (resolve) {
+    ssencDialogPending = { kind: "setup", resolve: resolve };
+    const p1 = document.getElementById("ssencSetupPass1");
+    const p2 = document.getElementById("ssencSetupPass2");
+    if (p1) { p1.value = ""; }
+    if (p2) { p2.value = ""; }
+    ssencShowDialogError("setup", "");
+    const modal = document.getElementById("ssencSetupModal");
+    if (modal) { modal.classList.remove("hidden"); }
+    if (p1) { p1.focus(); }
+  });
+}
+
+function ssencOpenUnlockDialog() {
+  return new Promise(function (resolve) {
+    ssencDialogPending = { kind: "unlock", resolve: resolve };
+    const input = document.getElementById("ssencUnlockPass");
+    if (input) { input.value = ""; }
+    ssencShowDialogError("unlock", "");
+    const modal = document.getElementById("ssencUnlockModal");
+    if (modal) { modal.classList.remove("hidden"); }
+    if (input) { input.focus(); }
+  });
+}
+
+async function ssencSetupConfirm() {
+  const p1 = document.getElementById("ssencSetupPass1");
+  const p2 = document.getElementById("ssencSetupPass2");
+  const a = p1 ? p1.value : "";
+  const b = p2 ? p2.value : "";
+  if (!a) {
+    ssencShowDialogError("setup", "Enter a passphrase.");
+    return;
+  }
+  if (a !== b) {
+    ssencShowDialogError("setup",
+      "The two passphrases do not match.");
+    return;
+  }
+  try {
+    await ssencCreateRecord(a);
+  } catch (err) {
+    ssencShowDialogError("setup",
+      "Encryption could not be set up on this device.");
+    return;
+  }
+  ssencCloseDialog("setup", true);
+}
+
+async function ssencUnlockConfirm() {
+  const input = document.getElementById("ssencUnlockPass");
+  const pass = input ? input.value : "";
+  if (!pass) {
+    ssencShowDialogError("unlock", "Enter your passphrase.");
+    return;
+  }
+  const ok = await ssencTryUnlock(pass);
+  if (!ok) {
+    ssencShowDialogError("unlock",
+      "That passphrase does not match the one that " +
+      "locked this text.");
+    return;
+  }
+  ssencCloseDialog("unlock", true);
+}
+
+/* The Settings row's Unlock and Set up doors: setup
+   when no record stands, unlock when one does. */
+async function ssencUnlockFlow() {
+  if (!ssencHasRecord()) {
+    await ssencOpenSetupDialog();
+    return;
+  }
+  if (!ssencKey) { await ssencOpenUnlockDialog(); }
+}
+
+/* ---------- the Encrypt action ---------- */
+
+/* The block element a node's inline content lives in,
+   for the one block rule: the note body itself, or
+   the nearest block level ancestor inside it. */
+function ssencBlockAncestor(node) {
+  const bodyEl = document.getElementById("noteBody");
+  let el = node && node.nodeType === 1 ? node : node.parentNode;
+  const BLOCKS = ["P", "LI", "H1", "H2", "H3", "H4", "H5",
+    "H6", "BLOCKQUOTE", "TD", "TH", "DIV", "PRE"];
+  while (el && el !== bodyEl) {
+    if (BLOCKS.indexOf(el.tagName) >= 0) { return el; }
+    el = el.parentNode;
+  }
+  return null;
+}
+
+function ssencRangeIntersectsNode(range, node) {
+  const nr = document.createRange();
+  nr.selectNode(node);
+  const after = range.compareBoundaryPoints(
+    Range.END_TO_START, nr);
+  const before = range.compareBoundaryPoints(
+    Range.START_TO_END, nr);
+  return after === 1 && before === -1;
+}
+
+/* Judge the live selection for the Encrypt action.
+   Returns {ok, range, html} or {ok:false, message}
+   under the refusal rule in this section's header. */
+function ssencSelectionPlan() {
+  const bodyEl = document.getElementById("noteBody");
+  const sel = window.getSelection();
+  if (!sel || !sel.rangeCount) {
+    return { ok: false, message: "Select the text to encrypt first." };
+  }
+  const range = sel.getRangeAt(0);
+  if (range.collapsed ||
+      !bodyEl.contains(range.commonAncestorContainer)) {
+    return { ok: false, message: "Select the text to encrypt first." };
+  }
+  if (!range.toString().trim()) {
+    return { ok: false,
+      message: "Select some text to encrypt first." };
+  }
+  const startBlock = ssencBlockAncestor(range.startContainer);
+  const endBlock = ssencBlockAncestor(range.endContainer);
+  if (!startBlock || startBlock !== endBlock) {
+    return { ok: false,
+      message: "Encrypted text has to sit inside one " +
+        "paragraph. Select text within a single " +
+        "paragraph and try again." };
+  }
+  const guarded = bodyEl.querySelectorAll(
+    "[data-ssenc], .ssenc-open");
+  for (let i = 0; i < guarded.length; i++) {
+    if (ssencRangeIntersectsNode(range, guarded[i])) {
+      return { ok: false,
+        message: "That selection touches an encrypted " +
+          "passage. Leave encrypted passages out of " +
+          "the selection." };
+    }
+  }
+  const holder = document.createElement("div");
+  holder.appendChild(range.cloneContents());
+  if (holder.querySelector(
+      ".ss-attachment, table, pre, .ss-toc")) {
+    return { ok: false,
+      message: "Attachments, tables, code blocks, and " +
+        "tables of contents cannot be encrypted. " +
+        "Select plain text and try again." };
+  }
+  return { ok: true, range: range.cloneRange(),
+    html: holder.innerHTML };
+}
+
+/* The Encrypt action itself (the toolbar More menu's
+   Encrypt selected text item): judge the selection,
+   walk the setup or unlock dialog when the vault
+   cannot encrypt yet, then replace the selection with
+   its locked block. Cancelling a dialog changes
+   nothing at all. */
+async function ssencEncryptSelectionFlow() {
+  const plan = ssencSelectionPlan();
+  if (!plan.ok) { toast(plan.message, true); return; }
+  if (!ssencHasRecord()) {
+    const setUp = await ssencOpenSetupDialog();
+    if (!setUp) { return; }
+  } else if (!ssencKey) {
+    const unlocked = await ssencOpenUnlockDialog();
+    if (!unlocked) { return; }
+  }
+  const bodyEl = document.getElementById("noteBody");
+  if (!bodyEl.contains(plan.range.commonAncestorContainer)) {
+    toast("That selection is gone. Select the text " +
+      "again and try again.", true);
+    return;
+  }
+  const out = await ssencEncryptHtml(plan.html);
+  plan.range.deleteContents();
+  const block = ssencBuildBlock(out.iv, out.ct);
+  plan.range.insertNode(block);
+  const sel = window.getSelection();
+  const after = document.createRange();
+  after.setStartAfter(block);
+  after.collapse(true);
+  sel.removeAllRanges();
+  sel.addRange(after);
+  markDirty();
+}
+
+/* ---------- Settings ---------- */
+
+/* The Encrypted text row (Settings, Editor tab): the
+   standing state in plain words, the unlock duration
+   select showing this device's saved choice, a Lock
+   button standing while unlocked, and an Unlock or
+   Set up button standing otherwise. */
+function renderSsencSettingsRow() {
+  const status = document.getElementById("settingsSsencStatus");
+  const select = document.getElementById(
+    "settingsSsencUnlockSelect");
+  const lockBtn = document.getElementById("settingsSsencLockBtn");
+  const unlockBtn = document.getElementById(
+    "settingsSsencUnlockBtn");
+  if (select) {
+    select.value = String(state.ssencUnlockChoice);
+  }
+  if (!status || !lockBtn || !unlockBtn) { return; }
+  if (!ssencHasRecord()) {
+    status.textContent = "Not set up";
+    unlockBtn.textContent = "Set up encryption";
+    unlockBtn.classList.remove("hidden");
+    lockBtn.classList.add("hidden");
+  } else if (!ssencKey) {
+    status.textContent = "Locked";
+    unlockBtn.textContent = "Unlock";
+    unlockBtn.classList.remove("hidden");
+    lockBtn.classList.add("hidden");
+  } else {
+    status.textContent = "Unlocked";
+    unlockBtn.classList.add("hidden");
+    lockBtn.classList.remove("hidden");
+  }
+}
+
+/* The duration select's change handler: the choice
+   persists at once, like every Settings control, on
+   this device only. Changing it while unlocked re-arms
+   the timer from this moment under the new choice. */
+function applySsencUnlockFromSelect() {
+  const select = document.getElementById(
+    "settingsSsencUnlockSelect");
+  if (!select) { return; }
+  const raw = select.value;
+  const value = raw === "close" ? "close" : Number(raw);
+  if (SSENC_UNLOCK_CHOICES.indexOf(value) < 0) { return; }
+  state.ssencUnlockChoice = value;
+  saveSettings();
+  if (ssencKey) { ssencArmUnlockTimer(); }
+}
+
+/* This section's wiring, called once from wireEvents:
+   the Settings controls, the two dialogs, and the
+   editor's delegated region and block handling. */
+function wireSsencControls() {
+  const select = document.getElementById(
+    "settingsSsencUnlockSelect");
+  if (select) {
+    select.addEventListener("change",
+      applySsencUnlockFromSelect);
+  }
+  const lockBtn = document.getElementById("settingsSsencLockBtn");
+  if (lockBtn) {
+    lockBtn.addEventListener("click", function () {
+      void ssencLockVault();
+    });
+  }
+  const unlockBtn = document.getElementById(
+    "settingsSsencUnlockBtn");
+  if (unlockBtn) {
+    unlockBtn.addEventListener("click", function () {
+      void ssencUnlockFlow();
+    });
+  }
+  document.getElementById("ssencSetupCancelBtn")
+    .addEventListener("click", function () {
+      ssencCloseDialog("setup", false);
+    });
+  document.getElementById("ssencSetupSaveBtn")
+    .addEventListener("click", function () {
+      void ssencSetupConfirm();
+    });
+  document.getElementById("ssencUnlockCancelBtn")
+    .addEventListener("click", function () {
+      ssencCloseDialog("unlock", false);
+    });
+  document.getElementById("ssencUnlockBtn")
+    .addEventListener("click", function () {
+      void ssencUnlockConfirm();
+    });
+  const bodyEl = document.getElementById("noteBody");
+  /* Edits inside a decrypted region keep its stored
+     ciphertext current (see the chain above). */
+  bodyEl.addEventListener("input", function (ev) {
+    const region = ev.target && ev.target.closest
+      ? ev.target.closest(".ssenc-open") : null;
+    if (region && bodyEl.contains(region)) {
+      ssencScheduleRegionEncrypt(region);
+    }
+  });
+  /* A locked block's click is the unlock door; a
+     region's lock chip locks the vault. */
+  bodyEl.addEventListener("click", function (ev) {
+    if (!ev.target || !ev.target.closest) { return; }
+    const chip = ev.target.closest(".ssenc-relock");
+    if (chip && bodyEl.contains(chip)) {
+      ev.preventDefault();
+      void ssencLockVault();
+      return;
+    }
+    const block = ev.target.closest("[data-ssenc]");
+    if (block && bodyEl.contains(block)) {
+      if (ssencKey) { void ssencDecryptOpenNoteBlocks(); }
+      else { void ssencUnlockFlow(); }
+    }
+  });
+}
+
 function wireEvents() {
   /* v2.28.2: the "@" mention popup moves to the top level of
      the page before anything can open it. In the markup it
@@ -65109,6 +66185,10 @@ function wireEvents() {
   /* v2.76: the Transcription model select in Settings Editor. */
   document.getElementById("settingsTranscriptionModelSelect")
     .addEventListener("change", applySpeechModelFromSelect);
+  /* v2.89: the passage encryption controls (the
+     Settings row, the two dialogs, and the editor's
+     delegated block and region handling). */
+  wireSsencControls();
   /* v2.47: the Web clipper copy button in Settings. */
   document.getElementById("webClipCopyBtn")
     .addEventListener("click", copyWebClipBookmarklet);
