@@ -40,10 +40,91 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-11-03-SSN-V21040
-  Version: 2.104.0
+  BUILD STAMP: 2026-11-03-SSN-V21050
+  Version: 2.105.0
 
   Revision history:
+    v2.105.0 2026-11-03 The Scratch Pad is a
+                      rich surface now, and
+                      the email picker names
+                      where its mail stands.
+                      The pad's plain text box
+                      becomes an editable
+                      surface in the same
+                      widget frame, with a
+                      formatting bar above it
+                      (Bold, Italic,
+                      Underline, and Link),
+                      the saved height and the
+                      customize drag
+                      untouched. What the pad
+                      holds is now its HTML,
+                      kept in the same home
+                      record as before; a pad
+                      saved by an earlier
+                      build, plain text with
+                      no markup, converts on
+                      load through the same
+                      converter the file
+                      imports use, so its
+                      words and line breaks
+                      survive whole, and the
+                      Create Note button still
+                      reads an empty pad as
+                      empty even when all it
+                      holds is an empty
+                      paragraph. The editor's
+                      four popups work in the
+                      pad with the same
+                      triggers and the same
+                      chips: @ links a note,
+                      @@ links an email, #
+                      drops a tag pill, and ^
+                      links an event, and the
+                      chips are live in the
+                      pad exactly as in a note
+                      (the note opens, the
+                      email opens in the Email
+                      view at its location,
+                      the event opens, read
+                      only where it must be),
+                      while a tag pill in the
+                      pad tags nothing yet and
+                      instead runs the app's
+                      tag search when it is
+                      clicked. Create Note now
+                      builds the note from the
+                      pad's HTML itself, so
+                      formatting and chips
+                      land intact; the pad's
+                      tag pills become the
+                      note's tags, each event
+                      chip registers its note
+                      link on the event the
+                      way a chip placed in a
+                      note does, the title
+                      rule is unchanged, and
+                      the pad clears as
+                      before. The @@ email
+                      picker, in the pad and
+                      in the note editor alike
+                      (it is one picker), now
+                      shows each message's
+                      location on its row's
+                      second line, Inbox when
+                      the message carries
+                      INBOX and All Mail
+                      otherwise, together with
+                      the names of the user
+                      labels it carries, and
+                      its search matches label
+                      names as well as sender
+                      and subject, so
+                      searching a label's name
+                      lists every message
+                      carrying it. Fetched
+                      mail still lives in page
+                      memory only.
     v2.104.0 2026-11-03 The Labels button opens
                       a true dropdown. Through
                       v2.103.0 it opened the
@@ -7491,6 +7572,50 @@ body.dark .home-widget-action{color:var(--accent);}
   padding:10px;border:1px solid var(--border);border-radius:8px;
   background:var(--bg);color:var(--text);resize:vertical;
 }
+/* v2.105.0: the pad is a rich surface now (a
+   contenteditable div, not a text area). Its height
+   is fixed by default so typed lines scroll inside
+   it instead of growing the widget: the height the
+   capture banks must stay a size the user chose with
+   the grip, never a content accident. The focus ring
+   is the task description editor's, the placeholder
+   stands while the surface is truly empty, and the
+   paragraph and link dress is the note body's own
+   measures in miniature. */
+.home-scratch-body{
+  height:150px;overflow-y:auto;cursor:text;outline:none;
+}
+.home-scratch-body:focus{
+  border-color:var(--secondary);
+  box-shadow:0 0 0 3px rgba(87,167,115,.22);
+}
+.home-scratch-body:empty::before{
+  content:attr(data-placeholder);color:var(--muted);
+}
+.home-scratch-body p{margin:0 0 6px;}
+.home-scratch-body a{color:var(--accent);
+  text-decoration:underline;}
+/* v2.105.0: the pad's formatting bar, in the task
+   description toolbar's dress, standing at the top
+   of the widget above the surface. The active face
+   (the marks standing at the caret) is the accent
+   soft ground with the accent border, visible in
+   both themes like every active choice in the app. */
+.home-scratch-toolbar{display:flex;gap:4px;flex-wrap:wrap;
+  margin-bottom:6px;}
+.home-scratch-toolbar button{
+  position:relative;background:var(--bg);
+  border:1px solid var(--border);
+  border-radius:var(--radius-button);min-width:28px;
+  min-height:28px;padding:2px 6px;font-size:13.5px;
+  font-weight:600;color:var(--text);cursor:pointer;
+}
+.home-scratch-toolbar button:hover{border-color:var(--secondary);
+  background:var(--soft);}
+.home-scratch-toolbar button.active{
+  background:var(--accent-soft);border-color:var(--accent);
+}
+.home-scratch-toolbar button svg{display:block;margin:0 auto;}
 /* v2.72: the Scratch Pad's Create Note row, right aligned
    under the pad; the button is the app's own small button,
    so it themes with everything else in both themes. */
@@ -8032,6 +8157,7 @@ body.dark .modal:hover::-webkit-scrollbar-thumb{
    read as internal links: accent color and an underline. The accent
    variable exists in both themes, so this holds in dark mode too. */
 #noteBody a.ss-note-link{color:var(--accent);text-decoration:underline;}
+.home-scratch-body a.ss-note-link{color:var(--accent);text-decoration:underline;}
 /* v2.28.0: links to tasks inside a note (href
    "sstask:<id>", class ss-task-link): the internal link
    look of a note link, led by a small checkbox square
@@ -8545,6 +8671,7 @@ body.dark .modal:hover::-webkit-scrollbar-thumb{
    its data-ss-link-view attribute, which IS saved, and these
    attribute selectors are what dress it as a chip or a card. */
 #noteBody .ss-link-original{display:none;}
+.home-scratch-body .ss-link-original{display:none;}
 /* v2.10: the chip and card anchor rules in this block dress WEB
    links. Since v2.10 note links carry view modes too, the web
    rules exclude ssnote: anchors explicitly (the href prefix is
@@ -10059,14 +10186,16 @@ body.dark .task-cal-more{color:var(--accent);}
 }
 .gcal-linked-chip:hover{border-color:var(--accent);}
 .gcal-linked-gone{font-size:13px;color:var(--muted);font-style:italic;}
-#noteBody .ss-event-chip{
+#noteBody .ss-event-chip,
+.home-scratch-body .ss-event-chip{
   display:inline-flex;align-items:center;gap:6px;
   border:1px solid var(--border);background:var(--soft);
   border-radius:20px;padding:1px 10px 1px 7px;margin:0 1px;
   font-size:.92em;cursor:pointer;white-space:nowrap;
   vertical-align:baseline;user-select:none;
 }
-#noteBody .ss-event-chip:hover{border-color:var(--accent);}
+#noteBody .ss-event-chip:hover,
+.home-scratch-body .ss-event-chip:hover{border-color:var(--accent);}
 .ss-event-chip-dot{
   flex:none;width:8px;height:8px;border-radius:50%;
   background:var(--accent);
@@ -10135,14 +10264,16 @@ body.dark .task-cal-more{color:var(--accent);}
   font-family:ui-monospace,Menlo,Consolas,monospace;
   letter-spacing:.04em;
 }
-#noteBody .ss-tag-pill{
+#noteBody .ss-tag-pill,
+.home-scratch-body .ss-tag-pill{
   display:inline-block;border:1px solid var(--border);
   background:var(--accent-soft);color:var(--text);
   border-radius:20px;padding:0 9px;margin:0 1px;
   font-size:.92em;cursor:pointer;white-space:nowrap;
   user-select:none;
 }
-#noteBody .ss-tag-pill:hover{border-color:var(--accent);}
+#noteBody .ss-tag-pill:hover,
+.home-scratch-body .ss-tag-pill:hover{border-color:var(--accent);}
 #eventLinkPopup,#tagLinkPopup{
   position:fixed;z-index:63;width:min(340px,94vw);padding:6px;
   background:var(--surface);border:1px solid var(--border);
@@ -10348,14 +10479,16 @@ body.dark .task-cal-more{color:var(--accent);}
 /* Part 8: the email chip in a note body, the event
    chip's sibling: an envelope glyph, the sender, and
    the subject on one pill. */
-#noteBody .ss-mail-chip{
+#noteBody .ss-mail-chip,
+.home-scratch-body .ss-mail-chip{
   display:inline-flex;align-items:center;gap:6px;
   border:1px solid var(--border);background:var(--soft);
   border-radius:20px;padding:1px 10px 1px 7px;margin:0 1px;
   font-size:.92em;cursor:pointer;white-space:nowrap;
   vertical-align:baseline;user-select:none;
 }
-#noteBody .ss-mail-chip:hover{border-color:var(--accent);}
+#noteBody .ss-mail-chip:hover,
+.home-scratch-body .ss-mail-chip:hover{border-color:var(--accent);}
 .ss-mail-chip-icon{display:inline-flex;color:var(--muted);}
 .ss-mail-chip-label{overflow:hidden;text-overflow:ellipsis;}
 .mail-empty{padding:22px 14px;color:var(--muted);font-size:14px;text-align:center;}
@@ -13858,8 +13991,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-11-03-SSN-V21040";
-const APP_VERSION = "2.104.0";
+const APP_BUILD = "2026-11-03-SSN-V21050";
+const APP_VERSION = "2.105.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -24777,7 +24910,223 @@ function ensureHomeScratchFeeders(grid) {
     });
 }
 
-/* The Scratch Pad widget: a plain text area whose every
+/* v2.105.0: what the store holds for the pad, and
+   what the pad shows, are both HTML now. A stored
+   value carrying no markup is a pre-v2.105 plain
+   text value: it converts through the standing
+   plain text converter (textToNoteBodyHtml, the
+   file import's own), so its words and line breaks
+   land exactly as they read. A value with markup
+   stands as it is. The detector asks only whether a
+   real tag stands in the string (a tag name right
+   after the bracket), so plain words that merely
+   mention a bracket are never mistaken for markup.
+   sanitizeHome is untouched: it still carries the
+   string verbatim, and the conversion lives here,
+   at the pad's own boundary (the render, the empty
+   test, and Create Note all read through these). */
+function scratchLooksLikeHtml(s) {
+  return /<\/?(p|div|br|b|strong|i|em|u|s|a|span|ul|ol|li|h[1-6]|blockquote|pre|table|figure|hr|code|mark|sub|sup)[\s>\/]/i
+    .test(s) || /<br\s*\/?>/i.test(s);
+}
+
+function scratchHtmlForPad(stored) {
+  const s = String(stored || "");
+  if (!s.trim()) { return ""; }
+  if (scratchLooksLikeHtml(s)) { return s; }
+  return textToNoteBodyHtml(s);
+}
+
+/* The plain words of the stored pad, whichever form
+   it stands in: what emptiness is judged on, so a
+   pad holding only an empty paragraph reads empty
+   exactly as a pad holding only spaces always has. */
+function scratchPlainTextOf(stored) {
+  const s = String(stored || "");
+  if (!s) { return ""; }
+  if (!scratchLooksLikeHtml(s)) { return s; }
+  const holder = document.createElement("div");
+  holder.innerHTML = s;
+  return holder.textContent || "";
+}
+
+/* The pad's element, by its standing id (the height
+   capture, the feeders, and the popups all address it
+   the same way). */
+function scratchPadEl() {
+  return document.getElementById("homeScratchText");
+}
+
+/* Read the live pad into the store: its HTML through
+   the one funnel every saved note body passes
+   (canonicalizeAttachmentPlaceholders, which is also
+   what strips the link faces decoration paints, so
+   the store never carries runtime faces), then the
+   standing persist, and the Create Note button's
+   word on what stands. Every pad mutation lands
+   here: typing, a toolbar command, a popup pick. */
+function persistScratchPadFromDom() {
+  const area = document.getElementById("homeScratchText");
+  if (!area) { return; }
+  state.home.scratch =
+    canonicalizeAttachmentPlaceholders(area.innerHTML);
+  persistHome();
+  syncScratchCreateButton();
+}
+
+/* The pad's selection, saved the note toolbar's way:
+   the bar's buttons take focus when pressed, so the
+   range the command must act on is banked on the
+   bar's mousedown and on every selection change that
+   stands inside the pad, and restored before a
+   command runs. */
+let scratchSelRange = null;
+
+function saveScratchSelection() {
+  const area = document.getElementById("homeScratchText");
+  if (!area) { return; }
+  const sel = window.getSelection();
+  if (sel && sel.rangeCount && area.contains(sel.anchorNode)) {
+    scratchSelRange = sel.getRangeAt(0).cloneRange();
+  }
+}
+
+function restoreScratchSelection() {
+  const area = document.getElementById("homeScratchText");
+  if (!area) { return false; }
+  area.focus();
+  if (scratchSelRange &&
+      area.contains(scratchSelRange.startContainer) &&
+      area.contains(scratchSelRange.endContainer)) {
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(scratchSelRange.cloneRange());
+    return true;
+  }
+  return false;
+}
+
+/* The bar's active faces: the three marks wear the
+   active dress while the caret stands inside them,
+   read from the engine's own command state, and only
+   while the selection stands in the pad at all. */
+function syncScratchToolbar() {
+  const bar = document.getElementById("homeScratchToolbar");
+  const area = document.getElementById("homeScratchText");
+  if (!bar || !area) { return; }
+  const sel = window.getSelection();
+  const inPad = !!(sel && sel.rangeCount &&
+    area.contains(sel.anchorNode));
+  ["bold", "italic", "underline"].forEach(function (cmd) {
+    const btn = bar.querySelector(
+      "[data-scratch-cmd=\"" + cmd + "\"]");
+    if (!btn) { return; }
+    let on = false;
+    if (inPad) {
+      try {
+        on = !!document.queryCommandState(cmd);
+      } catch (err) { on = false; }
+    }
+    btn.classList.toggle("active", on);
+    btn.setAttribute("aria-pressed", on ? "true" : "false");
+  });
+}
+
+/* Run one bar command against the pad's selection.
+   Bold, Italic, and Underline are the note editor's
+   own commands (runToolbarCommand's three marks,
+   aimed at the pad instead of the body); Link is the
+   note editor's standing link flow (Insert, Link)
+   with the pad standing where the body stands in it:
+   a selection is required, the address is asked for,
+   the saved range is restored, and the link is
+   created. The pad's HTML is read into the store
+   afterwards, like any pad edit. */
+function runScratchCommand(cmd) {
+  const area = document.getElementById("homeScratchText");
+  if (!area) { return; }
+  if (cmd === "link") {
+    restoreScratchSelection();
+    const sel = window.getSelection();
+    if (!sel || !sel.rangeCount ||
+        sel.getRangeAt(0).collapsed) {
+      toast("Select the text to turn into a link first.",
+        true);
+      return;
+    }
+    const url = prompt("Link address (https://...)");
+    if (!url) { return; }
+    restoreScratchSelection();
+    try {
+      document.execCommand("createLink", false, url.trim());
+    } catch (err) { /* an engine without the command */ }
+    decorateLinkTooltips(area);
+    decorateLinkViews(area);
+    persistScratchPadFromDom();
+    return;
+  }
+  restoreScratchSelection();
+  if (cmd === "bold" || cmd === "italic" ||
+      cmd === "underline") {
+    try {
+      document.execCommand(cmd, false, null);
+    } catch (err) { /* an engine without the command */ }
+  }
+  persistScratchPadFromDom();
+  syncScratchToolbar();
+}
+
+/* A click inside the pad: the chips and links the
+   popups plant are live here exactly as they are in
+   a note body (the note body's own click branches,
+   on the pad's element). An event chip travels to
+   its event, an email chip to its message, a note
+   link to its note, and a tag pill runs the tag's
+   search (the tag view the sidebar's rows open).
+   Any other anchor keeps the editing rule: a plain
+   click only places the caret, Ctrl or Cmd click
+   opens it through the checked path. */
+function onScratchPadClick(ev) {
+  const target = ev.target;
+  if (!target || !target.closest) { return; }
+  const evChip = target.closest(".ss-event-chip");
+  if (evChip) {
+    ev.preventDefault();
+    followEventChip(evChip);
+    return;
+  }
+  const tagPill = target.closest(".ss-tag-pill");
+  if (tagPill) {
+    ev.preventDefault();
+    openTagFilter(tagPill.getAttribute("data-ss-tag") || "");
+    return;
+  }
+  const mailChip = target.closest(".ss-mail-chip");
+  if (mailChip) {
+    ev.preventDefault();
+    followMailChip(mailChip);
+    return;
+  }
+  const anchor = target.closest("a");
+  if (!anchor) { return; }
+  const ssNoteId = noteLinkIdOf(anchor);
+  if (ssNoteId) {
+    ev.preventDefault();
+    followNoteLink(ssNoteId);
+    return;
+  }
+  if (ev.ctrlKey || ev.metaKey) {
+    ev.preventDefault();
+    openNoteLink(anchor.href ||
+      anchor.getAttribute("href") || "");
+  } else {
+    /* A plain click on a web link in an editable
+       surface must never navigate the app away. */
+    ev.preventDefault();
+  }
+}
+
+/* The Scratch Pad widget: a rich surface whose every
    input writes state and persists through the index
    writer, whose own coalescing (saveIndex's debounce)
    is the batching. It is not a note: it is never
@@ -24788,7 +25137,12 @@ function ensureHomeScratchFeeders(grid) {
    applied as part of the render (see below), so the
    packing pass that follows measures the widget at the
    chosen size and the grid arranges around it from the
-   first paint. */
+   first paint. v2.105.0: the surface is contenteditable
+   with a formatting bar above it, and the editor
+   popups (@, @@, #, ^) serve it as a third host beside
+   the note body and the task description (see the
+   popup sections); the chips they plant are live (see
+   onScratchPadClick). */
 function buildHomeScratchWidget() {
   /* v2.60.1: a height banked inside its debounce
      window belongs to the pad this build replaces;
@@ -24796,13 +25150,50 @@ function buildHomeScratchWidget() {
      resets below, so the rebuild cannot strand it. */
   settleHomeScratchHeight();
   const parts = homeWidgetShell("scratch", "Scratch Pad");
-  const area = document.createElement("textarea");
+  parts.widget.id = "homeScratchWidget";
+  /* v2.105.0: the formatting bar, at the top of the
+     widget above the surface: Bold, Italic,
+     Underline, and Link, in the note toolbar's own
+     button shapes. The bar's mousedown banks the
+     pad's selection before the press can move it. */
+  const bar = document.createElement("div");
+  bar.className = "home-scratch-toolbar";
+  bar.id = "homeScratchToolbar";
+  bar.setAttribute("role", "toolbar");
+  bar.setAttribute("aria-label", "Scratch pad formatting");
+  bar.addEventListener("mousedown", saveScratchSelection);
+  [["bold", "Bold", "<b>B</b>"],
+   ["italic", "Italic", "<i>I</i>"],
+   ["underline", "Underline", "<u>U</u>"]].forEach(
+    function (spec) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.setAttribute("data-scratch-cmd", spec[0]);
+      btn.title = spec[1];
+      btn.setAttribute("aria-pressed", "false");
+      btn.innerHTML = spec[2];
+      btn.addEventListener("click", function () {
+        runScratchCommand(spec[0]);
+      });
+      bar.appendChild(btn);
+    });
+  const linkBtn = document.createElement("button");
+  linkBtn.type = "button";
+  linkBtn.setAttribute("data-scratch-cmd", "link");
+  linkBtn.title = "Link";
+  linkBtn.textContent = "Link";
+  linkBtn.addEventListener("click", function () {
+    runScratchCommand("link");
+  });
+  bar.appendChild(linkBtn);
+  parts.body.appendChild(bar);
+  const area = document.createElement("div");
   area.id = "homeScratchText";
-  area.className = "home-scratch";
-  area.rows = 6;
-  area.placeholder = "Jot something down...";
+  area.className = "home-scratch home-scratch-body";
+  area.setAttribute("contenteditable", "true");
+  area.setAttribute("data-placeholder", "Jot something down...");
   area.setAttribute("aria-label", "Scratch pad");
-  area.value = state.home.scratch;
+  area.innerHTML = scratchHtmlForPad(state.home.scratch);
   /* v2.60: a remembered height becomes the text area's
      inline height as the widget is built, before the
      packing pass measures anything; the same value
@@ -24817,11 +25208,22 @@ function buildHomeScratchWidget() {
     homeScratchBaselineHeight = state.home.scratchHeight;
   }
   area.addEventListener("input", function () {
-    state.home.scratch = area.value;
-    persistHome();
-    syncScratchCreateButton();
+    persistScratchPadFromDom();
   });
+  /* v2.105.0: the editor popups track the pad on its
+     input events too, the note body's own wiring
+     (their document selectionchange tracking stands
+     over every host already). */
+  area.addEventListener("input", updateMentionPopup);
+  area.addEventListener("input", updateEventLinkPopup);
+  area.addEventListener("input", updateTagLinkPopup);
+  area.addEventListener("click", onScratchPadClick);
   parts.body.appendChild(area);
+  /* v2.105.0: the note link faces resolve over the pad
+     at render, as they do over a note body when a note
+     opens, so a stored Mention link shows its face. */
+  decorateLinkTooltips(area);
+  decorateLinkViews(area);
   /* v2.72: the Create Note button, under the pad: it
      files the pad's text as a note
      (createNoteFromScratchPad), clears the pad, and
@@ -24836,7 +25238,7 @@ function buildHomeScratchWidget() {
   scratchCreateBtn.className = "btn small home-scratch-create";
   scratchCreateBtn.textContent = "Create Note";
   scratchCreateBtn.disabled =
-    !String(state.home.scratch || "").trim();
+    !scratchPlainTextOf(state.home.scratch).trim();
   scratchCreateBtn.addEventListener("click", function () {
     createNoteFromScratchPad().catch(function (err) {
       toast("Could not create the note: " + err.message, true);
@@ -24851,11 +25253,14 @@ function buildHomeScratchWidget() {
 /* v2.72: the Create Note button's disabled state is the
    pad's emptiness, judged on the trimmed text: a pad
    holding only spaces has nothing to file. Synced when
-   the widget is built and on every keystroke. */
+   the widget is built and on every keystroke.
+   v2.105.0: the judgment reads the pad's words through
+   its HTML (scratchPlainTextOf), so a pad holding only
+   an empty paragraph is just as empty. */
 function syncScratchCreateButton() {
   const btn = document.getElementById("homeScratchCreateBtn");
   if (!btn) { return; }
-  btn.disabled = !String(state.home.scratch || "").trim();
+  btn.disabled = !scratchPlainTextOf(state.home.scratch).trim();
 }
 
 /* The title a Scratch Pad note wears, in the confirmed
@@ -24869,28 +25274,68 @@ function scratchPadNoteTitle(when) {
     " Scratch Pad Note";
 }
 
-/* Create Note from the Scratch Pad: the pad's text
-   becomes a note in the default notebook (the first
-   notebook while none is set), the pad clears, and the
-   note opens, through createNoteInRepo's instant create
-   pattern. The pad's plain text becomes the body
-   through the file import's own converter
-   (textToNoteBodyHtml), so paragraphs and line breaks
-   land the way imports land. An empty pad creates
-   nothing and returns null. */
+/* Create Note from the Scratch Pad: the pad becomes
+   a note in the default notebook (the first notebook
+   while none is set), the pad clears, and the note
+   opens, through createNoteInRepo's instant create
+   pattern. An empty pad creates nothing and returns
+   null.
+   v2.105.0: the body is the pad's own HTML (through
+   the one funnel every saved note body passes), so
+   its formatting and its chips land intact; a legacy
+   plain text pad converts on the way in, through
+   scratchHtmlForPad, exactly as it renders. The
+   pad's tag pills become the note's tags (the pill's
+   data-ss-tag is their record, read off the body
+   being filed), and each event chip registers its
+   note to event link the way a chip placed in a note
+   does (gcalAddNoteLinkToEvent), once per event,
+   after the note stands: the event is fetched by the
+   chip's own ids, and a chip whose event cannot be
+   read or cannot carry the property passes quietly,
+   the way the picker's own backlink treats a skipped
+   write its note's chip still stands. */
 async function createNoteFromScratchPad() {
-  const text = String(state.home.scratch || "");
-  if (!text.trim()) { return null; }
+  if (!scratchPlainTextOf(state.home.scratch).trim()) {
+    return null;
+  }
   if (!state.notebooks.length) {
     await createNotebook("Personal");
   }
+  const body = canonicalizeAttachmentPlaceholders(
+    scratchHtmlForPad(state.home.scratch));
   const note = makeNote(fallbackNotebookSlug(),
-    scratchPadNoteTitle(new Date()), textToNoteBodyHtml(text));
+    scratchPadNoteTitle(new Date()), body);
+  const holder = document.createElement("div");
+  holder.innerHTML = body;
+  const tags = [];
+  holder.querySelectorAll(".ss-tag-pill")
+    .forEach(function (el) {
+      const name = el.getAttribute("data-ss-tag") || "";
+      if (name && !tags.some(function (t) {
+        return t.toLowerCase() === name.toLowerCase();
+      })) {
+        tags.push(name);
+      }
+    });
+  note.tags = tags;
+  const chipRefs = [];
+  holder.querySelectorAll(".ss-event-chip")
+    .forEach(function (el) {
+      const calId = el.getAttribute("data-ss-event-cal") || "";
+      const evId = el.getAttribute("data-ss-event-id") || "";
+      if (!calId || !evId) { return; }
+      const key = calId + "|" + evId;
+      if (chipRefs.some(function (r) { return r.key === key; })) {
+        return;
+      }
+      chipRefs.push({ key: key, calId: calId, evId: evId });
+    });
   state.notes.unshift(note);
   state.home.scratch = "";
   persistHome();
   const area = document.getElementById("homeScratchText");
-  if (area) { area.value = ""; }
+  if (area) { area.innerHTML = ""; }
   syncScratchCreateButton();
   saveCache();
   renderAll();
@@ -24900,6 +25345,14 @@ async function createNoteFromScratchPad() {
     .catch(function (err) {
       toast("Note created locally; save failed: " + err.message, true);
     });
+  for (const ref of chipRefs) {
+    try {
+      const got = await gcalFetchEventById(ref.calId, ref.evId);
+      if (got.outcome === "ok" && got.ev) {
+        await gcalAddNoteLinkToEvent(got.ev, note.id);
+      }
+    } catch (err) { /* a backlink never breaks the create */ }
+  }
   return note;
 }
 
@@ -27946,20 +28399,18 @@ function runEventLinkSearch() {
 /* The token both editor popups in this release share:
    the caret's text node in a live, unlocked note body,
    outside any code block, link, attachment, or island.
-   Null everywhere else, which closes the popups. */
+   Null everywhere else, which closes the popups.
+   v2.105.0: the Scratch Pad is a host too (surface
+   "scratch", its element the pad): the same caret
+   rule, the same island exclusions, and no note
+   standing behind it at all, which the picks read off
+   the trigger's surface. */
 function linkPopupHost() {
-  const bodyEl = document.getElementById("noteBody");
-  const note = currentNote();
-  if (!note || note.trashed || note.archived || !bodyEl ||
-      bodyEl.contentEditable === "false") {
-    return null;
-  }
   const sel = window.getSelection();
   if (!sel || !sel.rangeCount) { return null; }
   const range = sel.getRangeAt(0);
   const node = range.startContainer;
-  if (!range.collapsed || !node || node.nodeType !== 3 ||
-      !bodyEl.contains(node)) {
+  if (!range.collapsed || !node || node.nodeType !== 3) {
     return null;
   }
   const host = node.parentElement;
@@ -27968,7 +28419,20 @@ function linkPopupHost() {
     ".ss-tag-pill, .ss-mail-chip"))) {
     return null;
   }
-  return { range: range, node: node };
+  const padEl = document.getElementById("homeScratchText");
+  if (padEl && padEl.contains(node)) {
+    return { range: range, node: node, el: padEl,
+      surface: "scratch" };
+  }
+  const bodyEl = document.getElementById("noteBody");
+  const note = currentNote();
+  if (!note || note.trashed || note.archived || !bodyEl ||
+      bodyEl.contentEditable === "false") {
+    return null;
+  }
+  if (!bodyEl.contains(node)) { return null; }
+  return { range: range, node: node, el: bodyEl,
+    surface: "note" };
 }
 
 /* The token under the caret for one trigger character,
@@ -28039,6 +28503,8 @@ function updateEventLinkPopup() {
   const tok = linkTokenAt(host.node,
     host.range.startOffset, "^");
   if (!tok) { closeEventLinkPopup(); return; }
+  tok.el = host.el;
+  tok.surface = host.surface;
   const fresh = !eventLinkTrigger ||
     eventLinkTrigger.node !== tok.node ||
     eventLinkTrigger.atOffset !== tok.atOffset;
@@ -28168,9 +28634,12 @@ function setEventLinkHighlight(i) {
 /* Replace the tracked token with an element and a
    trailing space, the mention insert's shape, shared by
    the event chip and the tag pill. False when the token
-   no longer stands in the body. */
+   no longer stands in its surface (the note body, or
+   the Scratch Pad since v2.105.0: the trigger records
+   the element it was tracked in). */
 function replaceLinkToken(trig, el) {
-  const bodyEl = document.getElementById("noteBody");
+  const bodyEl = trig && trig.el
+    ? trig.el : document.getElementById("noteBody");
   if (!trig || !bodyEl || !bodyEl.contains(trig.node)) {
     return false;
   }
@@ -28193,14 +28662,23 @@ function replaceLinkToken(trig, el) {
 /* Pick an event row: the chip replaces the "^" token,
    and the backlink write follows (its failure is a
    plain toast; a repeating or read only event skips it
-   silently, per the design). */
+   silently, per the design). v2.105.0: in the Scratch
+   Pad there is no note yet to dirty or to write the
+   backlink for: the chip lands, the pad persists, and
+   Create Note registers the link when the note is
+   made (see createNoteFromScratchPad). */
 function pickEventLinkRow(i) {
   const ev = eventLinkRows[i];
   if (!ev) { return; }
   const trig = eventLinkTrigger;
-  const note = currentNote();
+  const note = trig && trig.surface === "scratch"
+    ? null : currentNote();
   closeEventLinkPopup();
   if (!replaceLinkToken(trig, buildEventChipEl(ev))) {
+    return;
+  }
+  if (trig && trig.surface === "scratch") {
+    persistScratchPadFromDom();
     return;
   }
   markDirty();
@@ -28223,7 +28701,8 @@ function onEventLinkPopupKeydown(ev) {
   if (ev.key === "Escape") {
     const trig = eventLinkTrigger;
     closeEventLinkPopup();
-    const bodyEl = document.getElementById("noteBody");
+    const bodyEl = trig && trig.el
+      ? trig.el : document.getElementById("noteBody");
     if (trig && bodyEl && bodyEl.contains(trig.node)) {
       bodyEl.focus();
       placeCaretIn(trig.node, Math.min(trig.caretOffset,
@@ -28235,7 +28714,9 @@ function onEventLinkPopupKeydown(ev) {
   }
   if (ev.key !== "ArrowDown" && ev.key !== "ArrowUp" &&
       ev.key !== "Enter" && ev.key !== "Tab") { return; }
-  const bodyEl = document.getElementById("noteBody");
+  const bodyEl = eventLinkTrigger && eventLinkTrigger.el
+    ? eventLinkTrigger.el
+    : document.getElementById("noteBody");
   const searchEl = document.getElementById(
     "eventLinkSearch");
   const fromSearch = !!searchEl && ev.target === searchEl;
@@ -28328,6 +28809,8 @@ function updateTagLinkPopup() {
   const tok = linkTokenAt(host.node,
     host.range.startOffset, "#");
   if (!tok) { closeTagLinkPopup(); return; }
+  tok.el = host.el;
+  tok.surface = host.surface;
   const fresh = !tagLinkTrigger ||
     tagLinkTrigger.node !== tok.node ||
     tagLinkTrigger.atOffset !== tok.atOffset ||
@@ -28524,7 +29007,11 @@ function reconcileTagPillsAfterDelete() {
 }
 
 /* Pick a tag row: the pill replaces the "#" token, and
-   the tag is applied to the note at once. */
+   the tag is applied to the note at once. v2.105.0:
+   in the Scratch Pad nothing is tagged yet (the pad
+   is not a note): the pill lands and persists, and
+   Create Note applies the pad's pills as the note's
+   tags when the note is made. */
 function pickTagLinkRow(i) {
   const row = tagLinkRows[i];
   if (!row) { return; }
@@ -28537,6 +29024,10 @@ function pickTagLinkRow(i) {
   pill.setAttribute("data-ss-tag", name);
   pill.textContent = "#" + name;
   if (!replaceLinkToken(trig, pill)) { return; }
+  if (trig && trig.surface === "scratch") {
+    persistScratchPadFromDom();
+    return;
+  }
   applyTagToCurrentNote(name);
   markDirty();
 }
@@ -28547,7 +29038,8 @@ function onTagLinkPopupKeydown(ev) {
   if (ev.key === "Escape") {
     const trig = tagLinkTrigger;
     closeTagLinkPopup();
-    const bodyEl = document.getElementById("noteBody");
+    const bodyEl = trig && trig.el
+      ? trig.el : document.getElementById("noteBody");
     if (trig && bodyEl && bodyEl.contains(trig.node)) {
       bodyEl.focus();
       placeCaretIn(trig.node, Math.min(trig.caretOffset,
@@ -28559,7 +29051,9 @@ function onTagLinkPopupKeydown(ev) {
   }
   if (ev.key !== "ArrowDown" && ev.key !== "ArrowUp" &&
       ev.key !== "Enter" && ev.key !== "Tab") { return; }
-  const bodyEl = document.getElementById("noteBody");
+  const bodyEl = tagLinkTrigger && tagLinkTrigger.el
+    ? tagLinkTrigger.el
+    : document.getElementById("noteBody");
   if (!bodyEl || !ev.target || !bodyEl.contains(ev.target)) {
     return;
   }
@@ -30661,7 +31155,12 @@ function buildMailChipEl(rec) {
    leaves, and the editor's dirty flag is the receipt. */
 function insertMentionMailChip(rec) {
   const trig = mentionTrigger;
-  const bodyEl = document.getElementById("noteBody");
+  /* v2.105.0: the chip lands in the token's host, the
+     Scratch Pad included; there the pad persist is
+     the receipt instead of a note's dirty flag. */
+  const bodyEl = trig && trig.host === "scratch"
+    ? scratchPadEl()
+    : document.getElementById("noteBody");
   closeMentionPopup();
   if (!trig || !bodyEl || !bodyEl.contains(trig.node)) {
     return;
@@ -30680,7 +31179,11 @@ function insertMentionMailChip(rec) {
   const space = document.createTextNode(" ");
   chip.after(space);
   placeCaretIn(space, 1);
-  markDirty();
+  if (trig.host === "scratch") {
+    persistScratchPadFromDom();
+  } else {
+    markDirty();
+  }
 }
 
 /* v2.86 (Part E): where an opened message lives, in
@@ -30768,26 +31271,57 @@ async function followMailChip(chip) {
    typed, so the popup opens on the newest mail), then
    each answer read in metadata form, the list loader's
    own shape. Resolves the rows, or the consent word
-   when the standing grant does not cover mail. */
+   when the standing grant does not cover mail.
+   v2.105.0: the words are also matched against the
+   user's label names (the label list is loaded first
+   when it has not been): every label whose name
+   contains the words earns its own ask, by labelIds,
+   and its carriers join the rows, so searching a
+   label's name lists the mail carrying it. The asks
+   merge by message id, the rows sort newest first as
+   they always have, and the picker keeps its eight. */
 async function mentionMailSearch(query) {
-  let path = "/users/me/messages?maxResults=8";
+  if (!mailLabels && !mailLabelsLoading) {
+    await loadMailLabels();
+  }
+  const asks = [];
+  let rawPath = "/users/me/messages?maxResults=8";
   if (query) {
-    path += "&q=" + encodeURIComponent(query);
+    rawPath += "&q=" + encodeURIComponent(query);
   }
-  const out = await gmailRead(path);
-  if (out.outcome === "forbidden") {
-    mailSettleLoadOutcome(out);
-    return { outcome: "consent", rows: [] };
+  asks.push(rawPath);
+  if (query) {
+    const needle = String(query).toLowerCase();
+    mailUserLabels().forEach(function (l) {
+      if (l.name.toLowerCase().indexOf(needle) !== -1) {
+        asks.push("/users/me/messages?maxResults=8" +
+          "&labelIds=" + encodeURIComponent(l.id));
+      }
+    });
   }
-  if (out.outcome !== "ok" || !out.data) {
-    return { outcome: "bad", rows: [] };
+  const ids = [];
+  let sawOk = false;
+  for (const path of asks) {
+    const out = await gmailRead(path);
+    if (out.outcome === "forbidden") {
+      mailSettleLoadOutcome(out);
+      return { outcome: "consent", rows: [] };
+    }
+    if (out.outcome !== "ok" || !out.data) { continue; }
+    sawOk = true;
+    const items = Array.isArray(out.data.messages)
+      ? out.data.messages : [];
+    items.forEach(function (m) {
+      if (m && m.id && ids.indexOf(m.id) === -1) {
+        ids.push(m.id);
+      }
+    });
   }
-  const items = Array.isArray(out.data.messages)
-    ? out.data.messages : [];
+  if (!sawOk) { return { outcome: "bad", rows: [] }; }
   const rows = [];
-  await Promise.all(items.map(async function (m) {
+  await Promise.all(ids.map(async function (id) {
     const got = await gmailRead("/users/me/messages/" +
-      encodeURIComponent(m.id) +
+      encodeURIComponent(id) +
       "?format=metadata&metadataHeaders=From" +
       "&metadataHeaders=Subject&metadataHeaders=Date");
     if (got.outcome !== "ok" || !got.data) { return; }
@@ -30795,7 +31329,7 @@ async function mentionMailSearch(query) {
     if (rec) { rows.push(rec); }
   }));
   rows.sort(function (a, b) { return b.dateMs - a.dateMs; });
-  return { outcome: "ok", rows: rows };
+  return { outcome: "ok", rows: rows.slice(0, 8) };
 }
 
 /* ---------------- the Home Email widget ------------- */
@@ -48340,7 +48874,12 @@ let mentionLastRange = null;
    "task" (the task editor's description field). The
    tracker sets it from the editor the caret is in on
    every run; the trigger also records it, so a pick
-   lands in the editor the user was typing in. */
+   lands in the editor the user was typing in.
+   v2.105.0: a third host, "scratch" (the Home Scratch
+   Pad): notes and mail both serve it, tasks never
+   (they are the note host's alone, as the description
+   host taught), and its picks persist the pad instead
+   of marking a note dirty. */
 let mentionHost = "note";
 /* v2.84: the popup's mode, "notes" as it has
    always been, or "email" while a "@@" token
@@ -48614,6 +49153,12 @@ function updateMentionPopup() {
       node && descEl.contains(node)) {
     mentionHost = "task";
     hostEl = descEl;
+  } else if (node && scratchPadEl() &&
+      scratchPadEl().contains(node)) {
+    /* v2.105.0: the Scratch Pad host: the caret stands
+       in the pad, and no note need stand behind it. */
+    mentionHost = "scratch";
+    hostEl = scratchPadEl();
   } else {
     const note = currentNote();
     if (!note || note.trashed || note.archived || !bodyEl ||
@@ -48648,7 +49193,7 @@ function updateMentionPopup() {
      flips the same popup back to notes. */
   let tokStart = at;
   let tokMode = "notes";
-  if (mentionHost === "note" && at > 0 &&
+  if (mentionHost !== "task" && at > 0 &&
       before.charAt(at - 1) === "@") {
     const pairStart = at - 1;
     if (pairStart === 0 ||
@@ -48732,8 +49277,8 @@ function renderMentionPopup(range) {
   if (searchEl) {
     searchEl.placeholder = mentionMode === "email"
       ? "Search mail"
-      : mentionHost === "task"
-      ? "Search notes" : "Search notes and tasks";
+      : mentionHost === "note"
+      ? "Search notes and tasks" : "Search notes";
     searchEl.setAttribute("aria-label", searchEl.placeholder);
   }
   /* v2.84: the card's head names its mode (Email
@@ -48797,8 +49342,24 @@ function renderMentionPopup(range) {
       line1.textContent = row.rec.subject ||
         "(No subject)";
       line2.className = "mention-nb";
-      line2.textContent = row.rec.fromName ||
+      /* v2.105.0: the row's second line carries where
+         the message stands and what it wears, after
+         the sender: the location (Inbox when it
+         carries INBOX, All Mail otherwise) and the
+         user labels' names, read off the record's
+         standing label ids through the label list. */
+      const mailBits = [];
+      const mailSender = row.rec.fromName ||
         row.rec.fromAddress || "";
+      if (mailSender) { mailBits.push(mailSender); }
+      mailBits.push(row.rec.labelIds &&
+        row.rec.labelIds.indexOf("INBOX") !== -1
+        ? "Inbox" : "All Mail");
+      const mailNames = mailRowLabelNames(row.rec);
+      if (mailNames.length) {
+        mailBits.push(mailNames.join(", "));
+      }
+      line2.textContent = mailBits.join(" \u00b7 ");
     } else if (row.kind === "create") {
       line1.textContent = mentionEffectiveQuery();
       line2.className = "mention-create-sub";
@@ -48899,9 +49460,13 @@ function insertMentionNoteLink(target) {
   const trig = mentionTrigger;
   /* v2.28.0: the anchor lands in the host the token was
      tracked in: the note body, or the task description
-     editor while its modal is open. */
+     editor while its modal is open. v2.105.0: or the
+     Scratch Pad, whose aftercare is the pad persist
+     below instead of a note's dirty flag. */
   const bodyEl = trig && trig.host === "task"
     ? document.getElementById("taskDescInput")
+    : trig && trig.host === "scratch"
+    ? scratchPadEl()
     : document.getElementById("noteBody");
   closeMentionPopup();
   if (!trig || !bodyEl || !bodyEl.contains(trig.node)) { return; }
@@ -48929,6 +49494,10 @@ function insertMentionNoteLink(target) {
        (no link faces live in a task), and the task
        editor's own dirty flag is the one that moved. */
     markTaskEditorDirty();
+  } else if (trig.host === "scratch") {
+    decorateLinkTooltips(bodyEl);
+    decorateLinkViews(bodyEl);
+    persistScratchPadFromDom();
   } else {
     decorateLinkTooltips(bodyEl);
     decorateLinkViews(bodyEl);
@@ -48982,11 +49551,16 @@ function createMentionTargetNote(title) {
   /* v2.28.0: in the description host, the new note files
      into the notebook the task editor has selected; in
      the note host, it files beside the note being
-     edited, as it always has. */
+     edited, as it always has. v2.105.0: in the Scratch
+     Pad host it takes the default notebook, the rule
+     every scratch creation follows. */
   let slug = null;
   if (mentionTrigger && mentionTrigger.host === "task") {
     const nbSel = document.getElementById("taskNotebookSelect");
     slug = nbSel ? nbSel.value : null;
+  } else if (mentionTrigger &&
+      mentionTrigger.host === "scratch") {
+    slug = fallbackNotebookSlug();
   } else {
     const host = currentNote();
     slug = host ? host.notebook : null;
@@ -49054,9 +49628,12 @@ function onMentionPopupKeydown(ev) {
        spot. */
     /* v2.28.0: the editor handed back to is the
        trigger's host: the note body, or the task
-       description editor while its modal is open. */
+       description editor while its modal is open.
+       v2.105.0: or the Scratch Pad. */
     const bodyEl0 = trig && trig.host === "task"
       ? document.getElementById("taskDescInput")
+      : trig && trig.host === "scratch"
+      ? scratchPadEl()
       : document.getElementById("noteBody");
     if (trig && bodyEl0 && bodyEl0.contains(trig.node)) {
       bodyEl0.focus();
@@ -49077,12 +49654,14 @@ function onMentionPopupKeydown(ev) {
      editor holds the caret too, the trigger's second
      host. */
   const descElK = document.getElementById("taskDescInput");
+  const padElK = scratchPadEl();
   const searchEl = mentionSearchEl();
   const fromSearch = !!searchEl && ev.target === searchEl;
   if (fromSearch && ev.key === "Tab") { return; }
   if (!bodyEl || !ev.target ||
       (!bodyEl.contains(ev.target) &&
        !(descElK && descElK.contains(ev.target)) &&
+       !(padElK && padElK.contains(ev.target)) &&
        !fromSearch)) { return; }
   ev.preventDefault();
   ev.stopPropagation();
@@ -72249,6 +72828,14 @@ function wireEvents() {
     updateMentionPopup);
   document.addEventListener("selectionchange", updateMentionPopup);
   document.addEventListener("keydown", onMentionPopupKeydown, true);
+  /* v2.105.0: the Scratch Pad's selection bank and its
+     toolbar's active faces ride the same document
+     selectionchange the popups track on (both helpers
+     stand down when the selection is not the pad's). */
+  document.addEventListener("selectionchange", function () {
+    saveScratchSelection();
+    syncScratchToolbar();
+  });
   document.querySelector(".editor-scroll").addEventListener("scroll",
     function () { closeMentionPopup(); });
 
@@ -72280,12 +72867,16 @@ function wireEvents() {
     if (!target || !target.closest) { return; }
     if (eventLinkPopupOpen() &&
         !target.closest("#eventLinkPopup") &&
-        !target.closest("#noteBody")) {
+        !target.closest("#noteBody") &&
+        !target.closest("#homeScratchText") &&
+        !target.closest("#homeScratchToolbar")) {
       closeEventLinkPopup();
     }
     if (tagLinkPopupOpen() &&
         !target.closest("#tagLinkPopup") &&
-        !target.closest("#noteBody")) {
+        !target.closest("#noteBody") &&
+        !target.closest("#homeScratchText") &&
+        !target.closest("#homeScratchToolbar")) {
       closeTagLinkPopup();
     }
   });
@@ -72338,7 +72929,9 @@ function wireEvents() {
     if (!target || !target.closest) { return; }
     if (target.closest("#mentionPopup") ||
         target.closest("#noteBody") ||
-        target.closest("#taskDescInput")) { return; }
+        target.closest("#taskDescInput") ||
+        target.closest("#homeScratchText") ||
+        target.closest("#homeScratchToolbar")) { return; }
     closeMentionPopup();
   });
   const mentionPopupEl = document.getElementById("mentionPopup");
