@@ -40,10 +40,59 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-11-02-SSN-V21000
-  Version: 2.100.0
+  BUILD STAMP: 2026-11-03-SSN-V21010
+  Version: 2.101.0
 
   Revision history:
+    v2.101.0 2026-11-03 The list fix release.
+                      Lists created from a
+                      paragraph come out as
+                      clean top level lists
+                      with the caret back where
+                      the user was typing, and
+                      the saved file matches
+                      the live note. The
+                      checklist owns its
+                      Backspace: at an item's
+                      start it joins the item
+                      to the one above, on an
+                      empty item it removes
+                      the item, and the box is
+                      never the thing deleted.
+                      A checklist Enter split
+                      can no longer steal the
+                      item's checkbox into the
+                      item below. Clicking a
+                      checkbox hands the caret
+                      back into the item's
+                      text, so typing
+                      continues. Enter on the
+                      empty last item of a
+                      bullet or numbered list
+                      exits into a paragraph.
+                      List markers follow
+                      Word: bullet glyphs
+                      change with depth
+                      (filled, hollow, square,
+                      cycling), and numbered
+                      lists run numbers, then
+                      lowercase letters, then
+                      lowercase Roman numerals
+                      by depth, each sublist
+                      restarting its own
+                      sequence. The editor's
+                      right click menu, in a
+                      numbered list, gains a
+                      Numbering style submenu
+                      (Numbers, Capital
+                      Letters, Lowercase
+                      Letters, Capital Roman,
+                      Lowercase Roman) that
+                      restyles the one list
+                      level the caret is in,
+                      saved with the note,
+                      with the current style
+                      marked in the menu.
     v2.100.0 2026-11-02 Email snooze. Gmail has no
                       snooze of its own, so the app
                       manages it, per message: a
@@ -7842,6 +7891,51 @@ body.dark .modal:hover::-webkit-scrollbar-thumb{
 #noteBody h1{font-size:23px;margin:14px 0 6px;}
 #noteBody h2{font-size:19px;margin:12px 0 5px;}
 #noteBody ul,#noteBody ol{padding-left:24px;}
+/* v2.101.0: Word style list levels (Chris's list fix
+   release). Bullet markers change with depth: a
+   filled disc, a hollow circle, a square, then the
+   cycle repeats. Numbered markers by depth by
+   default: decimal, lowercase letters, lowercase
+   Roman numerals, cycling the same way; every list
+   counts its own items, so each sublist restarts
+   its own sequence. A level the user has given its
+   own style through the Numbering style menu (see
+   the editor context menu block) carries exactly
+   one of the ss-num-* classes, which wins over the
+   depth defaults at that level only. Checklists are
+   untouched by all of this: the checklist rules
+   further down set their markers to none at every
+   depth, with the specificity to hold. */
+#noteBody ul{list-style-type:disc;}
+#noteBody :is(ul,ol) ul{list-style-type:circle;}
+#noteBody :is(ul,ol) :is(ul,ol) ul{
+  list-style-type:square;}
+#noteBody :is(ul,ol) :is(ul,ol) :is(ul,ol) ul{
+  list-style-type:disc;}
+#noteBody :is(ul,ol) :is(ul,ol) :is(ul,ol)
+  :is(ul,ol) ul{list-style-type:circle;}
+#noteBody :is(ul,ol) :is(ul,ol) :is(ul,ol)
+  :is(ul,ol) :is(ul,ol) ul{list-style-type:square;}
+#noteBody ol{list-style-type:decimal;}
+#noteBody :is(ul,ol) ol{list-style-type:lower-alpha;}
+#noteBody :is(ul,ol) :is(ul,ol) ol{
+  list-style-type:lower-roman;}
+#noteBody :is(ul,ol) :is(ul,ol) :is(ul,ol) ol{
+  list-style-type:decimal;}
+#noteBody :is(ul,ol) :is(ul,ol) :is(ul,ol)
+  :is(ul,ol) ol{list-style-type:lower-alpha;}
+#noteBody :is(ul,ol) :is(ul,ol) :is(ul,ol)
+  :is(ul,ol) :is(ul,ol) ol{
+  list-style-type:lower-roman;}
+#noteBody ol.ss-num-decimal{list-style-type:decimal;}
+#noteBody ol.ss-num-upper-alpha{
+  list-style-type:upper-alpha;}
+#noteBody ol.ss-num-lower-alpha{
+  list-style-type:lower-alpha;}
+#noteBody ol.ss-num-upper-roman{
+  list-style-type:upper-roman;}
+#noteBody ol.ss-num-lower-roman{
+  list-style-type:lower-roman;}
 #noteBody li.done{color:var(--muted);text-decoration:line-through;}
 /* v2.1.0: links to other notes (href "ssnote:<id>", class ss-note-link)
    read as internal links: accent color and an underline. The accent
@@ -8118,6 +8212,28 @@ body.dark .modal:hover::-webkit-scrollbar-thumb{
    right click menu, in the attachment menus'
    separator shape. */
 .editor-ctx-sep{height:1px;background:var(--border);margin:4px 2px;}
+/* v2.101.0: the Numbering style submenu inside the
+   editor's right click menu: a separated group under
+   its parent item, opening in place. The current
+   style's row takes the soft surface and shows its
+   check in the accent, so the active choice is
+   obvious at a glance (the standing settings rule). */
+#editorCtxNumMenu{
+  display:flex;flex-direction:column;gap:2px;
+  border-top:1px solid var(--border);
+  margin-top:4px;padding-top:4px;
+}
+#editorCtxNumMenu.hidden{display:none;}
+#editorCtxMenu .ctx-check{
+  visibility:hidden;display:inline-block;width:16px;
+  color:var(--accent);font-weight:700;
+}
+#editorCtxMenu .att-menu-item.current{
+  background:var(--soft);
+}
+#editorCtxMenu .att-menu-item.current .ctx-check{
+  visibility:visible;
+}
 .att-menu-item{
   display:block;width:100%;text-align:left;border:none;background:none;
   color:var(--text);font-size:14px;padding:8px 10px;border-radius:8px;
@@ -11944,6 +12060,22 @@ body.dark .version-date{color:var(--accent);}
             <div class="editor-ctx-sep" role="separator"></div>
             <button class="att-menu-item" type="button" data-ctx-action="encrypt">Encrypt selected text</button>
             <button class="att-menu-item hidden" type="button" data-ctx-action="vault">Unlock encrypted text</button>
+            <!-- v2.101.0: the Numbering style item and
+                 its submenu. The item stands only while
+                 the caret is in a numbered list; the
+                 submenu opens in place under it and the
+                 current style's row carries the current
+                 class and a visible check. Picking a
+                 style restyles the one list level the
+                 caret is in (see applyNumberingStyle). -->
+            <button class="att-menu-item hidden" type="button" data-ctx-action="numstyle">Numbering style</button>
+            <div id="editorCtxNumMenu" class="hidden">
+              <button class="att-menu-item" type="button" data-num-style="decimal"><span class="ctx-check">&#10003;</span>Numbers</button>
+              <button class="att-menu-item" type="button" data-num-style="upper-alpha"><span class="ctx-check">&#10003;</span>Capital Letters</button>
+              <button class="att-menu-item" type="button" data-num-style="lower-alpha"><span class="ctx-check">&#10003;</span>Lowercase Letters</button>
+              <button class="att-menu-item" type="button" data-num-style="upper-roman"><span class="ctx-check">&#10003;</span>Capital Roman</button>
+              <button class="att-menu-item" type="button" data-num-style="lower-roman"><span class="ctx-check">&#10003;</span>Lowercase Roman</button>
+            </div>
           </div>
 
           <!-- v2.11: the full screen image preview. A dark lightbox
@@ -13583,8 +13715,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-11-02-SSN-V21000";
-const APP_VERSION = "2.100.0";
+const APP_BUILD = "2026-11-03-SSN-V21010";
+const APP_VERSION = "2.101.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -45363,6 +45495,60 @@ function canonicalizeAttachmentPlaceholders(html) {
     clean.setAttribute("contenteditable", "false");
     el.replaceWith(clean);
   });
+  /* v2.101.0: a numbered list level's chosen style
+     (see the Numbering style menu in the editor
+     context menu block) rides its ol as exactly one
+     ss-num-* class and nothing else. A second style
+     class standing beside the first, or a
+     list-style-type left in an inline style by a
+     paste, is folded into the one class here, in
+     the funnel every saved body passes through, so
+     the saved note, the editor stylesheet, and the
+     print stylesheet all read the level's style the
+     same way. Classes that are not style classes,
+     and levels with no choice standing, pass
+     through exactly as they were. */
+  holder.querySelectorAll("ol").forEach(function (ol) {
+    const known = ["ss-num-decimal", "ss-num-upper-alpha",
+      "ss-num-lower-alpha", "ss-num-upper-roman",
+      "ss-num-lower-roman"];
+    const byValue = { "decimal": "ss-num-decimal",
+      "upper-alpha": "ss-num-upper-alpha",
+      "lower-alpha": "ss-num-lower-alpha",
+      "upper-roman": "ss-num-upper-roman",
+      "lower-roman": "ss-num-lower-roman" };
+    let chosen = null;
+    const styleAttr = ol.getAttribute("style");
+    if (styleAttr) {
+      const m = /list-style-type\s*:\s*([a-z-]+)/i
+        .exec(styleAttr);
+      if (m && byValue[String(m[1]).toLowerCase()]) {
+        chosen = byValue[String(m[1]).toLowerCase()];
+        ol.style.removeProperty("list-style-type");
+        if (!ol.getAttribute("style")) {
+          ol.removeAttribute("style");
+        }
+      }
+    }
+    const kept = [];
+    (ol.getAttribute("class") || "").split(/\s+/)
+      .forEach(function (tok) {
+        if (!tok) { return; }
+        if (tok.indexOf("ss-num-") === 0) {
+          if (!chosen && known.indexOf(tok) !== -1) {
+            chosen = tok;
+          }
+          return;
+        }
+        kept.push(tok);
+      });
+    if (chosen) { kept.push(chosen); }
+    if (kept.length) {
+      ol.setAttribute("class", kept.join(" "));
+    } else if (ol.hasAttribute("class")) {
+      ol.removeAttribute("class");
+    }
+  });
   if (holder.querySelector(".ss-toc")) {
     tocEnsureHeadingIds(holder);
     const tocEntries = tocEntriesFrom(holder);
@@ -52845,6 +53031,24 @@ function buildPrintDocument(note, bodyHtml) {
     "th,td{border:1px solid #C9D6C9;padding:6px 10px;text-align:left;}" +
     "th{background:#EFF4EE;}" +
     "a{color:#14532D;}" +
+    "ul{list-style-type:disc;}" +
+    ":is(ul,ol) ul{list-style-type:circle;}" +
+    ":is(ul,ol) :is(ul,ol) ul{list-style-type:square;}" +
+    ":is(ul,ol) :is(ul,ol) :is(ul,ol) ul{" +
+    "list-style-type:disc;}" +
+    "ol{list-style-type:decimal;}" +
+    ":is(ul,ol) ol{list-style-type:lower-alpha;}" +
+    ":is(ul,ol) :is(ul,ol) ol{" +
+    "list-style-type:lower-roman;}" +
+    ":is(ul,ol) :is(ul,ol) :is(ul,ol) ol{" +
+    "list-style-type:decimal;}" +
+    "ol.ss-num-decimal{list-style-type:decimal;}" +
+    "ol.ss-num-upper-alpha{list-style-type:upper-alpha;}" +
+    "ol.ss-num-lower-alpha{list-style-type:lower-alpha;}" +
+    "ol.ss-num-upper-roman{list-style-type:upper-roman;}" +
+    "ol.ss-num-lower-roman{list-style-type:lower-roman;}" +
+    "ul.ss-checklist{list-style:none;}" +
+    "ul.ss-checklist li{list-style:none;}" +
     ".ss-attachment{border:1px solid #C9D6C9;border-radius:8px;" +
     "padding:10px 12px;margin:12px 0;}" +
     "@media print{body{margin:0 auto;}}" +
@@ -54090,6 +54294,9 @@ function listItemOfNode(node) {
    off list shape keep working at depth. Returns whether the item
    moved. */
 function indentListItem(li) {
+  /* v2.101.0: an item going back into a list gives
+     up its alumni standing (see outdentListItem). */
+  forgetListAlumnus(li);
   const list = li.parentElement;
   if (!list || (list.tagName !== "UL" && list.tagName !== "OL")) {
     return false;
@@ -54123,6 +54330,21 @@ function indentListItem(li) {
    stay in the sub-list, and a sub-list left with no items in it
    is removed. At the top level there is nowhere to go: a no-op.
    Returns whether the item moved. */
+/* v2.101.0: forget an item's alumni standing (see
+   outdentListItem): the runtime record that it was
+   promoted out of a particular sub-list earlier in
+   this session. Indenting the item back into any
+   list ends the standing. */
+function forgetListAlumnus(li) {
+  const from = li.__ssAlumniOf;
+  if (from && from.__ssAlumni) {
+    from.__ssAlumni = from.__ssAlumni.filter(
+      function (a) { return a.el !== li; });
+  }
+  delete li.__ssAlumniOf;
+  delete li.__ssAlumniIdx;
+}
+
 function outdentListItem(li) {
   const list = li.parentElement;
   if (!list || (list.tagName !== "UL" && list.tagName !== "OL")) {
@@ -54134,7 +54356,46 @@ function outdentListItem(li) {
   if (!grand || (grand.tagName !== "UL" && grand.tagName !== "OL")) {
     return false;
   }
-  grand.insertBefore(li, host.nextSibling);
+  /* v2.101.0: keep the item's visual place when its
+     siblings leave the same sub-list one by one.
+     Inserting every promotion immediately after the
+     host item scrambled the order of sequential
+     promotions (promote the second item, then the
+     third, and the third landed ahead of the
+     second), where Word keeps the order the items
+     stand in. The sub-list remembers its alumni for
+     the session, in runtime expandos only (nothing
+     is saved): each carries the index it held in
+     the sub-list, reconstructed as it leaves from
+     its place among the items still standing plus
+     the alumni that stood ahead of it. A promotion
+     lands after the host, past any alumni that
+     stood ahead of it, and ahead of any that stood
+     behind it or of the host's own next sibling. */
+  forgetListAlumnus(li);
+  const standing = Array.prototype.filter.call(
+    list.children, function (n) {
+      return n.tagName === "LI";
+    });
+  let orig = standing.indexOf(li);
+  const alumni = list.__ssAlumni || (list.__ssAlumni = []);
+  for (let i = 0; i < alumni.length; i++) {
+    if (alumni[i].idx <= orig) { orig++; }
+  }
+  let ref = host.nextSibling;
+  while (ref) {
+    if (ref.nodeType === 1 && ref.__ssAlumniOf === list &&
+        ref.__ssAlumniIdx < orig) {
+      ref = ref.nextSibling;
+      continue;
+    }
+    break;
+  }
+  grand.insertBefore(li, ref);
+  alumni.push({ el: li, idx: orig });
+  alumni.sort(function (a, b) { return a.idx - b.idx; });
+  li.__ssAlumniOf = list;
+  li.__ssAlumniIdx = orig;
   if (!list.querySelector("li")) { list.remove(); }
   return true;
 }
@@ -55036,10 +55297,11 @@ function runToolbarCommand(cmd) {
     if (listCtx && listCtx.li && isChecklistList(listCtx.list)) {
       convertChecklistToPlainList(listCtx.list, cmd === "ol",
         listCtx.li);
-    } else if (cmd === "ul") {
-      document.execCommand("insertUnorderedList", false, null);
     } else {
-      document.execCommand("insertOrderedList", false, null);
+      /* v2.101.0: creation runs through the app's own
+         path, which normalizes the primitive's result
+         on the spot (see createPlainListAtCaret). */
+      createPlainListAtCaret(cmd === "ol");
     }
   } else if (cmd === "checklist") {
     toggleChecklistAtCaret();
@@ -55150,6 +55412,70 @@ function placeCaretAtTextOffset(root, offset) {
   sel.addRange(end);
 }
 
+/* v2.101.0: an item's OWN text: the text nodes whose
+   nearest list item is this one, so the text of a
+   sublist nested inside the item never counts toward
+   the item it hangs under. The checklist Backspace
+   join, the checkbox click caret restore, and the
+   list creation caret restore all reckon in this
+   currency. */
+function itemOwnTextNodes(li) {
+  const nodes = [];
+  const walker = document.createTreeWalker(li,
+    NodeFilter.SHOW_TEXT, null);
+  let node = walker.nextNode();
+  while (node) {
+    if (node.parentNode && node.parentNode.closest &&
+        node.parentNode.closest("li") === li) {
+      nodes.push(node);
+    }
+    node = walker.nextNode();
+  }
+  return nodes;
+}
+
+function itemOwnTextLength(li) {
+  return itemOwnTextNodes(li).reduce(function (sum, n) {
+    return sum + n.nodeValue.length;
+  }, 0);
+}
+
+/* Place the caret offset characters into an item's
+   own text (see itemOwnTextNodes). Past its end the
+   caret lands at the end of that text; in an item
+   with no text of its own it lands right after the
+   item's leading element (its checkbox), or at the
+   item's start when it has neither. */
+function placeCaretAtItemTextOffset(li, offset) {
+  const sel = window.getSelection();
+  if (!sel) { return; }
+  const nodes = itemOwnTextNodes(li);
+  let remaining = offset;
+  for (let i = 0; i < nodes.length; i++) {
+    if (remaining <= nodes[i].nodeValue.length) {
+      const caret = document.createRange();
+      caret.setStart(nodes[i], remaining);
+      caret.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(caret);
+      return;
+    }
+    remaining -= nodes[i].nodeValue.length;
+  }
+  const caret = document.createRange();
+  if (nodes.length) {
+    const last = nodes[nodes.length - 1];
+    caret.setStart(last, last.nodeValue.length);
+  } else if (li.firstChild) {
+    caret.setStartAfter(li.firstChild);
+  } else {
+    caret.setStart(li, 0);
+  }
+  caret.collapse(true);
+  sel.removeAllRanges();
+  sel.addRange(caret);
+}
+
 /* Give one list item the checklist's leading checkbox, unless it
    already starts with one. */
 function ensureChecklistCheckbox(li) {
@@ -55213,6 +55539,118 @@ function convertBlockToChecklistItem(block, range) {
     bodyEl.appendChild(ul);
   }
   placeCaretAtTextOffset(li, offset);
+}
+
+/* v2.101.0: lift a list out of the paragraph (or
+   heading) the browser's list primitive wrapped it
+   in. insertUnorderedList and insertOrderedList, in
+   this Chromium, wrap rather than replace the block,
+   leaving <p><ul>...</ul></p> (audit D1): invalid
+   HTML whose saved form then reshapes on the save
+   funnel's reparse, so the file and the note on
+   screen disagree (D1b). The host's content before
+   the list keeps a block of the host's own tag ahead
+   of the list, its content after the list keeps the
+   host itself, and a side left with nothing (or
+   nothing but a placeholder break) loses its block
+   entirely. */
+function unwrapListFromParagraph(list) {
+  const bodyEl = document.getElementById("noteBody");
+  if (!list || !list.parentElement || !bodyEl) { return; }
+  const host = list.parentElement;
+  if (host === bodyEl) { return; }
+  if (!/^(P|H1|H2|H3|H4|H5|H6)$/.test(host.tagName)) {
+    return;
+  }
+  if (host.parentElement !== bodyEl) { return; }
+  const before = document.createElement(
+    host.tagName.toLowerCase());
+  while (host.firstChild && host.firstChild !== list) {
+    before.appendChild(host.firstChild);
+  }
+  host.parentElement.insertBefore(list, host);
+  if (before.childNodes.length) {
+    list.parentElement.insertBefore(before, list);
+  }
+  if (!host.childNodes.length ||
+      (host.childNodes.length === 1 &&
+       host.firstChild.tagName === "BR") ||
+      (!host.textContent.trim() &&
+       !host.querySelector("img, input, .ss-attachment"))) {
+    host.remove();
+  }
+}
+
+/* v2.101.0: the Bullet and Numbered commands' own
+   creation path (audit D1 and D1b). The browser
+   primitive still does the initial conversion, but
+   its result is normalized on the spot: the list is
+   lifted out of any block the primitive wrapped it
+   in, and the caret is restored to the end of the
+   item's own text, where the user was typing when
+   the primitive reset it to the item's start. A
+   primitive that toggled an existing list of the
+   same kind off has done the command's whole work
+   and is left alone. Where the primitive is missing
+   or refuses, the list is built by hand from the
+   caret's block, the convertBlockToChecklistItem
+   shape without the box. */
+function createPlainListAtCaret(ordered) {
+  const bodyEl = document.getElementById("noteBody");
+  if (!bodyEl) { return; }
+  const before = checklistCaretContext();
+  const block = before ? before.block : null;
+  const sel = window.getSelection();
+  const range = sel && sel.rangeCount ? sel.getRangeAt(0) : null;
+  const tag = ordered ? "OL" : "UL";
+  const wasInSame = !!(before && before.li && before.list &&
+    before.list.tagName === tag);
+  let worked = false;
+  if (typeof document.execCommand === "function") {
+    try {
+      worked = document.execCommand(
+        ordered ? "insertOrderedList" : "insertUnorderedList",
+        false, null);
+    } catch (err) { worked = false; }
+  }
+  if (worked) {
+    const after = checklistCaretContext();
+    if (after && after.li && after.list &&
+        after.list.tagName === tag) {
+      unwrapListFromParagraph(after.list);
+      placeCaretAtItemTextOffset(after.li,
+        itemOwnTextLength(after.li));
+    }
+    /* No list at the caret after a successful
+       primitive: it toggled a standing list off, or
+       it converted in a shape the context does not
+       resolve; either way its result stands as the
+       old commands left it. */
+    return;
+  }
+  if (wasInSame) { return; }
+  const list = document.createElement(tag.toLowerCase());
+  const li = document.createElement("li");
+  list.appendChild(li);
+  if (block) {
+    while (block.firstChild) {
+      li.appendChild(block.firstChild);
+    }
+    if (li.childNodes.length === 1 &&
+        li.firstChild.tagName === "BR" &&
+        !li.textContent.trim()) {
+      li.removeChild(li.firstChild);
+    }
+    block.replaceWith(list);
+  } else if (range && range.startContainer.nodeType === 3 &&
+             range.startContainer.parentNode === bodyEl) {
+    const anchor = range.startContainer.nextSibling;
+    li.appendChild(range.startContainer);
+    bodyEl.insertBefore(list, anchor);
+  } else {
+    bodyEl.appendChild(list);
+  }
+  placeCaretAtItemTextOffset(li, itemOwnTextLength(li));
 }
 
 /* v2.24.7: tag the pieces a checklist split leaves behind, so the
@@ -55330,6 +55768,18 @@ function toggleChecklistAtCaret() {
     const after = checklistCaretContext();
     if (after && after.list && after.list.tagName === "UL") {
       makeListChecklist(after.list);
+      /* v2.101.0: the same normalization the plain
+         commands get (audit D1, and the D2 chain it
+         started): the list stands at the top level,
+         and the caret goes back to the end of the
+         item's own text, so conversion cannot hand
+         the Enter handler a caret parked ahead of
+         the checkbox with the item's text behind it. */
+      unwrapListFromParagraph(after.list);
+      if (after.li) {
+        placeCaretAtItemTextOffset(after.li,
+          itemOwnTextLength(after.li));
+      }
       return;
     }
   }
@@ -55576,6 +56026,27 @@ function handleChecklistEnter() {
     return true;
   }
 
+  /* v2.101.0 (audit D2): the split below takes
+     everything from the caret to the item's end as
+     the new item's tail, on the assumption that the
+     item's checkbox stands before the caret. A caret
+     parked ahead of the box (the old conversion left
+     it there) put the box itself in the tail: the
+     item lost its box and the new item gained a
+     second one. The box is moved to the item's head
+     first, where it belongs, so no caret position
+     inside the item can put it in the tail; and any
+     stray box the tail still carried is dropped from
+     the new item below, leaving the fresh box the
+     only one it holds. */
+  const ownBox = Array.prototype.find.call(li.childNodes,
+    function (n) {
+      return n.nodeType === 1 && n.tagName === "INPUT" &&
+        n.type === "checkbox";
+    });
+  if (ownBox && li.firstChild !== ownBox) {
+    li.insertBefore(ownBox, li.firstChild);
+  }
   const newLi = document.createElement("li");
   const box = document.createElement("input");
   box.type = "checkbox";
@@ -55585,11 +56056,191 @@ function handleChecklistEnter() {
   tail.setEnd(li, li.childNodes.length);
   newLi.appendChild(tail.extractContents());
   li.after(newLi);
+  Array.prototype.slice.call(newLi.childNodes)
+    .forEach(function (n) {
+      if (n !== box && n.nodeType === 1 &&
+          n.tagName === "INPUT") {
+        n.remove();
+      }
+    });
   const caret2 = document.createRange();
   caret2.setStartAfter(box);
   caret2.collapse(true);
   sel.removeAllRanges();
   sel.addRange(caret2);
+  markDirty();
+  return true;
+}
+
+/* --------------------------------------------------------------------------
+   v2.101.0: the checklist's Backspace, and the plain
+   lists' Enter exit. Two list gestures the app left
+   to the browser (audit D3 and D5): in front of a
+   checklist caret at an item's start, the browser's
+   previous deletable unit is the item's checkbox
+   itself, so Backspace ate the box and edited
+   nothing; and a plain list's exit, left to the
+   browser, lands in a div in an app whose blocks are
+   paragraphs.
+   -------------------------------------------------------------------------- */
+
+/* Backspace with the caret at the very start of a
+   checklist item. Returns true when the keypress was
+   handled and the caller must preventDefault. The
+   shapes:
+     - a filled item joins the item above it, the
+       bullets' own behavior: its content (its
+       checkbox left behind) appends to the previous
+       item's own text and the caret lands at the
+       junction. The first item of a nested list joins
+       the item its list hangs under the same way.
+     - an empty item is removed and the caret lands
+       at the end of the previous item (or of the item
+       its list hangs under), leaving no phantom
+       boxless row; at the top level with nothing
+       above, it becomes a paragraph ahead of the
+       list, the exit shape.
+     - the first filled item of a top level list
+       becomes a paragraph where it stood, through
+       the same conversion the toolbar toggle uses.
+   A caret anywhere else in the item keeps the
+   browser's Backspace: the box is only ever the
+   unit in front of the caret at the item's start,
+   which is the one position this handler claims. */
+function handleChecklistBackspace() {
+  const bodyEl = document.getElementById("noteBody");
+  if (!bodyEl || bodyEl.contentEditable === "false") {
+    return false;
+  }
+  const hit = checklistItemAtCaret();
+  if (!hit) { return false; }
+  const li = hit.li;
+  const ul = hit.ul;
+  const range = hit.range;
+  if (caretTextOffsetWithin(li, range) > 0) {
+    return false;
+  }
+  const prev = li.previousElementSibling;
+  const prevLi = prev && prev.tagName === "LI" ? prev : null;
+  const hostLi = ul.parentElement &&
+    ul.parentElement.tagName === "LI" ? ul.parentElement : null;
+  if (!checklistItemText(li).trim()) {
+    /* An empty item: it goes away, box and all. */
+    if (prevLi) {
+      li.remove();
+      if (!ul.querySelector("li")) { ul.remove(); }
+      placeCaretAtItemTextOffset(prevLi,
+        itemOwnTextLength(prevLi));
+    } else if (hostLi) {
+      li.remove();
+      if (!ul.querySelector("li")) { ul.remove(); }
+      placeCaretAtItemTextOffset(hostLi,
+        itemOwnTextLength(hostLi));
+    } else {
+      const p = document.createElement("p");
+      p.appendChild(document.createElement("br"));
+      li.remove();
+      ul.parentElement.insertBefore(p, ul);
+      if (!ul.querySelector("li")) { ul.remove(); }
+      markChecklistExit(p, document.createElement("ul"), ul);
+      setBodyCaret(p, 0);
+    }
+    markDirty();
+    return true;
+  }
+  const joinTarget = prevLi || hostLi;
+  if (joinTarget) {
+    const junction = itemOwnTextLength(joinTarget);
+    let insertBefore = null;
+    if (joinTarget === hostLi) {
+      insertBefore = ul;
+    } else {
+      for (let i = 0; i < joinTarget.childNodes.length; i++) {
+        const n = joinTarget.childNodes[i];
+        if (n.nodeType === 1 &&
+            (n.tagName === "UL" || n.tagName === "OL")) {
+          insertBefore = n;
+          break;
+        }
+      }
+    }
+    /* Everything but the checkbox moves up: the moved
+       text joins the target's own line, ahead of any
+       sublist it carries. */
+    while (li.firstChild) {
+      const child = li.firstChild;
+      if (child.nodeType === 1 && child.tagName === "INPUT" &&
+          child.type === "checkbox") {
+        li.removeChild(child);
+      } else if (insertBefore) {
+        joinTarget.insertBefore(child, insertBefore);
+      } else {
+        joinTarget.appendChild(child);
+      }
+    }
+    li.remove();
+    if (!ul.querySelector("li")) { ul.remove(); }
+    placeCaretAtItemTextOffset(joinTarget, junction);
+    markDirty();
+    return true;
+  }
+  checklistItemToParagraph(li, ul);
+  markDirty();
+  return true;
+}
+
+/* Enter on the empty last item of a bullet or
+   numbered list: the item leaves the list and a
+   fresh paragraph stands after the list for the
+   caret (audit D5: the browser's own exit lands in
+   a div, and a div is a second class block in this
+   app). An empty last item of a NESTED list promotes
+   one level instead, the word processor behavior;
+   the next Enter, at the top level, exits. Every
+   other Enter in a plain list (a filled item
+   anywhere, an empty item with items below it)
+   keeps the browser default, which the audit found
+   clean. Returns true when handled. */
+function handlePlainListEnter() {
+  const bodyEl = document.getElementById("noteBody");
+  if (!bodyEl || bodyEl.contentEditable === "false") {
+    return false;
+  }
+  const sel = window.getSelection();
+  if (!sel || !sel.rangeCount) { return false; }
+  const range = sel.getRangeAt(0);
+  if (!range.collapsed) { return false; }
+  if (!bodyEl.contains(range.startContainer)) {
+    return false;
+  }
+  const li = listItemOfNode(range.startContainer);
+  if (!li) { return false; }
+  const list = li.parentElement;
+  if (!list || (list.tagName !== "UL" &&
+                list.tagName !== "OL")) {
+    return false;
+  }
+  if (isChecklistList(list)) { return false; }
+  if (li.nextElementSibling) { return false; }
+  if (li.querySelector("ul, ol")) { return false; }
+  const ownText = itemOwnTextNodes(li).map(function (n) {
+    return n.nodeValue;
+  }).join("");
+  if (ownText.trim()) { return false; }
+  const host = list.parentElement;
+  if (host && host.tagName === "LI") {
+    if (!outdentListItem(li)) { return false; }
+    placeCaretAtItemTextOffset(li, 0);
+    markDirty();
+    return true;
+  }
+  if (host !== bodyEl) { return false; }
+  const p = document.createElement("p");
+  p.appendChild(document.createElement("br"));
+  li.remove();
+  list.after(p);
+  if (!list.querySelector("li")) { list.remove(); }
+  setBodyCaret(p, 0);
   markDirty();
   return true;
 }
@@ -69067,6 +69718,30 @@ function openEditorCtxMenu(x, y) {
     vaultBtn.textContent = ssencKey
       ? "Lock encrypted text" : "Unlock encrypted text";
   }
+  /* v2.101.0: the Numbering style item stands only
+     while the caret is in a numbered list; its
+     submenu starts closed on every open, and the
+     item for the level's current style (its chosen
+     class, or the depth default) carries the
+     current mark. */
+  const numBtn = menu.querySelector(
+    "[data-ctx-action=\"numstyle\"]");
+  const numMenu = menu.querySelector("#editorCtxNumMenu");
+  const ctxOl = numberedListAtCaret();
+  if (numBtn) {
+    numBtn.classList.toggle("hidden", !ctxOl);
+  }
+  if (numMenu) {
+    numMenu.classList.add("hidden");
+    if (ctxOl) {
+      const current = numberingStyleOf(ctxOl);
+      numMenu.querySelectorAll("[data-num-style]")
+        .forEach(function (btn) {
+          btn.classList.toggle("current",
+            btn.getAttribute("data-num-style") === current);
+        });
+    }
+  }
   menu.classList.remove("hidden");
   const width = menu.offsetWidth || 200;
   const height = menu.offsetHeight || 170;
@@ -69263,6 +69938,80 @@ function runEditorCtxAction(action) {
   }
 }
 
+/* v2.101.0: the Numbering style submenu's machinery.
+   The styles, in menu order: a key is both the
+   list-style-type value it names and the tail of the
+   class that carries the choice on the ol
+   (ss-num-<key>), the form the save funnel keeps and
+   the editor and print stylesheets read. */
+const NUM_STYLE_KEYS = ["decimal", "upper-alpha",
+  "lower-alpha", "upper-roman", "lower-roman"];
+
+/* The numbered list level the caret is in: the ol
+   that directly holds the caret's item, or null.
+   Only the caret's own level is ever restyled; a
+   nested level is its own list, with its own style
+   and its own defaults. */
+function numberedListAtCaret() {
+  const bodyEl = document.getElementById("noteBody");
+  const sel = window.getSelection();
+  if (!bodyEl || !sel || !sel.rangeCount) { return null; }
+  const range = sel.getRangeAt(0);
+  if (!bodyEl.contains(range.startContainer)) {
+    return null;
+  }
+  let node = range.startContainer;
+  if (node.nodeType !== 1) { node = node.parentNode; }
+  const li = node && node.closest ? node.closest("li") : null;
+  if (!li || !bodyEl.contains(li)) { return null; }
+  const list = li.parentElement;
+  return list && list.tagName === "OL" ? list : null;
+}
+
+/* A level's current style: its chosen class when it
+   carries one, otherwise the depth default the
+   stylesheet applies (numbers, lowercase letters,
+   lowercase Roman numerals, cycling every three
+   levels, counted through whatever lists the level
+   is nested in). */
+function numberingStyleOf(ol) {
+  for (let i = 0; i < NUM_STYLE_KEYS.length; i++) {
+    if (ol.classList.contains("ss-num-" + NUM_STYLE_KEYS[i])) {
+      return NUM_STYLE_KEYS[i];
+    }
+  }
+  const bodyEl = document.getElementById("noteBody");
+  let depth = 1;
+  let n = ol.parentElement;
+  while (n && n !== bodyEl) {
+    if (n.tagName === "UL" || n.tagName === "OL") {
+      depth++;
+    }
+    n = n.parentElement;
+  }
+  return ["decimal", "lower-alpha", "lower-roman"][
+    (depth - 1) % 3];
+}
+
+/* Apply one style to the caret's numbered level:
+   exactly one ss-num-* class on that ol, the choice
+   the save funnel keeps and a reopen renders back.
+   The list's other levels keep their own styles and
+   defaults. */
+function applyNumberingStyle(key) {
+  closeEditorCtxMenu();
+  restoreFormatSelection();
+  const ol = numberedListAtCaret();
+  if (!ol || NUM_STYLE_KEYS.indexOf(key) === -1) {
+    return;
+  }
+  NUM_STYLE_KEYS.forEach(function (k) {
+    ol.classList.remove("ss-num-" + k);
+  });
+  ol.classList.add("ss-num-" + key);
+  markDirty();
+}
+
 function wireEditorCtxMenu() {
   const bodyEl = document.getElementById("noteBody");
   const menu = editorCtxMenuEl();
@@ -69328,8 +70077,24 @@ function wireEditorCtxMenu() {
     ev.preventDefault();
   });
   menu.addEventListener("click", function (ev) {
+    /* v2.101.0: a Numbering style pick applies its
+       style and closes the menu (inside
+       applyNumberingStyle); the Numbering style
+       parent item only opens or closes its submenu,
+       in place, and never runs an action. */
+    const styleBtn = ev.target.closest("[data-num-style]");
+    if (styleBtn) {
+      applyNumberingStyle(
+        styleBtn.getAttribute("data-num-style"));
+      return;
+    }
     const btn = ev.target.closest("[data-ctx-action]");
     if (!btn || btn.disabled) { return; }
+    if (btn.getAttribute("data-ctx-action") === "numstyle") {
+      const sub = menu.querySelector("#editorCtxNumMenu");
+      if (sub) { sub.classList.toggle("hidden"); }
+      return;
+    }
     runEditorCtxAction(btn.getAttribute("data-ctx-action"));
   });
   document.addEventListener("pointerdown", function (ev) {
@@ -71245,6 +72010,23 @@ function wireEvents() {
       if (li) {
         li.classList.toggle("done", target.checked);
         syncChecklistBox(target);
+        /* v2.101.0 (audit D4): the click focuses the
+           box itself, which strands the editor
+           selection outside the text: keystrokes
+           after checking an item off went nowhere
+           until the user clicked back in. For a
+           checklist item, the caret goes back into
+           the item's own text, at its end, so typing
+           simply continues. */
+        const list = li.parentElement;
+        if (isChecklistList(list)) {
+          const bodyEl = document.getElementById("noteBody");
+          if (bodyEl) {
+            bodyEl.focus();
+            placeCaretAtItemTextOffset(li,
+              itemOwnTextLength(li));
+          }
+        }
         markDirty();
       }
     }
@@ -72074,10 +72856,31 @@ function wireEvents() {
   /* v1.6 checklist Enter behavior (see handleChecklistEnter in the
      editor section). Only a plain Enter with the caret inside a
      checklist item is intercepted; Shift+Enter and every other Enter
-     keep the browser default. */
+     keep the browser default.
+     v2.101.0: the same listener runs the plain lists' exit
+     (handlePlainListEnter) behind the checklist's claim, so Enter
+     on the empty last item of a bullet or numbered list lands in
+     a paragraph, not the div the browser chooses. */
   noteBodyEl.addEventListener("keydown", function (ev) {
     if (ev.key === "Enter" && !ev.shiftKey) {
       if (handleChecklistEnter()) { ev.preventDefault(); }
+      else if (handlePlainListEnter()) {
+        ev.preventDefault();
+      }
+    }
+  });
+
+  /* v2.101.0: the checklist's Backspace at an item's start is the
+     app's too (see handleChecklistBackspace): left to the browser
+     it deletes the item's checkbox as a unit instead of editing
+     text. Modified chords belong to the browser and are left
+     alone. */
+  noteBodyEl.addEventListener("keydown", function (ev) {
+    if (ev.key === "Backspace" && !ev.ctrlKey &&
+        !ev.metaKey && !ev.altKey) {
+      if (handleChecklistBackspace()) {
+        ev.preventDefault();
+      }
     }
   });
 
