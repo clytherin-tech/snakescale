@@ -40,10 +40,42 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-11-02-SSN-V2970
-  Version: 2.97.0
+  BUILD STAMP: 2026-11-02-SSN-V2980
+  Version: 2.98.0
 
   Revision history:
+    v2.98.0 2026-11-02 Two encryption refinements
+                      Chris directed after testing
+                      v2.97.0. The Remove encryption
+                      control now stands ONLY on an
+                      open passage: a locked block's
+                      face renders without it, a
+                      face saved by an earlier build
+                      with the control in its markup
+                      has it stripped when the note
+                      opens (and the next save drops
+                      it from the file), and the
+                      locked removal flow is gone,
+                      so a passage is opened first
+                      and removed from there. And a
+                      removal now always takes its
+                      own pill with it: the strip
+                      that peels a passage's block
+                      away worked on a clone of the
+                      block's container and spliced
+                      at the container's first
+                      encrypted block, so when
+                      another block stood earlier
+                      in the same paragraph the
+                      removal deleted that block
+                      and left the passage's own
+                      "Encrypted text" pill
+                      standing; the block is now
+                      marked with a token unique
+                      to the strip before the
+                      clone is taken and the
+                      surgery finds it by that
+                      token.
     v2.97.0 2026-11-02 Two editor items Chris
                       directed. The Remove encryption
                       control now stands on an open
@@ -9795,10 +9827,12 @@ body.dark .task-cal-more{color:var(--accent);}
   margin-right:5px;vertical-align:middle;
   user-select:none;
 }
-/* v2.93.0: the Remove encryption control on a locked
-   block's face, standing beside the lock icon: an
-   open lock glyph in the relock chip's dress, muted
-   until hovered. */
+/* The Remove encryption control: an open lock
+   glyph in the relock chip's dress, muted until
+   hovered. v2.93.0 put it on a locked block's
+   face beside the lock icon; since v2.98.0 it
+   stands only on an open region, beside its
+   lock chip. */
 #noteBody .ssenc-remove{
   display:inline-flex;align-items:center;
   color:var(--muted);cursor:pointer;
@@ -13428,8 +13462,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-11-02-SSN-V2970";
-const APP_VERSION = "2.97.0";
+const APP_BUILD = "2026-11-02-SSN-V2980";
+const APP_VERSION = "2.98.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -65964,9 +65998,11 @@ function insertVoiceTranscript(anchorEl, segments) {
    to every locked block's face (beside the lock
    icon): it strips that one passage's encryption
    permanently, leaving its content as ordinary
-   note text (see ssencRemoveEncryptionFlow), and
-   the Unlock dialog's Enter key now submits
-   through its form, exactly as its button does.
+   note text (that flow of the control's is
+   removed in v2.98.0; see the paragraph at the
+   end of this header), and the Unlock dialog's
+   Enter key now submits through its form, exactly
+   as its button does.
 
    v2.94.0 adds the recovery key Chris approved,
    superseding the no recovery paragraph above:
@@ -65997,6 +66033,34 @@ function insertVoiceTranscript(anchorEl, segments) {
    words "unencrypted text blocks" having meant
    passages standing decrypted after unlock all
    along.
+
+   v2.98.0 (Chris's direction, after testing
+   v2.97.0): the Remove encryption control stands
+   ONLY on an open passage. The locked block's
+   face renders without it (ssencBuildBlock), a
+   face saved by v2.93.0 through v2.97.0 with the
+   control in its stored markup has it stripped
+   on open (ssencDecorateEditorBody), so the
+   note's next save drops the stale markup, and
+   the locked flow and its click branch are gone:
+   a locked passage is opened first and removed
+   from the region, like everything else done
+   with it. The same build fixes the strip's
+   aim: ssencStripInsert spliced the passage out
+   of its container's clone at the container's
+   FIRST encrypted block, so with another block
+   standing earlier in the same container the
+   removal deleted that block and left the
+   passage's own "Encrypted text" pill standing
+   (Chris's report; the diagnosis and captured
+   markup are in the build report). The block is
+   now marked before the clone is taken and the
+   surgery finds it by the mark, the mark a token
+   unique to the strip: the proof rig caught a
+   mark from an earlier strip surviving on
+   another block through an undo restore and
+   answering a later strip first, so no bare
+   flag is ever trusted.
    -------------------------------------------------------------------------- */
 
 const SSENC_KDF_ITERATIONS = 600000;
@@ -66013,6 +66077,12 @@ let ssencUnlockTimer = null;
    itself rides the region element's data attributes;
    this map only tracks the encryption chains. */
 const ssencRegions = new Map();
+/* The strip target counter (v2.98.0): every
+   ssencStripInsert takes the next value as its
+   target block's mark, so a mark surviving from
+   an earlier strip (an undo can restore a marked
+   block) never answers for a later strip. */
+let ssencStripTargetSeq = 0;
 let ssencRegionSeq = 0;
 /* The resolver of the setup or unlock dialog currently
    open, or null: {kind, resolve}. One dialog at a time. */
@@ -66169,11 +66239,12 @@ const SSENC_REMOVE_SVG =
   "<rect x=\"4\" y=\"11\" width=\"16\" height=\"10\" rx=\"2\"/>" +
   "<path d=\"M8 11V7a4 4 0 0 1 7.8-1.3\"/></svg>";
 
-/* The Remove encryption control's markup, one shape
-   shared by the block builder and the face
-   normalization in ssencDecorateEditorBody: a span
+/* The Remove encryption control's markup: a span
    button carrying the app's tooltip convention, its
-   title naming the action it runs. */
+   title naming the action it runs. Since v2.98.0
+   its one consumer is the open region's builder
+   (ssencBuildRegion); through v2.97.0 the locked
+   block's face and its decoration shared it too. */
 function ssencRemoveControlHtml() {
   return "<span class=\"ssenc-remove\" role=\"button\" " +
     "aria-label=\"Remove encryption\" " +
@@ -66191,8 +66262,13 @@ function ssencBuildBlock(iv, ct) {
   block.setAttribute("role", "button");
   block.setAttribute("aria-label", "Encrypted text");
   block.setAttribute("title", "Encrypted text");
+  /* v2.98.0: the face carries no Remove encryption
+     control (Chris's direction: the control stands
+     ONLY on an open passage). Through v2.97.0 the
+     control stood here too, from v2.93.0 on; a
+     locked passage is now opened first, and the
+     removal runs from the region's own control. */
   block.innerHTML = SSENC_LOCK_SVG +
-    ssencRemoveControlHtml() +
     "<span class=\"ssenc-face-text\">Encrypted text</span>";
   return block;
 }
@@ -66223,8 +66299,7 @@ function ssencBuildRegion(html, iv, ct) {
   chip.innerHTML = SSENC_LOCK_SVG;
   region.appendChild(chip);
   /* v2.97.0: the Remove encryption control stands
-     on the open region too, beside the lock chip,
-     in the same dress the locked block's face wears
+     on the open region too, beside the lock chip
      (runtime furniture like the chip: non editable,
      and stripped from the region's HTML before
      anything is encrypted or measured, see
@@ -66233,7 +66308,9 @@ function ssencBuildRegion(html, iv, ct) {
      ssencRemoveOpenRegionFlow); through v2.96.0 it
      stood on locked blocks only, so a passage
      standing open offered no way to strip its
-     encryption. */
+     encryption. Since v2.98.0 the control stands
+     ONLY here: the locked block's face no longer
+     carries it. */
   const rmHolder = document.createElement("div");
   rmHolder.innerHTML = ssencRemoveControlHtml();
   const rmCtl = rmHolder.firstChild;
@@ -66457,28 +66534,29 @@ function ssencRelockOpenNoteRegions() {
 function ssencDecorateEditorBody() {
   const bodyEl = document.getElementById("noteBody");
   if (bodyEl) {
-    /* v2.93.0: a block saved by an earlier build
-       carries the older face (the lock icon and its
-       label only). The Remove encryption control is
-       added to its face here, beside the lock icon,
-       so every locked block standing in the editor
-       offers the removal, whatever build saved it.
-       Decoration only: nothing here marks the note. */
+    /* v2.98.0: the Remove encryption control stands
+       ONLY on an open passage (Chris's direction),
+       so a locked block's face never carries it.
+       Blocks saved by v2.93.0 through v2.97.0 carry
+       the control in their stored face markup; it
+       is stripped here, on open, so those blocks
+       render without it too, and the note's next
+       save drops the stale markup from the file.
+       (Through v2.97.0 this decoration ran the
+       other way, adding the control to older
+       faces.) Decoration only: nothing here marks
+       the note. */
     bodyEl.querySelectorAll("[data-ssenc]").forEach(
       function (block) {
-        if (block.querySelector(".ssenc-remove")) {
-          return;
-        }
-        const holder = document.createElement("div");
-        holder.innerHTML = ssencRemoveControlHtml();
-        const ctl = holder.firstChild;
-        const faceText =
-          block.querySelector(".ssenc-face-text");
-        if (faceText) {
-          block.insertBefore(ctl, faceText);
-        } else {
-          block.appendChild(ctl);
-        }
+        block.querySelectorAll(".ssenc-remove")
+          .forEach(function (ctl) { ctl.remove(); });
+        /* A strip target mark can ride into the
+           file on a block an undo restored after
+           its strip (see ssencStripInsert); it is
+           runtime scaffolding, scrubbed here like
+           the stale control. */
+        block.removeAttribute(
+          "data-ssenc-strip-target");
       });
   }
   if (ssencKey) { void ssencDecryptOpenNoteBlocks(); }
@@ -67335,24 +67413,16 @@ async function ssencEncryptSelectionFlow() {
 
 /* ---------- removing one passage's encryption ---------- */
 
-/* Find the open note's decrypted region carrying one
-   passage's ciphertext: the bridge between a locked
-   block the user pointed at and the region the
-   unlock's decrypt pass made of it. The IV and the
-   ciphertext together name the passage; a fresh IV
-   per encryption makes the pair unique in the note. */
-function ssencFindRegionByCipher(iv, ct) {
-  const bodyEl = document.getElementById("noteBody");
-  if (!bodyEl) { return null; }
-  const regions = bodyEl.querySelectorAll(".ssenc-open");
-  for (let i = 0; i < regions.length; i++) {
-    if (regions[i].getAttribute("data-ssenc-iv") === iv &&
-        regions[i].getAttribute("data-ssenc-ct") === ct) {
-      return regions[i];
-    }
-  }
-  return null;
-}
+/* v2.98.0: the removal has exactly one door, the
+   open region's own control (ssencRemoveOpenRegionFlow
+   below). The locked block's face control and its
+   flow (which unlocked first when the vault was
+   locked, or decrypted the pointed block directly
+   when it stood unlocked, bridging block to region
+   by ciphertext) are gone on Chris's direction
+   that the control stand ONLY on an open passage:
+   a locked passage is opened first, like any other
+   reading of it, and removed from there. */
 
 /* Whether an element is one of the empty shells the
    encrypt flow leaves behind when a multi-paragraph
@@ -67444,13 +67514,59 @@ function ssencStripInsert(bodyEl, block, plainHtml) {
      parsed plain HTML (or, for a wrapped block, the
      plain HTML itself), then the sibling's clone,
      then the guard. */
+  /* v2.98.0: the block this strip answers for is
+     marked before the clone is taken, and the
+     clone surgery finds it by the mark. Through
+     v2.97.0 the surgery took the container's FIRST
+     [data-ssenc] block, so when another encrypted
+     block stood earlier in the same container (a
+     paragraph holding two passages, or a locked
+     block beside the region being stripped), the
+     strip spliced this passage's text in at that
+     block's place, deleted that block, and left
+     this passage's own block, the "Encrypted
+     text" pill, standing untouched (the build
+     report carries the captured markup). The mark
+     is a token unique to this strip (a standing
+     counter), never a bare flag: a mark left from
+     an earlier strip can survive on another block
+     (an undo restores the block a strip marked,
+     the mark on it), and a bare flag would match
+     that stale mark first in a later clone and
+     splice at the wrong block again, the very
+     failure being fixed. The marked clone is the
+     element the surgery removes, and where the
+     insert refuses and the fallback runs, the
+     live block the fallback replaces carries its
+     mark out of the tree with it;
+     ssencDecorateEditorBody also scrubs the
+     attribute from blocks on open, so a mark an
+     undo restored never reaches a saved file. */
+  /* Marks from earlier strips are cleared first:
+     an undo can restore a block an earlier strip
+     marked, and its stale mark must never stand
+     in this strip's clone. */
+  bodyEl.querySelectorAll(
+    "[data-ssenc-strip-target]").forEach(
+    function (el) {
+      el.removeAttribute("data-ssenc-strip-target");
+    });
+  let stripToken = "";
+  if (!wrapped) {
+    ssencStripTargetSeq += 1;
+    stripToken = String(ssencStripTargetSeq);
+    block.setAttribute("data-ssenc-strip-target",
+      stripToken);
+  }
   const holder = document.createElement("div");
   if (wrapped) {
     holder.innerHTML = plainHtml;
   } else {
     const cUnit = unit.cloneNode(true);
     holder.appendChild(cUnit);
-    const cBlock = holder.querySelector("[data-ssenc]");
+    const cBlock = holder.querySelector(
+      "[data-ssenc-strip-target=\"" + stripToken +
+      "\"]");
     if (!cBlock) { return false; }
     const fragHolder = document.createElement("div");
     fragHolder.innerHTML = plainHtml;
@@ -67462,7 +67578,27 @@ function ssencStripInsert(bodyEl, block, plainHtml) {
     cParent.removeChild(cBlock);
   }
   if (sibIn) { holder.appendChild(sib.cloneNode(true)); }
-  const replacement = holder.innerHTML +
+  /* v2.98.0: a paragraph unit with no joined
+     sibling is replaced by its CONTENTS, not as
+     a node: the range covers the paragraph's
+     children and the replacement is the clone's
+     inner HTML (the guard still trails it, as a
+     sibling after the paragraph). Replacing the
+     paragraph as a node made the browser empty
+     it and leave the husk standing in front of
+     the replacement when the paragraph held a
+     non editable block beside the target (the
+     block beside region shape); the paragraph
+     element, its attributes included, is never
+     in the deletion that way, and the insert
+     stays the one undo step it has always been.
+     Every other shape keeps the whole node
+     replacement below. */
+  const contentsOnly = !wrapped && !sibIn &&
+    unit.tagName === "P";
+  const replacement = (contentsOnly ?
+      holder.querySelector("p").innerHTML :
+      holder.innerHTML) +
     "<p data-ssenc-strip-guard=\"1\"></p>";
   const from = Array.prototype.indexOf.call(
     host.childNodes, unit);
@@ -67472,8 +67608,13 @@ function ssencStripInsert(bodyEl, block, plainHtml) {
   bodyEl.focus();
   const sel = window.getSelection();
   const range = document.createRange();
-  range.setStart(host, from);
-  range.setEnd(host, to + 1);
+  if (contentsOnly) {
+    range.setStart(unit, 0);
+    range.setEnd(unit, unit.childNodes.length);
+  } else {
+    range.setStart(host, from);
+    range.setEnd(host, to + 1);
+  }
   sel.removeAllRanges();
   sel.addRange(range);
   const ok = document.execCommand("insertHTML", false,
@@ -67580,82 +67721,29 @@ function ssencStripRegion(region) {
   ssencRebindFragment(parent);
 }
 
-/* The Remove encryption control's action (Chris,
-   2026-11-02): strip one passage's encryption
+/* The open region's Remove encryption control
+   (v2.97.0, Chris's correction; since v2.98.0 the
+   removal's only door, the locked block's face
+   control and its flow being removed on his
+   direction that the control stand ONLY on an
+   open passage): strip this passage's encryption
    permanently, leaving its content standing as
-   ordinary note text and every other passage in the
-   note untouched. The vault key is required. While
-   the vault is locked, the flow runs the normal
-   unlock dialog first and, on success, carries on
-   to the removal itself rather than stopping at the
-   unlock: the dialog's decrypt pass has turned the
-   block into a region by then, and the passage is
-   found by its ciphertext. A cancelled dialog or a
-   wrong passphrase changes nothing. While the vault
-   already stands unlocked, a block can still stand
-   (a tampered block the decrypt pass left, or one
-   an undo restored); it is decrypted directly and
-   restored through the ordinary region machinery
-   before the strip. A passage whose ciphertext
-   cannot be decrypted cannot have its encryption
-   removed either: the flow says so in a toast and
-   changes nothing. The removal marks the note
-   dirty once, so it autosaves like any edit. */
-async function ssencRemoveEncryptionFlow(block) {
-  const bodyEl = document.getElementById("noteBody");
-  if (!block || !bodyEl || !bodyEl.contains(block)) {
-    return;
-  }
-  if (bodyEl.contentEditable === "false") { return; }
-  const iv = block.getAttribute("data-ssenc-iv");
-  const ct = block.getAttribute("data-ssenc-ct");
-  let region = null;
-  if (!ssencKey) {
-    const unlocked = await ssencOpenUnlockDialog();
-    if (!unlocked) { return; }
-    region = ssencFindRegionByCipher(iv, ct);
-    if (!region) {
-      toast("That text cannot be decrypted, so its " +
-        "encryption cannot be removed.", true);
-      return;
-    }
-  } else {
-    let html = null;
-    try {
-      html = await ssencDecryptHtml(iv, ct);
-    } catch (err) {
-      toast("That text cannot be decrypted, so its " +
-        "encryption cannot be removed.", true);
-      return;
-    }
-    region = ssencBuildRegion(html, iv, ct);
-    block.parentNode.replaceChild(region, block);
-    ssencRebindFragment(region);
-  }
-  ssencStripRegion(region);
-  markDirty();
-}
-
-/* The open region's own Remove encryption control
-   (v2.97.0, Chris's correction): a passage standing
-   decrypted gains the same permanent removal the
-   locked block's face offers. The region's chains
-   are flushed first, so the ciphertext its strip
+   ordinary note text and every other passage in
+   the note untouched. The region's chains are
+   flushed first, so the ciphertext its strip
    swap builds the locked block from is the
-   passage's current text, edits made while it stood
-   open included; the strip itself (see
-   ssencStripRegion) then peels the wrapper away and
-   leaves the content standing as ordinary note
-   text, the region's record dropped, so no later
-   collect, lock, or save can re-encrypt it. One
-   undo restores the passage as its locked block,
-   the same restore the locked block's removal
-   leaves behind (the strip composes through the
-   block in both flows); where the strip's fallback
-   ran, the removal stands without an undo step,
-   again as in the locked flow. The removal marks
-   the note dirty once, so it autosaves like any
-   edit. */
+   passage's current text, edits made while it
+   stood open included; the strip itself (see
+   ssencStripRegion) then peels the wrapper away
+   and leaves the content standing as ordinary
+   note text, the region's record dropped, so no
+   later collect, lock, or save can re-encrypt
+   it. One undo restores the passage as its
+   locked block (the strip composes through the
+   block); where the strip's fallback ran, the
+   removal stands without an undo step. The
+   removal marks the note dirty once, so it
+   autosaves like any edit. */
 async function ssencRemoveOpenRegionFlow(region) {
   const bodyEl = document.getElementById("noteBody");
   if (!region || !bodyEl || !bodyEl.contains(region)) {
@@ -67871,21 +67959,20 @@ function wireSsencControls() {
       void ssencLockVault();
       return;
     }
-    /* v2.93.0: the block face's Remove encryption
-       control runs the removal for its own block; it
-       is judged before the block's own click (the
-       unlock door) so a press on it can never fall
-       through to merely unlocking. */
+    /* The open region's Remove encryption control
+       runs the passage's dissolution; it is judged
+       before the block test below, so a press on
+       it can never fall through to anything else.
+       (v2.93.0 through v2.97.0 a locked block's
+       face carried the control too and this branch
+       ran that flow for it; since v2.98.0 the
+       control stands ONLY on an open passage, so
+       a locked block offers no removal to judge:
+       clicking one is the unlock door below, like
+       any other reading of it.) */
     const removeCtl = ev.target.closest(".ssenc-remove");
     if (removeCtl && bodyEl.contains(removeCtl)) {
       ev.preventDefault();
-      const owner = removeCtl.closest("[data-ssenc]");
-      if (owner) { void ssencRemoveEncryptionFlow(owner); }
-      /* v2.97.0: the open region's Remove control
-         runs its own dissolution; it is judged here
-         too, before the block test below, so a press
-         on it can never fall through to anything
-         else. */
       const openRegion = removeCtl.closest(".ssenc-open");
       if (openRegion) {
         void ssencRemoveOpenRegionFlow(openRegion);
