@@ -40,10 +40,39 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-11-03-SSN-V21050
-  Version: 2.105.0
+  BUILD STAMP: 2026-11-03-SSN-V21060
+  Version: 2.106.0
 
   Revision history:
+    v2.106.0 2026-11-03 Note links wear the pill
+                      dress of the chips. A link
+                      to a note inside a note,
+                      and in the Scratch Pad,
+                      was accent text with an
+                      underline; it now stands
+                      as a pill in the family of
+                      the email, event, and tag
+                      chips: the same border,
+                      soft ground, 20px radius,
+                      the mail chip's own
+                      padding, and the same
+                      .92em size, the note's
+                      title alone inside, no
+                      underline in any state,
+                      and a long title
+                      ellipsizing at a 320px
+                      cap instead of stretching
+                      the line. Styling only:
+                      no markup changes, so
+                      every saved note and
+                      scratch entry restyles
+                      itself, and the Title
+                      and Preview faces keep
+                      their block cards. In
+                      the print document a
+                      note link prints as
+                      plain text, the way the
+                      chips print there.
     v2.105.0 2026-11-03 The Scratch Pad is a
                       rich surface now, and
                       the email picker names
@@ -8155,9 +8184,36 @@ body.dark .modal:hover::-webkit-scrollbar-thumb{
 #noteBody li.done{color:var(--muted);text-decoration:line-through;}
 /* v2.1.0: links to other notes (href "ssnote:<id>", class ss-note-link)
    read as internal links: accent color and an underline. The accent
-   variable exists in both themes, so this holds in dark mode too. */
-#noteBody a.ss-note-link{color:var(--accent);text-decoration:underline;}
-.home-scratch-body a.ss-note-link{color:var(--accent);text-decoration:underline;}
+   variable exists in both themes, so this holds in dark mode too.
+   v2.106.0: the note link takes the pill dress of its
+   sibling chips (the event chip, the mail chip, the
+   tag pill): the same border, the same soft ground,
+   the same 20px radius, the mail chip's own padding,
+   and the same .92em size, with the note's title
+   alone inside and no underline in any state. The
+   anchor is inline-block rather than the chips'
+   inline-flex so the title itself ellipsizes under
+   the width cap (a flex item will not shrink below
+   its text); the cap is 320px, the one measure the
+   anchor adds of its own, since the siblings cap
+   their labels only by their line. The Title and
+   Preview faces keep their block card dress: their
+   rules key on two attributes and outrank this one.
+   Both surfaces, both themes through the standing
+   tokens. */
+#noteBody a.ss-note-link,
+.home-scratch-body a.ss-note-link{
+  display:inline-block;
+  border:1px solid var(--border);background:var(--soft);
+  color:var(--text);border-radius:20px;
+  padding:1px 10px 1px 7px;margin:0 1px;
+  font-size:.92em;cursor:pointer;white-space:nowrap;
+  vertical-align:baseline;user-select:none;
+  text-decoration:none;max-width:320px;
+  overflow:hidden;text-overflow:ellipsis;
+}
+#noteBody a.ss-note-link:hover,
+.home-scratch-body a.ss-note-link:hover{border-color:var(--accent);}
 /* v2.28.0: links to tasks inside a note (href
    "sstask:<id>", class ss-task-link): the internal link
    look of a note link, led by a small checkbox square
@@ -13991,8 +14047,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-11-03-SSN-V21050";
-const APP_VERSION = "2.105.0";
+const APP_BUILD = "2026-11-03-SSN-V21060";
+const APP_VERSION = "2.106.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -53958,6 +54014,7 @@ function buildPrintDocument(note, bodyHtml) {
     "th,td{border:1px solid #C9D6C9;padding:6px 10px;text-align:left;}" +
     "th{background:#EFF4EE;}" +
     "a{color:#14532D;}" +
+    "a.ss-note-link{color:inherit;text-decoration:none;}" +
     "ul{list-style-type:disc;}" +
     ":is(ul,ol) ul{list-style-type:circle;}" +
     ":is(ul,ol) :is(ul,ol) ul{list-style-type:square;}" +
