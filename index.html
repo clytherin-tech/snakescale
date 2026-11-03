@@ -40,10 +40,41 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-11-03-SSN-V21010
-  Version: 2.101.0
+  BUILD STAMP: 2026-11-03-SSN-V21020
+  Version: 2.102.0
 
   Revision history:
+    v2.102.0 2026-11-03 The voice bar's Stop and
+                      Cancel answer taps on the
+                      phone again. The bar is a
+                      fixed card that lived
+                      inside the editor's
+                      scrolling region, the
+                      arrangement whose paint
+                      and tap region can part
+                      ways on the phone (a
+                      recording starts with
+                      the keyboard up): Chris's
+                      bar stood fully visible
+                      with both buttons dead.
+                      The bar now lives at the
+                      body's top level, like
+                      the editor popups since
+                      v2.28.2, is placed with
+                      the visual viewport's
+                      offset counted in, and
+                      its buttons answer a
+                      touchend as well as a
+                      click, one press running
+                      exactly once. The wait
+                      for the recorder's stop
+                      event is raced against a
+                      timeout, so a stop an
+                      engine never answers
+                      finishes the recording
+                      with what was captured
+                      instead of leaving it
+                      running.
     v2.101.0 2026-11-03 The list fix release.
                       Lists created from a
                       paragraph come out as
@@ -8791,6 +8822,7 @@ body.dark #conflictReloadBtn{background:#574512;color:#FFE1A8;border-color:#A887
    the opaque surface, the card shadow, and a capped width. */
 .voice-bar{
   position:fixed;z-index:64;width:min(600px,94vw);
+  touch-action:manipulation;
   display:flex;align-items:flex-start;gap:10px;
   border:1px solid var(--border);border-radius:var(--radius-card);
   background:var(--surface);padding:8px 12px;
@@ -13715,8 +13747,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-11-03-SSN-V21010";
-const APP_VERSION = "2.101.0";
+const APP_BUILD = "2026-11-03-SSN-V21020";
+const APP_VERSION = "2.102.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -67169,6 +67201,23 @@ function positionVoiceBar() {
       top = Math.max(8, window.innerHeight - height - 8);
     }
   } else { return; }
+  /* v2.102.0: the rectangle reads above are visual
+     viewport coordinates, but a fixed element is placed
+     against the layout viewport. The two agree except
+     while the phone keyboard is up or a pinch zoom
+     stands, which is exactly when a recording starts:
+     there the visual viewport sits offset inside the
+     layout one, and a bar placed by the raw rectangle
+     paints where the caret is while its tap region is
+     computed from the other origin. Adding the offset
+     back when one stands puts the paint and the tap
+     region in the same rectangle; at rest the offsets
+     are zero and the placement is unchanged. */
+  const vv = window.visualViewport;
+  if (vv && (vv.offsetLeft || vv.offsetTop)) {
+    left += vv.offsetLeft;
+    top += vv.offsetTop;
+  }
   bar.style.left = left + "px";
   bar.style.top = top + "px";
 }
@@ -67307,6 +67356,16 @@ async function startVoiceNote() {
   document.getElementById("voiceInterimText").textContent = "";
   document.getElementById("voiceTimer").textContent = "00:00";
   document.getElementById("voiceBar").classList.remove("hidden");
+  /* v2.102.0: a fresh bar is a fresh press: the buttons'
+     single-fire stamps (see wireVoiceBarButton) are
+     cleared as the capture starts, so the guard can
+     only ever dedupe the two event forms of one press
+     on THIS bar, never the first press on the next
+     recording, however soon it is stopped. */
+  ["voiceStopBtn", "voiceCancelBtn"].forEach(function (id) {
+    const b = document.getElementById(id);
+    if (b) { b.__ssVoiceFiredAt = 0; }
+  });
   /* v2.14.1: the bar opens at the caret's line, not in the flow
      above the body. It is unhidden first so the size positionVoiceBar
      measures is the size on screen. */
@@ -67319,6 +67378,34 @@ async function startVoiceNote() {
     }
   }, 1000);
   capture.recorder.start(250);
+}
+
+/* v2.102.0: the bar's two buttons, wired to answer a
+   press in whichever event form the engine delivers
+   first. A healthy engine synthesizes a click from a
+   tap; the engines where the phone report came from
+   can let that synthesis go astray while the touch
+   itself lands true, so a touchend runs the press too
+   (suppressing its own default, so no synthesized
+   click follows it), and the stamp keeps one physical
+   press to exactly one run when both forms arrive.
+   A mouse or keyboard press still arrives as the plain
+   click it has always been. */
+function wireVoiceBarButton(id, fn) {
+  const el = document.getElementById(id);
+  if (!el) { return; }
+  const run = function (ev) {
+    const now = Date.now();
+    if (now - (el.__ssVoiceFiredAt || 0) < 700) { return; }
+    el.__ssVoiceFiredAt = now;
+    if (ev && ev.type === "touchend" &&
+        typeof ev.preventDefault === "function") {
+      ev.preventDefault();
+    }
+    fn();
+  };
+  el.addEventListener("click", run);
+  el.addEventListener("touchend", run);
 }
 
 /* Stop everything about a capture without saving any of it: the
@@ -67368,19 +67455,41 @@ async function stopVoiceNote() {
     }
   }
   capture.recognition = null;
+  /* v2.102.0: the wait for the recorder's own stop
+     event is raced against a timeout. An engine that
+     takes the stop() call and never answers it (the
+     mobile engines are the ones that do this) would
+     otherwise leave this promise, the bar, and the
+     recording standing forever. On the timeout the
+     capture finishes with whatever chunks had already
+     arrived, the teardown below runs exactly as it
+     does on a clean stop, and the user is told the
+     stop was not answered. A recording can therefore
+     never be left running by a failed stop. */
   const blob = await new Promise(function (resolve) {
     if (!capture.recorder) { resolve(null); return; }
     if (capture.recorder.state === "inactive") {
       resolve(new Blob(capture.chunks, { type: capture.mime }));
       return;
     }
+    let settled = false;
+    const finish = function (unanswered) {
+      if (settled) { return; }
+      settled = true;
+      if (unanswered) {
+        toast("The recorder did not answer Stop, so " +
+          "the recording was finished with what had " +
+          "been captured.", true);
+      }
+      resolve(new Blob(capture.chunks,
+        { type: capture.mime }));
+    };
     capture.recorder.onstop = function () {
-      resolve(new Blob(capture.chunks, { type: capture.mime }));
+      finish(false);
     };
     try { capture.recorder.stop(); }
-    catch (e) {
-      resolve(new Blob(capture.chunks, { type: capture.mime }));
-    }
+    catch (e) { finish(false); return; }
+    setTimeout(function () { finish(true); }, 1500);
   });
   if (capture.stream) {
     capture.stream.getTracks().forEach(function (t) { t.stop(); });
@@ -70141,6 +70250,26 @@ function wireEvents() {
     }
   });
 
+  /* v2.102.0: the voice bar takes the same move, for the
+     same reason and one sharper one. On the phone a
+     recording starts with the keyboard up, and a fixed
+     card parented inside the editor's scrolling region
+     is the arrangement whose paint and tap region can
+     part ways in that state: on 2026-11-03 Chris's bar
+     stood fully visible at the caret with both its
+     buttons dead to taps, while the same taps in a
+     desktop engine landed on the buttons themselves.
+     At the body's top level the bar's paint and its tap
+     region are one rectangle, the standing the popups'
+     move already proved. The bar is found by id
+     everywhere it is used, so the move changes nothing
+     else about it. */
+  const voiceBarHome = document.getElementById("voiceBar");
+  if (voiceBarHome &&
+      voiceBarHome.parentElement !== document.body) {
+    document.body.appendChild(voiceBarHome);
+  }
+
   /* Setup form (v2.0): there is nothing to fill in. Submitting
      creates this device's local encryption key, saves the (Google
      only) settings shape, clears any legacy vault artifact left by
@@ -71753,10 +71882,10 @@ function wireEvents() {
   document.getElementById("voiceNoteBtn").addEventListener("click", function () {
     startVoiceNote().catch(function (err) { toast(err.message, true); });
   });
-  document.getElementById("voiceStopBtn").addEventListener("click", function () {
+  wireVoiceBarButton("voiceStopBtn", function () {
     stopVoiceNote().catch(function (err) { toast(err.message, true); });
   });
-  document.getElementById("voiceCancelBtn").addEventListener("click", function () {
+  wireVoiceBarButton("voiceCancelBtn", function () {
     cancelVoiceNote();
   });
   document.addEventListener("keydown", function (ev) {
