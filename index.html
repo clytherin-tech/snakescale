@@ -40,10 +40,39 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-11-03-SSN-V21020
-  Version: 2.102.0
+  BUILD STAMP: 2026-11-03-SSN-V21030
+  Version: 2.103.0
 
   Revision history:
+    v2.103.0 2026-11-03 Three mail changes Chris
+                      directed. The Inbox in the
+                      folder column is a drop
+                      target now: dragging a
+                      message onto it moves the
+                      message back home, INBOX
+                      on and TRASH off if it sat
+                      in the Trash, every other
+                      label kept, behind the
+                      undo toast reading Moved
+                      to Inbox; its Undo
+                      restores the exact label
+                      set the message held,
+                      Trash and all. A drop of
+                      a message already home
+                      writes nothing. Labels
+                      is its own button in the
+                      reading pane's action
+                      row (the tag icon that
+                      stood in the menu),
+                      opening the same label
+                      picker; the More menu
+                      loses its Labels item
+                      and gains Move to Inbox,
+                      standing only while the
+                      open message is away
+                      from the Inbox, and
+                      running the same move
+                      as the drop.
     v2.102.0 2026-11-03 The voice bar's Stop and
                       Cancel answer taps on the
                       phone again. The bar is a
@@ -10191,8 +10220,18 @@ body.dark .task-cal-more{color:var(--accent);}
 .mail-icon-btn:hover{color:var(--text);background:var(--accent-soft);border-color:var(--accent);}
 .mail-icon-btn:focus-visible{outline:2px solid var(--accent);outline-offset:1px;color:var(--text);}
 .mail-more-wrap{position:relative;display:inline-flex;}
+/* v2.103.0: the menu hangs from the wrap's left
+   edge now. The wrap stands at the actions row's
+   left (the location span and the icon buttons
+   come first, with nothing pushing the wrap to
+   the row's right), so the right-anchored form
+   opened leftward across the message list and
+   the reading pane's overflow box clipped all
+   but a sliver of it, beyond a real click's
+   reach, for every item the menu carries. From
+   the left edge it opens inside the pane. */
 .mail-more-menu{
-  position:absolute;top:calc(100% + 6px);right:0;z-index:65;
+  position:absolute;top:calc(100% + 6px);left:0;z-index:65;
   min-width:210px;padding:6px;display:flex;flex-direction:column;gap:2px;
   background:var(--surface);border:1px solid var(--border);
   border-radius:var(--radius-card);box-shadow:0 10px 28px rgba(6,32,22,.28);
@@ -12442,10 +12481,11 @@ body.dark .version-date{color:var(--accent);}
             <button class="mail-icon-btn" id="mailArchiveBtn" type="button" title="Archive" aria-label="Archive"><svg viewBox="0 0 20 20" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="3" width="15" height="4" rx="1"/><path d="M4 7v8a1.5 1.5 0 0 0 1.5 1.5h9A1.5 1.5 0 0 0 16 15V7M8 10h4"/></svg></button>
             <button class="mail-icon-btn" id="mailTrashBtn" type="button" title="Trash" aria-label="Trash"><svg viewBox="0 0 20 20" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5h14M8 5V3.5A.5.5 0 0 1 8.5 3h3a.5.5 0 0 1 .5.5V5M5 5l.8 11a1.5 1.5 0 0 0 1.5 1.4h5.4A1.5 1.5 0 0 0 14.2 16L15 5M8.3 8.5v5M11.7 8.5v5"/></svg></button>
             <button class="mail-icon-btn" id="mailSnoozeBtn" type="button" title="Snooze" aria-label="Snooze"><svg viewBox="0 0 20 20" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10" cy="10" r="7.5"/><path d="M10 5.8V10l3 2"/></svg></button>
+            <button class="mail-icon-btn" id="mailLabelsBtn" type="button" title="Labels" aria-label="Labels" aria-haspopup="true"><svg viewBox="0 0 20 20" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 3.5H10L17 10.5 10.5 17 3.5 10Z"/><circle cx="7.3" cy="7.3" r="1.2"/></svg></button>
             <span class="mail-more-wrap">
               <button class="mail-icon-btn" id="mailMoreBtn" type="button" title="More actions" aria-label="More actions" aria-haspopup="true"><svg viewBox="0 0 20 20" width="17" height="17" fill="currentColor" aria-hidden="true"><circle cx="4" cy="10" r="1.5"/><circle cx="10" cy="10" r="1.5"/><circle cx="16" cy="10" r="1.5"/></svg></button>
               <span class="mail-more-menu hidden" id="mailMoreMenu" role="menu" aria-label="More message actions">
-                <button class="mail-more-item" id="mailMoreLabelsBtn" type="button" role="menuitem"><svg viewBox="0 0 20 20" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 3.5H10L17 10.5 10.5 17 3.5 10Z"/><circle cx="7.3" cy="7.3" r="1.2"/></svg><span>Labels</span></button>
+                <button class="mail-more-item" id="mailMoreMoveInboxBtn" type="button" role="menuitem"><svg viewBox="0 0 20 20" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 6.8 5.2 4h9.6L16.5 6.8V15a1.5 1.5 0 0 1-1.5 1.5H5A1.5 1.5 0 0 1 3.5 15Z"/><path d="M3.5 11.5h3.7l1.6 2.3h2.4l1.6-2.3h3.7"/></svg><span>Move to Inbox</span></button>
                 <button class="mail-more-item" id="mailMoreMarkBtn" type="button" role="menuitem"><svg viewBox="0 0 20 20" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="4" width="15" height="12" rx="1.6"/><path d="M3 5.5l7 5.5 7-5.5"/></svg><span id="mailMoreMarkLabel">Mark as unread</span></button>
                 <button class="mail-more-item" id="mailMoreSaveBtn" type="button" role="menuitem"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3h7l4 4v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M14 3v4h4"/></svg><span>Save to note</span></button>
               </span>
@@ -13747,8 +13787,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-11-03-SSN-V21020";
-const APP_VERSION = "2.102.0";
+const APP_BUILD = "2026-11-03-SSN-V21030";
+const APP_VERSION = "2.103.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -28703,13 +28743,18 @@ async function mailTrashWithUndo(rec) {
    that set exactly, from whatever list the drag
    started in. */
 async function mailLabelMoveWithUndo(rec, target, add,
-    remove) {
+    remove, nameOverride) {
   if (!rec) { return false; }
   const prior = rec.labelIds.slice();
   let labelName = target.id;
   (mailLabels || []).forEach(function (l) {
     if (l.id === target.id) { labelName = l.name; }
   });
+  /* v2.103: a caller naming its own destination
+     (the move to the Inbox) speaks for the
+     toast, since the labels map calls the
+     Inbox INBOX. */
+  if (nameOverride) { labelName = nameOverride; }
   const snap = {
     kind: "label", id: rec.id,
     clone: JSON.parse(JSON.stringify(rec)),
@@ -28726,6 +28771,86 @@ async function mailLabelMoveWithUndo(rec, target, add,
     "label");
   if (ok) { showMailUndoToast("label", snap); }
   return ok;
+}
+
+/* v2.103: the move back to the Inbox, behind
+   the undo toast: INBOX goes on, and a message
+   sitting in the Trash loses TRASH as it comes
+   back (it leaves the Trash); every other label
+   it holds stays on. The write is the label
+   move aimed home: the same snapshot and the
+   same Undo arithmetic, so an Undo restores
+   exactly the label set the message held (a
+   message brought out of the Trash goes back
+   to the Trash on Undo, with no INBOX). A
+   message already in the Inbox and not in the
+   Trash is already home: no write is made and
+   no toast stands. The drop on the Inbox
+   folder row and the More menu's Move to
+   Inbox item both land here. */
+async function mailMoveToInboxWithUndo(rec) {
+  if (!rec) { return false; }
+  const prior = rec.labelIds.slice();
+  const inTrash = prior.indexOf("TRASH") !== -1;
+  if (prior.indexOf("INBOX") !== -1 && !inTrash) {
+    return false;
+  }
+  const remove = inTrash ? ["TRASH"] : [];
+  /* A detached copy of the row as it stands, taken
+     before the write: the apply path settles the
+     copies standing in lists and lifts a row out
+     of any list it stops belonging to, and a
+     message whose only standing copy is filtered
+     out of its old list by this very move (the
+     Trash copy, say) would otherwise leave no row
+     behind to bring home below. */
+  const homeward = JSON.parse(JSON.stringify(rec));
+  const ok = await mailLabelMoveWithUndo(rec,
+    { id: "INBOX" }, ["INBOX"], remove, "Inbox");
+  if (ok) {
+    mailSeatRowInInbox(homeward, ["INBOX"], remove);
+  }
+  return ok;
+}
+
+/* Seat a moved message's row in the Inbox list's
+   cache, at its date place among the rows standing
+   there: the apply path settles the copies that
+   stand in lists, but it never seats a row in a
+   list the message newly belongs to, so without
+   this the Inbox list would not show the message
+   home until a reload refetched it. A copy already
+   standing is left alone (the apply path settled
+   it in place), and an Inbox list that was never
+   loaded needs nothing (its first load reads the
+   server's truth). The move itself is applied to
+   the copy here for the same reason: its standing
+   originals may already have been filtered away. */
+function mailSeatRowInInbox(copy, add, remove) {
+  const key = mailListKey({ kind: "folder", id: "inbox" });
+  const list = mailLists[key];
+  if (!list || !list.loaded) { return; }
+  const held = list.rows.some(function (r) {
+    return r.id === copy.id;
+  });
+  if (held) { return; }
+  add.forEach(function (l) {
+    if (copy.labelIds.indexOf(l) === -1) {
+      copy.labelIds.push(l);
+    }
+  });
+  remove.forEach(function (l) {
+    const at = copy.labelIds.indexOf(l);
+    if (at !== -1) { copy.labelIds.splice(at, 1); }
+  });
+  copy.unread = copy.labelIds.indexOf("UNREAD") !== -1;
+  let at = list.rows.length;
+  for (let i = 0; i < list.rows.length; i++) {
+    if (list.rows[i].dateMs < copy.dateMs) {
+      at = i; break;
+    }
+  }
+  list.rows.splice(at, 0, copy);
 }
 
 /* ----- v2.100: snooze --------------------------------
@@ -29377,8 +29502,10 @@ async function confirmMailSnoozePick() {
 }
 
 /* A drop lands: the message the drag carried, acted on
-   by the target it fell on. All Mail archives and
-   Trash trashes (both behind the undo toast); a user
+   by the target it fell on. The Inbox moves the
+   message back home (v2.103, behind the undo
+   toast); All Mail archives and Trash trashes
+   (both behind the undo toast); a user
    label is a move (v2.95, Chris's rule, widened by
    him the same day): from whatever list the drag
    started in, the label applies AND the message
@@ -29396,6 +29523,10 @@ function mailDropOnTarget(target) {
   if (!drag) { return; }
   const rec = mailRowById(drag.id);
   if (!rec) { return; }
+  if (target.kind === "folder" && target.id === "inbox") {
+    mailMoveToInboxWithUndo(rec);
+    return;
+  }
   if (target.kind === "folder" && target.id === "all") {
     mailArchiveWithUndo(rec);
     return;
@@ -29429,8 +29560,8 @@ function mailDropOnTarget(target) {
 
 /* The drop dress on one folder column row: the drag
    over lights it, the leave and the drop take the
-   light back. Only the round's three target kinds
-   wear it. */
+   light back. The folder rows and the label
+   rows wear it (the Inbox included, v2.103). */
 function mailArmDropTarget(el, target) {
   el.addEventListener("dragover", function (ev) {
     if (!mailDragState) { return; }
@@ -31613,10 +31744,10 @@ function renderMailFolders() {
       btn.addEventListener("click", function () {
         mailChooseSelection({ kind: "folder", id: f.id });
       });
-      if (f.id === "all" || f.id === "trash") {
-        mailArmDropTarget(btn,
-          { kind: "folder", id: f.id });
-      }
+      /* v2.103: the Inbox is a drop target too: a
+         drop on it moves the message back home. */
+      mailArmDropTarget(btn,
+        { kind: "folder", id: f.id });
       list.appendChild(btn);
     });
     const labels = mailUserLabels();
@@ -32284,6 +32415,17 @@ function renderMailRead() {
   trashBtn.setAttribute("aria-label", trashBtn.title);
   mailEl("mailMoreMarkLabel").textContent = full.unread
     ? "Mark as read" : "Mark as unread";
+  /* v2.103: the More menu's Move to Inbox
+     stands only while the open message is
+     away from the Inbox (it lacks INBOX, or
+     it sits in the Trash); a message at home
+     gives it nothing to do. */
+  const moveInboxItem = mailEl("mailMoreMoveInboxBtn");
+  if (moveInboxItem) {
+    moveInboxItem.classList.toggle("hidden",
+      full.labelIds.indexOf("INBOX") !== -1 &&
+        !inTrash);
+  }
   const labelsMenu = mailEl("mailLabelsMenu");
   if (labelsMenu &&
       !labelsMenu.classList.contains("hidden")) {
@@ -32977,14 +33119,23 @@ function initMailBindings() {
           "mark");
       }
     });
-  mailEl("mailMoreLabelsBtn").addEventListener("click",
+  /* v2.103: Labels is its own button in the
+     action row now, no longer an item inside
+     the More menu; the picker it opens is
+     the standing one. */
+  mailEl("mailLabelsBtn").addEventListener("click",
     function () {
-      mailEl("mailMoreMenu").classList.add("hidden");
       const menu = mailEl("mailLabelsMenu");
       if (!menu || !mailOpenFull) { return; }
       const opening = menu.classList.contains("hidden");
       if (opening) { buildMailLabelsMenu(mailOpenFull); }
       menu.classList.toggle("hidden", !opening);
+    });
+  mailEl("mailMoreMoveInboxBtn").addEventListener(
+    "click", function () {
+      mailEl("mailMoreMenu").classList.add("hidden");
+      if (!mailOpenFull) { return; }
+      mailMoveToInboxWithUndo(mailOpenFull);
     });
   document.addEventListener("click", function (ev) {
     const t = ev.target;
@@ -32992,7 +33143,7 @@ function initMailBindings() {
     const menu = mailEl("mailLabelsMenu");
     if (menu && !menu.classList.contains("hidden") &&
         !t.closest("#mailLabelsMenu") &&
-        !t.closest("#mailMoreLabelsBtn")) {
+        !t.closest("#mailLabelsBtn")) {
       menu.classList.add("hidden");
     }
     /* v2.84 (Part 2): the More menu closes on an
