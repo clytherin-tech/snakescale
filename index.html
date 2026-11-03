@@ -40,10 +40,44 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-11-02-SSN-V2980
-  Version: 2.98.0
+  BUILD STAMP: 2026-11-02-SSN-V2990
+  Version: 2.99.0
 
   Revision history:
+    v2.99.0 2026-11-02 The code block caret drops
+                      to the new line the moment
+                      Enter is pressed. Since
+                      v2.97.0, typing after Enter
+                      landed on the new line, but
+                      the caret itself still
+                      painted at the end of the
+                      line above until typing
+                      resumed (Chris: "it doesn't
+                      go down to the next line
+                      until I actually start typing
+                      again"): the empty last line
+                      had no line box for the
+                      caret to stand on. A code
+                      block whose text ends in a
+                      newline now carries a
+                      trailing furniture break
+                      that gives that line its
+                      box, maintained as the text
+                      changes and stripped again
+                      by the save funnel, so saved
+                      notes are byte-identical to
+                      before. With the box
+                      standing, typing and
+                      Backspace at that caret are
+                      the browser's own work again
+                      (both re-derived in a real
+                      browser); the beforeinput
+                      guard from v2.97.0 survives
+                      narrowed to forward Delete
+                      alone, which left to the
+                      browser eats through the
+                      break and pulls the block
+                      after the pre into it.
     v2.98.0 2026-11-02 Two encryption refinements
                       Chris directed after testing
                       v2.97.0. The Remove encryption
@@ -13462,8 +13496,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-11-02-SSN-V2980";
-const APP_VERSION = "2.98.0";
+const APP_BUILD = "2026-11-02-SSN-V2990";
+const APP_VERSION = "2.99.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -42182,6 +42216,12 @@ function renderEditor() {
        is unlocked they decrypt in place; while locked
        the stored blocks already show their faces. */
     ssencDecorateEditorBody();
+    /* v2.99.0: the body just filled takes its code
+       blocks' caret furniture (see decorateCode
+       CaretBrs), so a block whose stored text ends
+       in a newline stands at full height, its empty
+       last line boxed, before anything is touched. */
+    decorateCodeCaretBrs(document.getElementById("noteBody"));
     setSaveState(note.trashed ? "In Trash" :
       (note.archived ? "Archived" : "Saved"));
     /* v1.2: fill the attachment placeholders from the providers. This is
@@ -44449,6 +44489,15 @@ function canonicalizeAttachmentPlaceholders(html) {
     el.classList.remove("ss-cell-selected");
     if (!el.classList.length) { el.removeAttribute("class"); }
   });
+  /* v2.99.0: a code block's caret furniture (the
+     trailing br.ss-code-caret-br that gives an
+     empty last line its box, see syncCodeCaretBr)
+     is editor only, like the cell selection above:
+     the block's trailing newline lives in its own
+     text, so a saved body carries the block exactly
+     as it did before the furniture existed. */
+  holder.querySelectorAll("br.ss-code-caret-br")
+    .forEach(function (el) { el.remove(); });
   /* v2.37.0: a table of contents block canonicalizes the
      same way an attachment does: the stored element is
      rebuilt from scratch (class and contenteditable only)
@@ -49805,6 +49854,9 @@ function insertCodeBlock() {
   } else {
     placeCaretIn(code, 0);
   }
+  /* v2.99.0: a block born holding text that ends in
+     a newline takes its caret furniture at once. */
+  syncCodeCaretBr(pre);
 }
 
 /* Insert, Inline Code: wrap the selection in code.ss-inline-code,
@@ -49908,10 +49960,125 @@ function codeBlockAtSelection() {
   return pre;
 }
 
+/* ----- v2.99.0: the code block caret furniture ------------------------------
+   A code block whose text ends in a newline has an
+   empty last line, and Chromium gives that line no
+   box of its own: the block renders one line short,
+   and a caret placed after the trailing newline
+   paints at the end of the line above instead of
+   on the new line (Chris, on v2.97.0: "when I hit
+   enter... it doesn't go down to the next line
+   until I actually start typing again"; the
+   geometry is measured in this build's rig probes:
+   the collapsed caret range returns no client rect
+   at all there, and the painted caret bar stands
+   on the line above). The furniture is a single
+   trailing break, classed so every reader can tell
+   it apart from content: while it stands as the
+   text host's last child, the empty last line has
+   a real line box and the caret placed before the
+   break paints on that line the moment it is
+   placed. The break is pure furniture: the text
+   model below never counts it (the newline it
+   serves already stands in the text), the save
+   funnel strips it (canonicalizeAttachmentPlace
+   holders), and syncCodeCaretBr re-derives it from
+   the block's text alone after every change that
+   can move the trailing newline: the app's Enter,
+   Tab, and paste routes, the body's input events
+   (which is where native edits land), and the
+   render pass that fills the body. The one shape
+   sync will not touch is a trailing newline
+   carried by a PLAIN break: that break is content
+   (it is itself the last line's box, the form
+   pastes and imports can leave behind), so it is
+   left exactly as it stands. A plain break left
+   trailing a text newline by the browser's own
+   editing (its line holder after a native
+   Backspace on the empty last line) is adopted
+   instead (classed, never stacked), which matches
+   how the platform itself uses that shape. */
+const CODE_CARET_BR_CLASS = "ss-code-caret-br";
+
+function isCodeCaretBr(node) {
+  return !!node && node.nodeType === 1 &&
+    node.tagName === "BR" && !!node.classList &&
+    node.classList.contains(CODE_CARET_BR_CLASS);
+}
+
+/* The element a code block's text lives in: the
+   code element when the block is the Insert menu's
+   shape (the code element as the pre's only child),
+   otherwise the pre itself. The one host choice
+   flattenCodePre and setCodePreText have always
+   made, named once here. */
+function codeTextHost(pre) {
+  if (pre.childNodes.length === 1 &&
+      pre.firstChild.nodeType === 1 &&
+      pre.firstChild.tagName === "CODE") {
+    return pre.firstChild;
+  }
+  return pre;
+}
+
+/* Bring one code block's caret furniture in line
+   with its text (see the section head above):
+   exactly one classed trailing break in the text
+   host while the block's text, read from its text
+   nodes alone, ends in a newline; none otherwise.
+   Idempotent, and safe to call on any pre the
+   block routes accept. */
+function syncCodeCaretBr(pre) {
+  if (!pre) { return; }
+  const host = codeTextHost(pre);
+  if (!host || !host.querySelectorAll) { return; }
+  host.querySelectorAll("br." + CODE_CARET_BR_CLASS)
+    .forEach(function (el) { el.remove(); });
+  let plain = "";
+  (function walk(node) {
+    const kids = node.childNodes;
+    for (let i = 0; i < kids.length; i++) {
+      const n = kids[i];
+      if (n.nodeType === 3) { plain += n.data; }
+      else if (n.nodeType === 1 && n.tagName !== "BR") {
+        walk(n);
+      }
+    }
+  })(host);
+  if (!plain || plain.charAt(plain.length - 1) !== "\n") {
+    return;
+  }
+  const last = host.lastChild;
+  if (last && last.nodeType === 1 &&
+      last.tagName === "BR") {
+    last.classList.add(CODE_CARET_BR_CLASS);
+    return;
+  }
+  const br = document.createElement("br");
+  br.setAttribute("class", CODE_CARET_BR_CLASS);
+  host.appendChild(br);
+}
+
+/* The render pass's sweep (called from renderEditor
+   beside the other body decorations): every code
+   block in the body just filled takes the furniture
+   its stored text calls for, so a reopened block
+   whose text ends in a newline stands at full
+   height before anything is touched. */
+function decorateCodeCaretBrs(rootEl) {
+  if (!rootEl || !rootEl.querySelectorAll) { return; }
+  rootEl.querySelectorAll("pre").forEach(function (pre) {
+    if (codeBlockOfNode(pre)) { syncCodeCaretBr(pre); }
+  });
+}
+
 /* The text a pre displays, in the line operations' measure:
    text nodes contribute their characters and a br
    contributes the line break it renders. Other elements
-   contribute what they hold. */
+   contribute what they hold. The one exception is
+   the caret furniture break (see the section
+   above): it contributes nothing, because the
+   newline it serves already stands in the text. */
 function codePreText(el) {
   let out = "";
   const kids = el.childNodes;
@@ -49919,7 +50086,9 @@ function codePreText(el) {
     const n = kids[i];
     if (n.nodeType === 3) { out += n.data; }
     else if (n.nodeType === 1) {
-      if (n.tagName === "BR") { out += "\n"; }
+      if (n.tagName === "BR") {
+        if (!isCodeCaretBr(n)) { out += "\n"; }
+      }
       else { out += codePreText(n); }
     }
   }
@@ -49931,7 +50100,9 @@ function codeTextLength(node) {
   if (!node) { return 0; }
   if (node.nodeType === 3) { return node.data.length; }
   if (node.nodeType !== 1) { return 0; }
-  if (node.tagName === "BR") { return 1; }
+  if (node.tagName === "BR") {
+    return isCodeCaretBr(node) ? 0 : 1;
+  }
   let total = 0;
   node.childNodes.forEach(function (c) {
     total += codeTextLength(c);
@@ -49989,12 +50160,7 @@ function codeOffsetInPre(pre, container, offset) {
    pastes and imports can leave behind. */
 function flattenCodePre(pre) {
   const text = codePreText(pre);
-  let host = pre;
-  if (pre.childNodes.length === 1 &&
-      pre.firstChild.nodeType === 1 &&
-      pre.firstChild.tagName === "CODE") {
-    host = pre.firstChild;
-  }
+  const host = codeTextHost(pre);
   if (host.childNodes.length === 1 &&
       host.firstChild.nodeType === 3 &&
       host.firstChild.data === text) {
@@ -50014,12 +50180,7 @@ function setCodePreText(pre, textNode, text) {
     textNode.data = text;
     return textNode;
   }
-  let host = pre;
-  if (pre.childNodes.length === 1 &&
-      pre.firstChild.nodeType === 1 &&
-      pre.firstChild.tagName === "CODE") {
-    host = pre.firstChild;
-  }
+  const host = codeTextHost(pre);
   const node = document.createTextNode(text);
   host.appendChild(node);
   return node;
@@ -50084,6 +50245,7 @@ function handleCodeBlockEnter() {
       placeCaretIn(p, 0);
     } else {
       setCodePreText(pre, textNode0, text.slice(0, -1));
+      syncCodeCaretBr(pre);
       let next = pre.nextElementSibling;
       if (!next) {
         next = emptyFollowParagraph();
@@ -50097,6 +50259,11 @@ function handleCodeBlockEnter() {
   const node = setCodePreText(pre, textNode0,
     text.slice(0, start) + "\n" + text.slice(end));
   setCodeCaret(node, start + 1, start + 1);
+  /* v2.99.0: the new last line takes its caret
+     furniture in the same edit, so the caret the
+     line above parks after the newline paints on
+     the new line at once (see syncCodeCaretBr). */
+  syncCodeCaretBr(pre);
   markDirty();
   return true;
 }
@@ -50198,6 +50365,7 @@ function codeIndentLines(pre, range, outdent) {
   }
   const node = setCodePreText(pre, textNode0, newText);
   setCodeCaret(node, newStart, newEnd);
+  syncCodeCaretBr(pre);
   if (changed) { markDirty(); }
   return changed;
 }
@@ -50234,54 +50402,50 @@ function insertPlainTextIntoCode(pre, text) {
   const node = setCodePreText(pre, textNode0,
     cur.slice(0, start) + clean + cur.slice(end));
   setCodeCaret(node, start + clean.length, start + clean.length);
+  syncCodeCaretBr(pre);
   markDirty();
   return true;
 }
 
 
-/* v2.97.0: the caret the code block Enter leaves
-   behind cannot take typed text in Chromium.
-   Diagnosis (reproduced in a real browser, rig
-   probes on file with this build): the app's Enter
-   inserts a plain newline at the caret and parks
-   the caret after it; when that newline is the
-   block's last character, the position after it is
-   not an editing position Chromium honors. Its
-   canonical editing position for the start of the
-   empty last line sits BEFORE the trailing newline,
-   so a typed character lands before the newline and
-   the line being typed piles onto the previous one
-   (Chris: "I hit enter, it doesn't go to the next
-   line"), a Backspace there eats the last character
-   of the line above instead of the break, and a
-   forward Delete can pull the next block's text
-   into the pre. No caret placement escapes it (a
-   text point, an element point, inside the code
-   element or loose in the pre all behave the same),
-   because the position itself is what the engine
-   remaps. So at that one caret position, and
-   nowhere else, the app takes the gesture itself:
-   this beforeinput handler claims a typed character
-   (insertText) and the two delete gestures while
-   the collapsed caret stands at the very end of a
-   code block whose text ends in a newline, and
-   performs them through the block's own text model
-   (the paste route's insertion for characters; for
-   the deletes, dropping the trailing newline, which
-   is the gesture's plain meaning on an empty last
-   line: the caret lands at the end of the text that
-   remains). Composition input is never claimed (an
-   IME session owns its gestures), a selection is
-   never claimed, and every other position in the
-   block and every position outside it keeps the
-   browser's own editing exactly as before. Returns
-   true when the gesture was the app's. */
+/* v2.97.0 shipped a beforeinput guard claiming
+   insertText and both delete gestures at the caret
+   a code block Enter leaves after a trailing
+   newline, because Chromium honored no editing
+   position there: the empty last line had no line
+   box, so the position remapped to the end of the
+   line above and typed characters piled onto it.
+   v2.99.0 gives that line its box (the caret
+   furniture: syncCodeCaretBr in the code block
+   section), and the gestures were re-derived
+   against the new DOM shape in a real browser
+   (this build's rig probes, on file): with the
+   furniture break standing and the caret before
+   it, typing lands natively after the newline, on
+   the new line (the engine consumes the furniture
+   as the line fills, and the body's input wiring
+   re-derives what remains), and Backspace on the
+   empty last line deletes natively exactly the
+   trailing newline and nothing of the line above
+   (the engine leaves its own plain break behind
+   as the line holder, which the input wiring then
+   adopts as the furniture). Forward Delete is
+   still destructive at that caret: left to the
+   engine it eats through the break and pulls the
+   block after the pre into the pre. So the guard
+   survives narrowed to that one gesture at that
+   one caret position, and performs its shipped
+   meaning through the block's own text model:
+   drop the trailing newline, and the caret lands
+   at the end of the text that remains. Composition
+   input is never claimed (an IME session owns its
+   gestures), a selection is never claimed, and
+   every other gesture, position, and block keeps
+   the browser's own editing exactly as before.
+   Returns true when the gesture was the app's. */
 function handleCodeBlockBeforeInput(ev) {
   if (!ev || ev.isComposing) { return false; }
-  const type = ev.inputType;
-  if (type !== "insertText" &&
-      type !== "deleteContentBackward" &&
-      type !== "deleteContentForward") {
+  if (ev.inputType !== "deleteContentForward") {
     return false;
   }
   const pre = codeBlockAtSelection();
@@ -50297,12 +50461,6 @@ function handleCodeBlockBeforeInput(ev) {
   const off = codeOffsetInPre(pre, range.startContainer,
     range.startOffset);
   if (off !== text.length) { return false; }
-  if (type === "insertText") {
-    if (typeof ev.data !== "string" || !ev.data) {
-      return false;
-    }
-    return insertPlainTextIntoCode(pre, ev.data);
-  }
   const note = currentNote();
   if (!note || note.trashed || note.archived) {
     return false;
@@ -50315,6 +50473,7 @@ function handleCodeBlockBeforeInput(ev) {
   const node = setCodePreText(pre, textNode0,
     text.slice(0, -1));
   setCodeCaret(node, node.data.length, node.data.length);
+  syncCodeCaretBr(pre);
   markDirty();
   return true;
 }
@@ -69932,6 +70091,20 @@ function wireEvents() {
   document.getElementById("noteBody").addEventListener("input", function () {
     queueAttachmentBodyCheck();
   });
+  /* v2.99.0: the same body input events keep the
+     code block at the caret's caret furniture true
+     (see syncCodeCaretBr): a native edit that fills
+     a block's empty last line retires its furniture
+     break, one that empties the line back to a
+     trailing newline restores it, and the plain
+     break a native Backspace leaves standing as
+     the line holder is adopted. A separate
+     listener; the ones above and below are
+     untouched. */
+  document.getElementById("noteBody").addEventListener("input", function () {
+    const pre = codeBlockAtSelection();
+    if (pre) { syncCodeCaretBr(pre); }
+  });
   /* v2.85: the tag pill deletion watch: a deletion
      gesture's beforeinput snapshots the body's pill
      counts, and the input event that follows every
@@ -71106,12 +71279,14 @@ function wireEvents() {
   });
 
 
-  /* v2.97.0: typed characters and the delete keys at
+  /* v2.97.0, narrowed in v2.99.0: forward Delete at
      the one caret position a code block Enter leaves
-     in Chromium (see handleCodeBlockBeforeInput in
-     the editor section): the app takes those gestures
-     there, through the block's own text model, and
-     steps aside everywhere else. */
+     (see handleCodeBlockBeforeInput in the editor
+     section): with the caret furniture standing,
+     typing and Backspace at that position are the
+     browser's own again, and only forward Delete,
+     which would pull the next block into the pre,
+     is still the app's there. */
   noteBodyEl.addEventListener("beforeinput", function (ev) {
     if (handleCodeBlockBeforeInput(ev)) {
       ev.preventDefault();
