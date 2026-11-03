@@ -40,10 +40,53 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-11-02-SSN-V2990
-  Version: 2.99.0
+  BUILD STAMP: 2026-11-02-SSN-V21000
+  Version: 2.100.0
 
   Revision history:
+    v2.100.0 2026-11-02 Email snooze. Gmail has no
+                      snooze of its own, so the app
+                      manages it, per message: a
+                      Snooze control in the reading
+                      pane's action row and on a
+                      row's quick actions opens the
+                      choices (Later today, three
+                      hours on; Tomorrow, 8:00 AM;
+                      Next week, Monday 8:00 AM; or
+                      a picked date and time, each
+                      row naming the exact return it
+                      will use, computed in Chris's
+                      zone). Snoozing writes the
+                      return FIRST into a small
+                      schedule file in the store
+                      root, mail-snooze.json (ids
+                      and a time only, never mail
+                      content), then moves the
+                      message: the Snoozed label
+                      on, INBOX off, behind the
+                      standing undo toast. A refused
+                      modify rolls the entry back
+                      out; a failed schedule write
+                      leaves the message untouched.
+                      The Snoozed label is an
+                      ordinary user label, found by
+                      name or created once, standing
+                      in the folder column; a snoozed
+                      message opened anywhere shows
+                      "Snoozed until" with an
+                      Unsnooze action beside it.
+                      Returns land on time even
+                      with the app closed: the push
+                      Worker reads the same file on
+                      its five minute pass (its v2),
+                      and the app reconciles due
+                      entries itself at the sign in
+                      landing and on the auto sync
+                      tick as a safety net. Every
+                      write of the file re-reads it
+                      fresh and merges by message
+                      id, so the app and the Worker
+                      never clobber each other.
     v2.99.0 2026-11-02 The code block caret drops
                       to the new line the moment
                       Enter is pressed. Since
@@ -10044,6 +10087,25 @@ body.dark .task-cal-more{color:var(--accent);}
 }
 .mail-undo-btn:hover{filter:brightness(1.1);}
 .mail-undo-btn:focus-visible{outline:2px solid var(--text);outline-offset:1px;}
+/* v2.100: snooze. The choices menu itself wears the
+   shared note-ctx-menu dress; these are its rows
+   (the choice's name, and the exact return it will
+   use standing muted beside it) and the reading
+   pane's snoozed line. */
+.mail-snooze-item{
+  display:flex;align-items:center;justify-content:space-between;gap:14px;width:100%;
+  background:none;border:none;border-radius:7px;padding:7px 9px;
+  color:var(--text);font-size:13.5px;cursor:pointer;text-align:left;
+}
+.mail-snooze-item:hover,.mail-snooze-item:focus-visible{background:var(--accent-soft);}
+.mail-snooze-when{color:var(--muted);font-size:12.5px;white-space:nowrap;}
+.mail-snoozed-line{
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  border:1px solid var(--border);border-radius:var(--radius-card);
+  background:var(--accent-soft);color:var(--text);
+  padding:8px 12px;margin-bottom:14px;font-size:13.5px;
+}
+.mail-snoozed-line.hidden{display:none;}
 /* Part 7: the contacts autocomplete dropdown, parked
    under the recipient field it serves. */
 .mail-recip-field{position:relative;}
@@ -12215,6 +12277,7 @@ body.dark .version-date{color:var(--accent);}
             <button class="mail-icon-btn" id="mailForwardBtn" type="button" title="Forward" aria-label="Forward"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 10l5 5-5 5"/><path d="M20 15H9a5 5 0 0 1-5-5V4"/></svg></button>
             <button class="mail-icon-btn" id="mailArchiveBtn" type="button" title="Archive" aria-label="Archive"><svg viewBox="0 0 20 20" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="3" width="15" height="4" rx="1"/><path d="M4 7v8a1.5 1.5 0 0 0 1.5 1.5h9A1.5 1.5 0 0 0 16 15V7M8 10h4"/></svg></button>
             <button class="mail-icon-btn" id="mailTrashBtn" type="button" title="Trash" aria-label="Trash"><svg viewBox="0 0 20 20" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5h14M8 5V3.5A.5.5 0 0 1 8.5 3h3a.5.5 0 0 1 .5.5V5M5 5l.8 11a1.5 1.5 0 0 0 1.5 1.4h5.4A1.5 1.5 0 0 0 14.2 16L15 5M8.3 8.5v5M11.7 8.5v5"/></svg></button>
+            <button class="mail-icon-btn" id="mailSnoozeBtn" type="button" title="Snooze" aria-label="Snooze"><svg viewBox="0 0 20 20" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10" cy="10" r="7.5"/><path d="M10 5.8V10l3 2"/></svg></button>
             <span class="mail-more-wrap">
               <button class="mail-icon-btn" id="mailMoreBtn" type="button" title="More actions" aria-label="More actions" aria-haspopup="true"><svg viewBox="0 0 20 20" width="17" height="17" fill="currentColor" aria-hidden="true"><circle cx="4" cy="10" r="1.5"/><circle cx="10" cy="10" r="1.5"/><circle cx="16" cy="10" r="1.5"/></svg></button>
               <span class="mail-more-menu hidden" id="mailMoreMenu" role="menu" aria-label="More message actions">
@@ -12223,6 +12286,10 @@ body.dark .version-date{color:var(--accent);}
                 <button class="mail-more-item" id="mailMoreSaveBtn" type="button" role="menuitem"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3h7l4 4v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M14 3v4h4"/></svg><span>Save to note</span></button>
               </span>
             </span>
+          </div>
+          <div class="mail-snoozed-line hidden" id="mailSnoozedLine">
+            <span id="mailSnoozedText"></span>
+            <button class="btn small" id="mailUnsnoozeBtn" type="button">Unsnooze</button>
           </div>
           <div class="mail-labels-menu hidden" id="mailLabelsMenu"></div>
           <div class="mail-attachments hidden" id="mailAttachments"></div>
@@ -13071,6 +13138,26 @@ body.dark .version-date{color:var(--accent);}
   </div>
 </div>
 
+<div id="mailSnoozeMenu" class="note-ctx-menu hidden" role="menu" aria-label="Snooze until">
+  <div class="note-ctx-head">Snooze until</div>
+  <div id="mailSnoozeMenuRows"></div>
+</div>
+
+<div id="mailSnoozePickModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="mailSnoozePickTitle">
+  <div class="modal-card">
+    <h2 id="mailSnoozePickTitle">Snooze until</h2>
+    <div class="field">
+      <label for="mailSnoozePickInput">Return at</label>
+      <input id="mailSnoozePickInput" type="datetime-local">
+    </div>
+    <p class="gcal-ev-error hidden" id="mailSnoozePickError"></p>
+    <div class="modal-foot">
+      <button class="btn" id="mailSnoozePickCancelBtn" type="button">Cancel</button>
+      <button class="btn primary" id="mailSnoozePickBtn" type="button">Snooze</button>
+    </div>
+  </div>
+</div>
+
 <div id="mailLabelMenu" class="note-ctx-menu hidden" role="menu" aria-label="Label actions">
   <button type="button" class="list-menu-item" id="mailLabelRenameBtn" role="menuitem">Rename</button>
   <button type="button" class="list-menu-item" id="mailLabelDeleteBtn" role="menuitem">Delete</button>
@@ -13496,8 +13583,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-11-02-SSN-V2990";
-const APP_VERSION = "2.99.0";
+const APP_BUILD = "2026-11-02-SSN-V21000";
+const APP_VERSION = "2.100.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -28334,7 +28421,9 @@ function showMailUndoToast(kind, snap) {
     ? "Archived"
     : kind === "label"
       ? "Moved to " + (snap.labelName || "label")
-      : "Moved to Trash";
+      : kind === "snooze"
+        ? "Snoozed until " + (snap.untilText || "")
+        : "Moved to Trash";
   el.appendChild(label);
   const btn = document.createElement("button");
   btn.type = "button";
@@ -28366,6 +28455,14 @@ async function mailUndoTriage(snap) {
   if (snap.kind === "archive") {
     ok = await mailModifyMessage(clone, ["INBOX"], [],
       "mark");
+  } else if (snap.kind === "snooze") {
+    /* v2.100: a snooze's Undo is the return with the
+       snapshot's own label: the Inbox comes back, the
+       Snoozed label comes off, and the registry entry
+       comes out, on the modify's acceptance alone. */
+    ok = await mailModifyMessage(clone, ["INBOX"],
+      [snap.labelId], "mark");
+    if (ok) { await mailSnoozeRemoveEntry(snap.id); }
   } else if (snap.kind === "label") {
     /* v2.95: a label move's Undo restores the exact
        label set the snapshot carried: the labels the
@@ -28465,6 +28562,654 @@ async function mailLabelMoveWithUndo(rec, target, add,
     "label");
   if (ok) { showMailUndoToast("label", snap); }
   return ok;
+}
+
+/* ----- v2.100: snooze --------------------------------
+   Gmail has no snooze of its own; the app manages it,
+   per message (the module is message based, so a
+   thread's messages snooze one at a time). Snoozing
+   a message does three things, in this order:
+
+     1. the return is written into a small schedule
+        file in the store root, mail-snooze.json,
+        holding one entry per snoozed message: its
+        id, its thread id, the Snoozed label's id,
+        and the instant it should come back;
+     2. the message itself is modified: the Snoozed
+        label goes on and INBOX comes off, through
+        the standing modify path;
+     3. the standing undo toast offers the reversal
+        for five seconds.
+
+   The order is the safety: the schedule is written
+   BEFORE the message moves, so a message can never
+   be hidden without its return standing in the
+   file. If the modify is refused, the entry just
+   written is rolled back out to exactly what stood
+   before it; if the schedule write itself fails,
+   the message is never touched at all. The Snoozed
+   label is an ordinary user label named "Snoozed",
+   found by name or created once, and it stands in
+   the folder column like any other label, so what
+   is sleeping is always one click away.
+
+   The file is schedule state, not mail content: no
+   subject, sender, or body ever stands in it, only
+   ids and a time. It is the one mail related thing
+   the app persists, and it has to be: the return
+   must survive the app closing, and the push
+   Worker reads the same file to bring due mail
+   back on time with the app closed. The app also
+   reconciles due entries itself whenever it is
+   open (the sign in landing and the auto sync
+   tick), as a safety net; the two restorers are
+   idempotent, and every write of the file re-reads
+   it fresh from Drive first and merges by message
+   id, so the app and the Worker never clobber
+   each other's entries. */
+
+const MAIL_SNOOZE_FILE = "mail-snooze.json";
+const MAIL_SNOOZE_LABEL_NAME = "Snoozed";
+/* Snooze times are computed in Chris's own zone,
+   whatever zone the device happens to be in. */
+const MAIL_SNOOZE_ZONE = "America/New_York";
+
+/* The registry as this page holds it: a working
+   copy for the reading pane's line and the flows
+   below. The file on Drive is the truth; every
+   write re-reads it (mailSnoozeWriteEntries). */
+let mailSnoozeEntries = [];
+let mailSnoozeLoaded = false;
+let mailSnoozeReconcileRunning = false;
+let mailSnoozeMenuCtx = null;
+let mailSnoozePickCtx = null;
+
+/* The stored entries, cleaned to the shape the
+   flows read: an entry stands only when it carries
+   a message id, a label id, and a return instant
+   that parses. Anything else in the file is not
+   this module's to keep, and a write drops it. */
+function mailSnoozeSanitizeEntries(raw) {
+  if (!Array.isArray(raw)) { return []; }
+  const out = [];
+  raw.forEach(function (e) {
+    if (!e || typeof e !== "object") { return; }
+    const id = typeof e.messageId === "string"
+      ? e.messageId : "";
+    const labelId = typeof e.labelId === "string"
+      ? e.labelId : "";
+    const until = typeof e.snoozeUntil === "string"
+      ? e.snoozeUntil : "";
+    if (!id || !labelId || !isFinite(Date.parse(until))) {
+      return;
+    }
+    out.push({
+      messageId: id,
+      threadId: typeof e.threadId === "string"
+        ? e.threadId : "",
+      labelId: labelId,
+      snoozeUntil: until,
+      createdAt: typeof e.createdAt === "string"
+        ? e.createdAt : ""
+    });
+  });
+  return out;
+}
+
+/* Read the registry file fresh from Drive. A missing
+   file is an empty registry. A file that does not
+   parse, or parses to the wrong shape, is broken:
+   writers refuse rather than overwrite a schedule
+   they cannot read, and the reconcile leaves it
+   alone, the same discipline the push Worker
+   keeps toward the same file. */
+async function mailSnoozeReadFresh() {
+  const file = await storeGetFile(MAIL_SNOOZE_FILE);
+  if (!file) {
+    return { entries: [], token: null, broken: false };
+  }
+  try {
+    const parsed = JSON.parse(file.text);
+    if (!parsed || typeof parsed !== "object" ||
+        !Array.isArray(parsed.entries)) {
+      return { entries: [], token: file.token,
+        broken: true };
+    }
+    return {
+      entries: mailSnoozeSanitizeEntries(parsed.entries),
+      token: file.token, broken: false
+    };
+  } catch (e) {
+    return { entries: [], token: file.token,
+      broken: true };
+  }
+}
+
+/* One registry write, under the merge discipline:
+   the file is re-read fresh, the caller's change is
+   applied to THAT list (never to the page's possibly
+   stale copy), and the result is written back under
+   the fresh read's token. A lost token race is
+   retried once over a second fresh read, so an
+   entry the Worker dropped, or another device
+   added, between this page's last look and this
+   write is merged, never clobbered. The page's
+   working copy follows the winning write. Returns
+   true when the change stands in the file. */
+async function mailSnoozeWriteEntries(change) {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    let fresh = null;
+    try {
+      fresh = await mailSnoozeReadFresh();
+    } catch (e) { return false; }
+    if (fresh.broken) { return false; }
+    const next = change(fresh.entries.slice());
+    if (JSON.stringify(next) ===
+        JSON.stringify(fresh.entries)) {
+      mailSnoozeEntries = fresh.entries;
+      mailSnoozeLoaded = true;
+      return true;
+    }
+    const text = JSON.stringify(
+      { version: 1, entries: next }, null, 2);
+    try {
+      await storePutFile(MAIL_SNOOZE_FILE, text,
+        fresh.token, "Update the mail snooze schedule");
+      mailSnoozeEntries = next;
+      mailSnoozeLoaded = true;
+      return true;
+    } catch (e) {
+      if (!isStoreConflict(e)) { return false; }
+      /* A conflict means the file moved between the
+         read and the write (the Worker restoring due
+         mail is the standing case): loop once over a
+         fresh read and merge again. */
+    }
+  }
+  return false;
+}
+
+/* Load the working copy once, for the surfaces that
+   only read it (the reading pane's snoozed line).
+   A broken file leaves the copy unloaded, so the
+   next look asks again. */
+async function mailSnoozeEnsureLoaded() {
+  if (mailSnoozeLoaded) { return; }
+  try {
+    const fresh = await mailSnoozeReadFresh();
+    if (!fresh.broken) {
+      mailSnoozeEntries = fresh.entries;
+      mailSnoozeLoaded = true;
+    }
+  } catch (e) { /* the next use asks again */ }
+}
+
+function mailSnoozeEntryFor(messageId) {
+  for (let i = 0; i < mailSnoozeEntries.length; i++) {
+    if (mailSnoozeEntries[i].messageId === messageId) {
+      return mailSnoozeEntries[i];
+    }
+  }
+  return null;
+}
+
+/* Take one message's entry out of the registry, on
+   the same merge discipline as every write. */
+function mailSnoozeRemoveEntry(messageId) {
+  return mailSnoozeWriteEntries(function (entries) {
+    return entries.filter(function (e) {
+      return e.messageId !== messageId;
+    });
+  });
+}
+
+/* ----- Snooze times, in the home zone --------------
+   The same Intl arithmetic the push Worker uses:
+   format the instant in the zone, read the parts
+   back as if they were UTC, and the difference is
+   the offset; a wall time becomes an instant by
+   subtracting the offset, corrected once at the
+   corrected instant. */
+
+const mailSnoozeZoneFormat = new Intl.DateTimeFormat(
+  "en-US", {
+    timeZone: MAIL_SNOOZE_ZONE, hour12: false,
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit"
+  });
+
+function mailSnoozeZoneParts(ms) {
+  const parts = {};
+  mailSnoozeZoneFormat.formatToParts(new Date(ms))
+    .forEach(function (p) { parts[p.type] = p.value; });
+  return {
+    year: parseInt(parts.year, 10),
+    month: parseInt(parts.month, 10),
+    day: parseInt(parts.day, 10),
+    hour: parseInt(parts.hour, 10) % 24,
+    minute: parseInt(parts.minute, 10),
+    second: parseInt(parts.second, 10)
+  };
+}
+
+function mailSnoozeZoneOffsetMs(ms) {
+  const p = mailSnoozeZoneParts(ms);
+  const readBack = Date.UTC(p.year, p.month - 1,
+    p.day, p.hour, p.minute, p.second);
+  return readBack - Math.floor(ms / 1000) * 1000;
+}
+
+function mailSnoozeWallToUtcMs(year, month, day,
+    hour, minute) {
+  const wallAsUtc = Date.UTC(year, month - 1, day,
+    hour, minute, 0);
+  let utc = wallAsUtc - mailSnoozeZoneOffsetMs(wallAsUtc);
+  utc = wallAsUtc - mailSnoozeZoneOffsetMs(utc);
+  return utc;
+}
+
+/* The menu's three standing choices, computed as
+   the menu opens: three hours on, tomorrow at
+   8:00 AM, and next Monday at 8:00 AM, all in the
+   home zone. The day arithmetic runs on the zone's
+   own calendar date, where adding days is exact. */
+function mailSnoozeChoices(nowMs) {
+  const p = mailSnoozeZoneParts(nowMs);
+  const DAY = 24 * 60 * 60000;
+  const todayUtc = Date.UTC(p.year, p.month - 1, p.day);
+  const atEight = function (dayUtc) {
+    const d = new Date(dayUtc);
+    return mailSnoozeWallToUtcMs(d.getUTCFullYear(),
+      d.getUTCMonth() + 1, d.getUTCDate(), 8, 0);
+  };
+  const dow = new Date(todayUtc).getUTCDay();
+  const toMonday = ((8 - dow) % 7) || 7;
+  return [
+    { key: "later", name: "Later today",
+      until: nowMs + 3 * 60 * 60000 },
+    { key: "tomorrow", name: "Tomorrow",
+      until: atEight(todayUtc + DAY) },
+    { key: "nextweek", name: "Next week",
+      until: atEight(todayUtc + toMonday * DAY) }
+  ];
+}
+
+/* A return instant in words, in the home zone: the
+   form the menu rows, the undo toast, and the
+   reading pane's line all speak. */
+const mailSnoozeUntilFormat = new Intl.DateTimeFormat(
+  "en-US", {
+    timeZone: MAIL_SNOOZE_ZONE, weekday: "short",
+    month: "short", day: "numeric", hour: "numeric",
+    minute: "2-digit"
+  });
+
+function mailSnoozeFormatUntil(ms) {
+  return mailSnoozeUntilFormat.format(new Date(ms));
+}
+
+/* The Snoozed label: an ordinary user label, found
+   by name in the loaded list, or created once
+   through the labels API and stood in the list, so
+   the folder column picks it up on its next render
+   like any label. Returns its id, or null when the
+   label can neither be found nor made (the snooze
+   then does not happen at all). */
+async function mailSnoozeLabelId() {
+  const byName = function () {
+    if (!mailLabels) { return null; }
+    for (let i = 0; i < mailLabels.length; i++) {
+      if (mailLabels[i].type === "user" &&
+          mailLabels[i].name === MAIL_SNOOZE_LABEL_NAME) {
+        return mailLabels[i].id;
+      }
+    }
+    return null;
+  };
+  let id = byName();
+  if (id) { return id; }
+  if (!mailLabels) {
+    await loadMailLabels();
+    id = byName();
+    if (id) { return id; }
+  }
+  const out = await gmailWrite("POST",
+    "/users/me/labels", {
+      name: MAIL_SNOOZE_LABEL_NAME,
+      labelListVisibility: "labelShow",
+      messageListVisibility: "show"
+    });
+  if (out.outcome !== "ok" || !out.data ||
+      !out.data.id) {
+    return null;
+  }
+  const rec = {
+    id: String(out.data.id),
+    name: String(out.data.name || MAIL_SNOOZE_LABEL_NAME),
+    type: "user",
+    messagesUnread: 0
+  };
+  if (mailLabels) { mailLabels.push(rec); }
+  return rec.id;
+}
+
+/* Snooze one message until one instant. The
+   registry entry is written FIRST; only then does
+   the message move; and a refused modify rolls the
+   entry back out to exactly what stood before
+   (nothing, or the entry this snooze replaced).
+   The undo toast stands only on the API's
+   acceptance, like every triage here. Snoozing an
+   already snoozed message replaces its entry: one
+   entry per message, newest wins. The accepted
+   write's own tail asks for the Inbox unread count
+   again (mailApplyLabelChange), as after every
+   mail action. */
+async function mailSnoozeMessage(rec, untilMs) {
+  if (!rec) { return false; }
+  const labelId = await mailSnoozeLabelId();
+  if (!labelId) {
+    toast("Could not snooze that message.", true);
+    return false;
+  }
+  const entry = {
+    messageId: rec.id,
+    threadId: rec.threadId || "",
+    labelId: labelId,
+    snoozeUntil: new Date(untilMs).toISOString(),
+    createdAt: new Date().toISOString()
+  };
+  let prior = null;
+  const written = await mailSnoozeWriteEntries(
+    function (entries) {
+      const next = entries.filter(function (e) {
+        if (e.messageId === rec.id) { prior = e; }
+        return e.messageId !== rec.id;
+      });
+      next.push(entry);
+      return next;
+    });
+  if (!written) {
+    toast("Could not snooze that message.", true);
+    return false;
+  }
+  const snap = {
+    kind: "snooze", id: rec.id,
+    clone: JSON.parse(JSON.stringify(rec)),
+    positions: mailCaptureRowPositions(rec.id),
+    labelId: labelId,
+    untilText: mailSnoozeFormatUntil(untilMs)
+  };
+  const out = await gmailWrite("POST",
+    "/users/me/messages/" + encodeURIComponent(rec.id) +
+    "/modify", { addLabelIds: [labelId],
+      removeLabelIds: ["INBOX"] });
+  if (out.outcome !== "ok") {
+    await mailSnoozeWriteEntries(function (entries) {
+      const next = entries.filter(function (e) {
+        return e.messageId !== rec.id;
+      });
+      if (prior) { next.push(prior); }
+      return next;
+    });
+    mailToastWriteFailure(out,
+      "Could not snooze that message.");
+    return false;
+  }
+  mailApplyLabelChange(rec.id, [labelId], ["INBOX"],
+    false);
+  if (state.view && state.view.kind === "email") {
+    renderMail();
+  }
+  showMailUndoToast("snooze", snap);
+  return true;
+}
+
+/* Bring one snoozed message back now: the modify
+   first, and the registry entry comes out only on
+   its acceptance, so a refused return leaves the
+   message honestly still snoozed. */
+async function mailUnsnoozeMessage(rec) {
+  if (!rec) { return false; }
+  await mailSnoozeEnsureLoaded();
+  const entry = mailSnoozeEntryFor(rec.id);
+  let labelId = entry ? entry.labelId : null;
+  if (!labelId && mailLabels) {
+    for (let i = 0; i < mailLabels.length; i++) {
+      if (mailLabels[i].type === "user" &&
+          mailLabels[i].name ===
+            MAIL_SNOOZE_LABEL_NAME) {
+        labelId = mailLabels[i].id;
+      }
+    }
+  }
+  const ok = await mailModifyMessage(rec, ["INBOX"],
+    labelId ? [labelId] : [], "mark");
+  if (ok) { await mailSnoozeRemoveEntry(rec.id); }
+  return ok;
+}
+
+/* The app side restore pass, the push Worker's twin
+   and safety net: every entry whose moment has come
+   is put back in the Inbox and dropped from the
+   file. A message Google says is gone (a 404) drops
+   its entry too; any other refusal keeps the entry
+   for the next pass. Quiet by design: a background
+   pass never toasts, and one that cannot run leaves
+   everything standing for the next landing or tick. */
+async function mailSnoozeReconcile() {
+  if (mailSnoozeReconcileRunning) { return; }
+  if (!mailSignedInAble()) { return; }
+  if (mailStatus === "needs-consent") { return; }
+  if (!state.repoExists) { return; }
+  mailSnoozeReconcileRunning = true;
+  try {
+    const fresh = await mailSnoozeReadFresh();
+    if (fresh.broken) { return; }
+    mailSnoozeEntries = fresh.entries;
+    mailSnoozeLoaded = true;
+    const now = Date.now();
+    const due = fresh.entries.filter(function (e) {
+      return Date.parse(e.snoozeUntil) <= now;
+    });
+    if (!due.length) { return; }
+    const dropped = [];
+    for (const e of due) {
+      const out = await gmailWrite("POST",
+        "/users/me/messages/" +
+        encodeURIComponent(e.messageId) + "/modify",
+        { addLabelIds: ["INBOX"],
+          removeLabelIds: [e.labelId] });
+      if (out.outcome === "ok") {
+        dropped.push(e.messageId);
+        mailApplyLabelChange(e.messageId, ["INBOX"],
+          [e.labelId], false);
+      } else if (out.status === 404) {
+        dropped.push(e.messageId);
+      }
+    }
+    if (dropped.length) {
+      await mailSnoozeWriteEntries(
+        function (entries) {
+          return entries.filter(function (x) {
+            return dropped.indexOf(x.messageId) === -1;
+          });
+        });
+      if (state.view && state.view.kind === "email") {
+        renderMail();
+      }
+    }
+  } catch (e) {
+    /* The next landing or tick retries. */
+  } finally {
+    mailSnoozeReconcileRunning = false;
+  }
+}
+
+/* ----- The snooze choices menu -------------------- */
+
+function closeMailSnoozeMenu() {
+  const menu = mailEl("mailSnoozeMenu");
+  if (menu) { menu.classList.add("hidden"); }
+  mailSnoozeMenuCtx = null;
+  document.removeEventListener("pointerdown",
+    onMailSnoozeMenuDocPointerDown, true);
+  document.removeEventListener("keydown",
+    onMailSnoozeMenuDocKeydown, true);
+}
+
+function onMailSnoozeMenuDocPointerDown(ev) {
+  const menu = mailEl("mailSnoozeMenu");
+  if (menu && ev.target && menu.contains(ev.target)) {
+    return;
+  }
+  closeMailSnoozeMenu();
+}
+
+function onMailSnoozeMenuDocKeydown(ev) {
+  if (ev.key === "Escape") {
+    ev.preventDefault();
+    closeMailSnoozeMenu();
+  }
+}
+
+/* The choices for one message, each row naming the
+   exact return its choice will use, computed as
+   the menu opens. Opened from the reading pane's
+   Snooze button and from a row's quick action
+   alike; it stands at the press point, clamped to
+   the viewport like the app's other floating
+   menus, and closes on an outside press or
+   Escape, the label menu's own discipline. */
+function openMailSnoozeMenu(rec, x, y) {
+  closeMailSnoozeMenu();
+  const menu = mailEl("mailSnoozeMenu");
+  const rows = mailEl("mailSnoozeMenuRows");
+  if (!menu || !rows || !rec) { return; }
+  mailSnoozeMenuCtx = { rec: rec };
+  rows.innerHTML = "";
+  mailSnoozeChoices(Date.now()).forEach(
+    function (choice) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "mail-snooze-item";
+      btn.setAttribute("data-snooze-key", choice.key);
+      btn.setAttribute("data-until",
+        String(choice.until));
+      const name = document.createElement("span");
+      name.textContent = choice.name;
+      btn.appendChild(name);
+      const when = document.createElement("span");
+      when.className = "mail-snooze-when";
+      when.textContent =
+        mailSnoozeFormatUntil(choice.until);
+      btn.appendChild(when);
+      btn.addEventListener("click", function () {
+        const ctx = mailSnoozeMenuCtx;
+        closeMailSnoozeMenu();
+        if (ctx) {
+          mailSnoozeMessage(ctx.rec, choice.until);
+        }
+      });
+      rows.appendChild(btn);
+    });
+  const pick = document.createElement("button");
+  pick.type = "button";
+  pick.className = "mail-snooze-item";
+  pick.setAttribute("data-snooze-key", "pick");
+  const pickName = document.createElement("span");
+  pickName.textContent = "Pick a date and time";
+  pick.appendChild(pickName);
+  pick.addEventListener("click", function () {
+    const ctx = mailSnoozeMenuCtx;
+    closeMailSnoozeMenu();
+    if (ctx) { openMailSnoozePick(ctx.rec); }
+  });
+  rows.appendChild(pick);
+  menu.classList.remove("hidden");
+  placeNoteContextMenu(menu, x, y);
+  document.addEventListener("pointerdown",
+    onMailSnoozeMenuDocPointerDown, true);
+  document.addEventListener("keydown",
+    onMailSnoozeMenuDocKeydown, true);
+  const first = rows.querySelector(".mail-snooze-item");
+  if (first) { first.focus(); }
+}
+
+/* Open the menu under one pressed control: the
+   reading pane's Snooze button, or a row's quick
+   action button. */
+function openMailSnoozeMenuAt(rec, anchorEl) {
+  if (!anchorEl) { return; }
+  const r = anchorEl.getBoundingClientRect();
+  openMailSnoozeMenu(rec, r.left, r.bottom + 4);
+}
+
+/* ----- The custom return ---------------------------
+   A datetime-local field, read as a wall time in
+   the snooze zone and prefilled with tomorrow's
+   standing choice. A time that is not in the
+   future is refused in the dialog, with nothing
+   changed: no entry written, no modify sent. */
+
+function openMailSnoozePick(rec) {
+  mailSnoozePickCtx = { rec: rec };
+  const input = mailEl("mailSnoozePickInput");
+  const err = mailEl("mailSnoozePickError");
+  if (err) {
+    err.textContent = "";
+    err.classList.add("hidden");
+  }
+  if (input) {
+    const t = mailSnoozeChoices(Date.now())[1].until;
+    const p = mailSnoozeZoneParts(t);
+    const pad = function (n) {
+      return (n < 10 ? "0" : "") + n;
+    };
+    input.value = p.year + "-" + pad(p.month) + "-" +
+      pad(p.day) + "T" + pad(p.hour) + ":" +
+      pad(p.minute);
+  }
+  mailEl("mailSnoozePickModal")
+    .classList.remove("hidden");
+  if (input) { input.focus(); }
+}
+
+function closeMailSnoozePick() {
+  mailEl("mailSnoozePickModal")
+    .classList.add("hidden");
+  mailSnoozePickCtx = null;
+}
+
+async function confirmMailSnoozePick() {
+  const ctx = mailSnoozePickCtx;
+  const input = mailEl("mailSnoozePickInput");
+  if (!ctx || !input) { return; }
+  const err = mailEl("mailSnoozePickError");
+  const refuse = function (text) {
+    if (err) {
+      err.textContent = text;
+      err.classList.remove("hidden");
+    }
+  };
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/
+    .exec(String(input.value || ""));
+  if (!m) {
+    refuse("Pick a date and time first.");
+    return;
+  }
+  const until = mailSnoozeWallToUtcMs(
+    parseInt(m[1], 10), parseInt(m[2], 10),
+    parseInt(m[3], 10), parseInt(m[4], 10),
+    parseInt(m[5], 10));
+  if (!(until > Date.now())) {
+    refuse("That time has already passed. " +
+      "Pick a future time.");
+    return;
+  }
+  const rec = ctx.rec;
+  closeMailSnoozePick();
+  await mailSnoozeMessage(rec, until);
 }
 
 /* A drop lands: the message the drag carried, acted on
@@ -30224,6 +30969,11 @@ function resetMailState() {
   mailShowImages = false;
   mailLabelsLoading = false;
   mailListLoadingKey = "";
+  /* v2.100: the snooze registry's working copy
+     belongs to the account too; a landing forgets
+     it, and the next read asks Drive again. */
+  mailSnoozeEntries = [];
+  mailSnoozeLoaded = false;
   if (mailStatus !== "idle") {
     mailStatus = "idle";
     renderMailSettingsRow();
@@ -30245,6 +30995,11 @@ function refreshMailAfterSync() {
      asked for again on its own light read, so a
      completed sync leaves a live number standing. */
   mailFetchInboxUnread();
+  /* v2.100: and the snooze schedule reconciles with
+     the same landing: this hook is where a sign in's
+     load settles, with the store standing, so due
+     returns are restored as the app opens. */
+  mailSnoozeReconcile();
 }
 
 /* The surfaces' one ask: make sure the labels and the
@@ -30908,6 +31663,7 @@ function buildMailRowEl(rec) {
   actions.className = "mail-row-actions";
   [["archive", "Archive", mailIconArchive()],
    ["trash", "Move to trash", mailIconTrash()],
+   ["snooze", "Snooze", mailIconClock()],
    ["mark", rec.unread ? "Mark as read" : "Mark as unread",
      mailIconMail()]].forEach(function (spec) {
     const btn = document.createElement("button");
@@ -30919,7 +31675,7 @@ function buildMailRowEl(rec) {
     btn.innerHTML = spec[2];
     btn.addEventListener("click", function (ev) {
       ev.stopPropagation();
-      mailRowQuickAction(rec, spec[0]);
+      mailRowQuickAction(rec, spec[0], btn);
     });
     actions.appendChild(btn);
   });
@@ -30952,6 +31708,15 @@ function mailIconTrash() {
     "8.5v5\"/></svg>";
 }
 
+function mailIconClock() {
+  return "<svg viewBox=\"0 0 20 20\" width=\"15\" " +
+    "height=\"15\" fill=\"none\" stroke=\"currentColor\" " +
+    "stroke-width=\"1.6\" stroke-linecap=\"round\" " +
+    "stroke-linejoin=\"round\" aria-hidden=\"true\">" +
+    "<circle cx=\"10\" cy=\"10\" r=\"7.5\"/>" +
+    "<path d=\"M10 5.8V10l3 2\"/></svg>";
+}
+
 function mailIconMail() {
   return "<svg viewBox=\"0 0 20 20\" width=\"15\" " +
     "height=\"15\" fill=\"none\" stroke=\"currentColor\" " +
@@ -30964,11 +31729,13 @@ function mailIconMail() {
 /* A row's hover quick action, run against the row's
    own record through the same write paths the
    reading view uses. */
-function mailRowQuickAction(rec, act) {
+function mailRowQuickAction(rec, act, anchorEl) {
   if (act === "archive") {
     mailArchiveWithUndo(rec);
   } else if (act === "trash") {
     mailTrashWithUndo(rec);
+  } else if (act === "snooze") {
+    openMailSnoozeMenuAt(rec, anchorEl);
   } else if (act === "mark") {
     if (rec.unread) {
       mailModifyMessage(rec, [], ["UNREAD"], "mark");
@@ -31317,6 +32084,32 @@ function renderMailRead() {
   }
   if (!mailLabels && !mailLabelsLoading) {
     loadMailLabels();
+  }
+  /* v2.100: a snoozed message says when it comes
+     back, with the way back standing beside it,
+     wherever the message is opened. The registry
+     is asked for once if it has not landed yet;
+     its landing re-renders this pane. */
+  const snoozedLine = mailEl("mailSnoozedLine");
+  if (snoozedLine) {
+    const szEntry = mailSnoozeEntryFor(full.id);
+    if (szEntry) {
+      mailEl("mailSnoozedText").textContent =
+        "Snoozed until " + mailSnoozeFormatUntil(
+          Date.parse(szEntry.snoozeUntil));
+      snoozedLine.classList.remove("hidden");
+    } else {
+      snoozedLine.classList.add("hidden");
+    }
+    if (!mailSnoozeLoaded) {
+      const openId = full.id;
+      mailSnoozeEnsureLoaded().then(function () {
+        if (mailOpenFull &&
+            mailOpenFull.id === openId) {
+          renderMailRead();
+        }
+      });
+    }
   }
   const inTrash = full.labelIds.indexOf("TRASH") !== -1;
   /* v2.84 (Part 2): the Trash icon button speaks
@@ -31988,6 +32781,26 @@ function initMailBindings() {
         mailTrashWithUndo(mailOpenFull);
       }
     });
+  mailEl("mailSnoozeBtn").addEventListener("click",
+    function () {
+      if (!mailOpenFull) { return; }
+      openMailSnoozeMenuAt(mailOpenFull,
+        mailEl("mailSnoozeBtn"));
+    });
+  mailEl("mailUnsnoozeBtn").addEventListener("click",
+    function () {
+      if (mailOpenFull) {
+        mailUnsnoozeMessage(mailOpenFull);
+      }
+    });
+  mailEl("mailSnoozePickBtn").addEventListener("click",
+    function () {
+      confirmMailSnoozePick().catch(function () {
+        /* reported in the dialog and the flows */
+      });
+    });
+  mailEl("mailSnoozePickCancelBtn").addEventListener(
+    "click", function () { closeMailSnoozePick(); });
   mailEl("mailMoreMarkBtn").addEventListener("click",
     function () {
       mailEl("mailMoreMenu").classList.add("hidden");
@@ -58460,6 +59273,12 @@ async function autoSyncTick() {
        guards itself (signed in, no consent state,
        not already in flight). */
     mailFetchInboxUnread();
+    /* v2.100: the snooze schedule reconciles on the
+       same cadence (its own guards are the same
+       shape), so a return that comes due while the
+       app stands open lands without waiting for
+       the Worker's next pass or a reopen. */
+    mailSnoozeReconcile();
   }
 }
 
