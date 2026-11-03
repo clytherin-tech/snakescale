@@ -40,10 +40,41 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-11-03-SSN-V21030
-  Version: 2.103.0
+  BUILD STAMP: 2026-11-03-SSN-V21040
+  Version: 2.104.0
 
   Revision history:
+    v2.104.0 2026-11-03 The Labels button opens
+                      a true dropdown. Through
+                      v2.103.0 it opened the
+                      standing label picker
+                      where that picker lived:
+                      in the reading pane's
+                      own flow, above the
+                      message, so opening it
+                      pushed the whole message
+                      down. The picker now
+                      hangs from the Labels
+                      button's wrap as a
+                      floating menu over the
+                      message, in the More
+                      menu's dress, and opening
+                      or closing it moves
+                      nothing in the pane. It
+                      flips left or upward
+                      when the pane's edge
+                      would clip it, caps its
+                      height with the themed
+                      scrollbar, stays open
+                      across toggles, and
+                      closes on an outside
+                      press, on Escape, on a
+                      new message or
+                      selection, and on
+                      leaving the Email view;
+                      the button wears its
+                      open face while it
+                      stands.
     v2.103.0 2026-11-03 Three mail changes Chris
                       directed. The Inbox in the
                       folder column is a drop
@@ -10338,10 +10369,48 @@ body.dark .task-cal-more{color:var(--accent);}
 .mail-actions{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;}
 .mail-location{display:inline-flex;flex-wrap:wrap;gap:6px;align-items:center;}
 .mail-loc-chip{font-size:11px;line-height:1;padding:4px 8px;border-radius:999px;background:var(--accent-soft);color:var(--text);white-space:nowrap;}
-.mail-labels-menu{border:1px solid var(--border);border-radius:var(--radius-card);padding:10px 12px;margin-bottom:14px;display:flex;flex-direction:column;gap:6px;max-width:340px;}
+/* v2.104.0: the Labels picker is a dropdown, not
+   a panel in the pane's flow. It hangs from the
+   Labels button's wrap exactly as the More menu
+   hangs from its own (same surface, border,
+   radius, and shadow), floating over the
+   message, so opening or closing it moves
+   nothing in the pane. Its height is capped,
+   with the app's scrollbar theme (the v2.18
+   pattern in this menu's own rules) for a long
+   label list, and the open code flips it left
+   or upward when the pane's edge would clip it
+   (the flip-x and flip-y classes below). */
+.mail-labels-wrap{position:relative;display:inline-flex;}
+.mail-labels-menu{
+  position:absolute;top:calc(100% + 6px);left:0;z-index:65;
+  width:248px;max-height:264px;overflow-y:auto;
+  padding:6px;display:flex;flex-direction:column;gap:2px;
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius-card);
+  box-shadow:0 10px 28px rgba(6,32,22,.28);
+  scrollbar-width:thin;
+  scrollbar-color:transparent transparent;
+  transition:scrollbar-color 250ms ease;
+}
+.mail-labels-menu:hover{scrollbar-color:rgba(87,167,115,.55) transparent;}
+body.dark .mail-labels-menu:hover{scrollbar-color:rgba(87,167,115,.65) transparent;}
+.mail-labels-menu::-webkit-scrollbar{width:10px;height:10px;}
+.mail-labels-menu::-webkit-scrollbar-track{background:transparent;}
+.mail-labels-menu::-webkit-scrollbar-thumb{background-color:transparent;border-radius:8px;border:2px solid transparent;background-clip:padding-box;transition:background-color 250ms ease;}
+.mail-labels-menu:hover::-webkit-scrollbar-thumb{background-color:rgba(87,167,115,.45);}
+body.dark .mail-labels-menu:hover::-webkit-scrollbar-thumb{background-color:rgba(87,167,115,.55);}
+.mail-labels-menu.flip-x{left:auto;right:0;}
+.mail-labels-menu.flip-y{top:auto;bottom:calc(100% + 6px);}
 .mail-labels-menu.hidden{display:none;}
-.mail-label-row{justify-content:flex-start;}
-.mail-labels-none{color:var(--muted);font-size:13.5px;}
+.mail-label-row{justify-content:flex-start;padding:6px 9px;border-radius:7px;cursor:pointer;}
+.mail-label-row:hover{background:var(--accent-soft);}
+.mail-labels-none{color:var(--muted);font-size:13.5px;padding:7px 9px;}
+/* The Labels button wears its open face while
+   the dropdown stands: the same lit dress its
+   hover wears, held for as long as the menu is
+   open, so the standing choice is obvious. */
+#mailLabelsBtn[aria-expanded="true"]{color:var(--text);background:var(--accent-soft);border-color:var(--accent);}
 .mail-attachments{display:flex;flex-direction:column;gap:6px;margin-bottom:14px;}
 .mail-attachments.hidden{display:none;}
 .mail-att-row{display:flex;align-items:center;gap:10px;font-size:13.5px;}
@@ -12481,7 +12550,10 @@ body.dark .version-date{color:var(--accent);}
             <button class="mail-icon-btn" id="mailArchiveBtn" type="button" title="Archive" aria-label="Archive"><svg viewBox="0 0 20 20" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="3" width="15" height="4" rx="1"/><path d="M4 7v8a1.5 1.5 0 0 0 1.5 1.5h9A1.5 1.5 0 0 0 16 15V7M8 10h4"/></svg></button>
             <button class="mail-icon-btn" id="mailTrashBtn" type="button" title="Trash" aria-label="Trash"><svg viewBox="0 0 20 20" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5h14M8 5V3.5A.5.5 0 0 1 8.5 3h3a.5.5 0 0 1 .5.5V5M5 5l.8 11a1.5 1.5 0 0 0 1.5 1.4h5.4A1.5 1.5 0 0 0 14.2 16L15 5M8.3 8.5v5M11.7 8.5v5"/></svg></button>
             <button class="mail-icon-btn" id="mailSnoozeBtn" type="button" title="Snooze" aria-label="Snooze"><svg viewBox="0 0 20 20" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10" cy="10" r="7.5"/><path d="M10 5.8V10l3 2"/></svg></button>
-            <button class="mail-icon-btn" id="mailLabelsBtn" type="button" title="Labels" aria-label="Labels" aria-haspopup="true"><svg viewBox="0 0 20 20" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 3.5H10L17 10.5 10.5 17 3.5 10Z"/><circle cx="7.3" cy="7.3" r="1.2"/></svg></button>
+            <span class="mail-labels-wrap">
+              <button class="mail-icon-btn" id="mailLabelsBtn" type="button" title="Labels" aria-label="Labels" aria-haspopup="true" aria-expanded="false"><svg viewBox="0 0 20 20" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 3.5H10L17 10.5 10.5 17 3.5 10Z"/><circle cx="7.3" cy="7.3" r="1.2"/></svg></button>
+              <div class="mail-labels-menu hidden" id="mailLabelsMenu" aria-label="Labels"></div>
+            </span>
             <span class="mail-more-wrap">
               <button class="mail-icon-btn" id="mailMoreBtn" type="button" title="More actions" aria-label="More actions" aria-haspopup="true"><svg viewBox="0 0 20 20" width="17" height="17" fill="currentColor" aria-hidden="true"><circle cx="4" cy="10" r="1.5"/><circle cx="10" cy="10" r="1.5"/><circle cx="16" cy="10" r="1.5"/></svg></button>
               <span class="mail-more-menu hidden" id="mailMoreMenu" role="menu" aria-label="More message actions">
@@ -12495,7 +12567,6 @@ body.dark .version-date{color:var(--accent);}
             <span id="mailSnoozedText"></span>
             <button class="btn small" id="mailUnsnoozeBtn" type="button">Unsnooze</button>
           </div>
-          <div class="mail-labels-menu hidden" id="mailLabelsMenu"></div>
           <div class="mail-attachments hidden" id="mailAttachments"></div>
           <button class="btn small hidden" id="mailShowImagesBtn" type="button">Show images</button>
           <div class="mail-body" id="mailBody"></div>
@@ -13787,8 +13858,8 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-11-03-SSN-V21030";
-const APP_VERSION = "2.103.0";
+const APP_BUILD = "2026-11-03-SSN-V21040";
+const APP_VERSION = "2.104.0";
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -31811,6 +31882,7 @@ function mailChooseSelection(sel) {
   mailFolder = sel;
   mailOpenId = null;
   mailOpenFull = null;
+  closeMailLabelsMenu();
   const pane = mailEl("mailpane");
   if (pane) { pane.classList.remove("mail-show-read"); }
   renderMail();
@@ -32308,6 +32380,11 @@ async function openMailMessage(id) {
   mailOpenFull = full;
   mailOpenId = id;
   mailShowImages = false;
+  /* v2.104.0: a new message standing in the
+     pane dismisses the labels dropdown; its
+     checkboxes belonged to the message that
+     stood before. */
+  closeMailLabelsMenu();
   const pane = mailEl("mailpane");
   if (pane) { pane.classList.add("mail-show-read"); }
   renderMail();
@@ -32502,6 +32579,75 @@ async function mailDownloadAttachment(full, att) {
     }, 4000);
   } catch (e) {
     toast("Could not download that attachment.", true);
+  }
+}
+
+/* v2.104.0: the picker stands as a dropdown
+   under its button (see the stylesheet), so its
+   opening and closing run through these two
+   hands alone: every path that stands it or
+   dismisses it (the button itself, an outside
+   press, Escape, a new message, a new
+   selection, leaving the Email view) keeps the
+   button's expanded word and open face in step
+   with the menu, and nothing else reaches for
+   the menu's hidden class. */
+function closeMailLabelsMenu() {
+  const menu = mailEl("mailLabelsMenu");
+  if (menu) {
+    menu.classList.add("hidden");
+    menu.classList.remove("flip-x", "flip-y");
+  }
+  const btn = mailEl("mailLabelsBtn");
+  if (btn) {
+    btn.setAttribute("aria-expanded", "false");
+  }
+}
+
+function openMailLabelsMenu() {
+  if (!mailOpenFull) { return; }
+  const menu = mailEl("mailLabelsMenu");
+  const btn = mailEl("mailLabelsBtn");
+  if (!menu || !btn) { return; }
+  buildMailLabelsMenu(mailOpenFull);
+  menu.classList.remove("flip-x", "flip-y");
+  menu.classList.remove("hidden");
+  btn.setAttribute("aria-expanded", "true");
+  placeMailLabelsMenu();
+}
+
+/* Keep the dropdown inside the reading pane:
+   if its natural hang would cross the pane's
+   right edge it flips to hang from the wrap's
+   right instead, and if it would cross the
+   pane's foot while the room above the button
+   is the larger, it opens upward. Measured
+   after the menu stands, against the pane's
+   own box (the viewport when the pane is not
+   laid out), and worked purely as class
+   changes, so the pane's layout never feels
+   it. */
+function placeMailLabelsMenu() {
+  const menu = mailEl("mailLabelsMenu");
+  const btn = mailEl("mailLabelsBtn");
+  const pane = mailEl("mailReadPane");
+  if (!menu || !btn ||
+      menu.classList.contains("hidden")) { return; }
+  const box = pane ? pane.getBoundingClientRect() : {
+    left: 0, top: 0,
+    right: window.innerWidth || 0,
+    bottom: window.innerHeight || 0
+  };
+  let r = menu.getBoundingClientRect();
+  if (r.right > box.right - 4) {
+    menu.classList.add("flip-x");
+    r = menu.getBoundingClientRect();
+  }
+  if (r.bottom > box.bottom - 4) {
+    const b = btn.getBoundingClientRect();
+    if (b.top - box.top > box.bottom - b.bottom) {
+      menu.classList.add("flip-y");
+    }
   }
 }
 
@@ -33120,16 +33266,20 @@ function initMailBindings() {
       }
     });
   /* v2.103: Labels is its own button in the
-     action row now, no longer an item inside
-     the More menu; the picker it opens is
-     the standing one. */
+     action row, no longer an item inside the
+     More menu. v2.104.0: the picker it opens
+     stands as a dropdown under the button, and
+     the toggle runs through the open and close
+     hands so the button's face follows. */
   mailEl("mailLabelsBtn").addEventListener("click",
     function () {
       const menu = mailEl("mailLabelsMenu");
       if (!menu || !mailOpenFull) { return; }
-      const opening = menu.classList.contains("hidden");
-      if (opening) { buildMailLabelsMenu(mailOpenFull); }
-      menu.classList.toggle("hidden", !opening);
+      if (menu.classList.contains("hidden")) {
+        openMailLabelsMenu();
+      } else {
+        closeMailLabelsMenu();
+      }
     });
   mailEl("mailMoreMoveInboxBtn").addEventListener(
     "click", function () {
@@ -33144,7 +33294,7 @@ function initMailBindings() {
     if (menu && !menu.classList.contains("hidden") &&
         !t.closest("#mailLabelsMenu") &&
         !t.closest("#mailLabelsBtn")) {
-      menu.classList.add("hidden");
+      closeMailLabelsMenu();
     }
     /* v2.84 (Part 2): the More menu closes on an
        outside click the same way. */
@@ -33171,6 +33321,16 @@ function initMailBindings() {
     });
   document.addEventListener("keydown", function (ev) {
     if (ev.key !== "Escape") { return; }
+    /* v2.104.0: the labels dropdown takes the
+       same Escape as the More menu, focus back
+       to its own button. */
+    const labels = mailEl("mailLabelsMenu");
+    if (labels &&
+        !labels.classList.contains("hidden")) {
+      closeMailLabelsMenu();
+      const lbtn = mailEl("mailLabelsBtn");
+      if (lbtn) { lbtn.focus(); }
+    }
     const menu = mailEl("mailMoreMenu");
     if (menu && !menu.classList.contains("hidden")) {
       menu.classList.add("hidden");
@@ -36537,6 +36697,11 @@ function syncTasksPane() {
   if (home) { home.classList.toggle("hidden", !homeActive); }
   const mail = document.getElementById("mailpane");
   if (mail) { mail.classList.toggle("hidden", !mailActive); }
+  /* v2.104.0: the labels dropdown belongs to
+     the Email view; leaving the view puts it
+     away, so it never stands over another
+     view's first paint on the way back. */
+  if (!mailActive) { closeMailLabelsMenu(); }
   const list = document.getElementById("listpane");
   if (list) {
     list.classList.toggle("hidden",
