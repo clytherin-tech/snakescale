@@ -40,7 +40,7 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-11-04-SSN-V21080
+  BUILD STAMP: 2026-11-04-SSN-V21090
   Version: 2.106.0
 
   Revision history:
@@ -8409,6 +8409,22 @@ body.dark .modal:hover::-webkit-scrollbar-thumb{
 #noteBody ul:has(> li > input[type="checkbox"]) > li::marker{
   content:"";
 }
+/* v2.109.0: a NESTED checklist level takes the plain
+   lists' indent step. The v1.6 rule above gives every
+   checklist level a 2px inset, so a sublist sat only
+   2px right of the item above it: Tab did indent the
+   item, but by a step too small to read as a real
+   indent, and deeper levels crowded onto nearly the
+   same line (Chris's checklist report). The top level
+   keeps the small inset (its checkbox is the marker);
+   a checklist standing inside a list item now takes
+   the same 24px measure a bullet or numbered sublist
+   takes, so one Tab reads as one full level at any
+   depth, matching the sublists beside it. */
+#noteBody li > ul.ss-checklist,
+#noteBody li > ul:has(> li > input[type="checkbox"]){
+  padding-left:24px;
+}
 #noteBody ul.ss-checklist input[type="checkbox"],
 #noteBody ul:has(> li > input[type="checkbox"]) input[type="checkbox"]{
   /* v2.17: real breathing room between the box and its text (the
@@ -8515,6 +8531,17 @@ body.dark .modal:hover::-webkit-scrollbar-thumb{
   margin-top:4px;padding-top:4px;
 }
 #editorCtxNumMenu.hidden{display:none;}
+/* v2.109.0: the Format submenu takes the same in
+   place dress as the Numbering style submenu: a
+   separated group under its parent item, opening in
+   place, its current rows marked by the shared
+   .current and .ctx-check rules below. */
+#editorCtxFormatMenu{
+  display:flex;flex-direction:column;gap:2px;
+  border-top:1px solid var(--border);
+  margin-top:4px;padding-top:4px;
+}
+#editorCtxFormatMenu.hidden{display:none;}
 #editorCtxMenu .ctx-check{
   visibility:hidden;display:inline-block;width:16px;
   color:var(--accent);font-weight:700;
@@ -8907,6 +8934,35 @@ body.dark .modal:hover::-webkit-scrollbar-thumb{
   display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;
   padding:10px 22px;border-top:1px solid var(--border);background:var(--surface);
 }
+/* v2.109.0: the floating Back to top button. Its
+   anchor is a zero height strip in the editor's
+   column between the scroll area and the footer; the
+   button is positioned from the strip, so its bottom
+   edge always stands 16px above the scroll area's
+   bottom edge and it can never cover the footer,
+   however many rows the footer wraps to. The 28px
+   right offset clears the note's own scrollbar and
+   matches the reading column's right padding. It
+   rests semi-transparent and turns fully opaque on
+   hover and while pressed, the dress Chris
+   specified; its ground is the theme's primary color
+   in both themes. */
+.editor-up-anchor{
+  position:relative;height:0;flex:none;
+}
+#editorUpBtn{
+  position:absolute;right:28px;bottom:16px;z-index:40;
+  width:44px;height:44px;border-radius:50%;
+  border:1px solid var(--border);
+  background:var(--primary);color:#fff;
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;opacity:.55;
+  box-shadow:0 4px 14px rgba(6,32,22,.30);
+  transition:opacity var(--motion);
+}
+#editorUpBtn:hover{opacity:1;}
+#editorUpBtn:active{opacity:1;}
+#editorUpBtn.hidden{display:none;}
 /* v2.5: the Tags box sits at the footer's left, where the save
    status used to be (the status itself now lives beside the
    sidebar's Synced pill; its #saveState rule lives with the
@@ -12424,6 +12480,23 @@ body.dark .version-date{color:var(--accent);}
             <button class="att-menu-item" type="button" data-ctx-action="copy">Copy</button>
             <button class="att-menu-item" type="button" data-ctx-action="paste">Paste</button>
             <div class="editor-ctx-sep" role="separator"></div>
+            <!-- v2.109.0: the Format submenu (Chris's
+                 checklist item): the basic formatting
+                 tools on the menu's preserved selection,
+                 the toolbar buttons' own commands,
+                 including Clear Formatting. It follows
+                 the Numbering style submenu's pattern:
+                 opens in place under its parent item,
+                 and a row whose format the selection
+                 currently carries is marked current. -->
+            <button class="att-menu-item" type="button" data-ctx-action="format">Format</button>
+            <div id="editorCtxFormatMenu" class="hidden">
+              <button class="att-menu-item" type="button" data-format-cmd="bold"><span class="ctx-check">&#10003;</span>Bold</button>
+              <button class="att-menu-item" type="button" data-format-cmd="italic"><span class="ctx-check">&#10003;</span>Italic</button>
+              <button class="att-menu-item" type="button" data-format-cmd="underline"><span class="ctx-check">&#10003;</span>Underline</button>
+              <button class="att-menu-item" type="button" data-format-cmd="strike"><span class="ctx-check">&#10003;</span>Strikethrough</button>
+              <button class="att-menu-item" type="button" data-format-cmd="clear"><span class="ctx-check">&#10003;</span>Clear Formatting</button>
+            </div>
             <button class="att-menu-item" type="button" data-ctx-action="encrypt">Encrypt selected text</button>
             <button class="att-menu-item hidden" type="button" data-ctx-action="vault">Unlock encrypted text</button>
             <!-- v2.101.0: the Numbering style item and
@@ -12597,6 +12670,20 @@ body.dark .version-date{color:var(--accent);}
           </div>
         </div>
       </div>
+      <!-- v2.109.0: the floating Back to top button
+           (Chris's checklist item). It lives in a
+           zero height anchor strip between the scroll
+           area and the footer, positioned from the
+           scroll area's bottom edge, so it stands at
+           the note's lower right whatever height the
+           footer wraps to, and can never cover it. It
+           is editor furniture, never part of #noteBody,
+           so it can never be saved into a note. It
+           stands only while the note is scrolled down
+           (see wireEditorUpButton), resting
+           semi-transparent and turning solid on hover
+           or press. -->
+      <div class="editor-up-anchor"><button type="button" id="editorUpBtn" class="hidden" aria-label="Back to top" title="Back to top"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg></button></div>
       <div class="editor-foot">
         <!-- v2.5: the Tags box lives here now, bottom left where
              the save status used to sit (the status moved to the
@@ -14098,8 +14185,43 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-11-04-SSN-V21080";
-const APP_VERSION = "2.108.0";
+const APP_BUILD = "2026-11-04-SSN-V21090";
+const APP_VERSION = "2.109.0";
+/* 2.109.0 (2026-11-04): the Editor takes the
+   Testing Checklist bundle, six items. Tab on a
+   checklist line now indents by a full list level
+   per press, the same 24 pixel step a bullet or
+   numbered sublist takes, instead of the 2 pixel
+   inset nested checklists had; the box itself
+   never toggles from the keyboard, and Shift+Tab
+   promotes one level per press. Checking a box no
+   longer makes the note jump to wherever the
+   caret last stood: the toggle handler's caret
+   restore used to refocus the body bare, which
+   scrolled the editor to the old selection, so
+   it now focuses without scrolling and restores
+   the editor's scroll position outright, while
+   typing after a click still lands in the item.
+   Clear Formatting also takes links now: the
+   words stay and the link itself goes, the way
+   Word clears them, while app-managed anchors
+   (note links, mail and event chips, tag pills)
+   are content rather than formatting and stand,
+   and a decorated link unwraps to exactly the
+   words the author wrote. The editor's right
+   click menu gains a Format submenu (Bold,
+   Italic, Underline, Strikethrough, and Clear
+   Formatting) acting on the preserved selection
+   exactly like the toolbar buttons, with the
+   formats the selection already carries marked.
+   Archived and trashed notes, which are read
+   only, no longer render the formatting toolbar,
+   and archived notes no longer appear in the @
+   link picker. A floating Back to top button
+   stands at a long note's lower right once the
+   note is scrolled past a screenful,
+   semi-transparent until hovered or pressed, and
+   returns the reader smoothly to the top. */
 /* 2.108.0 (2026-11-04): the save search menu's
    washed out text in light mode is fixed at the
    root. The panel's secondary lines (its head, the
@@ -45200,6 +45322,16 @@ function renderEditor() {
   document.getElementById("noteReminderBtn").disabled = locked;
   document.getElementById("noteReminderBtnLabel").textContent =
     note.reminderAt ? noteReminderLabel(note) : "Reminder";
+  /* v2.109.0: a locked note (Trash or Archive) shows no
+     formatting toolbar: the note is read only because of
+     the collection it sits in, so the editing bar has
+     nothing to offer it (Chris's checklist item). The
+     toggle rides the same locked state as every control
+     above, so the bar follows the note on every render:
+     hidden while locked, standing again the moment the
+     note is restored or unarchived. */
+  document.getElementById("toolbar").classList.toggle(
+    "hidden", locked);
   /* v2.2: a locked note (Trash or Archive) never shows the floating
      Table button or menu; updateTableMenu would hide them on the
      next caret move anyway, but locking closes them immediately. */
@@ -50168,8 +50300,9 @@ function onMentionSearchInput() {
    untitled note's title is empty, and an empty string contains
    only the empty query, so untitled notes surface only while
    nothing has been typed past the "@" and never flood filtered
-   results. Trashed notes never match; archived notes do, like the
-   rest of the app treats them: present, but read only.
+   results. Trashed notes never match. v2.109.0: archived
+   notes no longer match either (Chris's instruction): the
+   picker offers live notes only, in every host it serves.
    v2.28.0: in the note host, up to eight matching tasks follow
    the notes (the same title match, most recently updated
    first), and the renderer splits the two kinds with group
@@ -50180,8 +50313,8 @@ function onMentionSearchInput() {
    notes, and notes are where task links live. */
 function mentionCandidates(query) {
   const needle = String(query || "").toLowerCase();
-  const matches = state.notes.concat(state.archive).filter(function (note) {
-    if (note.trashed) { return false; }
+  const matches = state.notes.filter(function (note) {
+    if (note.trashed || note.archived) { return false; }
     return (note.title || "").toLowerCase().indexOf(needle) >= 0;
   }).slice().sort(function (a, b) {
     return String(b.updated || "").localeCompare(String(a.updated || ""));
@@ -59817,6 +59950,84 @@ function clearUnwrapCodeInPres(bodyEl, range, touched) {
    inside it, whose formatting is the element itself (no
    style attribute for the deep clean to strip) and which
    the browser's block conversion leaves standing. */
+/* v2.109.0: the plain link pass of one clear formatting
+   run. Everything else the operation removes is
+   presentation, and a link was the one survivor: href
+   was never treated as formatting, so a cleared link
+   stood afterward still styled and still live (Chris's
+   report: "Clear formatting doesn't fully work"). The
+   pass follows Word's Clear All Formatting: the link's
+   text stays and the link itself goes. Two kinds of
+   anchor are NOT plain links and never lose their
+   target here:
+     - anchors the app manages (note links, mail and
+       event chips, tag pills: anything carrying an
+       ss- class) are content objects, not formatting,
+       and stand exactly as attachments, TOC blocks,
+       and task blocks stand under this operation;
+     - anchors inside those protected blocks, and
+       inside encrypted passages, are untouched.
+   A decorated link (one wearing a view face) unwraps
+   to its original content: the hidden .ss-link-original
+   span holds the words the author wrote, and the
+   generated .ss-link-face goes with the anchor, so no
+   doubled or hidden text is left behind. The pass runs
+   over the same reach as the deep cleans (the touched
+   blocks plus everything the post-command range
+   intersects), so a link a conversion carried onto a
+   rebuilt block is caught as well. */
+function clearUnwrapPlainLinks(bodyEl, roots, range) {
+  const seen = new Set();
+  const anchors = [];
+  function consider(a) {
+    if (!a || seen.has(a)) { return; }
+    seen.add(a);
+    if (a.closest && (a.closest(".ss-attachment") ||
+        a.closest(".ss-toc") ||
+        a.closest(".ss-note-tasks") ||
+        a.closest("[data-ssenc]") ||
+        a.closest(".ssenc-open"))) {
+      return;
+    }
+    const tokens = (a.getAttribute("class") || "")
+      .split(/\s+/);
+    for (let i = 0; i < tokens.length; i++) {
+      if (tokens[i].indexOf("ss-") === 0) { return; }
+    }
+    anchors.push(a);
+  }
+  (roots || []).forEach(function (root) {
+    if (!root || root.nodeType !== 1 ||
+        !root.isConnected) { return; }
+    if (root.tagName === "A") { consider(root); }
+    root.querySelectorAll("a").forEach(consider);
+  });
+  if (range && bodyEl) {
+    bodyEl.querySelectorAll("a").forEach(function (a) {
+      let hit = false;
+      try { hit = range.intersectsNode(a); }
+      catch (e) { hit = false; }
+      if (hit) { consider(a); }
+    });
+  }
+  for (let i = anchors.length - 1; i >= 0; i--) {
+    const a = anchors[i];
+    const parent = a.parentNode;
+    if (!parent) { continue; }
+    /* A decorated anchor is first restored to the
+       children it was saved with (the app's own
+       stripLinkFaces: faces off, originals unwrapped),
+       so what lands in the text is exactly the words
+       the author wrote, never the face's rendering
+       of them. */
+    stripLinkFaces(a);
+    while (a.firstChild) {
+      parent.insertBefore(a.firstChild, a);
+    }
+    parent.removeChild(a);
+  }
+}
+
 function clearFormattingExtended() {
   const bodyEl = document.getElementById("noteBody");
   restoreFormatSelection();
@@ -59860,6 +60071,21 @@ function clearFormattingExtended() {
       });
       spans.forEach(function (s) {
         if (s.closest(".ss-attachment")) { return; }
+        /* v2.109.0: the link decoration spans and the
+           tab span keep the deep clean's protection
+           here too. Unwrapping a decorated link's
+           .ss-link-original and .ss-link-face into
+           their anchor would leave the face's words
+           standing beside the original words (doubled
+           text) before the link pass below can restore
+           the anchor's own children; the pass now
+           undecorates first (stripLinkFaces), so these
+           spans are its business, not this sweep's. */
+        if (s.classList && (s.classList.contains("ss-tab") ||
+            s.classList.contains("ss-link-face") ||
+            s.classList.contains("ss-link-original"))) {
+          return;
+        }
         if (range.intersectsNode(s)) {
           const parent = s.parentNode;
           while (s.firstChild) { parent.insertBefore(s.firstChild, s); }
@@ -59891,6 +60117,12 @@ function clearFormattingExtended() {
      no cleaning; normalization still gets to remove any
      shell the replacement leaves empty). */
   clearReplaceUnconvertedBlocks(plan);
+  /* v2.109.0: the plain link pass, last among the
+     cleaning passes and over the same reach the second
+     deep clean used, so no link survives the operation
+     on a touched block (see clearUnwrapPlainLinks). */
+  clearUnwrapPlainLinks(bodyEl, touchedBefore.concat(
+    clearTouchedTopBlocks(bodyEl, rangeAfter)), rangeAfter);
   clearFormattingNormalize(bodyEl, touchedBefore);
 }
 
@@ -71839,6 +72071,32 @@ function openEditorCtxMenu(x, y) {
         });
     }
   }
+  /* v2.109.0: the Format submenu starts closed on
+     every open, and its rows for the formats the
+     standing selection currently carries are marked
+     current, asked of the document the same moment
+     the Numbering marks are read. Clear Formatting
+     carries no state and is never marked. */
+  const fmtMenu = menu.querySelector(
+    "#editorCtxFormatMenu");
+  if (fmtMenu) {
+    fmtMenu.classList.add("hidden");
+    const fmtStates = { bold: "bold",
+      italic: "italic", underline: "underline",
+      strike: "strikeThrough" };
+    fmtMenu.querySelectorAll("[data-format-cmd]")
+      .forEach(function (btn) {
+        const stateCmd = fmtStates[
+          btn.getAttribute("data-format-cmd")];
+        let on = false;
+        if (stateCmd) {
+          try {
+            on = !!document.queryCommandState(stateCmd);
+          } catch (e) { on = false; }
+        }
+        btn.classList.toggle("current", on);
+      });
+  }
   menu.classList.remove("hidden");
   const width = menu.offsetWidth || 200;
   const height = menu.offsetHeight || 170;
@@ -72109,6 +72367,36 @@ function applyNumberingStyle(key) {
   markDirty();
 }
 
+/* v2.109.0: the floating Back to top button (Chris's
+   checklist item). It stands only while the editor is
+   scrolled down past about one viewport of the note,
+   and clicking it returns the reader smoothly to the
+   top. The scroll listener is passive and only ever
+   toggles the button's hidden class; the button lives
+   in #editorWrap outside the scrolling flow, so it
+   never moves with the note, never covers the
+   scrollbar (its CSS keeps it 28px off the right
+   edge), and hides itself again the moment the top
+   is reached, including the note switch renders
+   that zero the scroll. It is navigation, not
+   editing, so it serves locked notes too. */
+function wireEditorUpButton() {
+  const btn = document.getElementById("editorUpBtn");
+  const scroller = document.querySelector(
+    ".editor-scroll");
+  if (!btn || !scroller) { return; }
+  const update = function () {
+    btn.classList.toggle("hidden",
+      scroller.scrollTop <= scroller.clientHeight);
+  };
+  scroller.addEventListener("scroll", update,
+    { passive: true });
+  btn.addEventListener("click", function () {
+    scroller.scrollTo({ top: 0, behavior: "smooth" });
+  });
+  update();
+}
+
 function wireEditorCtxMenu() {
   const bodyEl = document.getElementById("noteBody");
   const menu = editorCtxMenuEl();
@@ -72185,11 +72473,35 @@ function wireEditorCtxMenu() {
         styleBtn.getAttribute("data-num-style"));
       return;
     }
+    /* v2.109.0: a Format submenu pick runs the
+       toolbar's own command on the menu's preserved
+       selection (runToolbarCommand restores it), with
+       the menu closing first, the runEditorCtxAction
+       shape. */
+    const fmtBtn = ev.target.closest("[data-format-cmd]");
+    if (fmtBtn) {
+      closeEditorCtxMenu();
+      runToolbarCommand(
+        fmtBtn.getAttribute("data-format-cmd"));
+      return;
+    }
     const btn = ev.target.closest("[data-ctx-action]");
     if (!btn || btn.disabled) { return; }
     if (btn.getAttribute("data-ctx-action") === "numstyle") {
       const sub = menu.querySelector("#editorCtxNumMenu");
       if (sub) { sub.classList.toggle("hidden"); }
+      const fmtSub = menu.querySelector(
+        "#editorCtxFormatMenu");
+      if (fmtSub) { fmtSub.classList.add("hidden"); }
+      return;
+    }
+    if (btn.getAttribute("data-ctx-action") === "format") {
+      const sub = menu.querySelector(
+        "#editorCtxFormatMenu");
+      if (sub) { sub.classList.toggle("hidden"); }
+      const numSub = menu.querySelector(
+        "#editorCtxNumMenu");
+      if (numSub) { numSub.classList.add("hidden"); }
       return;
     }
     runEditorCtxAction(btn.getAttribute("data-ctx-action"));
@@ -73355,6 +73667,8 @@ function wireEvents() {
      delegated block and region handling). */
   wireSsencControls();
   wireEditorCtxMenu();
+  /* v2.109.0: the floating Back to top button. */
+  wireEditorUpButton();
   /* v2.47: the Web clipper copy button in Settings. */
   document.getElementById("webClipCopyBtn")
     .addEventListener("click", copyWebClipBookmarklet);
@@ -74153,9 +74467,37 @@ function wireEvents() {
         if (isChecklistList(list)) {
           const bodyEl = document.getElementById("noteBody");
           if (bodyEl) {
-            bodyEl.focus();
+            /* v2.109.0: the refocus must not move the
+               reader's place. The bare focus() above
+               scrolled the editor toward the selection
+               that stood before the click (the caret is
+               often parked far from the box being
+               checked, for example at the top of a long
+               note), and parking the caret in the item
+               afterward never scrolled back, so the
+               note appeared to jump to a different spot
+               whenever a box was checked from a distance
+               (Chris's report). The scroll is captured
+               first, the focus is asked not to scroll,
+               and any movement the browser still makes
+               is undone, so the item stays exactly
+               where it stood on screen while the D2
+               caret guarantee above it is untouched. */
+            const scroller = document.querySelector(
+              ".editor-scroll");
+            const keepTop = scroller ?
+              scroller.scrollTop : null;
+            const keepLeft = scroller ?
+              scroller.scrollLeft : null;
+            bodyEl.focus({ preventScroll: true });
             placeCaretAtItemTextOffset(li,
               itemOwnTextLength(li));
+            if (scroller && keepTop !== null &&
+                (scroller.scrollTop !== keepTop ||
+                 scroller.scrollLeft !== keepLeft)) {
+              scroller.scrollTop = keepTop;
+              scroller.scrollLeft = keepLeft;
+            }
           }
         }
         markDirty();
