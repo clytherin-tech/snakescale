@@ -40,7 +40,7 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-11-03-SSN-V21060
+  BUILD STAMP: 2026-11-03-SSN-V21070
   Version: 2.106.0
 
   Revision history:
@@ -10403,6 +10403,25 @@ body.dark .task-cal-more{color:var(--accent);}
 .mail-row{position:relative;display:flex;gap:9px;padding:10px 12px;border-bottom:1px solid var(--border);cursor:pointer;}
 .mail-row:hover{background:var(--accent-soft);}
 .mail-row.selected{background:var(--accent-soft);box-shadow:inset 3px 0 0 var(--accent);}
+/* v2.107: a row standing in the Ctrl/Shift selection:
+   the same accent ground as the opened row, with its
+   bar on the right edge instead of the left, so the
+   two states never read as one another; a row that
+   is both opened and picked wears both bars. */
+.mail-row.picked{background:var(--accent-soft);box-shadow:inset -3px 0 0 var(--accent);}
+.mail-row.picked.selected{box-shadow:inset 3px 0 0 var(--accent),inset -3px 0 0 var(--accent);}
+/* v2.107: the selection bar above the list, standing
+   only while a selection stands; a plain bar in the
+   list pane's own dress, in layout like the status
+   line above it, never an overlay. */
+.mail-selbar{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--border);background:var(--accent-soft);}
+.mail-selbar-text{flex:1;font-size:13.5px;font-weight:600;}
+.mail-selbar-clear{display:inline-flex;align-items:center;justify-content:center;}
+/* v2.107: the drag badge, the count a multi drag
+   carries as its drag image: a small pill in the
+   app's dress, parked offscreen until a drag takes
+   it as its picture. */
+.mail-drag-badge{position:fixed;left:-260px;top:0;padding:6px 12px;border:1px solid var(--border);border-radius:20px;background:var(--surface);color:var(--text);font-size:13px;font-weight:600;box-shadow:var(--shadow);white-space:nowrap;}
 .mail-dot{flex:0 0 8px;width:8px;height:8px;border-radius:50%;background:var(--accent);margin-top:7px;}
 .mail-dot.off{background:transparent;}
 .mail-row-main{flex:1;min-width:0;}
@@ -12721,6 +12740,13 @@ body.dark .version-date{color:var(--accent);}
           <span id="mailStatusText">Gmail unavailable</span>
           <button class="btn small" id="mailStatusRetryBtn" type="button">Retry</button>
         </div>
+        <div class="mail-selbar hidden" id="mailSelBar">
+          <span class="mail-selbar-text" id="mailSelBarText">0 selected</span>
+          <button class="btn small" id="mailSelArchiveBtn" type="button">Archive</button>
+          <button class="btn small" id="mailSelTrashBtn" type="button">Delete</button>
+          <button class="btn small" id="mailSelSnoozeBtn" type="button">Snooze</button>
+          <button class="btn small mail-selbar-clear" id="mailSelClearBtn" type="button" title="Clear selection" aria-label="Clear selection"><svg viewBox="0 0 20 20" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M5 5l10 10M15 5L5 15"/></svg></button>
+        </div>
         <div class="mail-list" id="mailList"></div>
         <div class="mail-empty hidden" id="mailEmpty">No messages here.</div>
         <button class="btn mail-load-more hidden" id="mailLoadMoreBtn" type="button">Load more</button>
@@ -13622,6 +13648,13 @@ body.dark .version-date{color:var(--accent);}
   </div>
 </div>
 
+<div id="mailRowMenu" class="note-ctx-menu hidden" role="menu" aria-label="Message actions">
+  <div class="note-ctx-head hidden" id="mailRowMenuHead"></div>
+  <button type="button" class="list-menu-item" id="mailRowMenuArchiveBtn" role="menuitem">Archive</button>
+  <button type="button" class="list-menu-item" id="mailRowMenuDeleteBtn" role="menuitem">Delete</button>
+  <button type="button" class="list-menu-item" id="mailRowMenuSnoozeBtn" role="menuitem">Snooze</button>
+</div>
+
 <div id="mailLabelMenu" class="note-ctx-menu hidden" role="menu" aria-label="Label actions">
   <button type="button" class="list-menu-item" id="mailLabelRenameBtn" role="menuitem">Rename</button>
   <button type="button" class="list-menu-item" id="mailLabelDeleteBtn" role="menuitem">Delete</button>
@@ -14047,8 +14080,28 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-11-03-SSN-V21060";
-const APP_VERSION = "2.106.0";
+const APP_BUILD = "2026-11-03-SSN-V21070";
+const APP_VERSION = "2.107.0";
+/* 2.107.0 (2026-11-03): the email list learned
+   multi-select, with no checkboxes anywhere (Chris's
+   amendment): Ctrl or Cmd and click toggles a message
+   in or out of the picks, Shift and click takes the
+   range from the last clicked message, both together
+   add the range, and a slim bar above the list counts
+   the picks and carries Archive, Delete, and Snooze
+   for the whole set. Dragging a picked message drags
+   every pick onto the folder or label under the
+   standing drop rules behind one Undo, and a right
+   press on a row opens the app's own menu with the
+   same three actions, aimed at the whole selection
+   when the row is one of the picks and at that row
+   alone when it is not (a lone target keeps the
+   standing single paths). A batch snooze writes one
+   merged registry entry per message, rolls a refused
+   message's entry back alone, and unsnoozes as one;
+   Escape, a folder or search switch, a finished
+   batch, and rows leaving the list all keep the
+   picks honest, and touch changes nothing. */
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
@@ -29241,8 +29294,12 @@ function showMailUndoToast(kind, snap) {
   dot.setAttribute("aria-hidden", "true");
   el.appendChild(dot);
   const label = document.createElement("span");
+  /* v2.107: a batch snapshot carries its own words
+     (its counts, its return time); the single kinds
+     keep theirs below. */
   /* v2.95: a label move names its label. */
-  label.textContent = kind === "archive"
+  label.textContent = snap && snap.text ? snap.text
+    : kind === "archive"
     ? "Archived"
     : kind === "label"
       ? "Moved to " + (snap.labelName || "label")
@@ -29255,7 +29312,9 @@ function showMailUndoToast(kind, snap) {
   btn.className = "mail-undo-btn";
   btn.textContent = "Undo";
   btn.addEventListener("click", function () {
-    mailUndoTriage(snap).catch(function () {
+    const reversal = snap && snap.batch
+      ? mailUndoBatch(snap) : mailUndoTriage(snap);
+    reversal.catch(function () {
       /* the reversal reports through the write paths */
     });
   });
@@ -29992,11 +30051,24 @@ function onMailSnoozeMenuDocKeydown(ev) {
    menus, and closes on an outside press or
    Escape, the label menu's own discipline. */
 function openMailSnoozeMenu(rec, x, y) {
+  if (!rec) { return; }
+  openMailSnoozeMenuFor([rec], x, y);
+}
+
+/* v2.107: the same menu for a list of targets (a
+   selection, from the bar or the row menu): the
+   choices and their computed returns are the
+   standing ones; the pick runs the batch through
+   mailSnoozeRun, which keeps a single target on the
+   standing single path. */
+function openMailSnoozeMenuFor(recs, x, y) {
   closeMailSnoozeMenu();
   const menu = mailEl("mailSnoozeMenu");
   const rows = mailEl("mailSnoozeMenuRows");
-  if (!menu || !rows || !rec) { return; }
-  mailSnoozeMenuCtx = { rec: rec };
+  if (!menu || !rows || !recs || !recs.length) {
+    return;
+  }
+  mailSnoozeMenuCtx = { recs: recs.slice() };
   rows.innerHTML = "";
   mailSnoozeChoices(Date.now()).forEach(
     function (choice) {
@@ -30018,7 +30090,7 @@ function openMailSnoozeMenu(rec, x, y) {
         const ctx = mailSnoozeMenuCtx;
         closeMailSnoozeMenu();
         if (ctx) {
-          mailSnoozeMessage(ctx.rec, choice.until);
+          mailSnoozeRun(ctx.recs, choice.until);
         }
       });
       rows.appendChild(btn);
@@ -30033,7 +30105,7 @@ function openMailSnoozeMenu(rec, x, y) {
   pick.addEventListener("click", function () {
     const ctx = mailSnoozeMenuCtx;
     closeMailSnoozeMenu();
-    if (ctx) { openMailSnoozePick(ctx.rec); }
+    if (ctx) { openMailSnoozePickFor(ctx.recs); }
   });
   rows.appendChild(pick);
   menu.classList.remove("hidden");
@@ -30063,7 +30135,15 @@ function openMailSnoozeMenuAt(rec, anchorEl) {
    changed: no entry written, no modify sent. */
 
 function openMailSnoozePick(rec) {
-  mailSnoozePickCtx = { rec: rec };
+  if (!rec) { return; }
+  openMailSnoozePickFor([rec]);
+}
+
+/* v2.107: the custom return for a target list, the
+   dialog itself unchanged. */
+function openMailSnoozePickFor(recs) {
+  if (!recs || !recs.length) { return; }
+  mailSnoozePickCtx = { recs: recs.slice() };
   const input = mailEl("mailSnoozePickInput");
   const err = mailEl("mailSnoozePickError");
   if (err) {
@@ -30117,9 +30197,9 @@ async function confirmMailSnoozePick() {
       "Pick a future time.");
     return;
   }
-  const rec = ctx.rec;
+  const recs = ctx.recs;
   closeMailSnoozePick();
-  await mailSnoozeMessage(rec, until);
+  await mailSnoozeRun(recs, until);
 }
 
 /* A drop lands: the message the drag carried, acted on
@@ -30142,6 +30222,12 @@ function mailDropOnTarget(target) {
   const drag = mailDragState;
   mailDragState = null;
   if (!drag) { return; }
+  /* v2.107: a drag that carried a selection moves
+     the whole selection as one batch. */
+  if (drag.ids && drag.ids.length > 1) {
+    mailDropBatchOnTarget(drag, target);
+    return;
+  }
   const rec = mailRowById(drag.id);
   if (!rec) { return; }
   if (target.kind === "folder" && target.id === "inbox") {
@@ -30200,6 +30286,804 @@ function mailArmDropTarget(el, target) {
     el.classList.remove("mail-drop-on");
     mailDropOnTarget(target);
   });
+}
+
+/* ----- v2.107: list selection, batch actions, ----
+   ------- and the row context menu -----------------
+   Chris's ask, in his words: select more than one
+   email to drag and drop, and a right click menu on
+   the list (one or many selected) with Archive,
+   Delete, and Snooze. His amendment, also his
+   words: "No checkboxes! I just want to use Ctrl
+   and Shift to select."
+
+   The selection is a set of message ids held in
+   page memory only, living with the list that
+   stands (a folder, a label, or a search). A plain
+   click opens a message exactly as it always has
+   and never touches the set; Ctrl+click (Cmd+click
+   on a Mac) toggles one row; Shift+click takes the
+   range from the anchor (the last plainly clicked
+   or Ctrl-clicked row) to the pressed row, and
+   Shift+Ctrl+click adds that range to what stands.
+   Draft rows never join: a draft opens its
+   composer, it does not triage, the standing rule
+   its drag already keeps. Touch has no Ctrl or
+   Shift, so on touch the set simply never forms
+   and single message behavior is untouched; no
+   substitute was added, per Chris's word.
+
+   The batch actions are shared by the selection
+   bar, the row menu, and multi drags. One target
+   always runs the standing single paths, so a lone
+   action is byte for byte the action it was; two
+   or more run the batch paths below, which mirror
+   the singles' discipline at batch grain: a
+   snapshot (the record as it stood, its place in
+   every list, and each message's own undo
+   arithmetic) taken before the first write, one
+   modify per message through the standing
+   transport, the apply path settling each accepted
+   write, one undo toast covering the messages that
+   moved, and a refused message staying put and
+   standing outside the undo. Archive and Snooze
+   skip a message standing in the Trash (it has no
+   Inbox to leave, and a snooze return could never
+   surface it), and Delete skips one already there
+   (the permission cannot delete forever, so there
+   is nothing further for it to do). */
+
+let mailSelection = new Set();
+let mailSelectionAnchorId = null;
+let mailRowMenuCtx = null;
+
+/* The selected records standing in the current
+   list, in the list's own order: the order every
+   batch runs in, and the drag's carried order. */
+function mailSelectedRecords() {
+  const list = mailLists[mailListKey()];
+  if (!list || !list.loaded) { return []; }
+  return list.rows.filter(function (r) {
+    return !r.draftId && mailSelection.has(r.id);
+  });
+}
+
+/* Forget the selection's members the current list
+   no longer holds (a reload, a triage of the
+   opened message, a sync refresh): the set lives
+   with the list, so what left the list leaves the
+   set, and an anchor that left goes with it. */
+function mailPruneSelection() {
+  if (!mailSelection.size && !mailSelectionAnchorId) {
+    return;
+  }
+  const list = mailLists[mailListKey()];
+  if (!list || !list.loaded) { return; }
+  const present = {};
+  list.rows.forEach(function (r) {
+    present[r.id] = true;
+  });
+  let changed = false;
+  mailSelection.forEach(function (id) {
+    if (!present[id]) {
+      mailSelection.delete(id);
+      changed = true;
+    }
+  });
+  if (mailSelectionAnchorId &&
+      !present[mailSelectionAnchorId]) {
+    mailSelectionAnchorId = null;
+    changed = true;
+  }
+  if (changed) { closeMailRowMenu(); }
+}
+
+/* The bar above the list: the count and the three
+   actions stand only while a selection stands. */
+function renderMailSelBar() {
+  const bar = mailEl("mailSelBar");
+  if (!bar) { return; }
+  const n = mailSelection.size;
+  bar.classList.toggle("hidden", n === 0);
+  const text = mailEl("mailSelBarText");
+  if (text) {
+    text.textContent = n + " selected";
+  }
+}
+
+/* Repaint the picked rows and the bar from the set,
+   without a list render: a Ctrl or Shift press
+   moves no other furniture. */
+function mailPaintSelection() {
+  const listEl = mailEl("mailList");
+  if (listEl) {
+    listEl.querySelectorAll(".mail-row")
+      .forEach(function (el) {
+        el.classList.toggle("picked",
+          mailSelection.has(
+            el.getAttribute("data-mail-id")));
+      });
+  }
+  renderMailSelBar();
+}
+
+function mailClearSelection() {
+  const had = mailSelection.size > 0 ||
+    mailSelectionAnchorId !== null;
+  mailSelection.clear();
+  mailSelectionAnchorId = null;
+  if (had) { closeMailRowMenu(); }
+  mailPaintSelection();
+}
+
+/* Shift's range: from the anchor to the pressed
+   row over the list's standing rows, draft rows
+   passed over (they never join). With no anchor
+   standing, the pressed row anchors and the range
+   is itself alone. A plain Shift press replaces
+   the set; Shift with Ctrl or Cmd adds to it. The
+   anchor itself never moves on a Shift press, so
+   repeated presses re-measure from the same row,
+   the way Ctrl and Shift behave everywhere. */
+function mailSelectRangeTo(id, add) {
+  const list = mailLists[mailListKey()];
+  if (!list || !list.loaded) { return; }
+  const ids = [];
+  list.rows.forEach(function (r) {
+    if (!r.draftId) { ids.push(r.id); }
+  });
+  const to = ids.indexOf(id);
+  if (to === -1) { return; }
+  let from = mailSelectionAnchorId
+    ? ids.indexOf(mailSelectionAnchorId) : -1;
+  if (from === -1) {
+    from = to;
+    mailSelectionAnchorId = id;
+  }
+  if (!add) { mailSelection.clear(); }
+  const lo = Math.min(from, to);
+  const hi = Math.max(from, to);
+  for (let i = lo; i <= hi; i++) {
+    mailSelection.add(ids[i]);
+  }
+  closeMailRowMenu();
+  mailPaintSelection();
+}
+
+/* One message's batch snapshot: the record as it
+   stood and its place in every list, the undo's
+   raw material, exactly the single paths' own. */
+function mailBatchSnapItem(rec) {
+  return {
+    id: rec.id,
+    clone: JSON.parse(JSON.stringify(rec)),
+    positions: mailCaptureRowPositions(rec.id)
+  };
+}
+
+/* Run one write per snapshot item, in order,
+   collecting the items whose write the API
+   accepted. The write answers for itself: it runs
+   the transport and, on acceptance, the apply
+   path, and reports {ok} or {ok:false, out} with
+   the refusal kept for the summary toast. A
+   refused message has not moved: its caches stand
+   as they stood, so it stays put and stays out of
+   the undo. */
+async function mailBatchWrite(items, writeOne) {
+  const done = [];
+  let lastFailOut = null;
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    const rec = mailRowById(item.id) || item.clone;
+    let res = null;
+    try {
+      res = await writeOne(rec, item);
+    } catch (e) { res = null; }
+    if (res && res.ok) { done.push(item); }
+    else if (res && res.out) { lastFailOut = res.out; }
+  }
+  return { done: done, lastFailOut: lastFailOut };
+}
+
+/* Settle a finished batch: the view re-renders,
+   the selection clears (its rows have moved; the
+   set would be stale), and the one undo toast
+   stands with the counts in its words. When
+   nothing moved there is no toast to stand: the
+   write path's failure words speak, and the
+   selection stays for another try. */
+function mailBatchSettle(snap, total, failOut,
+    failText) {
+  if (state.view && state.view.kind === "email") {
+    renderMail();
+  }
+  if (!snap) {
+    mailToastWriteFailure(failOut, failText);
+    return false;
+  }
+  mailClearSelection();
+  showMailUndoToast("batch", snap);
+  return true;
+}
+
+function mailBatchCountText(verb, done, total, tail) {
+  return verb + " " + done +
+    (done < total ? " of " + total : "") +
+    (total === 1 ? " message" : " messages") +
+    (tail || "");
+}
+
+/* Archive a batch: INBOX comes off each message
+   that is not standing in the Trash, one modify
+   apiece, one undo restoring each message's
+   Inbox exactly as the single archive's does. */
+async function mailBatchArchive(recs) {
+  const targets = recs.filter(function (r) {
+    return r.labelIds.indexOf("TRASH") === -1;
+  });
+  if (!targets.length) {
+    toast("Nothing to archive there.", true);
+    return false;
+  }
+  const items = targets.map(mailBatchSnapItem);
+  const res = await mailBatchWrite(items,
+    async function (rec) {
+      const out = await gmailWrite("POST",
+        "/users/me/messages/" +
+        encodeURIComponent(rec.id) + "/modify",
+        { addLabelIds: [], removeLabelIds: ["INBOX"] });
+      if (out.outcome !== "ok") {
+        return { ok: false, out: out };
+      }
+      mailApplyLabelChange(rec.id, [], ["INBOX"],
+        false);
+      return { ok: true };
+    });
+  const snap = res.done.length ? {
+    batch: true, kind: "batch-archive",
+    items: res.done,
+    text: mailBatchCountText("Archived",
+      res.done.length, items.length)
+  } : null;
+  return mailBatchSettle(snap, items.length,
+    res.lastFailOut,
+    "Could not archive those messages.");
+}
+
+/* Trash a batch: the trash endpoint per message
+   (never a delete), skipping any message already
+   standing in the Trash. One undo untrashes the
+   whole batch. */
+async function mailBatchTrash(recs) {
+  const targets = recs.filter(function (r) {
+    return r.labelIds.indexOf("TRASH") === -1;
+  });
+  if (!targets.length) {
+    toast("Nothing to move to Trash there.", true);
+    return false;
+  }
+  const items = targets.map(mailBatchSnapItem);
+  const res = await mailBatchWrite(items,
+    async function (rec) {
+      const out = await gmailWrite("POST",
+        "/users/me/messages/" +
+        encodeURIComponent(rec.id) + "/trash", null);
+      if (out.outcome !== "ok") {
+        return { ok: false, out: out };
+      }
+      mailApplyLabelChange(rec.id, ["TRASH"],
+        ["INBOX"], true);
+      return { ok: true };
+    });
+  const snap = res.done.length ? {
+    batch: true, kind: "batch-trash",
+    items: res.done,
+    text: mailBatchCountText("Moved",
+      res.done.length, items.length, " to Trash")
+  } : null;
+  return mailBatchSettle(snap, items.length,
+    res.lastFailOut,
+    "Could not move those messages to trash.");
+}
+
+/* A label move for a batch, a multi drag's landing
+   on a label: the v2.95 arithmetic per message
+   (the label goes on, INBOX comes off, plus the
+   source label when the drag started in another
+   label's list), each message's undo restoring
+   its own exact prior set. */
+async function mailBatchLabelMove(recs, target,
+    remove) {
+  let labelName = target.id;
+  (mailLabels || []).forEach(function (l) {
+    if (l.id === target.id) { labelName = l.name; }
+  });
+  const add = [target.id];
+  const items = recs.map(function (rec) {
+    const item = mailBatchSnapItem(rec);
+    const prior = rec.labelIds.slice();
+    item.undoAdd = remove.filter(function (l) {
+      return prior.indexOf(l) !== -1;
+    });
+    item.undoRemove = add.filter(function (l) {
+      return prior.indexOf(l) === -1;
+    });
+    return item;
+  });
+  const res = await mailBatchWrite(items,
+    async function (rec) {
+      const out = await gmailWrite("POST",
+        "/users/me/messages/" +
+        encodeURIComponent(rec.id) + "/modify",
+        { addLabelIds: add, removeLabelIds: remove });
+      if (out.outcome !== "ok") {
+        return { ok: false, out: out };
+      }
+      mailApplyLabelChange(rec.id, add, remove,
+        false);
+      return { ok: true };
+    });
+  const snap = res.done.length ? {
+    batch: true, kind: "batch-label",
+    items: res.done,
+    text: mailBatchCountText("Moved",
+      res.done.length, items.length,
+      " to " + labelName)
+  } : null;
+  return mailBatchSettle(snap, items.length,
+    res.lastFailOut, "That move did not happen.");
+}
+
+/* The move back to the Inbox for a batch, a multi
+   drag's landing on the Inbox folder: per message
+   the v2.103 arithmetic (INBOX goes on, a message
+   in the Trash loses TRASH as it comes home,
+   every other label stays), a message already
+   home is passed over in silence like the
+   single's, and each landed message is seated in
+   the Inbox list at its date place, the v2.103
+   seating repair at batch grain. */
+async function mailBatchMoveToInbox(recs) {
+  const items = [];
+  recs.forEach(function (rec) {
+    const prior = rec.labelIds.slice();
+    const inTrash = prior.indexOf("TRASH") !== -1;
+    if (prior.indexOf("INBOX") !== -1 && !inTrash) {
+      return;
+    }
+    const item = mailBatchSnapItem(rec);
+    item.remove = inTrash ? ["TRASH"] : [];
+    item.undoAdd = item.remove.filter(function (l) {
+      return prior.indexOf(l) !== -1;
+    });
+    item.undoRemove = ["INBOX"].filter(function (l) {
+      return prior.indexOf(l) === -1;
+    });
+    item.homeward = JSON.parse(JSON.stringify(rec));
+    items.push(item);
+  });
+  if (!items.length) { return false; }
+  const res = await mailBatchWrite(items,
+    async function (rec, item) {
+      const out = await gmailWrite("POST",
+        "/users/me/messages/" +
+        encodeURIComponent(rec.id) + "/modify",
+        { addLabelIds: ["INBOX"],
+          removeLabelIds: item.remove });
+      if (out.outcome !== "ok") {
+        return { ok: false, out: out };
+      }
+      mailApplyLabelChange(rec.id, ["INBOX"],
+        item.remove, false);
+      mailSeatRowInInbox(item.homeward, ["INBOX"],
+        item.remove);
+      return { ok: true };
+    });
+  const snap = res.done.length ? {
+    batch: true, kind: "batch-inbox",
+    items: res.done,
+    text: mailBatchCountText("Moved",
+      res.done.length, items.length, " to Inbox")
+  } : null;
+  return mailBatchSettle(snap, items.length,
+    res.lastFailOut, "That move did not happen.");
+}
+
+/* Snooze a batch until one instant, the single
+   snooze's discipline at batch grain: ONE merged
+   registry write upserts an entry per target
+   (every write re-reads the file fresh and merges
+   by message id, the standing rule, so the batch
+   lands as one change), then one modify per
+   message (the Snoozed label on, INBOX off). A
+   message whose modify is refused has its entry
+   rolled back individually, a replaced prior
+   restored, exactly as the single's refusal rolls
+   its one entry back. The undo toast names the
+   count and the return, and its Undo brings the
+   whole batch home. */
+async function mailSnoozeMessages(recs, untilMs) {
+  const targets = recs.filter(function (r) {
+    return r.labelIds.indexOf("TRASH") === -1;
+  });
+  if (!targets.length) {
+    toast("Nothing to snooze there.", true);
+    return false;
+  }
+  const labelId = await mailSnoozeLabelId();
+  if (!labelId) {
+    toast("Could not snooze those messages.", true);
+    return false;
+  }
+  const entryBase = {
+    labelId: labelId,
+    snoozeUntil: new Date(untilMs).toISOString(),
+    createdAt: new Date().toISOString()
+  };
+  const ids = targets.map(function (r) { return r.id; });
+  const priors = {};
+  const written = await mailSnoozeWriteEntries(
+    function (entries) {
+      const next = entries.filter(function (e) {
+        if (ids.indexOf(e.messageId) !== -1) {
+          priors[e.messageId] = e;
+          return false;
+        }
+        return true;
+      });
+      targets.forEach(function (rec) {
+        next.push({
+          messageId: rec.id,
+          threadId: rec.threadId || "",
+          labelId: entryBase.labelId,
+          snoozeUntil: entryBase.snoozeUntil,
+          createdAt: entryBase.createdAt
+        });
+      });
+      return next;
+    });
+  if (!written) {
+    toast("Could not snooze those messages.", true);
+    return false;
+  }
+  ids.forEach(function (id) {
+    if (!(id in priors)) { priors[id] = null; }
+  });
+  const items = targets.map(mailBatchSnapItem);
+  const res = await mailBatchWrite(items,
+    async function (rec) {
+      const out = await gmailWrite("POST",
+        "/users/me/messages/" +
+        encodeURIComponent(rec.id) + "/modify",
+        { addLabelIds: [labelId],
+          removeLabelIds: ["INBOX"] });
+      if (out.outcome !== "ok") {
+        return { ok: false, out: out };
+      }
+      mailApplyLabelChange(rec.id, [labelId],
+        ["INBOX"], false);
+      return { ok: true };
+    });
+  const failedIds = items.filter(function (item) {
+    return res.done.indexOf(item) === -1;
+  }).map(function (item) { return item.id; });
+  if (failedIds.length) {
+    await mailSnoozeWriteEntries(
+      function (entries) {
+        const next = entries.filter(function (e) {
+          return failedIds.indexOf(e.messageId) === -1;
+        });
+        failedIds.forEach(function (id) {
+          if (priors[id]) { next.push(priors[id]); }
+        });
+        return next;
+      });
+  }
+  const donePriors = {};
+  res.done.forEach(function (item) {
+    donePriors[item.id] = priors[item.id];
+  });
+  const untilText = mailSnoozeFormatUntil(untilMs);
+  const snap = res.done.length ? {
+    batch: true, kind: "batch-snooze",
+    items: res.done, labelId: labelId,
+    priors: donePriors,
+    text: mailBatchCountText("Snoozed",
+      res.done.length, items.length,
+      " until " + untilText)
+  } : null;
+  return mailBatchSettle(snap, items.length,
+    res.lastFailOut,
+    "Could not snooze those messages.");
+}
+
+/* One snooze ask, any count: a single target runs
+   the standing single path; a list runs the
+   batch. The snooze menu and its pick dialog both
+   land here. */
+function mailSnoozeRun(recs, untilMs) {
+  if (!recs || !recs.length) {
+    return Promise.resolve(false);
+  }
+  if (recs.length === 1) {
+    return mailSnoozeMessage(recs[0], untilMs);
+  }
+  return mailSnoozeMessages(recs, untilMs);
+}
+
+/* Reverse a whole batch: every item's row copies
+   go back at their captured places first (so the
+   applies that follow settle off standing copies),
+   then each reversing write runs; a refused
+   reversal takes that message's restored copies
+   back out and the summary at the end counts what
+   came back honestly. A snooze batch's registry
+   follows the modifies, as the single's does: the
+   entries the batch wrote come out and the priors
+   it replaced go back, in one merged write, for
+   the messages whose return the API accepted. */
+async function mailUndoBatch(snap) {
+  dismissMailUndoToast();
+  const landedById = {};
+  snap.items.forEach(function (item) {
+    const clone = JSON.parse(JSON.stringify(
+      item.clone));
+    landedById[item.id] = mailRestoreRowPositions(
+      clone, item.positions);
+  });
+  let restored = 0;
+  const restoredIds = [];
+  for (let i = 0; i < snap.items.length; i++) {
+    const item = snap.items[i];
+    const path = "/users/me/messages/" +
+      encodeURIComponent(item.id);
+    let ok = false;
+    if (snap.kind === "batch-archive") {
+      const out = await gmailWrite("POST",
+        path + "/modify",
+        { addLabelIds: ["INBOX"],
+          removeLabelIds: [] });
+      if (out.outcome === "ok") {
+        mailApplyLabelChange(item.id, ["INBOX"], [],
+          false);
+        ok = true;
+      }
+    } else if (snap.kind === "batch-trash") {
+      const out = await gmailWrite("POST",
+        path + "/untrash", null);
+      if (out.outcome === "ok") {
+        mailApplyLabelChange(item.id, [],
+          ["TRASH"], true);
+        ok = true;
+      }
+    } else if (snap.kind === "batch-label" ||
+        snap.kind === "batch-inbox") {
+      const out = await gmailWrite("POST",
+        path + "/modify",
+        { addLabelIds: item.undoAdd,
+          removeLabelIds: item.undoRemove });
+      if (out.outcome === "ok") {
+        mailApplyLabelChange(item.id, item.undoAdd,
+          item.undoRemove, false);
+        ok = true;
+      }
+    } else if (snap.kind === "batch-snooze") {
+      const out = await gmailWrite("POST",
+        path + "/modify",
+        { addLabelIds: ["INBOX"],
+          removeLabelIds: [snap.labelId] });
+      if (out.outcome === "ok") {
+        mailApplyLabelChange(item.id, ["INBOX"],
+          [snap.labelId], false);
+        ok = true;
+      }
+    }
+    if (ok) {
+      restored++;
+      restoredIds.push(item.id);
+    } else {
+      (landedById[item.id] || []).forEach(
+        function (key) {
+          const list = mailLists[key];
+          if (list) {
+            list.rows = list.rows.filter(
+              function (r) { return r.id !== item.id; });
+          }
+        });
+    }
+  }
+  if (snap.kind === "batch-snooze" &&
+      restoredIds.length) {
+    await mailSnoozeWriteEntries(
+      function (entries) {
+        const next = entries.filter(function (e) {
+          return restoredIds.indexOf(e.messageId) === -1;
+        });
+        restoredIds.forEach(function (id) {
+          const prior = snap.priors
+            ? snap.priors[id] : null;
+          if (prior) { next.push(prior); }
+        });
+        return next;
+      });
+  }
+  if (state.view && state.view.kind === "email") {
+    renderMail();
+  }
+  if (restored < snap.items.length) {
+    toast("Undo restored " + restored + " of " +
+      snap.items.length + " messages.", true);
+  }
+}
+
+/* Run one of the three actions over a target list:
+   the bar, the row menu, and nothing else. A lone
+   target runs the standing single path, so its
+   toast and its undo are the ones it always had. */
+function mailRunTargets(recs, action, x, y) {
+  if (!recs || !recs.length) { return; }
+  if (action === "archive") {
+    if (recs.length === 1) {
+      mailArchiveWithUndo(recs[0]);
+    } else { mailBatchArchive(recs); }
+  } else if (action === "trash") {
+    if (recs.length === 1) {
+      mailTrashWithUndo(recs[0]);
+    } else { mailBatchTrash(recs); }
+  } else if (action === "snooze") {
+    openMailSnoozeMenuFor(recs, x, y);
+  }
+}
+
+/* A multi drag lands: the whole selection moves by
+   the target it fell on, under the standing drop
+   semantics per target (the Inbox brings the batch
+   home, All Mail archives it, Trash trashes it, a
+   label moves it), one undo toast covering the
+   batch. A drop on the very label whose list
+   stands open is no move at all, as a single's is. */
+function mailDropBatchOnTarget(drag, target) {
+  const recs = [];
+  (drag.ids || []).forEach(function (id) {
+    const rec = mailRowById(id);
+    if (rec) { recs.push(rec); }
+  });
+  if (!recs.length) { return; }
+  if (target.kind === "folder" &&
+      target.id === "inbox") {
+    mailBatchMoveToInbox(recs);
+    return;
+  }
+  if (target.kind === "folder" && target.id === "all") {
+    mailBatchArchive(recs);
+    return;
+  }
+  if (target.kind === "folder" &&
+      target.id === "trash") {
+    mailBatchTrash(recs);
+    return;
+  }
+  if (target.kind === "label") {
+    if (mailFolder.kind === "label" &&
+        mailFolder.id === target.id) {
+      return;
+    }
+    const remove = ["INBOX"];
+    if (drag.fromSel &&
+        drag.fromSel.kind === "label" &&
+        drag.fromSel.id !== target.id) {
+      remove.push(drag.fromSel.id);
+    }
+    mailBatchLabelMove(recs, target, remove);
+  }
+}
+
+/* ----- The row context menu ------------------------
+   A right click on a message row opens the app's
+   own menu at the pointer (the browser's never
+   stands here; the app suppresses it everywhere):
+   Archive, Delete, and Snooze, Chris's three. When
+   the pressed row stands in the selection the menu
+   acts on the whole selection and its head counts
+   it; when it does not, the menu acts on that row
+   alone and the standing selection is untouched.
+   An action whose whole target set stands in the
+   Trash has no meaning (Archive and Snooze need an
+   Inbox to leave, and Delete cannot delete
+   forever), so a press on trashed mail only opens
+   no menu at all. The menu closes on an outside
+   press, on Escape, on the list scrolling, on the
+   selection changing, and on the view changing,
+   the label menu's own discipline throughout. */
+
+function closeMailRowMenu() {
+  const menu = mailEl("mailRowMenu");
+  if (menu) { menu.classList.add("hidden"); }
+  mailRowMenuCtx = null;
+  document.removeEventListener("pointerdown",
+    onMailRowMenuDocPointerDown, true);
+  document.removeEventListener("keydown",
+    onMailRowMenuDocKeydown, true);
+  const list = mailEl("mailList");
+  if (list) {
+    list.removeEventListener("scroll",
+      onMailRowMenuListScroll);
+  }
+}
+
+function onMailRowMenuDocPointerDown(ev) {
+  const menu = mailEl("mailRowMenu");
+  if (menu && ev.target && menu.contains(ev.target)) {
+    return;
+  }
+  closeMailRowMenu();
+}
+
+function onMailRowMenuDocKeydown(ev) {
+  if (ev.key === "Escape") {
+    ev.preventDefault();
+    closeMailRowMenu();
+  }
+}
+
+function onMailRowMenuListScroll() {
+  closeMailRowMenu();
+}
+
+function openMailRowMenu(rec, x, y) {
+  closeMailRowMenu();
+  const menu = mailEl("mailRowMenu");
+  if (!menu || !rec) { return; }
+  const targets = mailSelection.has(rec.id)
+    ? mailSelectedRecords() : [rec];
+  if (!targets.length) { return; }
+  const anyLive = targets.some(function (r) {
+    return r.labelIds.indexOf("TRASH") === -1;
+  });
+  if (!anyLive) { return; }
+  const head = mailEl("mailRowMenuHead");
+  if (head) {
+    head.textContent = targets.length > 1
+      ? targets.length + " messages" : "";
+    head.classList.toggle("hidden",
+      targets.length <= 1);
+  }
+  mailRowMenuCtx = {
+    ids: targets.map(function (r) { return r.id; }),
+    x: x, y: y
+  };
+  menu.classList.remove("hidden");
+  placeNoteContextMenu(menu, x, y);
+  document.addEventListener("pointerdown",
+    onMailRowMenuDocPointerDown, true);
+  document.addEventListener("keydown",
+    onMailRowMenuDocKeydown, true);
+  const list = mailEl("mailList");
+  if (list) {
+    list.addEventListener("scroll",
+      onMailRowMenuListScroll);
+  }
+  const first = menu.querySelector(".list-menu-item");
+  if (first) { first.focus(); }
+}
+
+/* One of the menu's three, over the menu's targets:
+   the records resolve in the menu's own order, and
+   the run goes through mailRunTargets, so a lone
+   target keeps its standing single path and its
+   standing toast. Snooze opens the standing
+   snooze menu where the row menu stood. */
+function mailRowMenuRun(action) {
+  const ctx = mailRowMenuCtx;
+  closeMailRowMenu();
+  if (!ctx) { return; }
+  const recs = [];
+  ctx.ids.forEach(function (id) {
+    const rec = mailRowById(id);
+    if (rec) { recs.push(rec); }
+  });
+  mailRunTargets(recs, action, ctx.x, ctx.y);
 }
 
 /* ----- Part 6: the label context menu ------------- */
@@ -32472,6 +33356,9 @@ function mailChooseSelection(sel) {
   mailFolder = sel;
   mailOpenId = null;
   mailOpenFull = null;
+  /* v2.107: standing somewhere new ends the
+     selection that lived with the old list. */
+  mailClearSelection();
   closeMailLabelsMenu();
   const pane = mailEl("mailpane");
   if (pane) { pane.classList.remove("mail-show-read"); }
@@ -32487,6 +33374,11 @@ function mailChooseSelection(sel) {
 function renderMailList() {
   const listEl = mailEl("mailList");
   if (!listEl) { return; }
+  /* v2.107: the selection lives with this list:
+     what a reload, a triage, or a refresh took out
+     of it leaves the set, and the bar follows. */
+  mailPruneSelection();
+  renderMailSelBar();
   const clearBtn = mailEl("mailSearchClearBtn");
   if (clearBtn) {
     clearBtn.classList.toggle("hidden",
@@ -32530,7 +33422,10 @@ function renderMailList() {
 function buildMailRowEl(rec) {
   const el = document.createElement("div");
   el.className = "mail-row" + (rec.unread ? " unread" : "") +
-    (mailOpenId === rec.id ? " selected" : "");
+    (mailOpenId === rec.id ? " selected" : "") +
+    /* v2.107: a row standing in the Ctrl/Shift
+       selection wears the picked dress. */
+    (mailSelection.has(rec.id) ? " picked" : "");
   el.setAttribute("data-mail-id", rec.id);
   /* v2.84 (Part 3): a message row drags (a draft
      row does not: it opens the composer, it does
@@ -32540,8 +33435,22 @@ function buildMailRowEl(rec) {
   if (!rec.draftId) {
     el.setAttribute("draggable", "true");
     el.addEventListener("dragstart", function (ev) {
+      /* v2.107: dragging a row that stands in the
+         selection carries the whole selection, in
+         the list's order, and the drag's picture is
+         a badge counting the messages; dragging any
+         other row carries that row alone, exactly
+         as it always has, and the selection is
+         untouched. */
+      const multi = mailSelection.has(rec.id) &&
+        mailSelection.size > 1;
       mailDragState = {
         id: rec.id,
+        ids: multi
+          ? mailSelectedRecords().map(function (r) {
+              return r.id;
+            })
+          : [rec.id],
         fromSel: {
           kind: mailFolder.kind,
           id: mailFolder.id || null
@@ -32552,10 +33461,28 @@ function buildMailRowEl(rec) {
         try {
           ev.dataTransfer.setData("text/plain", rec.id);
         } catch (e) { /* the state above is the record */ }
+        if (multi &&
+            typeof ev.dataTransfer.setDragImage ===
+              "function") {
+          const badge = document.createElement("div");
+          badge.className = "mail-drag-badge";
+          badge.id = "mailDragBadge";
+          badge.textContent = mailSelection.size +
+            " messages";
+          document.body.appendChild(badge);
+          try {
+            ev.dataTransfer.setDragImage(badge, 0, 0);
+          } catch (e) { /* the row's own ghost serves */ }
+        }
       }
     });
     el.addEventListener("dragend", function () {
       mailDragState = null;
+      const badge = document.getElementById(
+        "mailDragBadge");
+      if (badge && badge.parentNode) {
+        badge.parentNode.removeChild(badge);
+      }
       document.querySelectorAll(
         ".mail-folder.mail-drop-on")
         .forEach(function (t) {
@@ -32637,9 +33564,51 @@ function buildMailRowEl(rec) {
     actions.appendChild(btn);
   });
   el.appendChild(actions);
-  el.addEventListener("click", function () {
+  el.addEventListener("click", function (ev) {
+    /* v2.107: a Shift press takes the range from
+       the anchor (adding, with Ctrl or Cmd held
+       too); a Ctrl or Cmd press without Shift
+       toggles the row in the selection without
+       opening it, and anchors the ranges there; a
+       plain press opens the message exactly as it
+       always has, never touching the selection,
+       and anchors. Draft rows keep their plain
+       behavior throughout: they open the composer
+       and never select. */
+    if (!rec.draftId && ev.shiftKey) {
+      /* Shift leads: with Ctrl or Cmd held too the
+         range adds, without it replaces. */
+      ev.preventDefault();
+      mailSelectRangeTo(rec.id,
+        !!(ev.ctrlKey || ev.metaKey));
+      return;
+    }
+    if (!rec.draftId && (ev.ctrlKey || ev.metaKey)) {
+      ev.preventDefault();
+      mailSelectionAnchorId = rec.id;
+      if (mailSelection.has(rec.id)) {
+        mailSelection.delete(rec.id);
+      } else {
+        mailSelection.add(rec.id);
+      }
+      closeMailRowMenu();
+      mailPaintSelection();
+      return;
+    }
+    if (!rec.draftId) {
+      mailSelectionAnchorId = rec.id;
+    }
     if (rec.draftId) { openMailDraft(rec); }
     else { openMailMessage(rec.id); }
+  });
+  /* v2.107: a right press on the row opens the row
+     menu at the pointer; a draft row answers with
+     silence (it has no triage to offer), and the
+     browser's own menu never stands here. */
+  el.addEventListener("contextmenu", function (ev) {
+    ev.preventDefault();
+    if (rec.draftId) { return; }
+    openMailRowMenu(rec, ev.clientX, ev.clientY);
   });
   return el;
 }
@@ -33790,6 +34759,57 @@ function initMailBindings() {
     });
   mailEl("mailLoadMoreBtn").addEventListener("click",
     function () { loadMailList(mailListKey(), true); });
+  /* v2.107: the selection bar's three actions run
+     over the standing selection (a lone selected
+     message keeps its standing single path, through
+     the same dispatcher the row menu uses), Snooze
+     opens the standing snooze menu under the bar's
+     own button, and Clear ends the selection. */
+  mailEl("mailSelArchiveBtn").addEventListener(
+    "click", function () {
+      mailRunTargets(mailSelectedRecords(), "archive");
+    });
+  mailEl("mailSelTrashBtn").addEventListener(
+    "click", function () {
+      mailRunTargets(mailSelectedRecords(), "trash");
+    });
+  mailEl("mailSelSnoozeBtn").addEventListener(
+    "click", function () {
+      const btn = mailEl("mailSelSnoozeBtn");
+      const r = btn.getBoundingClientRect();
+      mailRunTargets(mailSelectedRecords(), "snooze",
+        r.left, r.bottom + 4);
+    });
+  mailEl("mailSelClearBtn").addEventListener(
+    "click", function () { mailClearSelection(); });
+  /* v2.107: the row menu's three items. */
+  mailEl("mailRowMenuArchiveBtn").addEventListener(
+    "click", function () { mailRowMenuRun("archive"); });
+  mailEl("mailRowMenuDeleteBtn").addEventListener(
+    "click", function () { mailRowMenuRun("trash"); });
+  mailEl("mailRowMenuSnoozeBtn").addEventListener(
+    "click", function () { mailRowMenuRun("snooze"); });
+  /* v2.107: Escape ends a standing selection, once
+     the menus and the snooze pick have had theirs
+     (each closes on its own Escape first). */
+  document.addEventListener("keydown", function (ev) {
+    if (ev.key !== "Escape") { return; }
+    if (!state.view || state.view.kind !== "email") {
+      return;
+    }
+    if (!mailSelection.size) { return; }
+    const stands = function (id) {
+      const el = mailEl(id);
+      return el && !el.classList.contains("hidden");
+    };
+    if (stands("mailRowMenu") || stands("mailSnoozeMenu") ||
+        stands("mailLabelsMenu") ||
+        stands("mailMoreMenu") ||
+        stands("mailSnoozePickModal")) {
+      return;
+    }
+    mailClearSelection();
+  });
   mailEl("mailBackBtn").addEventListener("click",
     function () {
       const pane = mailEl("mailpane");
