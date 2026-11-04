@@ -40,7 +40,7 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-11-04-SSN-V21110
+  BUILD STAMP: 2026-11-04-SSN-V21120
   Version: 2.106.0
 
   Revision history:
@@ -14222,8 +14222,35 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-11-04-SSN-V21110";
-const APP_VERSION = "2.111.0";
+const APP_BUILD = "2026-11-04-SSN-V21120";
+const APP_VERSION = "2.112.0";
+/* 2.112.0 (2026-11-04): a sync keeps the
+   reader's place (Chris: "When syncing and using
+   Sync Now, the whole app refreshes and I end up
+   losing my place... the whole app shouldn't
+   refresh like I pressed F5."). syncNow never
+   reloaded the page; it flushes, loads, and
+   renders everything, and the render rebuilt
+   every surface. Whether a rebuilt scroller kept
+   its offset was the browser's clamp behavior,
+   and the notes list lost the place outright when
+   the load changed its membership above the
+   reader's card: the numeric offset survived
+   while the content slid under it. syncNow now
+   brackets its render with captureSyncPlace and
+   restoreSyncPlace. The list is anchored to the
+   card at its viewport's top (falling back to the
+   captured number when that card is gone), the
+   open note's scroll and caret ride
+   restoreEditorViewState under a same-note guard,
+   and the Home, Tasks, and Email list scrollers
+   keep their numeric offsets; the scroll restore
+   runs again on the next frame for surfaces whose
+   layout settles late, the caret only in the
+   render pass. Nothing else in the sync changes:
+   the flush order, the load, the conflict
+   decisions, the drop box, and the calendar and
+   mail refresh calls stand as they were. */
 /* 2.111.0 (2026-11-04): the Tab refinement
    (Chris's correction on v2.110.0, device tested:
    "It should only indent the list line if the
@@ -19464,11 +19491,18 @@ async function syncNow(showToast) {
       await ensureNoteBodyLoaded(openAfterLoad);
     }
     syncOpenNoteRefresh = openNoteCtx;
+    /* v2.112.0: the reader's place, captured with
+       the load landed and the render about to run,
+       and restored on the render's far side, so the
+       sync leaves the reader where it found them
+       (see the place block at captureSyncPlace). */
+    const syncPlace = captureSyncPlace();
     try {
       renderAll();
     } finally {
       syncOpenNoteRefresh = null;
     }
+    restoreSyncPlace(syncPlace);
     /* v2.36: the auto sync editor guard can let renderEditor
        return early when the OPEN note did not change, even
        when the sync rewrote a note that links to it; sweep
@@ -42535,6 +42569,231 @@ function restoreEditorViewState(view) {
   sel.removeAllRanges();
   sel.addRange(range);
 }
+
+/* --------------------------------------------------------------------------
+   v2.112.0: a sync keeps the reader's place
+
+   Chris (2026-11-04): "When syncing and using Sync
+   Now, the whole app refreshes and I end up losing
+   my place. Can you have it Sync in the background
+   without having to refresh the whole app? Unless
+   it has to directly refresh what I am working
+   on/in, but the whole app shouldn't refresh like
+   I pressed F5."
+
+   syncNow never reloads the page. What it does is
+   flush, load, and renderAll(), and the render
+   rebuilds every surface wholesale. Whether a
+   rebuilt surface's scroller kept its offset was
+   the browser's clamp behavior, not a promise, and
+   one surface lost the place outright in
+   measurement: when the load changed the viewed
+   list's membership above the reader's card (a note
+   arriving from another device sorts in above it;
+   notes vanishing do the same from the other side),
+   the rebuilt list kept its numeric scroll offset
+   while the content slid under it, so the card
+   being read moved by the height of whatever came
+   or went.
+
+   So syncNow now brackets its render with a place
+   capture and restore. The capture is taken with
+   the load landed and the render about to run, so
+   it reads the place the reader actually holds at
+   that moment, typing done through the load
+   included. The restore runs on the render's far
+   side:
+
+   - The notes list is anchored, not numbered: the
+     card standing at the top of the list's viewport
+     (the first card whose foot passes the list's
+     top edge) and its offset from that edge are
+     captured, and the restore scrolls the rebuilt
+     list so that same card stands at that same
+     offset. When the card itself is gone (the sync
+     took it), the captured numeric offset stands
+     instead, clamped by the browser to whatever
+     the new content allows.
+   - The editor, while it stands open on a note
+     that is still the selected one, is restored
+     through restoreEditorViewState: the scroll
+     offset numerically and the caret as a character
+     offset, clamped to the body that stands. A
+     clean editor the sync refilled has already had
+     the same restore from the refill itself; this
+     pass is the guarantee for every other path,
+     and it never runs for a note the sync moved
+     the reader away from.
+   - Home, Tasks (the calendar rides in the same
+     pane), and the Email list keep their numeric
+     scroll offsets.
+
+   Only laid out surfaces are captured or restored:
+   a hidden pane has no place to keep, and its own
+   return render rebuilds it as it always has. The
+   scroll restore is applied once as the render
+   lands and once more on the next frame, so a
+   surface whose layout settles a frame late (the
+   Home grid's pack is the standing example) still
+   lands at its offset; the caret is set once, in
+   the synchronous pass, so a frame of the reader's
+   own typing can never be pulled back. Each
+   surface restores inside its own guard, so one
+   surface's failure cannot take the others.
+   Nothing else in the sync changes: the flush
+   order, the load, the conflict decisions, the
+   drop box, and the calendar and mail refresh
+   calls stand as they were. This is only what the
+   render is allowed to do to the reader's place.
+   -------------------------------------------------------------------------- */
+let syncPlaceGeneration = 0;
+
+/* The reader's place, in restoreSyncPlace's shape.
+   list: { top, anchorId, anchorOff } or null when
+   the list is not laid out; editor: { id, view }
+   or null when no editor stands open; home, tasks,
+   and mail: a numeric offset, or null when the
+   scroller does not exist. */
+function captureSyncPlace() {
+  const place = { list: null, editor: null,
+    home: null, tasks: null, mail: null };
+  try {
+    const listEl = document.getElementById("noteList");
+    if (listEl && listEl.clientHeight > 0) {
+      const entry = { top: listEl.scrollTop,
+        anchorId: null, anchorOff: 0 };
+      const listRect = listEl.getBoundingClientRect();
+      const cards = listEl.querySelectorAll(".note-card");
+      for (let i = 0; i < cards.length; i++) {
+        const r = cards[i].getBoundingClientRect();
+        if (r.bottom > listRect.top + 2) {
+          entry.anchorId =
+            cards[i].getAttribute("data-note-id");
+          entry.anchorOff = r.top - listRect.top;
+          break;
+        }
+      }
+      place.list = entry;
+    }
+  } catch (err) {
+    console.warn("Sync place capture (list) failed: " +
+      (err && err.message));
+  }
+  try {
+    const scroller = document.querySelector(
+      "#editorWrap .editor-scroll");
+    const note = currentNote();
+    if (scroller && scroller.clientHeight > 0 && note) {
+      place.editor = { id: note.id,
+        view: captureEditorViewState() };
+    }
+  } catch (err) {
+    console.warn("Sync place capture (editor) failed: " +
+      (err && err.message));
+  }
+  const numeric = function (id) {
+    const el = document.getElementById(id);
+    return el ? el.scrollTop : null;
+  };
+  try { place.home = numeric("homeScroll"); }
+  catch (err) { place.home = null; }
+  try { place.tasks = numeric("tasksScroll"); }
+  catch (err) { place.tasks = null; }
+  try { place.mail = numeric("mailList"); }
+  catch (err) { place.mail = null; }
+  return place;
+}
+
+/* The scroll half of the restore, shared by the
+   synchronous pass and the next frame's: the list
+   anchor first (falling back to the captured
+   number when the card is gone), then the numeric
+   scrollers, each only while it stands laid out. */
+function restoreSyncPlaceScrolls(place) {
+  if (place.list) {
+    try {
+      const listEl = document.getElementById("noteList");
+      if (listEl && listEl.clientHeight > 0) {
+        let anchored = false;
+        if (place.list.anchorId) {
+          const listRect = listEl.getBoundingClientRect();
+          const cards =
+            listEl.querySelectorAll(".note-card");
+          for (let i = 0; i < cards.length; i++) {
+            if (cards[i].getAttribute("data-note-id") ===
+                place.list.anchorId) {
+              const off = cards[i]
+                .getBoundingClientRect().top - listRect.top;
+              listEl.scrollTop +=
+                off - place.list.anchorOff;
+              anchored = true;
+              break;
+            }
+          }
+        }
+        if (!anchored) {
+          listEl.scrollTop = place.list.top;
+        }
+      }
+    } catch (err) {
+      console.warn("Sync place restore (list) failed: " +
+        (err && err.message));
+    }
+  }
+  const numeric = function (id, value) {
+    if (value === null || value === undefined) { return; }
+    try {
+      const el = document.getElementById(id);
+      if (el && el.clientHeight > 0) {
+        el.scrollTop = value;
+      }
+    } catch (err) {
+      console.warn("Sync place restore (" + id +
+        ") failed: " + (err && err.message));
+    }
+  };
+  numeric("homeScroll", place.home);
+  numeric("tasksScroll", place.tasks);
+  numeric("mailList", place.mail);
+  if (place.editor) {
+    try {
+      const scroller = document.querySelector(
+        "#editorWrap .editor-scroll");
+      if (scroller && scroller.clientHeight > 0 &&
+          state.selectedId === place.editor.id) {
+        scroller.scrollTop = place.editor.view.scrollTop;
+      }
+    } catch (err) {
+      console.warn("Sync place restore (editor " +
+        "scroll) failed: " + (err && err.message));
+    }
+  }
+}
+
+/* Put a captured place back after a sync's render:
+   the scrolls and, in this pass only, the editor's
+   caret; then the scrolls once more on the next
+   frame, under a generation token a newer sync
+   supersedes. */
+function restoreSyncPlace(place) {
+  if (!place) { return; }
+  restoreSyncPlaceScrolls(place);
+  if (place.editor &&
+      state.selectedId === place.editor.id) {
+    try {
+      restoreEditorViewState(place.editor.view);
+    } catch (err) {
+      console.warn("Sync place restore (editor) " +
+        "failed: " + (err && err.message));
+    }
+  }
+  const generation = ++syncPlaceGeneration;
+  requestAnimationFrame(function () {
+    if (generation !== syncPlaceGeneration) { return; }
+    restoreSyncPlaceScrolls(place);
+  });
+}
+
 
 /* --------------------------------------------------------------------------
    v2.72: per note editor view memory
