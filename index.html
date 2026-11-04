@@ -40,7 +40,7 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-11-03-SSN-V21070
+  BUILD STAMP: 2026-11-04-SSN-V21080
   Version: 2.106.0
 
   Revision history:
@@ -5947,6 +5947,20 @@
      Here it is the ink itself, the black the items
      need on the light surface. */
   --text-strong:#10231A;
+  /* v2.108: the muted text tone the same menu family
+     names for its secondary lines (the saved search
+     panel's head, query line, empty note, and three
+     dot buttons, the templates gallery's matching
+     lines, and the tag parent panel's head). Like
+     text-strong in v2.59 it was referenced but never
+     defined, so those lines fell back to inherited
+     color: the sidebar's pale text on the menus'
+     white card, washed out in light mode. Chris's
+     call (2026-11-04): the save search menu's text
+     in light mode is black, so here it is the ink
+     itself; the hierarchy still comes from size
+     and weight. */
+  --text-muted:#10231A;
   /* v2.61: the soft accent wash the sidebar menu
      family's hover rules name (the tag, tag parent,
      shortcut, saved search, and template menus), and
@@ -5983,6 +5997,10 @@ body.dark{
      sidebar's own button hovers use for strong text
      on the dark surfaces. */
   --text-strong:#FFFFFF;
+  /* v2.108: the dark theme's muted text tone (see
+     :root): the dark muted tone, readable on the
+     dark surface card. */
+  --text-muted:#B7CFC0;
   /* v2.61: the dark theme's accent-soft, the soft
      tone's dark value here (see :root). */
   --accent-soft:#1D4A38;
@@ -14080,28 +14098,26 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-11-03-SSN-V21070";
-const APP_VERSION = "2.107.0";
-/* 2.107.0 (2026-11-03): the email list learned
-   multi-select, with no checkboxes anywhere (Chris's
-   amendment): Ctrl or Cmd and click toggles a message
-   in or out of the picks, Shift and click takes the
-   range from the last clicked message, both together
-   add the range, and a slim bar above the list counts
-   the picks and carries Archive, Delete, and Snooze
-   for the whole set. Dragging a picked message drags
-   every pick onto the folder or label under the
-   standing drop rules behind one Undo, and a right
-   press on a row opens the app's own menu with the
-   same three actions, aimed at the whole selection
-   when the row is one of the picks and at that row
-   alone when it is not (a lone target keeps the
-   standing single paths). A batch snooze writes one
-   merged registry entry per message, rolls a refused
-   message's entry back alone, and unsnoozes as one;
-   Escape, a folder or search switch, a finished
-   batch, and rows leaving the list all keep the
-   picks honest, and touch changes nothing. */
+const APP_BUILD = "2026-11-04-SSN-V21080";
+const APP_VERSION = "2.108.0";
+/* 2.108.0 (2026-11-04): the save search menu's
+   washed out text in light mode is fixed at the
+   root. The panel's secondary lines (its head, the
+   query under a saved search's name, the empty
+   note, and the three dot buttons) name a muted
+   text token that, like text-strong in v2.59, was
+   referenced but never defined, so they inherited
+   the sidebar's pale color on the panel's white
+   card. The token is defined now in both themes:
+   the ink itself in light mode, per Chris's call
+   that the menu's text there is black, and the
+   dark muted tone in dark mode. The same two
+   definitions also heal the token's other users,
+   audited first: the templates gallery's group
+   titles, previews, menu buttons, and empty note,
+   and the tag parent panel's head, every one on a
+   themed surface card like the saved search
+   panel's. No rule's text changed. */
 /* The Drive folder that holds the complete notes layout: notebook
    folders, trash, archive, index.json, and (since v2.0) the
    attachments subfolder. */
