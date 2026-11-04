@@ -40,7 +40,7 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-11-04-SSN-V21090
+  BUILD STAMP: 2026-11-04-SSN-V21100
   Version: 2.106.0
 
   Revision history:
@@ -8199,6 +8199,43 @@ body.dark .modal:hover::-webkit-scrollbar-thumb{
   list-style-type:upper-roman;}
 #noteBody ol.ss-num-lower-roman{
   list-style-type:lower-roman;}
+/* v2.110.0: the depth cycle spelled out to Word's
+   ninth level (the v2.101.0 rules above stop at the
+   sixth): disc, circle, square and decimal, lower
+   alpha, lower roman keep repeating, so a level
+   seven item reads as a level again rather than
+   inheriting the deepest written rule. */
+#noteBody :is(ul,ol) :is(ul,ol) :is(ul,ol)
+  :is(ul,ol) :is(ul,ol) :is(ul,ol) ul{
+  list-style-type:disc;}
+#noteBody :is(ul,ol) :is(ul,ol) :is(ul,ol)
+  :is(ul,ol) :is(ul,ol) :is(ul,ol)
+  :is(ul,ol) ul{list-style-type:circle;}
+#noteBody :is(ul,ol) :is(ul,ol) :is(ul,ol)
+  :is(ul,ol) :is(ul,ol) :is(ul,ol)
+  :is(ul,ol) :is(ul,ol) ul{list-style-type:square;}
+#noteBody :is(ul,ol) :is(ul,ol) :is(ul,ol)
+  :is(ul,ol) :is(ul,ol) :is(ul,ol) ol{
+  list-style-type:decimal;}
+#noteBody :is(ul,ol) :is(ul,ol) :is(ul,ol)
+  :is(ul,ol) :is(ul,ol) :is(ul,ol)
+  :is(ul,ol) ol{list-style-type:lower-alpha;}
+#noteBody :is(ul,ol) :is(ul,ol) :is(ul,ol)
+  :is(ul,ol) :is(ul,ol) :is(ul,ol)
+  :is(ul,ol) :is(ul,ol) ol{
+  list-style-type:lower-roman;}
+/* v2.110.0: the level wrapper (see indentListItem).
+   An li.ss-level-pad is not an item: it exists
+   only to hold the sub-list a first item demoted
+   into, the nested model's stand-in for the flat
+   level Word puts on a first item. display:contents
+   gives it no box of its own: no marker, no line
+   of vertical space, and no share of an ordered
+   list's counting (measured in Chromium: the item
+   after it keeps the number it would have had
+   without it). Its sub-list renders at the deeper
+   level by the ordinary depth rules above. */
+#noteBody li.ss-level-pad{display:contents;}
 #noteBody li.done{color:var(--muted);text-decoration:line-through;}
 /* v2.1.0: links to other notes (href "ssnote:<id>", class ss-note-link)
    read as internal links: accent color and an underline. The accent
@@ -14185,8 +14222,38 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-11-04-SSN-V21090";
-const APP_VERSION = "2.109.0";
+const APP_BUILD = "2026-11-04-SSN-V21100";
+const APP_VERSION = "2.110.0";
+/* 2.110.0 (2026-11-04): lists take Word's Tab
+   model (Chris's report: Tab did nothing on the
+   first line of a list no matter where the caret
+   stood, and an item that headed its own sub-list
+   stalled after one press). Tab now demotes the
+   caret's item one level with the caret anywhere
+   in it, in ordered, unordered, and checklist
+   lists alike, and Shift+Tab promotes it, as many
+   times as he presses, up to Word's ninth level;
+   the depth marker cycle is spelled out to the
+   ninth level in the editor and print stylesheets
+   alike, and every level takes the same 24 pixel
+   step. The first item of a list, and any item
+   heading its sub-list, used to have no item
+   above it to nest under, so Tab was a swallowed
+   no-op there; those items now demote through a
+   markerless wrapper (li.ss-level-pad,
+   display:contents): an empty host that renders
+   no marker, consumes no number in an ordered
+   list, and takes no line of its own, holding
+   the sub-list the item moves into. Promoting
+   back out of it removes the wrapper, so the
+   round trip restores the exact structure. A
+   selection spanning several items still moves
+   them together, and Tab outside lists is
+   untouched: table cells still navigate, code
+   blocks still indent, plain paragraphs still
+   take a tab character. The text and Word
+   exporters walk through a wrapper without
+   giving it a line or a number of its own. */
 /* 2.109.0 (2026-11-04): the Editor takes the
    Testing Checklist bundle, six items. Tab on a
    checklist line now indents by a full list level
@@ -54586,6 +54653,20 @@ function noteBodyToPlainText(html, note) {
     let num = 0;
     Array.prototype.forEach.call(listEl.children, function (li) {
       if (li.tagName !== "LI") { return; }
+      /* v2.110.0: a level wrapper is not an item: it
+         takes no number and no line of its own, and
+         its sub-list renders one level deeper, the
+         way the note itself renders it. */
+      if (li.classList.contains("ss-level-pad")) {
+        Array.prototype.forEach.call(li.children,
+          function (child) {
+            if (child.tagName === "UL" ||
+                child.tagName === "OL") {
+              listLines(child, depth + 1);
+            }
+          });
+        return;
+      }
       num++;
       let prefix;
       if (checklist) { prefix = isCheckedItem(li) ? "\u2611 " : "\u2610 "; }
@@ -54828,6 +54909,20 @@ function buildWordDocumentXml(note) {
     let num = 0;
     Array.prototype.forEach.call(listEl.children, function (li) {
       if (li.tagName !== "LI") { return; }
+      /* v2.110.0: a level wrapper is not an item: it
+         takes no number and no paragraph of its own,
+         and its sub-list renders one level deeper,
+         the way the note itself renders it. */
+      if (li.classList.contains("ss-level-pad")) {
+        Array.prototype.forEach.call(li.children,
+          function (child) {
+            if (child.tagName === "UL" ||
+                child.tagName === "OL") {
+              listParas(child, depth + 1);
+            }
+          });
+        return;
+      }
       num++;
       let prefix;
       if (checklist) {
@@ -55195,6 +55290,31 @@ function buildPrintDocument(note, bodyHtml) {
     "list-style-type:lower-roman;}" +
     ":is(ul,ol) :is(ul,ol) :is(ul,ol) ol{" +
     "list-style-type:decimal;}" +
+    ":is(ul,ol) :is(ul,ol) :is(ul,ol) :is(ul,ol) ul{" +
+    "list-style-type:circle;}" +
+    ":is(ul,ol) :is(ul,ol) :is(ul,ol) :is(ul,ol) " +
+    ":is(ul,ol) ul{list-style-type:square;}" +
+    ":is(ul,ol) :is(ul,ol) :is(ul,ol) :is(ul,ol) " +
+    ":is(ul,ol) :is(ul,ol) ul{list-style-type:disc;}" +
+    ":is(ul,ol) :is(ul,ol) :is(ul,ol) :is(ul,ol) " +
+    ":is(ul,ol) :is(ul,ol) :is(ul,ol) ul{" +
+    "list-style-type:circle;}" +
+    ":is(ul,ol) :is(ul,ol) :is(ul,ol) :is(ul,ol) " +
+    ":is(ul,ol) :is(ul,ol) :is(ul,ol) :is(ul,ol) ul{" +
+    "list-style-type:square;}" +
+    ":is(ul,ol) :is(ul,ol) :is(ul,ol) :is(ul,ol) ol{" +
+    "list-style-type:lower-alpha;}" +
+    ":is(ul,ol) :is(ul,ol) :is(ul,ol) :is(ul,ol) " +
+    ":is(ul,ol) ol{list-style-type:lower-roman;}" +
+    ":is(ul,ol) :is(ul,ol) :is(ul,ol) :is(ul,ol) " +
+    ":is(ul,ol) :is(ul,ol) ol{list-style-type:decimal;}" +
+    ":is(ul,ol) :is(ul,ol) :is(ul,ol) :is(ul,ol) " +
+    ":is(ul,ol) :is(ul,ol) :is(ul,ol) ol{" +
+    "list-style-type:lower-alpha;}" +
+    ":is(ul,ol) :is(ul,ol) :is(ul,ol) :is(ul,ol) " +
+    ":is(ul,ol) :is(ul,ol) :is(ul,ol) :is(ul,ol) ol{" +
+    "list-style-type:lower-roman;}" +
+    "li.ss-level-pad{display:contents;}" +
     "ol.ss-num-decimal{list-style-type:decimal;}" +
     "ol.ss-num-upper-alpha{list-style-type:upper-alpha;}" +
     "ol.ss-num-lower-alpha{list-style-type:lower-alpha;}" +
@@ -56435,17 +56555,56 @@ function listItemOfNode(node) {
   return li;
 }
 
-/* Indent one list item one level: move it into a sub-list inside
-   its previous sibling item. The first item of a list has nothing
-   above it to nest under, so it cannot indent (a no-op). The
-   sub-list is the previous sibling's existing list of the same
-   tag when one is there (the item joins it, after the items it
-   already holds), otherwise a fresh list of the same tag as the
-   item's own list, appended as the sibling's last child. In a
-   checklist the sub-list carries the ss-checklist class, so the
-   decoration, the Enter splitting, and the box toggling that key
-   off list shape keep working at depth. Returns whether the item
-   moved. */
+/* v2.110.0: the level a list item stands at, in
+   Word's terms: one for a top level item, plus one
+   for every list standing between its own list and
+   the note body. A level wrapper (see
+   indentListItem) counts like any other nesting,
+   because the sub-list it holds is a list standing
+   between. */
+function listItemLevel(li) {
+  let level = 0;
+  let el = li ? li.parentElement : null;
+  while (el) {
+    if (el.tagName === "UL" || el.tagName === "OL") {
+      level++;
+    }
+    if (el.id === "noteBody") { break; }
+    el = el.parentElement;
+  }
+  return level;
+}
+
+/* Indent one list item one level. v2.110.0: Word's
+   level model (Chris's Tab report: Tab has to work
+   anywhere in a list, on the first item too, as
+   many times as he presses it). With a previous
+   sibling item the move is the standing one: the
+   item joins a sub-list inside that sibling (the
+   sibling's existing list of the same tag when one
+   is there, after the items it already holds,
+   otherwise a fresh list of the same tag as the
+   item's own list, appended as the sibling's last
+   child). The first item of a list has nothing
+   above it to nest under; Word's flat levels have
+   no such wall, so the nested model builds the
+   level out of a markerless wrapper instead: an
+   li.ss-level-pad takes the item's place in its
+   list, holding a fresh sub-list the item moves
+   into. The wrapper is not an item: it carries no
+   text of its own, no marker, and no checkbox, and
+   its stylesheet rule (display:contents) gives it
+   no box, so nothing renders where it stands and
+   an ordered list's counting passes it by. An item
+   that demotes again while heading a sub-list,
+   its own or a wrapper's, meets the same wall and
+   takes the same way through, one level per press.
+   In a checklist the sub-list carries the
+   ss-checklist class, so the decoration, the Enter
+   splitting, and the box toggling that key off
+   list shape keep working at depth. Levels run to
+   nine, Word's ceiling; at the ninth, indent does
+   nothing. Returns whether the item moved. */
 function indentListItem(li) {
   /* v2.101.0: an item going back into a list gives
      up its alumni standing (see outdentListItem). */
@@ -56454,9 +56613,20 @@ function indentListItem(li) {
   if (!list || (list.tagName !== "UL" && list.tagName !== "OL")) {
     return false;
   }
-  const prev = li.previousElementSibling;
-  if (!prev || prev.tagName !== "LI") { return false; }
+  if (listItemLevel(li) >= 9) { return false; }
   const checklist = isChecklistList(list);
+  const prev = li.previousElementSibling;
+  if (!prev || prev.tagName !== "LI") {
+    const wrap = document.createElement("li");
+    wrap.className = "ss-level-pad";
+    const sub = document.createElement(
+      list.tagName.toLowerCase());
+    if (checklist) { sub.className = "ss-checklist"; }
+    wrap.appendChild(sub);
+    list.insertBefore(wrap, li);
+    sub.appendChild(li);
+    return true;
+  }
   let sub = null;
   for (let i = 0; i < prev.children.length; i++) {
     if (prev.children[i].tagName === list.tagName) {
@@ -56550,6 +56720,16 @@ function outdentListItem(li) {
   li.__ssAlumniOf = list;
   li.__ssAlumniIdx = orig;
   if (!list.querySelector("li")) { list.remove(); }
+  /* v2.110.0: a level wrapper whose sub-list just
+     emptied goes with it, so promoting the item a
+     first item demotion wrapped restores the exact
+     structure the demotion started from: no dead
+     wrapper is left standing where the item was. A
+     wrapper still holding items stays. */
+  if (host.classList.contains("ss-level-pad") &&
+      !list.isConnected) {
+    host.remove();
+  }
   return true;
 }
 
@@ -57647,9 +57827,16 @@ function ensureChecklistCheckbox(li) {
 function makeListChecklist(ul) {
   ul.classList.add("ss-checklist");
   for (let i = 0; i < ul.children.length; i++) {
-    if (ul.children[i].tagName === "LI") {
-      ensureChecklistCheckbox(ul.children[i]);
+    if (ul.children[i].tagName !== "LI") { continue; }
+    /* v2.110.0: a level wrapper is not an item and
+       never takes a box; without this it would grow
+       one here and render as an empty checklist
+       row. */
+    if (ul.children[i].classList.contains(
+        "ss-level-pad")) {
+      continue;
     }
+    ensureChecklistCheckbox(ul.children[i]);
   }
 }
 
@@ -58004,7 +58191,11 @@ function convertChecklistToPlainList(list, ordered, caretLi) {
 function isChecklistList(ul) {
   if (!ul || ul.tagName !== "UL") { return false; }
   if (ul.classList.contains("ss-checklist")) { return true; }
-  const first = ul.querySelector("li");
+  /* v2.110.0: a level wrapper can head the list and
+     is not an item, so the content probe reads the
+     first true item past it. */
+  const first = ul.querySelector(
+    "li:not(.ss-level-pad)") || ul.querySelector("li");
   if (!first) { return false; }
   const head = first.firstElementChild;
   return !!head && head.tagName === "INPUT" && head.type === "checkbox";
