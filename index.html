@@ -40,7 +40,7 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-11-04-SSN-V21100
+  BUILD STAMP: 2026-11-04-SSN-V21110
   Version: 2.106.0
 
   Revision history:
@@ -14222,8 +14222,40 @@ body.dark .version-date{color:var(--accent);}
 /* --------------------------------------------------------------------------
    1. Constants and global state
    -------------------------------------------------------------------------- */
-const APP_BUILD = "2026-11-04-SSN-V21100";
-const APP_VERSION = "2.110.0";
+const APP_BUILD = "2026-11-04-SSN-V21110";
+const APP_VERSION = "2.111.0";
+/* 2.111.0 (2026-11-04): the Tab refinement
+   (Chris's correction on v2.110.0, device tested:
+   "It should only indent the list line if the
+   cursor is at the beginning. Any other time it
+   should just function as a tab."). Tab and
+   Shift+Tab now belong to a list item only at the
+   very beginning of its own text, which is also
+   Word's rule: Word demotes only at a paragraph's
+   start. A new probe, caretAtListItemTextStart,
+   reads the fragment of the item standing before
+   the caret: the checklist checkbox, stray source
+   whitespace, and the item's sub-lists do not cost
+   the caret its beginning; a real character, a
+   media element, or a tab character itself does,
+   so a caret behind an inserted tab is not at the
+   beginning. With the caret anywhere else in the
+   item, Tab inserts a tab character through
+   insertTabAtRange, the plain paragraph path's
+   own mechanism, so a list item's tab is the same
+   span.ss-tab a paragraph's is, in the editor and
+   in the saved file; Shift+Tab there does nothing
+   but keep the key in the note, so focus never
+   escapes and no level changes mid line. A
+   selection spanning several items still demotes
+   and promotes them all, wherever it starts; a
+   selection inside one item now takes the single
+   block behavior, exactly like a paragraph
+   selection. Everything else is unchanged: the
+   v2.110.0 demote and promote machinery (the
+   level wrapper, the nine level ceiling, the
+   marker cycle), Tab in table cells and code
+   blocks, and the multi block tab prefix. */
 /* 2.110.0 (2026-11-04): lists take Word's Tab
    model (Chris's report: Tab did nothing on the
    first line of a list no matter where the caret
@@ -56273,6 +56305,18 @@ function moveNoteToNotebook(note, targetSlug) {
        take the tab prefix path. A list inside a table cell does
        not qualify: the table navigation above has already won
        by the time this is consulted.
+     - v2.111.0: the indent and outdent above belong to the
+       caret only at the very beginning of the item's own
+       text (caretAtListItemTextStart below), the way Word
+       demotes only at a paragraph's start. With the caret
+       anywhere else in the item, Tab inserts a tab
+       character at the caret through the same
+       insertTabAtRange the plain block path below uses,
+       and Shift+Tab does nothing but stay in the note. A
+       selection spanning several items still indents and
+       outdents them all, wherever it starts; a selection
+       inside one item behaves like a selection inside one
+       plain block.
      - With a selection spanning several blocks (outside tables
        and lists), Tab prefixes every touched block with a tab
        and Shift+Tab removes one leading tab from each that has
@@ -56555,6 +56599,58 @@ function listItemOfNode(node) {
   return li;
 }
 
+/* v2.111.0: whether the collapsed caret stands at
+   the very beginning of a list item's own text:
+   before its first character, with nothing ahead of
+   it in the item but the furniture that is not text.
+   The probe is the fragment of the item standing
+   before the caret. What it may hold without
+   costing the caret its beginning: the checklist
+   checkbox (an input, and this probe reads text
+   only), stray spaces and line breaks from source
+   markup, and the item's sub-lists (their text
+   belongs to the items below, and a caret standing
+   in one of those is in that item, which
+   listItemOfNode already handed over). What costs
+   it: any real character, a media or attachment
+   element standing in the item, and a tab character
+   itself, raw or in its span: a caret behind an
+   inserted tab is not at the beginning, so Tab
+   pressed there inserts another tab rather than
+   demoting. An item with no text of its own is at
+   its beginning wherever its caret stands in it. */
+function caretAtListItemTextStart(li, range) {
+  const probe = document.createRange();
+  probe.setStart(li, 0);
+  try {
+    probe.setEnd(range.startContainer, range.startOffset);
+  } catch (e) { return false; }
+  const frag = probe.cloneContents();
+  if (frag.querySelectorAll(
+      "img, .ss-attachment").length) {
+    return false;
+  }
+  const walker = document.createTreeWalker(
+    frag, NodeFilter.SHOW_TEXT);
+  let node;
+  while ((node = walker.nextNode())) {
+    let anc = node.parentNode, nested = false;
+    while (anc && anc !== frag) {
+      if (anc.tagName === "UL" || anc.tagName === "OL") {
+        nested = true;
+        break;
+      }
+      anc = anc.parentNode;
+    }
+    if (nested) { continue; }
+    if (/\S/.test(node.data) ||
+        node.data.indexOf("\t") !== -1) {
+      return false;
+    }
+  }
+  return true;
+}
+
 /* v2.110.0: the level a list item stands at, in
    Word's terms: one for a top level item, plus one
    for every list standing between its own list and
@@ -56777,16 +56873,34 @@ function handleBodyTabKey(ev) {
   if (range.collapsed) {
     const li = listItemOfNode(range.startContainer);
     if (li) {
-      const caretNode = range.startContainer;
-      const caretOffset = range.startOffset;
-      const moved = shift ? outdentListItem(li) : indentListItem(li);
-      if (moved) {
-        /* The move carried the item (and the caret's nodes with
-           it) to a new parent; re-park the caret where it was
-           inside the item, falling back to the item's start if
-           the old spot no longer resolves. */
-        try { setBodyCaret(caretNode, caretOffset); }
-        catch (e) { setBodyCaret(li, 0); }
+      /* v2.111.0: at the very beginning of the item's own
+         text the keys still demote and promote (the
+         v2.110.0 machinery, first item and sub-list
+         heads included); anywhere else in the item Tab
+         is a tab character again, inserted through the
+         plain block path's own insertTabAtRange, and
+         Shift+Tab does nothing but keep the key in the
+         note, so focus never escapes and no level ever
+         changes mid line. */
+      if (caretAtListItemTextStart(li, range)) {
+        const caretNode = range.startContainer;
+        const caretOffset = range.startOffset;
+        const moved = shift ? outdentListItem(li) :
+          indentListItem(li);
+        if (moved) {
+          /* The move carried the item (and the caret's nodes
+             with it) to a new parent; re-park the caret
+             where it was inside the item, falling back to
+             the item's start if the old spot no longer
+             resolves. */
+          try { setBodyCaret(caretNode, caretOffset); }
+          catch (e) { setBodyCaret(li, 0); }
+          markDirty();
+        }
+        return true;
+      }
+      if (!shift) {
+        insertTabAtRange(range);
         markDirty();
       }
       return true;
@@ -56796,7 +56910,29 @@ function handleBodyTabKey(ev) {
     const items = blocks.filter(function (b) {
       return b.tagName === "LI";
     });
-    if (items.length) {
+    /* v2.111.0: a selection inside ONE list item is not
+       a multi item selection: it falls through to the
+       single block behavior at the bottom (Tab
+       replaces it with a tab character, Shift+Tab
+       takes a tab back), exactly like a selection
+       inside one paragraph. The selection spans items
+       when it touches more than one block, when its
+       ends stand in different items, or when it
+       reaches into the starting item's own sub-list;
+       the ancestors of a nested item are not counted,
+       because a selection inside one nested item
+       intersects them without touching their text. */
+    const startItem = listItemOfNode(range.startContainer);
+    const endItem = listItemOfNode(range.endContainer);
+    let spansItems = items.length > 1 ||
+      blocks.length > 1 || startItem !== endItem;
+    if (!spansItems && startItem) {
+      spansItems = Array.prototype.some.call(
+        startItem.querySelectorAll("li"), function (el) {
+          return range.intersectsNode(el);
+        });
+    }
+    if (items.length && spansItems) {
       const others = blocks.filter(function (b) {
         return b.tagName !== "LI";
       });
