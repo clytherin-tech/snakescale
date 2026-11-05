@@ -2,7 +2,7 @@
   ==========================================================================
   SnakeScale Notes service worker
   ==========================================================================
-  BUILD STAMP: 2026-11-04-SSN-V21120
+  BUILD STAMP: 2026-11-05-SSN-V21130
   Version: 2.11.0
 
   This worker exists for exactly one job: making SnakeScale Notes
@@ -11,9 +11,10 @@
   registered by the page only over HTTPS (or localhost); see
   registerServiceWorker in index.html.
 
-  What it caches: the app shell only. The page itself, the install
-  manifest, and the app icons, under a cache name that carries the
-  build stamp. Every release bumps the stamp, so every release gets
+  What it caches: the app shell only. The page itself, its
+  stylesheet and scripts (the split parts, named in the shell
+  list below), the install manifest, and the app icons, under
+  a cache name that carries the build stamp. Every release bumps the stamp, so every release gets
   a fresh cache, and the activate step below deletes the caches of
   all older versions.
 
@@ -84,7 +85,7 @@
 
 "use strict";
 
-const CACHE_NAME = "snakescale-shell-2026-11-04-SSN-V21120";
+const CACHE_NAME = "snakescale-shell-2026-11-05-SSN-V21130";
 
 /* The shell, as paths relative to this worker's scope (the site
    root). "./" and "./index.html" are both listed: the first is the
@@ -93,6 +94,21 @@ const CACHE_NAME = "snakescale-shell-2026-11-04-SSN-V21120";
 const SHELL_URLS = [
   "./",
   "./index.html",
+  "./styles.css",
+  "./version.js",
+  "./core.js",
+  "./store.js",
+  "./sync.js",
+  "./tasks.js",
+  "./notebooks.js",
+  "./home.js",
+  "./calendar.js",
+  "./mail.js",
+  "./render.js",
+  "./editor.js",
+  "./editor-tools.js",
+  "./media.js",
+  "./app.js",
   "./manifest.webmanifest",
   "./icon-192.png",
   "./icon-512.png",
@@ -171,11 +187,15 @@ self.addEventListener("fetch", function (event) {
     return;
   }
 
-  /* The manifest and the icons: cache first. They are versioned by
-     the cache name, so a cache hit is always the current release's
-     file; a miss goes to the network and is kept for next time. */
+  /* The manifest, the icons, and the app's own styles and
+     scripts: cache first. They are versioned by the cache
+     name, so a cache hit is always the current release's
+     file; a miss goes to the network and is kept for next
+     time. */
   const isShellAsset = url.pathname.endsWith(".webmanifest") ||
-    url.pathname.endsWith(".png");
+    url.pathname.endsWith(".png") ||
+    url.pathname.endsWith(".css") ||
+    url.pathname.endsWith(".js");
   if (isShellAsset) {
     event.respondWith(
       caches.match(request, { ignoreSearch: true })
