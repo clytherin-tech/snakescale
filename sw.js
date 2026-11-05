@@ -2,7 +2,7 @@
   ==========================================================================
   SnakeScale Notes service worker
   ==========================================================================
-  BUILD STAMP: 2026-11-05-SSN-V21130
+  BUILD STAMP: 2026-11-05-SSN-V21140
   Version: 2.11.0
 
   This worker exists for exactly one job: making SnakeScale Notes
@@ -14,9 +14,14 @@
   What it caches: the app shell only. The page itself, its
   stylesheet and scripts (the split parts, named in the shell
   list below), the install manifest, and the app icons, under
-  a cache name that carries the build stamp. Every release bumps the stamp, so every release gets
-  a fresh cache, and the activate step below deletes the caches of
-  all older versions.
+  a cache name that carries the build stamp. Every release
+  bumps the stamp, so every release gets a fresh cache, and
+  the activate step below deletes the caches of all older
+  versions. Since this release the worker also carries a manifest
+  of SHA-256 hashes, one per shell file (ASSET_HASHES below,
+  generated from the shipped files, never edited by hand).
+  The manifest is what lets an update tell, file by file,
+  what actually changed: see Updates below.
 
   What it never does: it never caches API responses, access tokens,
   or note data. Notes live in the user's own Google Drive and are
@@ -60,10 +65,24 @@
   focusing a running window (navigating it to the
   payload's URL when it differs) or opening that URL.
 
-  Updates: install precaches the new shell (the new build's page
-  included, fetched fresh from the network at install time) under
-  the new cache name and skips waiting, and activate clears the
-  old caches and claims the open pages. Claiming is not a reload:
+  Updates (per-file cache versioning): install
+  assembles the new release's cache completely before
+  anything activates, file by file. For each shell file it
+  first looks in the older caches for a copy whose bytes
+  hash (SHA-256, computed here at install time) to the new
+  manifest: a match is copied forward with no network fetch
+  at all. A file with no matching copy is fetched from the
+  network and stored only if its bytes hash to the manifest;
+  a failed fetch or a failed verification fails the whole
+  install and deletes the half-built cache, so the previous
+  release keeps running whole, exactly the promise the old
+  cache.addAll install made. Only when every file stands
+  verified in the new cache does install skip waiting, and
+  activate then clears the old caches and claims the open
+  pages. An update therefore downloads only the files that
+  changed (plus this worker itself, whose change is what
+  makes the browser look), instead of the whole shell on
+  every release. Claiming is not a reload:
   open pages keep running the build they loaded with. A
   navigation still served by the outgoing worker (the one that
   discovers the update) runs the old build once more, and every
@@ -85,7 +104,7 @@
 
 "use strict";
 
-const CACHE_NAME = "snakescale-shell-2026-11-05-SSN-V21130";
+const CACHE_NAME = "snakescale-shell-2026-11-05-SSN-V21140";
 
 /* The shell, as paths relative to this worker's scope (the site
    root). "./" and "./index.html" are both listed: the first is the
@@ -120,11 +139,167 @@ const SHELL_URLS = [
    spelling the navigation used. */
 const PAGE_KEY = "./index.html";
 
+/* The generated per-file manifest: every unique
+   shell asset's URL, spelled as in SHELL_URLS, mapped to the
+   SHA-256 of its shipped bytes, in hex. "./" is not a key:
+   it is the page under its other spelling, and the page's
+   one entry here is "./index.html" (see installShell).
+   This block is written by gen_asset_hashes.py in the
+   build's harness folder, between the two marker lines,
+   and the test suite recomputes every hash and fails the
+   build if this block is stale. Never edit it by hand. */
+// BEGIN GENERATED ASSET HASHES (gen_asset_hashes.py)
+const ASSET_HASHES = {
+  "./index.html": "4cdfd4748027a040528a1e6653cf4c94112e3ea6d7e96ca1fdcd1a61b2a630ce",
+  "./styles.css": "061cd0443c9a396cd84e909c5a22f1ac2b6a1d34846863f73a599c787c7897ec",
+  "./version.js": "7f9fe32d38648eeebbdd12e52abfe34fe94733e2beabe39812891c6cec08dfeb",
+  "./core.js": "6f39b11f76398034d4a15d3295df07b438fb37bc3471854a286a51d21922386b",
+  "./store.js": "6435b80d8d1ec9f539451b3982b768c78df0e69513ad5750e7bf531a1577dfc9",
+  "./sync.js": "92213ded9ff4c0626a56e20c58da580558b43d608017ea3a4d7ce3c917bf13db",
+  "./tasks.js": "3e8903aaa9380d86af2e072f783515f39b9ea315e598ad1b25eb1387c9b4d546",
+  "./notebooks.js": "354f98b8c805843c5fdd45b55a4471e5823553ca799fbf72df249fb41faa19df",
+  "./home.js": "cd957b2b826d002028a4f6a922cb7756ff9f4621a47a769f3d228b22e316f191",
+  "./calendar.js": "d5ad2872dcb7126b2368ae0c6f26d0c40c290522cdf61af2fd9298834c9f4d11",
+  "./mail.js": "3556cd45b6d52c38a584e8eab3e786ab2f7fb4cd5fad0992dbb6e16f1d4e78ff",
+  "./render.js": "c233735cf3b7b6a24d9a85921f17f06bd94d1b913238179c3abe914ba36849df",
+  "./editor.js": "91e9c174949210b33944370b5c98247a09d72d9da6a3d89fa2967539c09cd063",
+  "./editor-tools.js": "22d92c84cd5a79335c8b716e2fdb06331a216d66955503f5aefcd0ab9af50b0a",
+  "./media.js": "453ff89182da27a9a464e530743d0ab87babd83f563c663edfaf2af493a67f2a",
+  "./app.js": "ead116e42fa22848c2f95d6da7ea777c1a00a06ce3867662319c7e4ef1aa539d",
+  "./manifest.webmanifest": "3023da8f798f72a653465cd72fc269090e5c0e18dbc0d2f52afb0d54cda8c16c",
+  "./icon-192.png": "d663e8dbb927453044a9760c7ed49d13d6be2c155ffff85245f09a02c319848e",
+  "./icon-512.png": "0745bbae85b4dd2c4b726154c043022330ac2067e31944bc4db32e48352cb5f9",
+  "./icon-maskable-512.png": "4a147e82c17ef92666fc5fa59dd06bf6b4bd844c072e62a2dc27d52d919faacf",
+  "./apple-touch-icon.png": "fe3998937952e0dca681323b6471ccd40920aa3e55ac03c95581dbd064f74859"
+};
+// END GENERATED ASSET HASHES
+
+/* SHA-256 of an ArrayBuffer, as lowercase hex, the same
+   spelling the generator writes into ASSET_HASHES. */
+function sha256Hex(buffer) {
+  return crypto.subtle.digest("SHA-256", buffer)
+    .then(function (digest) {
+      const bytes = new Uint8Array(digest);
+      let hex = "";
+      for (let i = 0; i < bytes.length; i++) {
+        hex += ("0" + bytes[i].toString(16)).slice(-2);
+      }
+      return hex;
+    });
+}
+
+/* The storage keys a shell asset stands under in a cache:
+   the page stands under both of its spellings, every other
+   asset under its own URL alone. */
+function assetKeys(url) {
+  if (url === PAGE_KEY) { return [PAGE_KEY, "./"]; }
+  return [url];
+}
+
+/* Look for a copy of url in any cache other than the one
+   being built whose bytes verify against expectedHash.
+   The page is also tried under its "./" spelling, because
+   older caches may hold it under either key. Returns the
+   verified Response, or null when no old copy verifies.
+   Any error (a cache that will not open, a body that will
+   not read, a digest that fails) reads as "no copy": the
+   caller falls back to the network, never to unverified
+   bytes. The body is read from a clone, so the response
+   handed back is still whole for cache.put. */
+async function findVerifiedCopy(url, expectedHash) {
+  try {
+    const names = await caches.keys();
+    for (let i = 0; i < names.length; i++) {
+      if (names[i] === CACHE_NAME) { continue; }
+      const cache = await caches.open(names[i]);
+      const keys = assetKeys(url);
+      for (let k = 0; k < keys.length; k++) {
+        const hit = await cache.match(keys[k],
+          { ignoreSearch: true });
+        if (!hit) { continue; }
+        try {
+          const bytes = await hit.clone().arrayBuffer();
+          const hex = await sha256Hex(bytes);
+          if (hex === expectedHash) { return hit; }
+        } catch (e) { /* unreadable copy: keep looking */ }
+      }
+    }
+  } catch (e) { /* no readable old caches: network path */ }
+  return null;
+}
+
+/* Fetch url from the network and return a Response whose
+   bytes are proven to hash to expectedHash. cache:
+   "no-store" keeps a stale HTTP cache entry from standing
+   in for the new release's file: if it somehow did, the
+   hash check would fail the install, not serve the file.
+   A not-ok response or a hash mismatch throws, which
+   fails the install (see installShell). */
+async function fetchVerified(url, expectedHash) {
+  const response = await fetch(url, { cache: "no-store" });
+  if (!response || !response.ok) {
+    throw new Error("shell fetch failed for " + url);
+  }
+  const bytes = await response.arrayBuffer();
+  const hex = await sha256Hex(bytes);
+  if (hex !== expectedHash) {
+    throw new Error("shell hash mismatch for " + url);
+  }
+  return new Response(bytes, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: response.headers
+  });
+}
+
+/* Assemble the new release's cache, file by file, in
+   SHELL_URLS order, skipping "./" (the page is stored
+   when its "./index.html" entry is processed, under both
+   keys). Each file comes from a hash-verified old copy
+   when one exists and from a hash-verified fetch when
+   none does. The first failure of any kind aborts the
+   assembly: the caller deletes this cache and fails the
+   install, so no half-built or mixed set is ever served
+   and the previous release keeps running whole. */
+async function installShell(cache) {
+  for (let i = 0; i < SHELL_URLS.length; i++) {
+    const url = SHELL_URLS[i];
+    if (url === "./") { continue; }
+    const expected = ASSET_HASHES[url];
+    if (!expected) {
+      throw new Error("no manifest hash for " + url);
+    }
+    let response = await findVerifiedCopy(url, expected);
+    if (!response) {
+      response = await fetchVerified(url, expected);
+    }
+    const keys = assetKeys(url);
+    /* Clone before any put: a put consumes its
+       response's body, and cloning afterwards throws.
+       The page's two keys each need their own copy. */
+    const copies = [response];
+    for (let k = 1; k < keys.length; k++) {
+      copies.push(response.clone());
+    }
+    for (let k = 0; k < keys.length; k++) {
+      await cache.put(keys[k], copies[k]);
+    }
+  }
+}
+
 self.addEventListener("install", function (event) {
   event.waitUntil(
     caches.open(CACHE_NAME)
-      .then(function (cache) { return cache.addAll(SHELL_URLS); })
+      .then(function (cache) { return installShell(cache); })
       .then(function () { return self.skipWaiting(); })
+      .catch(function (err) {
+        /* A failed assembly must leave nothing behind:
+           delete the half-built cache, then fail the
+           install so the old worker (and its whole,
+           verified cache) keeps serving. */
+        return caches.delete(CACHE_NAME)
+          .then(function () { throw err; });
+      })
   );
 });
 
@@ -168,7 +343,8 @@ self.addEventListener("fetch", function (event) {
     url.pathname.endsWith("/index.html");
   if (isPage) {
     event.respondWith(
-      caches.match(PAGE_KEY, { ignoreSearch: true })
+      caches.match(PAGE_KEY, { ignoreSearch: true,
+        cacheName: CACHE_NAME })
         .then(function (hit) {
           if (hit) { return hit; }
           return fetch(request).then(function (response) {
@@ -180,7 +356,8 @@ self.addEventListener("fetch", function (event) {
             }
             return response;
           }).catch(function () {
-            return caches.match("./", { ignoreSearch: true });
+            return caches.match("./", { ignoreSearch: true,
+              cacheName: CACHE_NAME });
           });
         })
     );
@@ -198,7 +375,8 @@ self.addEventListener("fetch", function (event) {
     url.pathname.endsWith(".js");
   if (isShellAsset) {
     event.respondWith(
-      caches.match(request, { ignoreSearch: true })
+      caches.match(request, { ignoreSearch: true,
+        cacheName: CACHE_NAME })
         .then(function (hit) {
           if (hit) { return hit; }
           return fetch(request).then(function (response) {
