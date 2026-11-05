@@ -150,8 +150,8 @@ const PAGE_KEY = "./index.html";
    build if this block is stale. Never edit it by hand. */
 // BEGIN GENERATED ASSET HASHES (gen_asset_hashes.py)
 const ASSET_HASHES = {
-  "./index.html": "e2a72690be076a2feb821c4d12cc9be93669a44d96f9bc4e79ec3e105835abae",
-  "./styles.css": "edc3c3176bd7b877478a991dd141cd8bc52d9aaca6daeb4cff4e7f0c637d1576",
+  "./index.html": "57eeb3d4199ed1027ab6456e2e681560d3788df74e90aec5d74ca723f08ff646",
+  "./styles.css": "21c2dddeb7486a4123660197a4b67906849d4609540ecdef358ea65eb728fa32",
   "./version.js": "61ff0eff8022bd1af464c35abb44db119b905a5765617691a655804790e42eaf",
   "./core.js": "6f39b11f76398034d4a15d3295df07b438fb37bc3471854a286a51d21922386b",
   "./store.js": "6435b80d8d1ec9f539451b3982b768c78df0e69513ad5750e7bf531a1577dfc9",
@@ -161,7 +161,7 @@ const ASSET_HASHES = {
   "./home.js": "55aa6924af653c87eb8a123d2b9fa483a7ac309cea17f1d6ece86a2ca2e5c467",
   "./calendar.js": "1d8926b971eecfa2a7cfd0e285272ad26bc8ff95a88138878f3dff1c078c79b4",
   "./mail.js": "4dfa5686640063fcb444222fc22f15ffe28a621d5b714dbb1daa0c9c7b51bd59",
-  "./render.js": "ab779901bd7f7ed08b8d705cc895b8b854740d3a57bfcf735aec7695cff69a7d",
+  "./render.js": "e7e537ad4d48d65120d6b8b0632e4703a24832ab36b38653c2d69395ff027703",
   "./editor.js": "71a79c5a8972fbe1ed80d411c105e92acfcbc6031ea42ba410f469b7e590f02e",
   "./editor-tools.js": "22d92c84cd5a79335c8b716e2fdb06331a216d66955503f5aefcd0ab9af50b0a",
   "./media.js": "453ff89182da27a9a464e530743d0ab87babd83f563c663edfaf2af493a67f2a",

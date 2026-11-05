@@ -5232,6 +5232,7 @@ function renderTasksView() {
   search.id = "tasksSearch";
   search.placeholder = "Find tasks...";
   search.setAttribute("aria-label", "Find tasks");
+  search.setAttribute("autocomplete", "off");
   search.value = state.tasksView.query || "";
   /* Typing re-renders only the body (the groups), so the
      input keeps its focus and its caret. */

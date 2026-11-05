@@ -6064,7 +6064,7 @@
          rows open (rename, the Shortcuts toggle, delete), held in
          savedSearchMenuFor like the tag menu's target. -->
     <div class="sidebar-search">
-      <input id="searchInput" type="search" placeholder="Search notes..." aria-label="Search notes">
+      <input id="searchInput" type="search" placeholder="Search notes..." aria-label="Search notes" autocomplete="off">
       <div id="savedSearchPanel" class="hidden" role="menu" aria-label="Saved searches">
         <div class="saved-search-head">Saved searches</div>
         <!-- v2.72: the save row's slot, filled by
@@ -7232,7 +7232,7 @@
              notes by the same lock handling in renderEditor. -->
         <div class="foot-tags">
           <label for="noteTags">Tags</label>
-          <input id="noteTags" type="text" placeholder="ideas, work, personal">
+          <input id="noteTags" type="text" placeholder="ideas, work, personal" autocomplete="off">
           <!-- v2.17: the tags picker, filled by the script with
                the tags already in use. It opens when the field is
                focused and lives outside #noteBody, so nothing of
@@ -7378,7 +7378,7 @@
           <select id="mailFolderPicker" aria-label="Mail folder"></select>
         </div>
         <div class="mail-search-row">
-          <input id="mailSearchInput" type="search" placeholder="Search mail" aria-label="Search mail">
+          <input id="mailSearchInput" type="search" placeholder="Search mail" aria-label="Search mail" autocomplete="off">
           <button class="btn small hidden" id="mailSearchClearBtn" type="button">Clear</button>
         </div>
         <div class="mail-status-line hidden" id="mailStatusLine">

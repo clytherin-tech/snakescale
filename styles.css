@@ -3182,8 +3182,19 @@ body.dark .modal:hover::-webkit-scrollbar-thumb{
   display:flex;flex-direction:column;gap:2px;
 }
 #tagPicker.hidden{display:none;}
+/* v2.115: flex:none keeps a row at its natural height.
+   #tagPicker is a column flex box capped by max-height;
+   a row is a flex item, and because the row carries
+   overflow:hidden (for its ellipsis) its automatic
+   minimum size is zero, so once the rows' natural total
+   passed the cap the browser shrank every row to fit
+   instead of scrolling (15 rows measured at 12.14px
+   against a 31.56px natural height, the 15px text line
+   clipped 10.86px at the bottom by the row's own
+   overflow). With shrinking off, the rows stand full
+   height and the picker scrolls as designed. */
 .tag-picker-row{
-  display:block;width:100%;text-align:left;border:none;background:none;
+  display:block;width:100%;flex:none;text-align:left;border:none;background:none;
   color:var(--text);font-size:13.5px;padding:6px 10px;border-radius:8px;
   cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
 }
