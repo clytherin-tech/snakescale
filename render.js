@@ -4941,6 +4941,27 @@ function buildTaskRowEl(task, opts) {
   });
   picker.appendChild(box);
 
+  /* v2.116: a right press on the row opens the task
+     row's own menu (Open task, Copy link; see
+     openTaskRowMenu in tasks.js), in the calendar
+     entries' discipline: the element listener runs
+     ahead of the document menu guard, which only ever
+     suppressed the browser's menu on these rows, and
+     the propagation stop keeps the press the menu's
+     alone. One exception, kept standing: a row inside
+     the note body (a note's tasks block is built by
+     this same builder) opens nothing, because the
+     editor surface's rows keep their standing no menu
+     rule and the note editor's own menu owns that
+     ground; the guard's suppression still answers the
+     press there, exactly as before. */
+  row.addEventListener("contextmenu", function (ctxEv) {
+    if (row.closest("#noteBody")) { return; }
+    ctxEv.preventDefault();
+    ctxEv.stopPropagation();
+    openTaskRowMenu(task, ctxEv.clientX, ctxEv.clientY);
+  });
+
   /* v2.24.1: the Tasks view's column form of the row, under
      the view's one header row: the checkbox and the markers
      (flag, priority) ride in the Title column, the due chip

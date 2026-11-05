@@ -1251,7 +1251,8 @@ function copyNoteLink(anchor) {
 }
 
 /* v2.115: the shared copy behind the context menus'
-   Copy link items (a note, an email, an event). The
+   Copy link items (a note, an email, an event; a task
+   joined in v2.116). The
    payload is the chip the matching mention picker
    inserts, carried as text/html beside the item's
    title as text/plain, so a paste into a note or the
@@ -1301,13 +1302,26 @@ function copyChipLink(html, plain) {
 }
 
 /* The chip HTML the @ mention inserter produces for a
-   note in its default mode: an ss-note-link anchor on
-   the ssnote: href carrying the note's title, escaped
-   the way copyNoteLink escapes its link text. */
+   note: the anchor exactly as insertMentionNoteLink and
+   pickNoteLinkTarget build one, attribute for attribute
+   (the ssnote: href, the ss-note-link class, the title
+   tooltip, and the Mention view mode every new note link
+   is born with since v2.12), its text the note's title,
+   escaped the way copyNoteLink escapes its link text.
+   v2.116: through v2.115 this string carried only the
+   href, the class, and the text: a paste of it landed a
+   plain Text mode anchor, no Mention face, no page icon,
+   the caret free to wander into its text and the link
+   bar serving it on hover, where the picker planted
+   link is an atomic pill the caret steps around (the
+   diagnosis is in the v2.116 build report). The payload
+   was half of that fault; the paste path's missing
+   decoration pass was the other half. */
 function noteLinkChipHtml(note) {
+  const title = escapeHtml(note.title || "Untitled note");
   return "<a href=\"" + SSNOTE_HREF_PREFIX + note.id +
-    "\" class=\"ss-note-link\">" +
-    escapeHtml(note.title || "Untitled note") + "</a>";
+    "\" class=\"ss-note-link\" title=\"" + title +
+    "\" data-ss-link-view=\"mention\">" + title + "</a>";
 }
 
 /* Copy link for one note (the note list context
@@ -2548,6 +2562,35 @@ function decorateTaskLinks(rootEl) {
       }
       anchor.setAttribute("title", current);
     });
+}
+
+/* v2.116: the chip HTML the mention inserter produces
+   for a task (insertMentionTaskLink): the anchor exactly
+   as the inserter builds one, attribute for attribute
+   (the sstask: href, the ss-task-link class, the title
+   tooltip), its text the task's title. Task links are
+   born plain and are never faced (see decorateLinkView),
+   so this bare anchor IS the chip's whole shape, and a
+   paste of it is indistinguishable from the picker's
+   plant once the paste path's decoration runs
+   decorateTaskLinks over it like the inserter does. */
+function taskLinkChipHtml(task) {
+  const title = escapeHtml(task.title || "Untitled task");
+  return "<a href=\"" + SSTASK_HREF_PREFIX + task.id +
+    "\" class=\"ss-task-link\" title=\"" + title +
+    "\">" + title + "</a>";
+}
+
+/* v2.116: Copy link for one task (the task row menu's
+   item, the menu itself new in this release: task rows
+   had no menu of their own before it). The clipboard
+   carries the task chip beside the task's title as
+   plain text, through the one honest fallback helper
+   every Copy link item shares. */
+function copyLinkForTask(task) {
+  if (!task) { return; }
+  copyChipLink(taskLinkChipHtml(task),
+    task.title || "Untitled task");
 }
 
 /* ----- v2.17: the Tags field picker ---------------------------------

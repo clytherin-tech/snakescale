@@ -1322,6 +1322,19 @@ body.dark .tag-chip{color:var(--accent);}
   position:fixed;z-index:120;pointer-events:none;margin:0;opacity:.5;
   box-shadow:var(--shadow);
 }
+/* v2.116: the batch note drag's count badge, the mail
+   drag badge's dress on the note ghost's corner: a
+   themed pill riding above the translucent ghost at
+   full strength, so the number being carried reads
+   clearly while the ghost itself stays see through.
+   Furniture only, like the ghost: never serialized. */
+.note-drag-count{
+  position:fixed;z-index:121;pointer-events:none;
+  padding:6px 12px;border:1px solid var(--border);
+  border-radius:20px;background:var(--surface);
+  color:var(--text);font-size:13px;font-weight:600;
+  box-shadow:var(--shadow);white-space:nowrap;
+}
 body.note-drag-active{touch-action:none;overscroll-behavior:none;}
 #sidebar .nav-item.drop-hover{
   background:var(--secondary);color:#fff;

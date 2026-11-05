@@ -885,6 +885,79 @@ function deleteTask(id) {
   afterTasksChanged();
 }
 
+/* v2.116: the task row's own right click menu. Task rows
+   had no menu before this release: the app wide guard
+   suppressed the browser's menu on them and the app
+   offered nothing, so a task link could only be made
+   from inside a note, never copied from the task
+   itself. The menu is the calendar entries' menu's
+   twin (the v2.115 gcalEventMenu discipline throughout):
+   the app's own menu card (.note-ctx-menu), placed at
+   the pointer by placeNoteContextMenu, closing on an
+   outside press and on Escape, focusing its first item
+   on open, with exactly two items: Open task (the row
+   click's own door, the task editor) and Copy link
+   (copyLinkForTask, in editor.js beside the task chip
+   builder it copies). Rows inside the note body are
+   excluded by the caller in buildTaskRowEl: the rows of
+   a note's tasks block keep their standing no menu rule
+   there, and the editor's own menu owns that surface. */
+let taskRowMenuCtx = null;
+
+function closeTaskRowMenu() {
+  const menu = document.getElementById("taskRowMenu");
+  if (menu) { menu.classList.add("hidden"); }
+  taskRowMenuCtx = null;
+  document.removeEventListener("pointerdown",
+    onTaskRowMenuDocPointerDown, true);
+  document.removeEventListener("keydown",
+    onTaskRowMenuDocKeydown, true);
+}
+
+function onTaskRowMenuDocPointerDown(ev) {
+  const menu = document.getElementById("taskRowMenu");
+  if (menu && ev.target && menu.contains(ev.target)) {
+    return;
+  }
+  closeTaskRowMenu();
+}
+
+function onTaskRowMenuDocKeydown(ev) {
+  if (ev.key === "Escape") {
+    ev.preventDefault();
+    closeTaskRowMenu();
+  }
+}
+
+function openTaskRowMenu(task, x, y) {
+  closeTaskRowMenu();
+  const menu = document.getElementById("taskRowMenu");
+  if (!menu || !task) { return; }
+  taskRowMenuCtx = { taskId: task.id };
+  menu.classList.remove("hidden");
+  placeNoteContextMenu(menu, x, y);
+  document.addEventListener("pointerdown",
+    onTaskRowMenuDocPointerDown, true);
+  document.addEventListener("keydown",
+    onTaskRowMenuDocKeydown, true);
+  const first = menu.querySelector(".list-menu-item");
+  if (first) { first.focus(); }
+}
+
+/* The menu's Open task: the row click's own door, the
+   task editor over whatever surface the row stands on. */
+function taskRowMenuOpen() {
+  const ctx = taskRowMenuCtx;
+  closeTaskRowMenu();
+  if (ctx) { openTaskEditor(ctx.taskId); }
+}
+
+function taskRowMenuCopyLink() {
+  const ctx = taskRowMenuCtx;
+  closeTaskRowMenu();
+  if (ctx) { copyLinkForTask(findTaskById(ctx.taskId)); }
+}
+
 /* v2.49.0: clear the note link from every task that
    points at a note being deleted forever, and return how
    many were cleared. The tasks themselves are untouched

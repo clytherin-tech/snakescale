@@ -2417,7 +2417,17 @@ async function editorCtxPaste() {
       inserted = true;
     }
   }
-  if (inserted) { markDirty(); }
+  if (inserted) {
+    markDirty();
+    /* v2.116: the editor menu's Paste is a paste too:
+       the landed content gets the same decoration the
+       keyboard paste handler now runs, so a chip
+       brought in through the menu matches one brought
+       in with Ctrl+V. */
+    decorateLinkTooltips(bodyEl);
+    decorateLinkViews(bodyEl);
+    decorateTaskLinks(bodyEl);
+  }
 }
 
 /* Run one menu item. Encrypt is the identical flow to
@@ -3795,6 +3805,14 @@ function wireEvents() {
   });
   document.getElementById("gcalEventMenuCopyBtn").addEventListener("click", function () {
     gcalEventMenuCopy();
+  });
+  /* v2.116: the task rows' right click menu items
+     (the menu machinery itself lives in tasks.js). */
+  document.getElementById("taskRowMenuOpenBtn").addEventListener("click", function () {
+    taskRowMenuOpen();
+  });
+  document.getElementById("taskRowMenuCopyBtn").addEventListener("click", function () {
+    taskRowMenuCopyLink();
   });
   document.getElementById("gcalViewModal").addEventListener("click", function (ev) {
     if (ev.target === ev.currentTarget) { closeGcalEventView(); }
@@ -5383,6 +5401,23 @@ function wireEvents() {
       document.execCommand("insertHTML", false,
         renderPasteForMode(mode, htmlText, plainText));
       markDirty();
+      /* v2.116: the paste lands the way the pickers
+         land. Through v2.115 this handler inserted the
+         cleaned fragment and stopped: the decoration
+         passes that turn a note link into its atomic
+         Mention pill (and keep a task link's title
+         honest) ran only when a note opened or a picker
+         inserted, so a pasted Copy link stood in the
+         body as a plain editable anchor beside the
+         picker planted pills it was meant to match
+         (the diagnosis is in the v2.116 build report).
+         The passes now run over the body at once, as
+         they do at every render; they are idempotent
+         and preserve the pasted text nodes themselves,
+         so the session's bookmarks below stand. */
+      decorateLinkTooltips(noteBodyEl);
+      decorateLinkViews(noteBodyEl);
+      decorateTaskLinks(noteBodyEl);
       const endBm = pasteSelectionBookmark(true);
       if (startBm && endBm) {
         pastePopupSession = {

@@ -2450,7 +2450,17 @@ function handleBodyTabKey(ev) {
    A drop on either runs that destination's own action function,
    the same one its editor footer button runs. In rail mode,
    hovering the Notebooks rail button mid drag opens its flyout
-   so the notebooks inside stay reachable. */
+   so the notebooks inside stay reachable.
+   v2.116: the drag learned the selection. Through v2.115 a
+   drag carried the pressed card's note alone, however many
+   notes stood selected (Chris's report). Now a press on a
+   selected card with two or more selected arms a batch drag
+   (noteIds on the drag record, a count badge on the ghost),
+   and the drop runs the bulk machinery: the selection's own
+   bulk actions for Trash and Archive, and the shared single
+   notebook move per note for a notebook. Any other press
+   arms the single drag exactly as before, and touch still
+   never arms one (the v2.58 rule below). */
 const NOTE_DRAG_MOUSE_PX = 6;
 const NOTE_DRAG_TOUCH_SLOP_PX = 10;
 const NOTE_DRAG_LONGPRESS_MS = 300;
@@ -2571,6 +2581,16 @@ function positionNoteDragGhost(x, y) {
   if (!noteDrag || !noteDrag.ghost) { return; }
   noteDrag.ghost.style.left = (x - noteDrag.offsetX) + "px";
   noteDrag.ghost.style.top = (y - noteDrag.offsetY) + "px";
+  /* v2.116: the batch count badge rides the ghost's
+     top right corner. */
+  if (noteDrag.badge) {
+    const gw = noteDrag.ghost.offsetWidth || 0;
+    const bw = noteDrag.badge.offsetWidth || 0;
+    noteDrag.badge.style.left =
+      (x - noteDrag.offsetX + gw - bw - 8) + "px";
+    noteDrag.badge.style.top =
+      (y - noteDrag.offsetY + 8) + "px";
+  }
 }
 
 function updateNoteDragTarget(x, y) {
@@ -2615,6 +2635,18 @@ function engageNoteDrag() {
   ghost.style.width = rect.width + "px";
   document.body.appendChild(ghost);
   drag.ghost = ghost;
+  /* v2.116: a batch drag says so on its face: a count
+     badge in the mail drag badge's dress ("N notes"),
+     riding at the ghost's top right corner (positioned
+     in positionNoteDragGhost, removed in
+     cleanupNoteDrag). A single drag wears none. */
+  if (drag.noteIds && drag.noteIds.length > 1) {
+    const badge = document.createElement("div");
+    badge.className = "note-drag-count";
+    badge.textContent = drag.noteIds.length + " notes";
+    document.body.appendChild(badge);
+    drag.badge = badge;
+  }
   card.classList.add("drag-source");
   document.body.classList.add("note-drag-active");
   card.style.touchAction = "none";
@@ -2635,6 +2667,7 @@ function cleanupNoteDrag() {
   if (drag.timer) { clearTimeout(drag.timer); }
   if (drag.targetEl) { drag.targetEl.classList.remove("drop-hover"); }
   if (drag.ghost) { drag.ghost.remove(); }
+  if (drag.badge) { drag.badge.remove(); }
   if (drag.card) {
     drag.card.classList.remove("drag-source");
     drag.card.style.touchAction = "";
@@ -2670,8 +2703,29 @@ function onNoteListPointerDown(ev) {
   if (!card || !card.getAttribute("data-note-id")) { return; }
   const note = findNoteById(card.getAttribute("data-note-id"));
   if (!note || note.trashed || note.archived) { return; }
+  /* v2.116: the drag carries the selection when it can.
+     A press on a card that belongs to the current
+     selection, when that selection holds two or more
+     notes, arms a drag for ALL of them (Chris's report:
+     he could select several notes but the drag moved
+     only the one he grabbed; the drag had never once
+     consulted the selection). A press on any other
+     card, or with no standing selection, arms the
+     single note drag it always was. The carried ids
+     are captured here, at the press, in selection
+     order, resolved against the view by the selection's
+     own reader. */
+  let dragIds = [note.id];
+  if (currentSelectionSet().indexOf(note.id) >= 0) {
+    const selected = selectedNotesInView();
+    if (selected.length >= 2) {
+      dragIds = selected.map(function (n) { return n.id; });
+    }
+  }
   noteDrag = {
     noteId: note.id,
+    noteIds: dragIds,
+    badge: null,
     pointerId: ev.pointerId,
     pointerType: ev.pointerType || "mouse",
     startX: ev.clientX,
@@ -2729,6 +2783,55 @@ function endNoteDrag(commit) {
   if (!wasEngaged) { return; }
   noteDragClickBlock = true;
   if (!commit || !note) { return; }
+  /* v2.116: a batch drop (the pressed card stood in a
+     selection of two or more, so the drag carried them
+     all) runs through the bulk machinery, never the
+     single paths below:
+     - Trash and Archive hand over to the selection's
+       own bulk actions (trashSelectedNotes and
+       archiveSelectedNotes), which is the exact code
+       the context menu's bulk items run: the selection
+       is consumed and cleared, the moves run under the
+       bulk pool, and the one undoable progress toast
+       the menu produces is the toast the drop produces.
+       The drag changed nothing about the selection on
+       its way (its tail click is swallowed), so the
+       set those functions read is the set the drag
+       carried.
+     - A notebook has no bulk action of its own, so the
+       moves run the shared single move per carried
+       note in turn, skipping any note already in the
+       target (the single drop's own no-op rule), then
+       clear the selection the way every bulk action
+       does and render once at the end. When every
+       carried note already lives in the target there
+       is nothing to do and the selection stands, again
+       the single drop's rule. */
+  const carried = (drag.noteIds || []).map(function (id) {
+    return findNoteById(id);
+  }).filter(Boolean);
+  if (carried.length >= 2) {
+    if (slug) {
+      const movers = carried.filter(function (n) {
+        return n.notebook !== slug;
+      });
+      if (!movers.length) { return; }
+      clearListSelections();
+      let chain = Promise.resolve();
+      movers.forEach(function (n) {
+        chain = chain.then(function () {
+          return moveNoteToNotebook(n, slug);
+        });
+      });
+      chain.then(function () { renderAll(); }, function () {
+        renderAll();
+      });
+      return;
+    }
+    if (action === "trash") { trashSelectedNotes(); return; }
+    if (action === "archive") { archiveSelectedNotes(); return; }
+    return;
+  }
   if (slug) {
     if (slug !== note.notebook) { moveNoteToNotebook(note, slug); }
     return;
@@ -4864,11 +4967,23 @@ function cleanBackgroundsInRoots(roots) {
        too, on the same rule: generated content, painted
        live, carrying no background styling of its own. */
     if (root.closest && root.closest(".ss-note-tasks")) { return; }
+    /* v2.116: a mail or event chip's subtree is skipped
+       on the same rule: the chip is an atomic island the
+       app itself built, and its one styled interior (the
+       event chip's calendar color dot) is the chip's
+       face, not source styling. Through v2.115 a pasted
+       event chip lost its dot's color right here, in
+       the background strip, and landed colorless beside
+       the picker planted chip it should have matched. */
+    if (root.closest && root.closest(".ss-mail-chip")) { return; }
+    if (root.closest && root.closest(".ss-event-chip")) { return; }
     cleanBackgroundFromElement(root);
     root.querySelectorAll("*").forEach(function (el) {
       if (el.closest && el.closest(".ss-attachment")) { return; }
       if (el.closest && el.closest(".ss-toc")) { return; }
       if (el.closest && el.closest(".ss-note-tasks")) { return; }
+      if (el.closest && el.closest(".ss-mail-chip")) { return; }
+      if (el.closest && el.closest(".ss-event-chip")) { return; }
       cleanBackgroundFromElement(el);
     });
   });
@@ -4958,14 +5073,22 @@ function cleanMergeFromElement(el) {
 }
 
 /* The merge walk over a list of roots, mirroring
-   cleanBackgroundsInRoots exactly, attachment skip included. */
+   cleanBackgroundsInRoots exactly, attachment skip included.
+   v2.116: the chip skip rides along too, on the same
+   ground: a chip's interiors are the app's own face for
+   an atomic island, not the source's presentation, and
+   merge formatting has no business recoloring them. */
 function cleanMergeInRoots(roots) {
   (roots || []).forEach(function (root) {
     if (!root || root.nodeType !== 1) { return; }
     if (root.closest && root.closest(".ss-attachment")) { return; }
+    if (root.closest && root.closest(".ss-mail-chip")) { return; }
+    if (root.closest && root.closest(".ss-event-chip")) { return; }
     cleanMergeFromElement(root);
     root.querySelectorAll("*").forEach(function (el) {
       if (el.closest && el.closest(".ss-attachment")) { return; }
+      if (el.closest && el.closest(".ss-mail-chip")) { return; }
+      if (el.closest && el.closest(".ss-event-chip")) { return; }
       cleanMergeFromElement(el);
     });
   });
@@ -5185,6 +5308,14 @@ function applyPasteMode(mode) {
     if (endBm) { session.end = endBm; }
     session.mode = mode;
     markDirty();
+    /* v2.116: a mode switch re-lands the paste, so it
+       owes the landed content the same decoration the
+       paste itself now gets (see the paste handler):
+       the passes are idempotent and preserve the
+       bookmark nodes, so the session's end stands. */
+    decorateLinkTooltips(pasteBodyEl());
+    decorateLinkViews(pasteBodyEl());
+    decorateTaskLinks(pasteBodyEl());
     syncPastePopupRows();
     positionPastePopup();
   } finally {

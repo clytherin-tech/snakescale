@@ -1789,6 +1789,61 @@ function buildHomeScratchWidget() {
   area.addEventListener("input", function () {
     persistScratchPadFromDom();
   });
+  /* v2.116: a paste into the pad is the browser's own
+     (the pad has never intercepted one), and through
+     v2.115 what it landed stood undecorated until the
+     next Home render: a pasted note link sat as a plain
+     anchor while a picker planted one wore its Mention
+     face at once. The paste is still not intercepted
+     (the browser's insert and its undo step stay the
+     browser's); this listener only decorates what
+     landed, on the tick after the insert, with the
+     same passes the pickers run over the pad, and the
+     persist that follows stores the decorated pass's
+     clean saved form through the one funnel, exactly
+     as a picker plant's persist does. */
+  area.addEventListener("paste", function () {
+    setTimeout(function () {
+      if (!area.isConnected) { return; }
+      /* v2.116: a native paste stamps the browser's own
+         font inherit style onto the pasted roots; the
+         picker plants carry no such style, so a pasted
+         chip would stand apart from a planted one.
+         Drop the inherit declarations from chip roots
+         (any other declaration stands). */
+      const chipRoots = area.querySelectorAll(
+        ".ss-note-link, .ss-task-link, .ss-mail-chip," +
+        " .ss-event-chip");
+      for (let ci = 0; ci < chipRoots.length; ci++) {
+        const chipEl = chipRoots[ci];
+        const styleText = chipEl.getAttribute("style");
+        if (!styleText) { continue; }
+        const keptDecls = [];
+        const decls = styleText.split(";");
+        for (let di = 0; di < decls.length; di++) {
+          const decl = decls[di].trim();
+          if (!decl) { continue; }
+          const colonAt = decl.indexOf(":");
+          if (colonAt > 0 &&
+            decl.slice(colonAt + 1).trim() ===
+              "inherit") {
+            continue;
+          }
+          keptDecls.push(decl);
+        }
+        if (keptDecls.length) {
+          chipEl.setAttribute("style",
+            keptDecls.join("; ") + ";");
+        } else {
+          chipEl.removeAttribute("style");
+        }
+      }
+      decorateLinkTooltips(area);
+      decorateLinkViews(area);
+      decorateTaskLinks(area);
+      persistScratchPadFromDom();
+    }, 0);
+  });
   /* v2.105.0: the editor popups track the pad on its
      input events too, the note body's own wiring
      (their document selectionchange tracking stands
