@@ -2027,66 +2027,229 @@ function toggleHomeFilteredPicker(widget) {
   picker.classList.remove("hidden");
 }
 
-/* The Tags widget: every tag in the sidebar tree's order
-   with its count, labels flat (the tree's shape is the
-   sidebar's business; here the order is the borrow),
-   navigating like the sidebar rows. */
+/* The Tags widget: through v2.114.0 the widget borrowed
+   only the sidebar tree's order and rendered the tags
+   flat. v2.115 (Chris's ask): the widget renders the
+   sidebar's tree itself, the same tagTreeRows the
+   sidebar renders, with collapse on: each row indents
+   by its depth in the sidebar's measure (14px a
+   level), a tag with sub-tags carries the fold caret,
+   and the caret toggles the very state.collapsedTags
+   the sidebar reads, so a fold made on either surface
+   shows on both (the toggle re-renders the sidebar;
+   the caret here re-renders Home as well). The row
+   body keeps the widget's own dress and its click
+   still opens the tag the way it always has. */
 function buildHomeTagsWidget() {
   const parts = homeWidgetShell("tags", "Tags");
   const tags = allTagsWithCounts();
   if (!tags.length) {
     parts.body.appendChild(homeHint("No tags yet."));
   }
-  tagTreeRows(tags, false).forEach(function (row) {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "home-tag-row";
-    btn.setAttribute("data-tag", row.tag);
-    const label = document.createElement("span");
-    label.className = "home-tag-label";
-    label.textContent = row.tag;
-    btn.appendChild(label);
-    const count = document.createElement("span");
-    count.className = "home-tag-count";
-    count.textContent = String(row.count);
-    btn.appendChild(count);
-    btn.addEventListener("click", function () {
-      homeOpenTag(row.tag);
-    });
-    parts.body.appendChild(btn);
+  tagTreeRows(tags, true).forEach(function (row) {
+    parts.body.appendChild(buildHomeTagRow(row));
   });
   return parts.widget;
 }
 
-/* The Notebooks widget: the notebooks in the sidebar's
-   Evernote order, flattened the way the other notebook
-   pickers flatten it, navigating like the sidebar rows. */
+/* One Tags widget row: the sidebar row's shape (a flex
+   wrapper carrying the depth indent, a caret or the
+   alignment spacer, then the row itself) in the
+   widget's own row dress. */
+function buildHomeTagRow(row) {
+  const collapsed = state.collapsedTags.indexOf(row.tag) >= 0;
+  const wrap = document.createElement("div");
+  wrap.className = "home-tree-row" +
+    (collapsed ? " collapsed" : "");
+  wrap.setAttribute("data-tag", row.tag);
+  wrap.setAttribute("data-depth", String(row.depth));
+  if (row.depth > 0) {
+    wrap.style.marginLeft = (row.depth * 14) + "px";
+  }
+  if (row.hasChildren) {
+    const chev = document.createElement("button");
+    chev.type = "button";
+    chev.className = "home-tree-chevron";
+    chev.setAttribute("aria-expanded",
+      collapsed ? "false" : "true");
+    chev.setAttribute("aria-label",
+      (collapsed ? "Expand" : "Collapse") +
+      " sub-tags of " + row.tag);
+    chev.title = collapsed ? "Expand" : "Collapse";
+    chev.innerHTML = STACK_CHEVRON_ICON;
+    chev.addEventListener("click", function () {
+      toggleTagCollapsed(row.tag);
+      renderHome();
+    });
+    wrap.appendChild(chev);
+  } else {
+    const spacer = document.createElement("span");
+    spacer.className = "home-tree-chevron-spacer";
+    wrap.appendChild(spacer);
+  }
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "home-tag-row";
+  btn.setAttribute("data-tag", row.tag);
+  const label = document.createElement("span");
+  label.className = "home-tag-label";
+  label.textContent = row.tag;
+  btn.appendChild(label);
+  const count = document.createElement("span");
+  count.className = "home-tag-count";
+  count.textContent = String(row.count);
+  btn.appendChild(count);
+  btn.addEventListener("click", function () {
+    homeOpenTag(row.tag);
+  });
+  wrap.appendChild(btn);
+  return wrap;
+}
+
+/* The Notebooks widget: through v2.114.0 the widget
+   listed notebooksInSidebarOrder() flat. v2.115
+   (Chris's ask): the widget renders the sidebar's own
+   shape, walked from the sidebar's own row model
+   (sidebarNotebookPlan, the same plan the sidebar
+   renders): stack group headers that fold on the same
+   state.collapsedStacks, notebooks nested and
+   indented under their parent notebook on the same
+   state.collapsedNotebooks, unstacked notebooks at
+   the top level in sidebar order. The sidebar's row
+   builders themselves emit sidebar chrome (the
+   .nav-item dress, the stack actions menu), so the
+   widget mirrors the plan in its own row dress
+   instead of reusing the builders; the model, the
+   indent math (a stack's 16px plus 14px a level), the
+   fold state, the counts, and the click navigation
+   are the sidebar's exactly. */
 function buildHomeNotebooksWidget() {
   const parts = homeWidgetShell("notebooks", "Notebooks");
-  const list = notebooksInSidebarOrder();
-  if (!list.length) {
+  if (!state.notebooks.length) {
     parts.body.appendChild(homeHint("No notebooks yet."));
   }
-  list.forEach(function (nb) {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "home-nb-row";
-    btn.setAttribute("data-slug", nb.slug);
-    const label = document.createElement("span");
-    label.className = "home-nb-label";
-    label.textContent = nb.name;
-    btn.appendChild(label);
-    const count = document.createElement("span");
-    count.className = "home-nb-count";
-    count.textContent = String(notebookCount(nb.slug));
-    btn.appendChild(count);
-    btn.addEventListener("click", function () {
-      state.view = { kind: "notebook", value: nb.slug };
-      renderAll();
-      setMobileView("list");
-    });
-    parts.body.appendChild(btn);
+  sidebarNotebookPlan().forEach(function (entry) {
+    if (entry.stack) {
+      parts.body.appendChild(
+        buildHomeStackHead(entry.stack));
+      if (state.collapsedStacks.indexOf(entry.stack) < 0) {
+        entry.members.forEach(function (nb) {
+          homeAppendNotebookWithSubtree(
+            parts.body, nb, true, 0);
+        });
+      }
+    } else {
+      homeAppendNotebookWithSubtree(
+        parts.body, entry.nb, false, 0);
+    }
   });
   return parts.widget;
+}
+
+/* One stack group header in the Notebooks widget: the
+   sidebar head's fold toggle (chevron, name, the
+   members' total count) without its actions menu,
+   which is a sidebar management gesture, not a
+   navigation one. The toggle runs the sidebar's own
+   fold, then re-renders Home from the same state. */
+function buildHomeStackHead(name) {
+  const collapsed = state.collapsedStacks.indexOf(name) >= 0;
+  const head = document.createElement("button");
+  head.type = "button";
+  head.className = "home-stack-head" +
+    (collapsed ? " collapsed" : "");
+  head.setAttribute("data-stack", name);
+  head.setAttribute("aria-expanded",
+    collapsed ? "false" : "true");
+  const chev = document.createElement("span");
+  chev.className = "home-stack-chevron";
+  chev.setAttribute("aria-hidden", "true");
+  chev.innerHTML = STACK_CHEVRON_ICON;
+  head.appendChild(chev);
+  const nameSpan = document.createElement("span");
+  nameSpan.className = "home-stack-name";
+  nameSpan.textContent = name;
+  head.appendChild(nameSpan);
+  const total = stackMembers(name).reduce(function (sum, nb) {
+    return sum + notebookCount(nb.slug);
+  }, 0);
+  const count = document.createElement("span");
+  count.className = "home-nb-count";
+  count.textContent = String(total);
+  head.appendChild(count);
+  head.addEventListener("click", function () {
+    toggleStackCollapsed(name);
+    renderHome();
+  });
+  return head;
+}
+
+/* The sidebar's subtree walk (appendNotebookWithSubtree)
+   mirrored for the widget: one notebook row, then,
+   unless it stands folded, its whole subtree after
+   it, depth first, the in-stack mark riding down. */
+function homeAppendNotebookWithSubtree(body, nb, inStack, depth) {
+  body.appendChild(buildHomeNotebookRow(nb, inStack, depth));
+  if (state.collapsedNotebooks.indexOf(nb.slug) >= 0) {
+    return;
+  }
+  notebookChildrenOf(nb.slug).forEach(function (kid) {
+    homeAppendNotebookWithSubtree(body, kid, inStack, depth + 1);
+  });
+}
+
+/* One Notebooks widget row: the widget's row dress on
+   the sidebar row's geometry. A notebook with
+   sub-notebooks is wrapped with the fold caret at its
+   indent, exactly the sidebar's arrangement; a leaf
+   row takes the indent itself. */
+function buildHomeNotebookRow(nb, inStack, depth) {
+  const indent = (inStack ? 16 : 0) + (depth || 0) * 14;
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "home-nb-row";
+  btn.setAttribute("data-slug", nb.slug);
+  btn.setAttribute("data-nb-depth", String(depth || 0));
+  const label = document.createElement("span");
+  label.className = "home-nb-label";
+  label.textContent = nb.name;
+  btn.appendChild(label);
+  const count = document.createElement("span");
+  count.className = "home-nb-count";
+  count.textContent = String(notebookCount(nb.slug));
+  btn.appendChild(count);
+  btn.addEventListener("click", function () {
+    state.view = { kind: "notebook", value: nb.slug };
+    renderAll();
+    setMobileView("list");
+  });
+  const kids = notebookChildrenOf(nb.slug);
+  if (!kids.length) {
+    if (indent > 0) { btn.style.marginLeft = indent + "px"; }
+    return btn;
+  }
+  const collapsed =
+    state.collapsedNotebooks.indexOf(nb.slug) >= 0;
+  const wrap = document.createElement("div");
+  wrap.className = "home-tree-row" +
+    (collapsed ? " collapsed" : "");
+  if (indent > 0) { wrap.style.marginLeft = indent + "px"; }
+  const chev = document.createElement("button");
+  chev.type = "button";
+  chev.className = "home-tree-chevron";
+  chev.setAttribute("aria-expanded",
+    collapsed ? "false" : "true");
+  chev.setAttribute("aria-label",
+    (collapsed ? "Expand" : "Collapse") +
+    " sub-notebooks of " + nb.name);
+  chev.title = collapsed ? "Expand" : "Collapse";
+  chev.innerHTML = STACK_CHEVRON_ICON;
+  chev.addEventListener("click", function () {
+    toggleNotebookCollapsed(nb.slug);
+    renderHome();
+  });
+  wrap.appendChild(chev);
+  wrap.appendChild(btn);
+  return wrap;
 }
 

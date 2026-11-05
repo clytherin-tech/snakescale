@@ -1250,6 +1250,74 @@ function copyNoteLink(anchor) {
   plainFallback();
 }
 
+/* v2.115: the shared copy behind the context menus'
+   Copy link items (a note, an email, an event). The
+   payload is the chip the matching mention picker
+   inserts, carried as text/html beside the item's
+   title as text/plain, so a paste into a note or the
+   scratch pad lands the same pill the @, @@, and ^
+   menus plant, and a paste anywhere else lands the
+   title. The fallback chain is copyNoteLink's own
+   (the rich write, then a plain writeText, then the
+   textarea fallback), with one honesty difference the
+   menus' brief requires: when only the plain title
+   could be copied, the toast says exactly that,
+   rather than claiming the link was copied. */
+function copyChipLink(html, plain) {
+  const done = function () { toast("Link copied."); };
+  const failed = function () {
+    toast("The link could not be copied.", true);
+  };
+  const plainOnly = function () {
+    toast("Only the title was copied; the link " +
+      "itself was refused.");
+  };
+  const plainFallback = function () {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(plain).then(plainOnly,
+        function () {
+          if (copyLinkUrlFallback(plain)) { plainOnly(); }
+          else { failed(); }
+        });
+      return;
+    }
+    if (copyLinkUrlFallback(plain)) { plainOnly(); }
+    else { failed(); }
+  };
+  if (navigator.clipboard && navigator.clipboard.write &&
+      typeof ClipboardItem !== "undefined") {
+    try {
+      const item = new ClipboardItem({
+        "text/html": new Blob([html], { type: "text/html" }),
+        "text/plain": new Blob([plain], { type: "text/plain" })
+      });
+      navigator.clipboard.write([item]).then(done, plainFallback);
+    } catch (err) {
+      plainFallback();
+    }
+    return;
+  }
+  plainFallback();
+}
+
+/* The chip HTML the @ mention inserter produces for a
+   note in its default mode: an ss-note-link anchor on
+   the ssnote: href carrying the note's title, escaped
+   the way copyNoteLink escapes its link text. */
+function noteLinkChipHtml(note) {
+  return "<a href=\"" + SSNOTE_HREF_PREFIX + note.id +
+    "\" class=\"ss-note-link\">" +
+    escapeHtml(note.title || "Untitled note") + "</a>";
+}
+
+/* Copy link for one note (the note list context
+   menu's item). */
+function copyLinkForNote(note) {
+  if (!note) { return; }
+  copyChipLink(noteLinkChipHtml(note),
+    note.title || "Untitled note");
+}
+
 /* Unlink: replace the anchor with its own original contents, so
    the text and any inline formatting inside it stay in the note
    and only the link goes away. While a face is shown, the

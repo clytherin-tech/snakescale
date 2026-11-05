@@ -8103,6 +8103,7 @@
     <div class="modal-foot">
       <button class="btn danger hidden" id="gcalViewDeleteSeriesBtn" type="button">Delete series</button>
       <button class="btn danger hidden" id="gcalViewDeleteBtn" type="button">Delete event</button>
+      <button class="btn" id="gcalViewCopyLinkBtn" type="button">Copy link</button>
       <button class="btn" id="gcalViewCloseBtn" type="button">Close</button>
     </div>
   </div>
@@ -8298,6 +8299,7 @@
   <button type="button" class="list-menu-item" id="mailRowMenuArchiveBtn" role="menuitem">Archive</button>
   <button type="button" class="list-menu-item" id="mailRowMenuDeleteBtn" role="menuitem">Delete</button>
   <button type="button" class="list-menu-item" id="mailRowMenuSnoozeBtn" role="menuitem">Snooze</button>
+  <button type="button" class="list-menu-item hidden" id="mailRowMenuCopyLinkBtn" role="menuitem">Copy link</button>
 </div>
 
 <div id="mailLabelMenu" class="note-ctx-menu hidden" role="menu" aria-label="Label actions">
@@ -8683,6 +8685,10 @@
      opening for the card's collection and target, in the
      list menu's own item language. -->
 <div id="noteCtxMenu" class="note-ctx-menu hidden" role="menu" aria-label="Note actions"></div>
+<div id="gcalEventMenu" class="note-ctx-menu hidden" role="menu" aria-label="Event actions">
+  <button type="button" class="list-menu-item" id="gcalEventMenuOpenBtn" role="menuitem">Open event</button>
+  <button type="button" class="list-menu-item" id="gcalEventMenuCopyBtn" role="menuitem">Copy link</button>
+</div>
 <div id="nbDropOverlay" class="hidden" role="dialog" aria-label="Move note">
   <div class="nb-drop-head">Move to</div>
   <div id="nbDropList"></div>

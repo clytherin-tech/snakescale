@@ -1882,6 +1882,15 @@ function openMailRowMenu(rec, x, y) {
     head.classList.toggle("hidden",
       targets.length <= 1);
   }
+  /* v2.115: Copy link stands in this menu only when
+     it acts on a single message; a selection of two
+     or more has no one link to copy, so the item is
+     absent there, not merely disabled. */
+  const copyBtn = mailEl("mailRowMenuCopyLinkBtn");
+  if (copyBtn) {
+    copyBtn.classList.toggle("hidden",
+      targets.length !== 1);
+  }
   mailRowMenuCtx = {
     ids: targets.map(function (r) { return r.id; }),
     x: x, y: y
@@ -1917,6 +1926,29 @@ function mailRowMenuRun(action) {
     if (rec) { recs.push(rec); }
   });
   mailRunTargets(recs, action, ctx.x, ctx.y);
+}
+
+/* v2.115: the row menu's Copy link. The menu's own
+   context names its one message (the item stands
+   only for a single target; see openMailRowMenu);
+   the copy itself is the shared chip copy, carrying
+   the @@ chip's own element as the HTML payload. */
+function mailRowMenuCopyLink() {
+  const ctx = mailRowMenuCtx;
+  closeMailRowMenu();
+  if (!ctx || ctx.ids.length !== 1) { return; }
+  const rec = mailRowById(ctx.ids[0]);
+  if (rec) { copyLinkForMail(rec); }
+}
+
+/* Copy link for one message: the chip HTML is exactly
+   what the @@ mention inserter produces
+   (buildMailChipEl, serialized), and the plain text
+   is the subject line, the chip's own title. */
+function copyLinkForMail(rec) {
+  if (!rec) { return; }
+  copyChipLink(buildMailChipEl(rec).outerHTML,
+    rec.subject || "(No subject)");
 }
 
 /* ----- Part 6: the label context menu ------------- */
@@ -5622,6 +5654,9 @@ function initMailBindings() {
     "click", function () { mailRowMenuRun("trash"); });
   mailEl("mailRowMenuSnoozeBtn").addEventListener(
     "click", function () { mailRowMenuRun("snooze"); });
+  /* v2.115: the row menu's Copy link item. */
+  mailEl("mailRowMenuCopyLinkBtn").addEventListener(
+    "click", function () { mailRowMenuCopyLink(); });
   /* v2.107: Escape ends a standing selection, once
      the menus and the snooze pick have had theirs
      (each closes on its own Escape first). */

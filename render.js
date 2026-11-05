@@ -2288,6 +2288,23 @@ function noteCtxItem(menu, label, action, danger) {
   return btn;
 }
 
+/* v2.115: one group separator in the note context
+   menu (Chris's ask: better organize the menu, with
+   separators and groups). It reuses the app's one
+   separator declaration (.note-ctx-sep shares the
+   editor menu's separator rule in styles.css), is a
+   plain div with role="separator", and is not a
+   .list-menu-item, so the menu keyboard handler's
+   item query never lands on it and the arrows walk
+   past it unaided. */
+function noteCtxSep(menu) {
+  const sep = document.createElement("div");
+  sep.className = "note-ctx-sep";
+  sep.setAttribute("role", "separator");
+  menu.appendChild(sep);
+  return sep;
+}
+
 /* The menu's contents for its target (see the section
    header): the single note's own actions, or the
    selection's, under a count header. Every item calls
@@ -2315,6 +2332,12 @@ function buildNoteContextItems(menu, note, targetIds, pointerType) {
     noteCtxItem(menu, "Restore all", function () {
       return restoreSelectedNotes();
     });
+    /* v2.115: the grouped order (see noteCtxSep):
+       the restore stands alone above the separator,
+       the permanent delete below it, and Clear
+       selection in its own group at the foot, the
+       live selection menu's own grouping. */
+    noteCtxSep(menu);
     noteCtxItem(menu, "Delete Forever", function () {
       return deleteSelectionForever();
     }, true);
@@ -2335,6 +2358,12 @@ function buildNoteContextItems(menu, note, targetIds, pointerType) {
         return pinSelectedNotes(false);
       });
     }
+    /* v2.115: the grouped order (see noteCtxSep):
+       the pin group, then the make-something group,
+       then the filing group, then Clear selection in
+       its own group at the foot. No item renamed or
+       removed; only the grouping is new. */
+    noteCtxSep(menu);
     noteCtxItem(menu, "Duplicate", function () {
       return duplicateSelectedNotes();
     });
@@ -2345,6 +2374,7 @@ function buildNoteContextItems(menu, note, targetIds, pointerType) {
       function () {
         return createTableOfContentsNote();
       });
+    noteCtxSep(menu);
     noteCtxItem(menu, "Archive all", function () {
       return archiveSelectedNotes();
     });
@@ -2353,6 +2383,7 @@ function buildNoteContextItems(menu, note, targetIds, pointerType) {
         return trashSelectedNotes();
       });
   }
+  if (targetIds.length >= 2) { noteCtxSep(menu); }
   noteCtxItem(menu, "Clear selection", function () {
     clearListSelections();
     refreshSelectionUI();
@@ -2381,6 +2412,14 @@ function buildSingleNoteContextItems(menu, note, kind, pointerType) {
           return restoreNote(note);
         });
     });
+    /* v2.115: grouped (see noteCtxSep): Restore
+       above the separator, Delete Forever below it.
+       No Copy link here or in the Archive menu: a
+       link to a trashed note is a dead end, and
+       archived notes stand outside the @ picker by
+       the standing rule. Select keeps its place at
+       the foot, as it always has. */
+    noteCtxSep(menu);
     noteCtxItem(menu, "Delete Forever", function () {
       return confirmDeleteNoteForever(note);
     }, true);
@@ -2392,6 +2431,13 @@ function buildSingleNoteContextItems(menu, note, kind, pointerType) {
         });
     });
   } else {
+    /* v2.115: the grouped order Chris approved: the
+       standing group (pin, shortcuts, reminder), then
+       the share and make group (Copy link, new in
+       this release, Duplicate note, Save as
+       Template), then Select in its own group, then
+       the filing group (Archive, Move to Trash) at
+       the foot. No item renamed or removed. */
     noteCtxItem(menu, note.pinned ? "Unpin note" : "Pin note",
       function () { return toggleNotePin(note); });
     noteCtxItem(menu,
@@ -2402,12 +2448,21 @@ function buildSingleNoteContextItems(menu, note, kind, pointerType) {
     noteCtxItem(menu,
       note.reminderAt ? "Edit reminder" : "Add reminder",
       function () { openNoteReminderPanel(note.id); });
-    noteCtxItem(menu, "Save as Template", function () {
-      return promptSaveNoteAsTemplate(note);
+    noteCtxSep(menu);
+    noteCtxItem(menu, "Copy link", function () {
+      copyLinkForNote(note);
     });
     noteCtxItem(menu, "Duplicate note", function () {
       return duplicateNote(note);
     });
+    noteCtxItem(menu, "Save as Template", function () {
+      return promptSaveNoteAsTemplate(note);
+    });
+    noteCtxSep(menu);
+    noteCtxItem(menu, "Select", function () {
+      selectNoteFromContextMenu(note, pointerType);
+    });
+    noteCtxSep(menu);
     noteCtxItem(menu, "Archive", function () {
       return moveNoteWithProgress("Archiving", "Archived",
         "Note archived.", function () {
@@ -2420,6 +2475,7 @@ function buildSingleNoteContextItems(menu, note, kind, pointerType) {
           return moveNoteToTrash(note, false);
         }, moveUndoSnapshot("trash", [note]));
     });
+    return;
   }
   noteCtxItem(menu, "Select", function () {
     selectNoteFromContextMenu(note, pointerType);

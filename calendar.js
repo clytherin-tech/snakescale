@@ -634,6 +634,18 @@ function buildGcalEventEl(ev) {
     clickEv.stopPropagation();
     openGcalEventEditor(ev, ev.days[0]);
   });
+  /* v2.115: a right press opens the entry's own
+     small menu (Open event, Copy link). This element
+     listener runs ahead of the document menu guard,
+     whose .task-cal-entry branch suppresses the
+     browser's menu on these entries without offering
+     one of the app's; the propagation stop keeps the
+     press the menu's alone. */
+  el.addEventListener("contextmenu", function (ctxEv) {
+    ctxEv.preventDefault();
+    ctxEv.stopPropagation();
+    openGcalEventMenu(ev, ctxEv.clientX, ctxEv.clientY);
+  });
   return el;
 }
 
@@ -2659,6 +2671,88 @@ async function followEventChip(chip) {
     return;
   }
   openGcalEventEditor(got.ev, got.ev.days[0]);
+}
+
+/* v2.115: Copy link for one event. The clipboard
+   carries the chip element the ^ inserter produces
+   (buildEventChipEl itself, not the paragraph
+   eventChipParagraphHtml wraps it in for insertion
+   at a caret), so a paste lands the pill inline, and
+   the event's title as the plain text. */
+function copyLinkForEvent(ev) {
+  if (!ev) { return; }
+  copyChipLink(buildEventChipEl(ev).outerHTML,
+    ev.title || "Untitled event");
+}
+
+/* v2.115: the calendar entries' right click menu.
+   Entries had no menu of their own before this
+   release (the app-wide guard only ever suppressed
+   the browser's there), so this is a new, minimal
+   menu with exactly two items, Open event and Copy
+   link, kept in the mail row menu's discipline
+   throughout: the app's own menu card (.note-ctx-menu),
+   placed at the pointer by placeNoteContextMenu,
+   closing on an outside press and on Escape, and
+   focusing its first item on open. */
+let gcalEventMenuCtx = null;
+
+function closeGcalEventMenu() {
+  const menu = document.getElementById("gcalEventMenu");
+  if (menu) { menu.classList.add("hidden"); }
+  gcalEventMenuCtx = null;
+  document.removeEventListener("pointerdown",
+    onGcalEventMenuDocPointerDown, true);
+  document.removeEventListener("keydown",
+    onGcalEventMenuDocKeydown, true);
+}
+
+function onGcalEventMenuDocPointerDown(ev) {
+  const menu = document.getElementById("gcalEventMenu");
+  if (menu && ev.target && menu.contains(ev.target)) {
+    return;
+  }
+  closeGcalEventMenu();
+}
+
+function onGcalEventMenuDocKeydown(ev) {
+  if (ev.key === "Escape") {
+    ev.preventDefault();
+    closeGcalEventMenu();
+  }
+}
+
+function openGcalEventMenu(ev, x, y) {
+  closeGcalEventMenu();
+  const menu = document.getElementById("gcalEventMenu");
+  if (!menu || !ev) { return; }
+  gcalEventMenuCtx = { ev: ev };
+  menu.classList.remove("hidden");
+  placeNoteContextMenu(menu, x, y);
+  document.addEventListener("pointerdown",
+    onGcalEventMenuDocPointerDown, true);
+  document.addEventListener("keydown",
+    onGcalEventMenuDocKeydown, true);
+  const first = menu.querySelector(".list-menu-item");
+  if (first) { first.focus(); }
+}
+
+/* The menu's Open event: the entry click's own door,
+   so the routing rule (editor for a single, future,
+   writable event, the read only view for the rest)
+   decides exactly as a click decides. */
+function gcalEventMenuOpen() {
+  const ctx = gcalEventMenuCtx;
+  closeGcalEventMenu();
+  if (ctx && ctx.ev) {
+    openGcalEventEditor(ctx.ev, ctx.ev.days[0]);
+  }
+}
+
+function gcalEventMenuCopy() {
+  const ctx = gcalEventMenuCtx;
+  closeGcalEventMenu();
+  if (ctx && ctx.ev) { copyLinkForEvent(ctx.ev); }
 }
 
 /* Open the notes list filtered by a tag (a tag pill's

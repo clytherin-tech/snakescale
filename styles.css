@@ -1689,6 +1689,60 @@ body.dark .home-widget-action{color:var(--accent);}
 .home-note-row-meta,.home-tag-count,.home-nb-count{
   color:var(--muted);font-size:12px;flex:0 0 auto;
 }
+/* v2.115: the Home Tags and Notebooks widgets render
+   the sidebar's trees. A parent row is a flex wrapper
+   (the sidebar rows' shape): the fold caret at the
+   row's indent, the row button filling the rest; the
+   wrapper carries the row's rule line and its depth
+   indent rides as its margin, the sidebar's own
+   arrangement. The caret keeps the sidebar carets'
+   geometry (20 by 24, pointing down while expanded
+   and right once folded) in Home's own theme tokens,
+   since these rows stand on the light Home surface,
+   not in the sidebar: it must read in both themes.
+   The stack head speaks in the stack toggle's voice
+   (small, bold, letterspaced, uppercase) in the same
+   Home tokens. */
+.home-tree-row{
+  display:flex;align-items:center;gap:2px;width:100%;
+  border-bottom:1px solid var(--border);
+}
+.home-widget-body>.home-tree-row:last-child,
+.home-widget-body>.home-stack-head:last-child{
+  border-bottom:none;
+}
+.home-tree-row .home-tag-row,.home-tree-row .home-nb-row{
+  border-bottom:none;flex:1;min-width:0;
+}
+.home-tree-chevron{
+  flex:none;width:20px;height:24px;display:inline-flex;
+  align-items:center;justify-content:center;background:none;
+  border:none;color:var(--muted);cursor:pointer;padding:0;
+  transform:rotate(90deg);transition:transform var(--motion);
+}
+.home-tree-row.collapsed .home-tree-chevron{
+  transform:rotate(0deg);
+}
+.home-tree-chevron-spacer{flex:none;width:20px;height:24px;}
+.home-stack-head{
+  display:flex;align-items:center;gap:7px;width:100%;
+  background:none;border:none;text-align:left;cursor:pointer;
+  border-bottom:1px solid var(--border);
+  padding:7px 4px;color:var(--muted);font:inherit;
+  font-size:12px;font-weight:700;letter-spacing:.8px;
+  text-transform:uppercase;
+}
+.home-stack-chevron{
+  display:inline-flex;flex:none;
+  transform:rotate(90deg);transition:transform var(--motion);
+}
+.home-stack-head.collapsed .home-stack-chevron{
+  transform:rotate(0deg);
+}
+.home-stack-name{
+  flex:1;white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis;
+}
 .home-hint{color:var(--muted);font-size:13px;padding:6px 2px;}
 .home-filtered-picker{
   display:flex;flex-direction:column;gap:2px;margin-top:8px;
@@ -2648,8 +2702,11 @@ body.dark .modal:hover::-webkit-scrollbar-thumb{
 #attMenu.hidden, #attCardMenu.hidden, #editorCtxMenu.hidden{display:none;}
 /* v2.91.0: the separator inside the editor's own
    right click menu, in the attachment menus'
-   separator shape. */
-.editor-ctx-sep{height:1px;background:var(--border);margin:4px 2px;}
+   separator shape. v2.115: the note list context
+   menu's separator (.note-ctx-sep) joins this same
+   declaration rather than inventing a second one:
+   one separator shape for every app menu. */
+.editor-ctx-sep,.note-ctx-sep{height:1px;background:var(--border);margin:4px 2px;}
 /* v2.101.0: the Numbering style submenu inside the
    editor's right click menu: a separated group under
    its parent item, opening in place. The current

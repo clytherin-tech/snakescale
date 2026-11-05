@@ -3782,6 +3782,20 @@ function wireEvents() {
       openGcalLinkNotePicker(gcalViewState.ev, "view");
     }
   });
+  /* v2.115: the event view's Copy link button, and
+     the calendar entries' right click menu items (the
+     menu machinery itself lives in calendar.js). */
+  document.getElementById("gcalViewCopyLinkBtn").addEventListener("click", function () {
+    if (gcalViewState && gcalViewState.ev) {
+      copyLinkForEvent(gcalViewState.ev);
+    }
+  });
+  document.getElementById("gcalEventMenuOpenBtn").addEventListener("click", function () {
+    gcalEventMenuOpen();
+  });
+  document.getElementById("gcalEventMenuCopyBtn").addEventListener("click", function () {
+    gcalEventMenuCopy();
+  });
   document.getElementById("gcalViewModal").addEventListener("click", function (ev) {
     if (ev.target === ev.currentTarget) { closeGcalEventView(); }
   });
