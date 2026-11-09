@@ -2617,14 +2617,27 @@ body.dark .modal:hover::-webkit-scrollbar-thumb{
 #noteBody ul:has(> li > input[type="checkbox"]){
   list-style:none;padding-left:2px;
 }
-#noteBody ul.ss-checklist li,
+#noteBody ul.ss-checklist > li,
 #noteBody ul:has(> li > input[type="checkbox"]) > li{
   list-style:none;
 }
-#noteBody ul.ss-checklist li::marker,
+#noteBody ul.ss-checklist > li::marker,
 #noteBody ul:has(> li > input[type="checkbox"]) > li::marker{
   content:"";
 }
+/* v2.118: the suppression above stands on a
+   checklist's OWN direct items only, the shape
+   the :has variants already had. Through v2.117
+   the ss-checklist forms were descendant wide
+   (ul.ss-checklist li), so they also blanked
+   the markers of a plain bullet or numbered
+   sublist nested anywhere under a checklist:
+   converting a sub checklist to bullets removed
+   its checkboxes and showed no bullets in their
+   place (Chris's device report). A checklist
+   nested inside a plain list inside a checklist
+   still reads level by level: each list's own
+   direct items take that list's marker rule. */
 /* v2.109.0: a NESTED checklist level takes the plain
    lists' indent step. The v1.6 rule above gives every
    checklist level a 2px inset, so a sublist sat only

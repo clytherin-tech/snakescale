@@ -780,7 +780,7 @@ function buildPrintDocument(note, bodyHtml) {
     "ol.ss-num-upper-roman{list-style-type:upper-roman;}" +
     "ol.ss-num-lower-roman{list-style-type:lower-roman;}" +
     "ul.ss-checklist{list-style:none;}" +
-    "ul.ss-checklist li{list-style:none;}" +
+    "ul.ss-checklist>li{list-style:none;}" +
     ".ss-attachment{border:1px solid #C9D6C9;border-radius:8px;" +
     "padding:10px 12px;margin:12px 0;}" +
     "@media print{body{margin:0 auto;}}" +
@@ -3271,6 +3271,12 @@ function runToolbarCommand(cmd) {
   const body = document.getElementById("noteBody");
   restoreFormatSelection();
   body.focus();
+  /* v2.118: a list press that turns out to be a
+     clean no-op (the caret already stands in a
+     list of the pressed type) owes the note no
+     dirty mark and no decoration pass; the flag
+     is read where markDirty stands at the end. */
+  let listPressNoOp = false;
   if (cmd === "bold" || cmd === "italic" || cmd === "underline") {
     document.execCommand(cmd, false, null);
   } else if (cmd === "strike") {
@@ -3291,15 +3297,42 @@ function runToolbarCommand(cmd) {
        it stands (convertChecklistToPlainList, with the
        checklist machinery below), exactly as the
        Checklist command converts a plain list the other
-       way. Anywhere else the primitives run as before. */
+       way. Anywhere else the primitives ran as
+       before; v2.118 narrows that (see the plain
+       list routes in this branch): the primitives
+       now run only when the caret is outside
+       any list. */
     const listCtx = checklistCaretContext();
     if (listCtx && listCtx.li && isChecklistList(listCtx.list)) {
       convertChecklistToPlainList(listCtx.list, cmd === "ol",
         listCtx.li);
+    } else if (listCtx && listCtx.li && listCtx.list) {
+      /* v2.118: the caret stands in a PLAIN list.
+         Through v2.117 this case fell through to
+         createPlainListAtCaret and its raw browser
+         primitive, which knows nothing about
+         branches: a second Bullet press on a
+         sublist that had just become bullets
+         re-typed and merged at whole list scope
+         (Chris's device report). The routes are
+         hand run now, over exactly the list
+         containing the caret: the pressed type
+         already standing is a clean no-op, and
+         the other type swaps that one list
+         element by hand (swapPlainListTag). */
+      if (listCtx.list.tagName ===
+          (cmd === "ol" ? "OL" : "UL")) {
+        listPressNoOp = true;
+      } else {
+        swapPlainListTag(listCtx.list, cmd === "ol",
+          listCtx.li);
+      }
     } else {
       /* v2.101.0: creation runs through the app's own
          path, which normalizes the primitive's result
-         on the spot (see createPlainListAtCaret). */
+         on the spot (see createPlainListAtCaret).
+         v2.118: this is now the only route that
+         reaches it: the caret is outside any list. */
       createPlainListAtCaret(cmd === "ol");
     }
   } else if (cmd === "checklist") {
@@ -3311,9 +3344,14 @@ function runToolbarCommand(cmd) {
      done states (see the conversion functions
      below); resync the done wraps over the body
      so the painting follows the new states at
-     once. Idempotent for every other command. */
-  decorateDoneItems(body);
-  markDirty();
+     once. Idempotent for every other command.
+     v2.118: a no-op list press skips both calls:
+     nothing changed, so there is nothing to
+     resync and nothing to save. */
+  if (!listPressNoOp) {
+    decorateDoneItems(body);
+    markDirty();
+  }
 }
 
 /* --------------------------------------------------------------------------
@@ -3941,6 +3979,63 @@ function convertChecklistToPlainList(list, ordered, caretLi) {
         if (li === caretLi && offset > 0) {
           offset -= 1;
         }
+      }
+    }
+  });
+  if (caretLi) {
+    placeCaretAtTextOffset(caretLi, Math.max(0, offset));
+  }
+}
+
+/* v2.118: swap one plain list's element for the
+   other plain tag, UL for OL or OL for UL, where
+   it stands: the Bullet and Numbered commands'
+   answer when the caret stands in a plain list
+   of the other type. The work runs over the
+   conversion targets (see conversionListTargets),
+   so a list standing inside one of this list's
+   own level pads swaps with it, exactly as the
+   checklist conversions treat their pads, while a
+   genuine sublist inside one of its items is not
+   a target and keeps its own tag. The children
+   move across as nodes, so every item keeps its
+   content, its nested lists, and its states; the
+   classes ride across too, except a Numbering
+   style class (an ss-num-* class names a style a
+   numbered list carries), which a bullet list
+   result drops, the mirror of the checklist
+   swap's class handling in toggleChecklistAtCaret.
+   The caret is restored into its own item at its
+   own text offset. Hand run throughout: the
+   browser's list primitive never sees a press
+   whose caret stands inside a list (see
+   runToolbarCommand). */
+function swapPlainListTag(list, ordered, caretLi) {
+  const sel = window.getSelection();
+  const range = sel && sel.rangeCount ? sel.getRangeAt(0) : null;
+  let offset = range && caretLi
+    ? caretTextOffsetWithin(caretLi, range) : 0;
+  const want = ordered ? "OL" : "UL";
+  conversionListTargets(list).forEach(function (l) {
+    if (l.tagName === want) { return; }
+    const target = document.createElement(
+      want.toLowerCase());
+    if (l.getAttribute("class")) {
+      target.setAttribute("class",
+        l.getAttribute("class"));
+    }
+    while (l.firstChild) {
+      target.appendChild(l.firstChild);
+    }
+    l.replaceWith(target);
+    if (target.tagName === "UL") {
+      ["ss-num-decimal", "ss-num-upper-alpha",
+       "ss-num-lower-alpha", "ss-num-upper-roman",
+       "ss-num-lower-roman"].forEach(function (c) {
+        target.classList.remove(c);
+      });
+      if (!target.classList.length) {
+        target.removeAttribute("class");
       }
     }
   });

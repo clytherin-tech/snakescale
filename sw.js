@@ -104,7 +104,7 @@
 
 "use strict";
 
-const CACHE_NAME = "snakescale-shell-2026-11-09-SSN-V21170";
+const CACHE_NAME = "snakescale-shell-2026-11-09-SSN-V21180";
 
 /* The shell, as paths relative to this worker's scope (the site
    root). "./" and "./index.html" are both listed: the first is the
@@ -150,9 +150,9 @@ const PAGE_KEY = "./index.html";
    build if this block is stale. Never edit it by hand. */
 // BEGIN GENERATED ASSET HASHES (gen_asset_hashes.py)
 const ASSET_HASHES = {
-  "./index.html": "8381c1162fce5674e4b85fd8d5d9f4909e372276e58ad9b2b6188836ba0c0cf3",
-  "./styles.css": "298a14b8b94b4b7b46d06a9cb15e57ce8fc0ecac5fc423001fbedf4636773b64",
-  "./version.js": "c7b5adad69838dcf1cb0baeaad108d0f7fa44c461b3b024ce11c2fe1b37c74ba",
+  "./index.html": "4f71b26c9df0c55026ebbb3eaa98ad4b2c4806d505e9bfc032610e0375ceb5d2",
+  "./styles.css": "5eae94820360dd0969b56256c1bd5451d0b7556995d267d2692b33382e594614",
+  "./version.js": "a0da616c515b9876a782cb59d78ef59ee0ac325b615535f8a5ccdf64bca435c5",
   "./core.js": "6f39b11f76398034d4a15d3295df07b438fb37bc3471854a286a51d21922386b",
   "./store.js": "6435b80d8d1ec9f539451b3982b768c78df0e69513ad5750e7bf531a1577dfc9",
   "./sync.js": "92213ded9ff4c0626a56e20c58da580558b43d608017ea3a4d7ce3c917bf13db",
@@ -163,7 +163,7 @@ const ASSET_HASHES = {
   "./mail.js": "4dfa5686640063fcb444222fc22f15ffe28a621d5b714dbb1daa0c9c7b51bd59",
   "./render.js": "69501a0e6fa59970bc9646793037a5b54e916b9c25b750c616a618e2dd554b6c",
   "./editor.js": "84588578048f2a91fe3a88a7f5ac6b7aa3703130b4d40751f3924b94457fa8d0",
-  "./editor-tools.js": "3edf64d9ae8244aae5d4fda76279568d5d4c47217fe3578aa3d0b0c2988a1117",
+  "./editor-tools.js": "d974c245c1ca1a098a7201c21ab50e0950e9fa8b74662a3fc453b55f0da6fe3d",
   "./media.js": "453ff89182da27a9a464e530743d0ab87babd83f563c663edfaf2af493a67f2a",
   "./app.js": "fbbfefff5a9b73eb8bd8e785ddee1d07155b01e08984eab313d7905f279cfaa6",
   "./manifest.webmanifest": "3023da8f798f72a653465cd72fc269090e5c0e18dbc0d2f52afb0d54cda8c16c",
