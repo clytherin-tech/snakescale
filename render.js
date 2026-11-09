@@ -7332,6 +7332,12 @@ function renderEditor() {
        pass), so a checked item reopens checked; see
        syncChecklistBoxes. */
     syncChecklistBoxes(document.getElementById("noteBody"));
+    /* v2.117: a done item's own content takes its
+       struck and muted wrap (see syncDoneItemWrap),
+       so the finished look paints on the item's own
+       text only and never on a list nested under
+       it. */
+    decorateDoneItems(document.getElementById("noteBody"));
     /* v1.7: freshly rendered placeholders get the shared decoration
        (the inline image class, the draggable flag) immediately, not
        only when hydration reaches them one by one. */

@@ -2397,7 +2397,25 @@ body.dark .modal:hover::-webkit-scrollbar-thumb{
    without it). Its sub-list renders at the deeper
    level by the ordinary depth rules above. */
 #noteBody li.ss-level-pad{display:contents;}
-#noteBody li.done{color:var(--muted);text-decoration:line-through;}
+/* v2.117: the finished look moved off the item
+   itself. Through v2.116.0 this rule stood on the
+   li directly, and both of its properties reached
+   the item's whole subtree: the muted color is
+   inherited, and a line through set on an ancestor
+   is painted across every descendant, so a checked
+   item struck and muted the unchecked items
+   nested under it (Chris's report, with a
+   screenshot). A reset on the children does not
+   undo the painted line (proven in a Chromium
+   probe, see the build report), so the look now
+   lives on span.ss-done-own, a furniture span that
+   wraps only the item's own content at render and
+   is stripped at save (see syncDoneItemWrap in the
+   checklist code, and collectEditor). The item's
+   own text is exactly what the span holds, at any
+   wrap, so exactly that text is struck and muted,
+   in both themes through the standing tokens. */
+#noteBody li.done > .ss-done-own{color:var(--muted);text-decoration:line-through;}
 /* v2.1.0: links to other notes (href "ssnote:<id>", class ss-note-link)
    read as internal links: accent color and an underline. The accent
    variable exists in both themes, so this holds in dark mode too.

@@ -475,6 +475,10 @@ function ssencRebindFragment(region) {
   if (!note) { return; }
   normalizeChecklists(region);
   syncChecklistBoxes(region);
+  /* v2.117: a restored fragment's done items take
+     their own content wrap too (see
+     syncDoneItemWrap). */
+  decorateDoneItems(region);
   const attById = new Map();
   (note.attachments || []).forEach(function (a) {
     attById.set(a.id, a);
@@ -2427,6 +2431,11 @@ async function editorCtxPaste() {
     decorateLinkTooltips(bodyEl);
     decorateLinkViews(bodyEl);
     decorateTaskLinks(bodyEl);
+    /* v2.117: the menu Paste is a paste too (see
+       the paste handler's note): its done items
+       take their own content wrap in the same
+       pass. */
+    decorateDoneItems(bodyEl);
   }
 }
 
@@ -4643,6 +4652,12 @@ function wireEvents() {
       if (li) {
         li.classList.toggle("done", target.checked);
         syncChecklistBox(target);
+        /* v2.117: the item's finished look follows
+           the toggle in the same breath (see
+           syncDoneItemWrap): checking wraps the
+           item's own content so only it is struck,
+           unchecking unwraps it. */
+        syncDoneItemWrap(li);
         /* v2.101.0 (audit D4): the click focuses the
            box itself, which strands the editor
            selection outside the text: keystrokes
@@ -5418,6 +5433,11 @@ function wireEvents() {
       decorateLinkTooltips(noteBodyEl);
       decorateLinkViews(noteBodyEl);
       decorateTaskLinks(noteBodyEl);
+      /* v2.117: a pasted done item takes its own
+         content wrap in the same pass (see
+         decorateDoneItems), so it paints like a
+         done item that was always here. */
+      decorateDoneItems(noteBodyEl);
       const endBm = pasteSelectionBookmark(true);
       if (startBm && endBm) {
         pastePopupSession = {
@@ -5541,9 +5561,19 @@ function wireEvents() {
      a paragraph, not the div the browser chooses. */
   noteBodyEl.addEventListener("keydown", function (ev) {
     if (ev.key === "Enter" && !ev.shiftKey) {
-      if (handleChecklistEnter()) { ev.preventDefault(); }
+      /* v2.117: after a claimed Enter the done
+         wraps are resynced (see decorateDoneItems):
+         a split can carry part of a done item's
+         wrapped content into its new sibling, and
+         the resync unwraps what no longer belongs
+         to a done item and wraps what does. */
+      if (handleChecklistEnter()) {
+        ev.preventDefault();
+        decorateDoneItems(noteBodyEl);
+      }
       else if (handlePlainListEnter()) {
         ev.preventDefault();
+        decorateDoneItems(noteBodyEl);
       }
     }
   });
@@ -5558,6 +5588,10 @@ function wireEvents() {
         !ev.metaKey && !ev.altKey) {
       if (handleChecklistBackspace()) {
         ev.preventDefault();
+        /* v2.117: a join can move wrapped content
+           between items; resync the done wraps (see
+           decorateDoneItems). */
+        decorateDoneItems(noteBodyEl);
       }
     }
   });
@@ -5610,6 +5644,11 @@ function wireEvents() {
   noteBodyEl.addEventListener("keydown", function (ev) {
     if (ev.key === "Tab" && handleBodyTabKey(ev)) {
       ev.preventDefault();
+      /* v2.117: a demote or promote moves an item
+         (and any wrap it carries) between lists;
+         resync the done wraps (see
+         decorateDoneItems). */
+      decorateDoneItems(noteBodyEl);
     }
   });
 

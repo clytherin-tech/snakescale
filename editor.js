@@ -130,6 +130,20 @@ function canonicalizeAttachmentPlaceholders(html) {
      as it did before the furniture existed. */
   holder.querySelectorAll("br.ss-code-caret-br")
     .forEach(function (el) { el.remove(); });
+  /* v2.117: a done item's own content wrap (the
+     span.ss-done-own that carries its struck and
+     muted look, see syncDoneItemWrap) is editor
+     furniture in the same pattern: the saved body
+     carries the item's done class and its content
+     exactly as before, and the span is rebuilt by
+     decoration on the next render. */
+  holder.querySelectorAll("span.ss-done-own")
+    .forEach(function (el) {
+      while (el.firstChild) {
+        el.parentNode.insertBefore(el.firstChild, el);
+      }
+      el.remove();
+    });
   /* v2.37.0: a table of contents block canonicalizes the
      same way an attachment does: the stored element is
      rebuilt from scratch (class and contenteditable only)

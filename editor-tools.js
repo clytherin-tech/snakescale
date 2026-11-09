@@ -3307,6 +3307,12 @@ function runToolbarCommand(cmd) {
   } else if (cmd === "clear") {
     clearFormattingExtended();
   }
+  /* v2.117: a list conversion can strip or add
+     done states (see the conversion functions
+     below); resync the done wraps over the body
+     so the painting follows the new states at
+     once. Idempotent for every other command. */
+  decorateDoneItems(body);
   markDirty();
 }
 
@@ -3487,10 +3493,62 @@ function ensureChecklistCheckbox(li) {
   li.insertBefore(box, li.firstChild);
 }
 
+
+/* v2.117: the lists one list conversion acts on.
+   Converting the list containing the caret must
+   convert exactly that list, no more and no less.
+   The one gap in the geometry checklistCaretContext
+   already scopes (it returns the innermost list)
+   is the ss-level-pad wrapper (see indentListItem
+   and li.ss-level-pad in the stylesheet): the pad
+   is a stand-in for the list's own first level, a
+   markerless item that exists only to hold the
+   sublist a first item demoted into, so a list
+   standing inside one of the list's own pads is
+   part of THIS list for conversion, not a branch
+   of it. Through v2.116.0 the conversions below
+   walked direct items only and skipped the pad
+   (it is not an item), so its inner list kept the
+   old type whole: a checklist converted to bullets
+   at the top level left the padded items behind
+   as a checklist with their boxes (rig proof in
+   the build report). A genuine sublist, a list
+   inside a normal item, is a branch: it is never
+   in this set, so it keeps its own type, boxes,
+   and states when the list above it converts,
+   exactly as a branch conversion leaves the rest
+   of the tree alone. Pads can nest (a demoted
+   first item inside a padded level), so the walk
+   recurses through them. */
+function conversionListTargets(list) {
+  const out = [list];
+  const walk = function (l) {
+    Array.from(l.children).forEach(function (li) {
+      if (li.tagName === "LI" &&
+          li.classList.contains("ss-level-pad")) {
+        Array.from(li.children).forEach(
+          function (sub) {
+            if (sub.tagName === "UL" ||
+                sub.tagName === "OL") {
+              out.push(sub);
+              walk(sub);
+            }
+          });
+      }
+    });
+  };
+  walk(list);
+  return out;
+}
+
 /* Turn an existing list into a checklist where it stands: the
    ss-checklist class on the list, and a checkbox at the start of
-   every item. The items' own content is not touched. */
-function makeListChecklist(ul) {
+   every item. The items' own content is not touched.
+   v2.117: the work runs over the conversion targets
+   (see conversionListTargets), so a list standing inside
+   one of this list's own level pads converts with it,
+   while a genuine sublist in a normal item is untouched. */
+function makeOneListChecklist(ul) {
   ul.classList.add("ss-checklist");
   for (let i = 0; i < ul.children.length; i++) {
     if (ul.children[i].tagName !== "LI") { continue; }
@@ -3504,6 +3562,12 @@ function makeListChecklist(ul) {
     }
     ensureChecklistCheckbox(ul.children[i]);
   }
+}
+
+function makeListChecklist(ul) {
+  conversionListTargets(ul).forEach(function (l) {
+    makeOneListChecklist(l);
+  });
 }
 
 /* The hand done fallback for turning a plain block into a checklist
@@ -3749,12 +3813,23 @@ function toggleChecklistAtCaret() {
     makeListChecklist(ctx.list);
     return;
   }
-  /* In a numbered list: swap it for a checklist with the same items. */
+  /* In a numbered list: swap it for a checklist with the same items.
+     v2.117: every conversion target swaps (see
+     conversionListTargets), so a list inside one of this
+     list's own level pads becomes a checklist with it;
+     makeListChecklist on the head of the set reaches the
+     rest through the same pads. */
   if (ctx.li && ctx.list && ctx.list.tagName === "OL") {
-    const ul = document.createElement("ul");
-    while (ctx.list.firstChild) { ul.appendChild(ctx.list.firstChild); }
-    ctx.list.replaceWith(ul);
-    makeListChecklist(ul);
+    const targets = conversionListTargets(ctx.list);
+    const head = targets.map(function (l) {
+      const ul = document.createElement("ul");
+      while (l.firstChild) { ul.appendChild(l.firstChild); }
+      l.replaceWith(ul);
+      return ul;
+    });
+    head.forEach(function (ul) {
+      makeOneListChecklist(ul);
+    });
     return;
   }
   /* Any other block, or no block at all: the toolbar's list
@@ -3812,34 +3887,63 @@ function convertChecklistToPlainList(list, ordered, caretLi) {
   const range = sel && sel.rangeCount ? sel.getRangeAt(0) : null;
   let offset = range && caretLi
     ? caretTextOffsetWithin(caretLi, range) : 0;
-  let target = list;
-  if (ordered && list.tagName === "UL") {
-    target = document.createElement("ol");
-    while (list.firstChild) { target.appendChild(list.firstChild); }
-    list.replaceWith(target);
-  }
-  target.classList.remove("ss-checklist");
-  /* An emptied class attribute does not ride into the
-     saved body; the attribute itself goes too. */
-  if (!target.classList.length) {
-    target.removeAttribute("class");
-  }
-  for (let i = 0; i < target.children.length; i++) {
-    const li = target.children[i];
-    if (li.tagName !== "LI") { continue; }
-    li.classList.remove("done");
-    if (!li.classList.length) { li.removeAttribute("class"); }
-    const head = li.firstElementChild;
-    if (head && head.tagName === "INPUT" && head.type === "checkbox") {
-      head.remove();
+  /* v2.117: the conversion runs over the conversion
+     targets (see conversionListTargets): the list
+     containing the caret converts whole, its own level
+     pads included, and nothing beyond it. A genuine
+     sublist inside one of its items is not a target, so
+     it keeps its type, its boxes, and its states. Level
+     wrapper items are skipped as items (they are not
+     items), which also keeps the separator space strip
+     below from reaching through a pad into the first
+     padded item's text. */
+  const targets = conversionListTargets(list).map(
+    function (l) {
+      let target = l;
+      if (ordered && l.tagName === "UL") {
+        target = document.createElement("ol");
+        while (l.firstChild) {
+          target.appendChild(l.firstChild);
+        }
+        l.replaceWith(target);
+      }
+      return target;
+    });
+  targets.forEach(function (target) {
+    target.classList.remove("ss-checklist");
+    /* An emptied class attribute does not ride into the
+       saved body; the attribute itself goes too. */
+    if (!target.classList.length) {
+      target.removeAttribute("class");
     }
-    const walker = document.createTreeWalker(li, NodeFilter.SHOW_TEXT, null);
-    const firstText = walker.nextNode();
-    if (firstText && firstText.nodeValue.charAt(0) === " ") {
-      firstText.nodeValue = firstText.nodeValue.slice(1);
-      if (li === caretLi && offset > 0) { offset -= 1; }
+    for (let i = 0; i < target.children.length; i++) {
+      const li = target.children[i];
+      if (li.tagName !== "LI") { continue; }
+      if (li.classList.contains("ss-level-pad")) {
+        continue;
+      }
+      li.classList.remove("done");
+      if (!li.classList.length) {
+        li.removeAttribute("class");
+      }
+      const head = li.firstElementChild;
+      if (head && head.tagName === "INPUT" &&
+          head.type === "checkbox") {
+        head.remove();
+      }
+      const walker = document.createTreeWalker(li,
+        NodeFilter.SHOW_TEXT, null);
+      const firstText = walker.nextNode();
+      if (firstText &&
+          firstText.nodeValue.charAt(0) === " ") {
+        firstText.nodeValue =
+          firstText.nodeValue.slice(1);
+        if (li === caretLi && offset > 0) {
+          offset -= 1;
+        }
+      }
     }
-  }
+  });
   if (caretLi) {
     placeCaretAtTextOffset(caretLi, Math.max(0, offset));
   }
@@ -3909,6 +4013,110 @@ function syncChecklistBoxes(rootEl) {
   rootEl.querySelectorAll("input[type=\"checkbox\"]").forEach(
     function (box) { syncChecklistBox(box); });
 }
+/* v2.117: a done item's finished look wraps its
+   OWN content, and nothing else. Through v2.116.0
+   the look stood in one stylesheet rule on the
+   item itself (#noteBody li.done), and it bled
+   into every list nested under the item: the
+   muted color is inherited by the nested items,
+   and a line through set on an ancestor is
+   painted by the browser across all of its
+   descendants, so checking an item struck and
+   muted its unchecked children (Chris's report).
+   The state itself was never wrong (the click
+   handler marks only the clicked item, and
+   syncChecklistBox above mirrors only its box);
+   only the painting spread. A stylesheet reset on
+   the children is a proven non fix: it restores
+   their color, but the ancestor's line still
+   paints through them (Chromium probe, build
+   report). So the painting moves onto furniture:
+   syncDoneItemWrap wraps each run of the item's
+   own content (everything that is not its
+   checkbox, a nested list, or a block child) in a
+   span.ss-done-own, and the stylesheet rule now
+   stands on li.done > .ss-done-own. The spans are
+   editor furniture in the standing pattern (the
+   link faces, the code caret break): rederived
+   whenever the body is decorated, and unwrapped
+   in collectEditor, the one funnel every saved
+   body passes through, so no saved note ever
+   carries one. Typing inside a done item types
+   inside its span, so new text takes the look
+   with no further work; the passes that call
+   decorateDoneItems (render, the checkbox
+   toggle, the app claimed list keys, toolbar
+   commands, the paste doors) rewrap after any
+   structural change, and unwrapDoneOwnSpans
+   inside an item that is not done keeps a stale
+   span from ever striking on its own: the rule
+   also keys on li.done, so a stray span in an
+   open item paints nothing. */
+function unwrapDoneOwnSpans(li) {
+  if (!li || !li.querySelectorAll) { return; }
+  li.querySelectorAll(":scope > span.ss-done-own")
+    .forEach(function (span) {
+      while (span.firstChild) {
+        span.parentNode.insertBefore(
+          span.firstChild, span);
+      }
+      span.remove();
+    });
+}
+
+function syncDoneItemWrap(li) {
+  if (!li || li.tagName !== "LI") { return; }
+  /* A level wrapper is not an item: it holds a
+     sublist and no text of its own (see
+     li.ss-level-pad in the stylesheet), so there
+     is nothing of its own to wrap. */
+  if (li.classList.contains("ss-level-pad")) {
+    return;
+  }
+  unwrapDoneOwnSpans(li);
+  if (!li.classList.contains("done")) { return; }
+  /* Block children stand outside the item's own
+     text: a nested list above all, and any block
+     the item holds (a table, a code block, a
+     figure) keeps its own rendering, exactly as
+     the tasks view's completed row strikes only
+     its title and never its description. */
+  const BREAKERS = { UL: 1, OL: 1, FIGURE: 1,
+    TABLE: 1, PRE: 1, DIV: 1, BLOCKQUOTE: 1,
+    P: 1, H1: 1, H2: 1, H3: 1, H4: 1, H5: 1,
+    H6: 1 };
+  let run = [];
+  const flush = function () {
+    const meaningful = run.some(function (n) {
+      return n.nodeType === 1 ||
+        (n.nodeValue && n.nodeValue.trim());
+    });
+    if (run.length && meaningful) {
+      const span = document.createElement("span");
+      span.className = "ss-done-own";
+      li.insertBefore(span, run[0]);
+      run.forEach(function (n) {
+        span.appendChild(n);
+      });
+    }
+    run = [];
+  };
+  Array.from(li.childNodes).forEach(function (n) {
+    const breaker = n.nodeType === 1 &&
+      (BREAKERS[n.tagName] ||
+       (n.tagName === "INPUT" &&
+        n.type === "checkbox"));
+    if (breaker) { flush(); } else { run.push(n); }
+  });
+  flush();
+}
+
+function decorateDoneItems(rootEl) {
+  if (!rootEl || !rootEl.querySelectorAll) { return; }
+  rootEl.querySelectorAll("li").forEach(
+    function (li) { syncDoneItemWrap(li); });
+}
+
 
 /* v2.6.0: the hover tooltip for one anchor in a note body. A note
    link (ssnote:) shows the target note's current title; findNoteById
@@ -5316,6 +5524,11 @@ function applyPasteMode(mode) {
     decorateLinkTooltips(pasteBodyEl());
     decorateLinkViews(pasteBodyEl());
     decorateTaskLinks(pasteBodyEl());
+    /* v2.117: the re-landed rendering's done
+       items take their own content wrap in the
+       same pass (see the paste handler's note in
+       the app wiring). */
+    decorateDoneItems(pasteBodyEl());
     syncPastePopupRows();
     positionPastePopup();
   } finally {
