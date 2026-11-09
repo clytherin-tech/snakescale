@@ -3384,6 +3384,10 @@ function startAttachmentResize(ev, corner) {
   ev.stopPropagation();
   const el = selectedAttachmentEl;
   if (!el) { return; }
+  /* v2.119: the history suspends BEFORE the drag's
+     first mutation (the Fill conversion below), so
+     the whole drag lands as one step at its end. */
+  editorHistorySuspend();
   /* v2.11: a grip drag on a Fill width figure converts it to a
      sized, centered figure at its rendered width first, so the
      drag has a pixel width to work from (see applyImageAlign). */
@@ -3405,6 +3409,9 @@ function startAttachmentResize(ev, corner) {
     document.removeEventListener("pointermove", onMove);
     document.removeEventListener("pointerup", onUp);
     markDirty();
+    /* v2.119: the drag was one change, so the
+       history resumes with one signal for it. */
+    editorHistoryResume(true);
   }
   document.addEventListener("pointermove", onMove);
   document.addEventListener("pointerup", onUp);

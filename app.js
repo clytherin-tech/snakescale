@@ -4296,6 +4296,77 @@ function wireEvents() {
     document.getElementById("addNotebookBtn").click();
   });
   document.getElementById("noteBody").addEventListener("input", markDirty);
+  /* v2.119: the editor's own undo history reads its
+     change signals here, beside the dirty marking
+     the same events already feed. The body's input
+     events classify each change for coalescing (a
+     checkbox's own input event is a discrete
+     operation; the text input types name the
+     typing and deletion bursts; everything else
+     is a discrete operation), the title field's
+     input events are title typing, a mousedown
+     anywhere closes an open burst before the
+     click's own work begins, caret moving keys
+     close it too, and the selection's resting
+     place is tracked between changes so a step
+     remembers the selection it began from. The
+     history's keys (Ctrl+Z, Ctrl+Shift+Z, Ctrl+Y)
+     are spent here while the body or the title
+     holds the focus, so the browser's native
+     stack never also fires inside the editor;
+     every other field keeps its native undo. */
+  document.getElementById("noteBody").addEventListener("input",
+    function (ev) {
+      if (ev.target && ev.target.tagName === "INPUT") {
+        editorHistoryInputSignal("op");
+        return;
+      }
+      const t = ev.inputType || "";
+      if (t === "insertText" ||
+          t === "insertCompositionText") {
+        editorHistoryInputSignal("text");
+      } else if (t === "deleteContentBackward") {
+        editorHistoryInputSignal("delback");
+      } else if (t === "deleteContentForward") {
+        editorHistoryInputSignal("delfwd");
+      } else {
+        editorHistoryInputSignal("op");
+      }
+    });
+  document.getElementById("noteTitle").addEventListener("input",
+    function () { editorHistoryInputSignal("title"); });
+  document.addEventListener("mousedown", function () {
+    editorHistoryCloseBurst();
+  }, true);
+  document.addEventListener("selectionchange", function () {
+    editorHistoryTrackCaret();
+  });
+  document.addEventListener("keydown", function (ev) {
+    if (!(ev.ctrlKey || ev.metaKey) || ev.altKey) {
+      if (!ev.ctrlKey && !ev.metaKey && !ev.altKey &&
+          /^(Arrow|Home|End|Page)/.test(ev.key || "")) {
+        editorHistoryCloseBurst();
+      }
+      return;
+    }
+    const k = (ev.key || "").toLowerCase();
+    if (k !== "z" && k !== "y") { return; }
+    const bodyEl = document.getElementById("noteBody");
+    const titleEl = document.getElementById("noteTitle");
+    let inEditor = document.activeElement === titleEl ||
+      document.activeElement === bodyEl;
+    if (!inEditor) {
+      const sel = window.getSelection();
+      inEditor = !!(sel && sel.rangeCount &&
+        bodyEl.contains(sel.anchorNode));
+    }
+    if (!inEditor) { return; }
+    const note = currentNote();
+    if (!note || note.trashed || note.archived) { return; }
+    ev.preventDefault();
+    if (k === "y" || ev.shiftKey) { editorHistoryRedo(); }
+    else { editorHistoryUndo(); }
+  });
   /* v1.7: the same body input events feed the attachment deletion
      reconciliation, which notices blocks removed with the Delete or
      Backspace keys. A separate listener; the markDirty one above is

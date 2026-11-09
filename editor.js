@@ -272,6 +272,619 @@ function canonicalizeAttachmentPlaceholders(html) {
   return holder.innerHTML;
 }
 
+/* --------------------------------------------------------------------------
+   v2.119: the note editor's own undo and redo history.
+
+   Through v2.118.0 the editor leaned on the browser's
+   native undo stack. Typing and the execCommand
+   formatting commands fed that stack, but the app's
+   many hand built operations never landed on it, or
+   landed only in part: list conversions and swaps,
+   Tab demote and promote (called out since v2.110.0
+   as not a native undo step), checkbox toggles, the
+   hand list creation fallback, table work, and the
+   encryption flows' DOM surgery. Ctrl+Z after such a
+   change reverted some older native step instead, or
+   did nothing, so undo could not be trusted across
+   the changes a note actually goes through (Chris's
+   report: "Undo (Ctrl+Z) needs to fully work across
+   ALL changes in notes").
+
+   This module owns the history instead. A step is a
+   snapshot: the SERIALIZED body, exactly what the
+   save funnel stores (see collectEditor: the
+   canonicalized form, attachment references rather
+   than blob URLs, encrypted passages as ciphertext),
+   the title field's raw value, and a caret bookmark
+   (the selection's anchor and focus as character
+   offsets into the body's text, the same measure
+   captureEditorViewState uses). Because a snapshot
+   is the serialized form, the editor's decoration
+   passes (link faces, checklist box sync, the done
+   items' own content wrap, attachment hydration,
+   fold and TOC furniture) can churn the live DOM
+   without ever reading as a change: their output
+   serializes away.
+
+   Capture signals: a MutationObserver over the body
+   sees every DOM change however it was made; the
+   body's input events classify the change (plain
+   text typing, backward or forward deletion, or a
+   discrete operation), and the title field's input
+   events classify as title typing. Changes coalesce
+   on a quiet window: a burst of one classification
+   (typing at word pace, a run of Backspaces) settles
+   as ONE step when the window lapses, a change of
+   classification settles the open burst first and
+   starts its own step, a mousedown anywhere settles
+   an open burst before the click's own operation
+   begins, and every discrete operation settles as
+   exactly one step. A restore puts the snapshot back
+   through the same decoration sequence a note open
+   runs (editorHistoryFillBody mirrors the fill block
+   in renderEditor), restores the title and the
+   caret, and marks the note dirty so the restored
+   state autosaves like any other edit.
+
+   Bounds: at most EDITOR_HISTORY_MAX_STEPS undo
+   steps, and at most EDITOR_HISTORY_MAX_CHARS of
+   serialized body text across the whole history;
+   the oldest steps fall off first and undo simply
+   stops at the bottom. Undo at the bottom and redo
+   at the top are silent no-ops. A new change after
+   an undo clears the redo stack. The stack belongs
+   to the open note: renderEditor's fill (a note
+   switch, a sync or self update refill) resets it
+   through editorHistoryReset, and a restore never
+   goes through that fill, so undoing cannot reset
+   the very stack it is walking.
+
+   Scope: the note editor only, the body and the
+   title field. The Home scratch pad and the task
+   description editor keep the behavior they had.
+   -------------------------------------------------------------------------- */
+const EDITOR_HISTORY_MAX_STEPS = 100;
+const EDITOR_HISTORY_MAX_CHARS = 4000000;
+const EDITOR_HISTORY_TYPE_IDLE_MS = 450;
+const EDITOR_HISTORY_OP_IDLE_MS = 150;
+let editorHistory = null;
+let editorHistoryObserver = null;
+
+/* The serialized body a snapshot carries: the save
+   funnel's own read of the live body, so a snapshot
+   and a save of the same state are the same string. */
+function editorHistorySerializedBody() {
+  return canonicalizeAttachmentPlaceholders(
+    ssencSerializedBodyHtml());
+}
+
+/* A position as a character offset into the body's
+   text: the length of the text a range from the
+   body's start to the position covers. Minus one
+   when the position is not inside the body. */
+function editorHistoryTextOffset(node, offset) {
+  const bodyEl = document.getElementById("noteBody");
+  if (!node || !bodyEl || !bodyEl.contains(node)) {
+    return -1;
+  }
+  const range = document.createRange();
+  range.setStart(bodyEl, 0);
+  try { range.setEnd(node, offset); }
+  catch (err) { return -1; }
+  return range.toString().length;
+}
+
+/* Reconcile the current snapshot with the stored
+   note once saves settle. Some app writes land
+   asynchronously after the change that caused them
+   (an encrypted passage's re-encryption chain above
+   all): a settle can capture the serialized body a
+   beat before the last attribute lands, and the
+   autosave that follows stores the final form. If
+   the stored body and the live serialized body
+   agree with each other but not with the current
+   snapshot, the snapshot adopts the stored form,
+   so a later undo or redo restores exactly what
+   the file holds. The live body must agree with
+   the stored one first: while they differ, the
+   difference is an unsaved edit in flight, not a
+   late landing, and nothing is adopted. */
+function editorHistoryReconcileNow() {
+  const h = editorHistory;
+  if (!h || h.applying || h.suspended || h.unsettled) {
+    return;
+  }
+  const note = currentNote();
+  if (!note || note.id !== h.noteId) { return; }
+  const stored = note.body || "";
+  if (stored === h.cur.body) { return; }
+  if (editorHistorySerializedBody() !== stored) {
+    return;
+  }
+  h.cur = { body: stored, title: h.cur.title,
+    caret: h.cur.caret };
+  const titleEl = document.getElementById("noteTitle");
+  if (titleEl && typeof note.title === "string" &&
+      titleEl.value === note.title) {
+    h.cur.title = note.title;
+  }
+}
+
+function editorHistoryArmReconcile() {
+  const h = editorHistory;
+  if (!h) { return; }
+  if (h.reconcileTimer) { clearTimeout(h.reconcileTimer); }
+  h.reconcileTimer = setTimeout(function () {
+    if (editorHistory !== h) { return; }
+    h.reconcileTimer = null;
+    editorHistoryReconcileNow();
+  }, 1400);
+}
+
+/* The caret bookmark for a snapshot: which field
+   holds the selection, and the anchor and focus
+   offsets in that field's own measure (the title
+   input's selection offsets, or body text offsets). */
+function editorHistoryCaret() {
+  const titleEl = document.getElementById("noteTitle");
+  if (titleEl && document.activeElement === titleEl) {
+    return { field: "title",
+      a: titleEl.selectionStart, f: titleEl.selectionEnd };
+  }
+  const sel = window.getSelection();
+  if (!sel || !sel.rangeCount) {
+    return { field: "body", a: -1, f: -1 };
+  }
+  return { field: "body",
+    a: editorHistoryTextOffset(sel.anchorNode,
+      sel.anchorOffset),
+    f: editorHistoryTextOffset(sel.focusNode,
+      sel.focusOffset) };
+}
+
+/* One snapshot of the editor as it stands. */
+function editorHistoryCapture() {
+  const titleEl = document.getElementById("noteTitle");
+  return {
+    body: editorHistorySerializedBody(),
+    title: titleEl ? titleEl.value : "",
+    caret: editorHistoryCaret()
+  };
+}
+
+/* The note the history may act on: the open note,
+   not locked, and the one the stack belongs to. */
+function editorHistoryLive() {
+  const h = editorHistory;
+  if (!h) { return null; }
+  const note = currentNote();
+  if (!note || note.id !== h.noteId ||
+      note.trashed || note.archived) {
+    return null;
+  }
+  return h;
+}
+
+/* Keep the stacks inside their bounds: the oldest
+   undo steps fall off first, then the oldest redo
+   steps, until the step count and the serialized
+   size both fit. */
+function editorHistoryTrim() {
+  const h = editorHistory;
+  if (!h) { return; }
+  const totalChars = function () {
+    let n = h.cur ? h.cur.body.length : 0;
+    h.undo.forEach(function (s) { n += s.body.length; });
+    h.redo.forEach(function (s) { n += s.body.length; });
+    return n;
+  };
+  while (h.undo.length > EDITOR_HISTORY_MAX_STEPS) {
+    h.undo.shift();
+  }
+  while (totalChars() > EDITOR_HISTORY_MAX_CHARS &&
+      h.undo.length) {
+    h.undo.shift();
+  }
+  while (totalChars() > EDITOR_HISTORY_MAX_CHARS &&
+      h.redo.length) {
+    h.redo.shift();
+  }
+}
+
+/* Fill the body from a serialized snapshot through
+   the same decoration sequence renderEditor's fill
+   runs, in the same order, so a restored body is
+   decorated exactly as an opened one. The note's
+   own object is not touched here; the caller's
+   markDirty and the autosave's collect read the
+   filled fields, as they do after any edit. */
+function editorHistoryFillBody(note, bodyHtml) {
+  const bodyEl = document.getElementById("noteBody");
+  if (!bodyEl || !note) { return; }
+  deselectAttachment();
+  revokeAttachmentUrls();
+  attachBodyGuard = true;
+  bodyEl.innerHTML = bodyHtml || "";
+  normalizeChecklists(bodyEl);
+  syncChecklistBoxes(bodyEl);
+  decorateDoneItems(bodyEl);
+  bodyEl.querySelectorAll(".ss-attachment")
+    .forEach(function (el) {
+      const att = (note.attachments || []).find(
+        function (a) {
+          return a.id === el.getAttribute(
+            "data-attachment-id");
+        });
+      decorateAttachmentPlaceholder(note, el, att || null);
+    });
+  applyAllTableFilters(bodyEl);
+  decorateLinkTooltips(bodyEl);
+  decorateLinkViews(bodyEl);
+  decorateTaskLinks(bodyEl);
+  refreshTocBlocks(bodyEl);
+  decorateSectionFolds(bodyEl);
+  refreshNoteTaskBlocks(bodyEl, note);
+  ssencDecorateEditorBody();
+  decorateCodeCaretBrs(bodyEl);
+  finishNoteOpenAttachments(note).catch(function (err) {
+    console.warn("Attachment hydration failed:", err);
+  });
+}
+
+/* Put a snapshot's caret back: the title field's
+   selection when the bookmark is the title's, else
+   the body selection rebuilt from its two text
+   offsets (each clamped to the text the restored
+   body actually has), direction preserved through
+   setBaseAndExtent where the platform offers it. */
+function editorHistoryRestoreCaret(caret) {
+  if (!caret) { return; }
+  if (caret.field === "title") {
+    const titleEl = document.getElementById("noteTitle");
+    if (!titleEl) { return; }
+    titleEl.focus();
+    try {
+      titleEl.setSelectionRange(caret.a, caret.f);
+    } catch (err) { /* the field keeps its own caret */ }
+    return;
+  }
+  if (caret.a < 0) { return; }
+  const bodyEl = document.getElementById("noteBody");
+  if (!bodyEl) { return; }
+  const pointAt = function (wanted) {
+    let remaining = wanted;
+    let lastText = null;
+    const walker = document.createTreeWalker(
+      bodyEl, NodeFilter.SHOW_TEXT, null);
+    let node = walker.nextNode();
+    while (node) {
+      lastText = node;
+      if (remaining <= node.nodeValue.length) {
+        return { node: node, offset: remaining };
+      }
+      remaining -= node.nodeValue.length;
+      node = walker.nextNode();
+    }
+    return lastText ? { node: lastText,
+      offset: lastText.nodeValue.length } : null;
+  };
+  const a = pointAt(caret.a);
+  if (!a) { return; }
+  const f = caret.f >= 0 ? pointAt(caret.f) : a;
+  bodyEl.focus({ preventScroll: true });
+  const sel = window.getSelection();
+  if (!sel) { return; }
+  try {
+    if (f && sel.setBaseAndExtent) {
+      sel.setBaseAndExtent(a.node, a.offset,
+        f.node, f.offset);
+    } else {
+      const range = document.createRange();
+      range.setStart(a.node, a.offset);
+      range.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(range);
+    }
+  } catch (err) { /* the body keeps its own caret */ }
+}
+
+/* Start the stack over for a note: renderEditor's
+   fill calls this once the new body stands filled
+   and decorated, so the baseline snapshot is the
+   note as opened. The observer is created on first
+   use and watches the body element, which outlives
+   every note it serves. */
+function editorHistoryReset(note) {
+  if (!note) { return; }
+  if (editorHistory && editorHistory.timer) {
+    clearTimeout(editorHistory.timer);
+  }
+  if (editorHistory && editorHistory.reconcileTimer) {
+    clearTimeout(editorHistory.reconcileTimer);
+  }
+  editorHistory = {
+    noteId: note.id, undo: [], redo: [],
+    cur: null, burst: null, unsettled: false,
+    pendingPush: false, amendNext: false,
+    suspended: false, applying: false, timer: null,
+    reconcileTimer: null, lastTrack: 0,
+    inputStamp: 0, observerQueued: false,
+    justRestored: false, restoredStamp: 0
+  };
+  editorHistory.cur = editorHistoryCapture();
+  if (!editorHistoryObserver) {
+    const bodyEl = document.getElementById("noteBody");
+    if (bodyEl) {
+      editorHistoryObserver = new MutationObserver(
+        function () {
+          /* The observer's callback can run ahead of
+             the input event that classifies the same
+             change (a keystroke's text insertion is
+             mutated, observed, and only then reported
+             as an input event), so an immediate signal
+             here would land unclassified and split the
+             burst the input event was about to name.
+             Defer one turn: when a classified input
+             signal has arrived in the meantime (the
+             stamp moved), it owns the change and this
+             batch stands down; when none has, the
+             change was a hand built operation with no
+             input event, and it signals as one. */
+          const h = editorHistory;
+          if (!h || h.observerQueued) { return; }
+          h.observerQueued = true;
+          const stamp = h.inputStamp;
+          setTimeout(function () {
+            if (editorHistory !== h) { return; }
+            h.observerQueued = false;
+            if (h.inputStamp !== stamp) { return; }
+            editorHistorySignal("op");
+          }, 0);
+        });
+      editorHistoryObserver.observe(bodyEl, {
+        childList: true, subtree: true,
+        characterData: true, attributes: true });
+    }
+  }
+}
+
+/* Arm the quiet window at whose lapse the open
+   changes settle into a step. */
+function editorHistoryArmTimer(ms) {
+  const h = editorHistory;
+  if (!h) { return; }
+  if (h.timer) { clearTimeout(h.timer); }
+  h.timer = setTimeout(function () {
+    if (editorHistory === h) { editorHistorySettle(); }
+  }, ms);
+}
+
+/* Settle the open changes: compare the editor as it
+   stands against the current snapshot, and when the
+   serialized state moved, adopt the new snapshot,
+   pushing the old one as an undo step first unless
+   the change was declared an amendment of the
+   standing step (see editorHistoryAmendStep). A
+   settle that finds no serialized change (decoration
+   churn, a caret move) refreshes only the caret. */
+function editorHistorySettle() {
+  const h = editorHistory;
+  if (!h) { return; }
+  if (h.timer) { clearTimeout(h.timer); h.timer = null; }
+  if (!h.unsettled) { h.burst = null; return; }
+  h.unsettled = false;
+  h.burst = null;
+  if (!editorHistoryLive()) { h.pendingPush = false; return; }
+  const snap = editorHistoryCapture();
+  if (snap.body === h.cur.body &&
+      snap.title === h.cur.title) {
+    h.cur.caret = snap.caret;
+    h.pendingPush = false;
+    editorHistoryArmReconcile();
+    return;
+  }
+  /* A restore can be followed by the app's own late
+     landings: an open encrypted passage re-encrypts
+     on the restore's autosave with a fresh IV, so
+     the live body churns bytes without any edit.
+     When no user input has landed since the
+     restore and the capture is exactly the stored
+     body, the churn adopts into the current
+     snapshot instead of pushing a step (a push
+     would also clear the redo stack and strand
+     the state the user just undid). */
+  if (h.justRestored &&
+      h.inputStamp === h.restoredStamp &&
+      snap.body === (currentNote().body || "")) {
+    h.cur = { body: snap.body, title: snap.title,
+      caret: snap.caret };
+    h.amendNext = false;
+    h.pendingPush = false;
+    editorHistoryArmReconcile();
+    return;
+  }
+  h.justRestored = false;
+  if (h.pendingPush && !h.amendNext) {
+    h.undo.push(h.cur);
+    h.redo.length = 0;
+    editorHistoryTrim();
+  }
+  h.amendNext = false;
+  h.pendingPush = false;
+  h.cur = snap;
+  editorHistoryArmReconcile();
+}
+
+/* A classified signal arriving from an input
+   event: it stamps the state first, so a mutation
+   batch the observer is still holding for the same
+   change stands down when its deferred turn comes
+   (see the observer in editorHistoryReset). */
+function editorHistoryInputSignal(kind) {
+  const h = editorHistory;
+  if (h) { h.inputStamp++; h.justRestored = false; }
+  editorHistorySignal(kind);
+}
+
+/* One classified change signal. kind is "text" for
+   plain typing, "delback" or "delfwd" for deletion
+   runs, "title" for title typing, and "op" for every
+   discrete operation (a toolbar command, a checkbox
+   toggle, a paste, a conversion, any DOM change the
+   observer sees without an input classification).
+   A signal whose classification differs from the
+   open burst's settles the burst first, so a
+   discrete operation never merges into the typing
+   burst in front of it. */
+function editorHistorySignal(kind) {
+  const h = editorHistory;
+  if (!h || h.applying || h.suspended) { return; }
+  if (!editorHistoryLive()) { return; }
+  const burstable = kind !== "op";
+  if (!h.unsettled) {
+    h.pendingPush = true;
+    h.burst = burstable ? kind : null;
+  } else if (h.burst !== null && kind !== h.burst) {
+    editorHistorySettle();
+    if (!editorHistoryLive()) { return; }
+    h.pendingPush = true;
+    h.burst = burstable ? kind : null;
+  } else if (h.burst === null && burstable) {
+    h.burst = kind;
+  }
+  h.unsettled = true;
+  editorHistoryArmTimer(burstable &&
+    kind === h.burst ? EDITOR_HISTORY_TYPE_IDLE_MS
+    : EDITOR_HISTORY_OP_IDLE_MS);
+}
+
+/* Close any open burst without waiting for its
+   window: a mousedown or a caret moving key lands
+   here, so the burst stands as its own step before
+   whatever the press or the key goes on to do. */
+function editorHistoryCloseBurst() {
+  const h = editorHistory;
+  if (h && h.unsettled && h.burst !== null) {
+    editorHistorySettle();
+  }
+}
+
+/* Declare that the next settled change amends the
+   standing step instead of adding one: the paste
+   mode switch uses it, because a switch re-lands
+   the paste the last step already holds, so undoing
+   after a switch must reach the state before the
+   paste, not the paste's first rendering. When the
+   paste itself has not settled yet, its own settle
+   already makes the combined landing one step and
+   there is nothing to amend. */
+function editorHistoryAmendStep() {
+  const h = editorHistory;
+  if (!h || h.applying) { return; }
+  if (!h.unsettled) { h.amendNext = true; }
+}
+
+/* Suspend capture around a drag whose geometry
+   writes land continuously (the table and image
+   resize drags): the drag settles whatever stands
+   open, its own writes are ignored, and the caller
+   resumes with a single signal for the net change
+   when the drag commits, or none when it cancels. */
+function editorHistorySuspend() {
+  const h = editorHistory;
+  if (!h) { return; }
+  editorHistorySettle();
+  h.suspended = true;
+}
+
+function editorHistoryResume(changed) {
+  const h = editorHistory;
+  if (!h) { return; }
+  h.suspended = false;
+  if (changed) { editorHistorySignal("op"); }
+}
+
+/* Restore one snapshot: the title field, the body
+   through the open fill's decoration sequence, the
+   caret, and the dirty mark that autosaves the
+   restored state. The applying flag stands only
+   for the duration of the call: the fill's own
+   mutation records are drained out of the observer
+   before the flag drops (takeRecords), so the
+   restore never reads as a new change however the
+   platform schedules observer callbacks, and the
+   flag is down before the caller returns, so a
+   fast second Ctrl+Z is never swallowed. Later
+   asynchronous decoration from the fill (attachment
+   hydration) still reaches the observer, but it
+   serializes away at the next settle, like all
+   decoration churn. */
+function editorHistoryRestore(snap) {
+  const h = editorHistory;
+  const note = currentNote();
+  if (!h || !note) { return; }
+  h.applying = true;
+  try {
+    const titleEl = document.getElementById("noteTitle");
+    if (titleEl) { titleEl.value = snap.title; }
+    editorHistoryFillBody(note, snap.body);
+    h.cur = snap;
+    editorHistoryRestoreCaret(snap.caret);
+  } finally {
+    if (editorHistoryObserver) {
+      editorHistoryObserver.takeRecords();
+    }
+    h.applying = false;
+  }
+  h.justRestored = true;
+  h.restoredStamp = h.inputStamp;
+  markDirty();
+}
+
+function editorHistoryUndo() {
+  const h = editorHistoryLive();
+  if (!h || h.applying) { return; }
+  editorHistorySettle();
+  /* Adopt the stored form before the current
+     snapshot crosses to the redo stack: a fast
+     undo can beat the reconcile timer, and the
+     redo entry must hold the final bytes, not a
+     capture taken a beat before a late landing. */
+  editorHistoryReconcileNow();
+  if (!h.undo.length) { return; }
+  const target = h.undo.pop();
+  h.redo.push(h.cur);
+  editorHistoryRestore(target);
+  editorHistoryTrim();
+}
+
+function editorHistoryRedo() {
+  const h = editorHistoryLive();
+  if (!h || h.applying) { return; }
+  editorHistorySettle();
+  editorHistoryReconcileNow();
+  if (!h.redo.length) { return; }
+  const target = h.redo.pop();
+  h.undo.push(h.cur);
+  editorHistoryRestore(target);
+  editorHistoryTrim();
+}
+
+/* Follow a settled caret between changes, so the
+   snapshot a step pushes carries the selection as
+   it stood when the step began (the selection a
+   Bold press acts on above all). Throttled: the
+   offsets cost a walk of the body's text, and a
+   drag selection fires this many times a second. */
+function editorHistoryTrackCaret() {
+  const h = editorHistoryLive();
+  if (!h || h.unsettled || h.applying) { return; }
+  const now = Date.now();
+  if (now - h.lastTrack < 120) { return; }
+  h.lastTrack = now;
+  h.cur.caret = editorHistoryCaret();
+}
+
 /* v2.9: remove every link view face under rootEl and unwrap every
    wrapped original, restoring each decorated anchor to exactly
    the children it was saved with. Shared by the save funnel
@@ -5084,15 +5697,13 @@ function wireCellMenu() {
    drag on them is never stolen as a scroll), a pointerdown
    on a strip or the handle is prevented, so a drag never
    starts a text selection, the geometry writes live during
-   the drag, and the release commits. The commit is ONE undo
-   step, composed the way the paste mode switch composes
-   its own: the drag's mutations are first reverted to the
-   pre-drag table, then the final table is inserted over it
-   with a single insertHTML, so one Ctrl+Z restores the
-   exact pre-drag sizes and Redo reapplies the resize.
-   Where insertHTML is unavailable or refuses, the final
-   table is swapped in directly (the sizes still land; only
-   the single undo step is lost). A drag that ends where it
+   the drag, and the release commits. The commit is ONE step
+   on the editor's own undo history (v2.119): capture
+   suspends for the whole drag, so the live geometry
+   writes never settle as steps, and the finish resumes
+   capture with a single signal for the net change, so
+   one Ctrl+Z restores the exact pre-drag sizes and Redo
+   reapplies the resize. A drag that ends where it
    started, an Escape mid-drag, and a pointercancel all
    restore the pre-drag table exactly and mark nothing.
    Only a committed resize calls markDirty, once, on
@@ -5441,6 +6052,14 @@ function startTableResizeDrag(ev, spec) {
   const table = spec.table;
   if (!table || !table.isConnected) { return; }
   if (!cellEditorEditable()) { return; }
+  /* v2.119: the history suspends BEFORE the drag's
+     first mutation (the drag start normalization
+     below), so the whole drag, normalization
+     included, lands as exactly one step at the
+     finish; a settle taken after the normalization
+     would adopt the normalized table as the
+     pre-drag state and strand it under the undo. */
+  editorHistorySuspend();
   ev.preventDefault();
   ev.stopPropagation();
   closeTableMenu();
@@ -5554,8 +6173,13 @@ function finishTableResizeDrag(commit) {
     true);
   if (!drag) { return; }
   if (drag.stripEl) { drag.stripEl.classList.remove("ss-active"); }
-  if (commit && drag.changed) { tableResizeCommit(drag); }
-  else { tableResizeRestore(drag); }
+  if (commit && drag.changed) {
+    tableResizeCommit(drag);
+    editorHistoryResume(true);
+  } else {
+    tableResizeRestore(drag);
+    editorHistoryResume(false);
+  }
 }
 
 function onTableResizeDragUp() { finishTableResizeDrag(true); }
@@ -5599,40 +6223,26 @@ function tableResizeRestore(drag) {
   tableResizeAfterReplace(drag);
 }
 
-/* The commit. The live table holds the final sizes; the
-   document is first put back to the pre-drag table, and the
-   final table is then inserted over it through one
-   insertHTML, so the resize is exactly one step on the
-   editor's undo stack. Where that call is unavailable or
-   refuses, the final table is swapped in directly instead:
-   the sizes land either way, and markDirty runs once, so
-   the note autosaves on release exactly like a typed edit. */
+/* The commit. The live table holds the final sizes;
+   the final table is swapped in as a fresh element
+   (the furniture rebuild in tableResizeAfterReplace
+   wants a new element either way), and markDirty
+   runs once, so the note autosaves on release
+   exactly like a typed edit. The swap is one step
+   on the editor's own undo history (v2.119):
+   capture stood suspended for the whole drag and
+   the finish resumes it with one signal for the
+   net change. Through v2.118.0 the commit composed
+   a step on the browser's native stack instead
+   (the document was first put back to the pre-drag
+   table and the final table inserted over it with
+   one insertHTML); that stack is no longer the
+   editor's, so the composition is gone. */
 function tableResizeCommit(drag) {
-  const bodyEl = document.getElementById("noteBody");
   const finalHTML = drag.table.outerHTML;
-  const before = tableResizeParse(drag.beforeHTML);
-  if (!before || !drag.table.parentNode) { return; }
-  drag.table.replaceWith(before);
-  let done = false;
-  if (typeof document.execCommand === "function") {
-    try {
-      bodyEl.focus();
-      const sel = window.getSelection();
-      const range = document.createRange();
-      range.setStartBefore(before);
-      range.setEndAfter(before);
-      sel.removeAllRanges();
-      sel.addRange(range);
-      done = document.execCommand("insertHTML", false,
-        finalHTML) === true;
-    } catch (err) { done = false; }
-  }
-  if (!done) {
-    const after = tableResizeParse(finalHTML);
-    const current = bodyEl.querySelectorAll("table")[
-      drag.tableIndex];
-    if (after && current) { current.replaceWith(after); }
-  }
+  const after = tableResizeParse(finalHTML);
+  if (!after || !drag.table.parentNode) { return; }
+  drag.table.replaceWith(after);
   tableResizeAfterReplace(drag);
   markDirty();
 }

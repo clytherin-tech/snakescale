@@ -5431,20 +5431,19 @@ function mergePastedFormatting(htmlText) {
    which is what makes the bookmarks and the undo composition
    below safe.
 
-   Undo composition: a switch first undoes the insert the
-   editor is currently wearing (one native undo step, the
-   same stack the paste itself made) and then inserts the
-   new rendering as a fresh step. So the session never grows
-   the stack: paste makes step A; a switch undoes A and
-   makes step B; a second switch undoes B and makes step C.
-   One Ctrl+Z after any switch removes the current insert
-   step and lands on the pre-paste content, exactly as one
-   Ctrl+Z after the paste itself would. Where execCommand
-   undo is unavailable or reports failure, the switch falls
-   back to selecting the bookmarked pasted range and
-   inserting over it; then one Ctrl+Z returns to the paste
-   as it last landed, and a second reaches the pre-paste
-   state.
+   Undo composition: the switch re-lands the paste over
+   the bookmarked range it occupies, and tells the
+   editor's own undo history (v2.119) that the landing
+   amends the paste's step rather than adding one, so
+   the session never grows the history: paste makes
+   step A; a switch re-lands inside A; a second switch
+   re-lands inside A again. One Ctrl+Z after any switch
+   removes the paste and lands on the pre-paste content,
+   exactly as one Ctrl+Z after the paste itself would.
+   (Through v2.118.0 the composition ran on the
+   browser's native undo stack: a switch undid the
+   standing insert with execCommand and inserted the
+   new rendering as a fresh native step.)
    ------------------------------------------------------------------ */
 let pastePopupSession = null;   // {html, text, mode, start, end, fresh?}
 let pastePopupApplying = false; // true while a switch re-inserts
@@ -5587,24 +5586,25 @@ function applyPasteMode(mode) {
   pastePopupApplying = true;
   try {
     pasteBodyEl().focus();
-    let undone = false;
-    try {
-      undone = document.execCommand("undo", false, null);
-    } catch (err) { undone = false; }
-    if (undone) {
-      /* The paste's insert is off the document; the caret is
-         back where the paste landed. Insert the new rendering
-         there, through the paste's own call. */
-      document.execCommand("insertHTML", false, rendered);
-    } else {
-      const range = pasteRangeFromBookmarks(session);
-      if (!range) { closePastePopup(); return; }
-      const sel = window.getSelection();
-      sel.removeAllRanges();
-      sel.addRange(range);
-      captureCaret();
-      document.execCommand("insertHTML", false, rendered);
-    }
+    /* v2.119: the switch re-lands the paste through
+       the bookmark range, always. Through v2.118.0
+       it first peeled the paste off with the
+       browser's native undo and re-inserted over
+       the gap; the editor's history is the app's
+       own now, and editorHistoryAmendStep carries
+       the same composition (one undo after a
+       switch reaches the state before the paste).
+       The bookmark path was the old fallback and
+       is exact: the range the bookmarks name is
+       the landed paste, nothing else. */
+    editorHistoryAmendStep();
+    const range = pasteRangeFromBookmarks(session);
+    if (!range) { closePastePopup(); return; }
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+    captureCaret();
+    document.execCommand("insertHTML", false, rendered);
     /* The insert leaves the caret at the end of the new
        rendering: that is the session's new end bookmark. */
     const endBm = pasteSelectionBookmark(true);

@@ -7405,6 +7405,12 @@ function renderEditor() {
     finishNoteOpenAttachments(note).catch(function (err) {
       console.warn("Attachment hydration failed:", err);
     });
+    /* v2.119: the body just filled is the baseline
+       for the editor's own undo history: the stack
+       the previous note (or this note's previous
+       stored state) had is gone, and changes from
+       here settle as steps of their own. */
+    editorHistoryReset(note);
   }
   /* v2.16.1: a sync refill hands the reader their place back
      (scroll, and the caret by its text offset) once the new
