@@ -2737,13 +2737,13 @@ body.dark .modal:hover::-webkit-scrollbar-thumb{
    is position:fixed and lives OUTSIDE #noteBody, so it can never be
    saved into a note; the script positions it at the image's menu
    button and closes it under the same rules as the link popup. */
-#attMenu, #attCardMenu, #editorCtxMenu{
+#attMenu, #attCardMenu, #editorCtxMenu, #extMenu{
   position:fixed;z-index:60;min-width:180px;padding:6px;
   background:var(--surface);border:1px solid var(--border);
   border-radius:var(--radius-card);box-shadow:0 10px 28px rgba(6,32,22,.28);
   display:flex;flex-direction:column;gap:2px;
 }
-#attMenu.hidden, #attCardMenu.hidden, #editorCtxMenu.hidden{display:none;}
+#attMenu.hidden, #attCardMenu.hidden, #editorCtxMenu.hidden, #extMenu.hidden{display:none;}
 /* v2.91.0: the separator inside the editor's own
    right click menu, in the attachment menus'
    separator shape. v2.115: the note list context
@@ -3497,6 +3497,23 @@ body.dark #conflictReloadBtn{background:#574512;color:#FFE1A8;border-color:#A887
 }
 .ss-att-meta{font-size:12.5px;color:var(--muted);margin:2px 0 8px;}
 .ss-att-msg{font-size:13.5px;color:var(--muted);margin:4px 0 8px;}
+/* v2.120: an external image whose source will not
+   load: a quiet framed box in the figure's own frame
+   (the figure carries the chosen width), naming the
+   failure and showing the address it could not load,
+   so a table of posters keeps its shape with one cell
+   reporting its dead source. Runtime furniture only;
+   it is never saved. */
+.ss-ext-broken{
+  border:1px dashed var(--border);border-radius:8px;
+  background:var(--soft);color:var(--muted);
+  padding:10px 12px;font-size:12.5px;line-height:1.45;
+  overflow:hidden;
+}
+.ss-ext-broken-label{font-weight:600;}
+.ss-ext-broken-url{
+  word-break:break-all;opacity:.85;margin-top:2px;
+}
 .ss-att-actions{display:flex;gap:6px;flex-wrap:wrap;}
 .ss-att-provider{
   display:inline-block;font-size:11.5px;font-weight:700;letter-spacing:.3px;
@@ -3575,14 +3592,19 @@ body.dark .ss-att-provider{color:#EAF3EC;}
    and #attAlignMenu so the other menus that share .att-menu-item
    (sidebar, table, cell) keep their plainer rows untouched. */
 #attMenu{max-height:calc(100vh - 16px);overflow-y:auto;min-width:230px;}
+/* v2.120: the external image menu is the same card
+   with the same rows (see #extMenu in the shell). */
+#extMenu{max-height:calc(100vh - 16px);overflow-y:auto;min-width:230px;}
 #attMenu .att-menu-item,
 #attCardMenu .att-menu-item,
-#attAlignMenu .att-menu-item{
+#attAlignMenu .att-menu-item,
+#extMenu .att-menu-item{
   display:flex;align-items:center;gap:9px;
 }
 #attMenu .att-menu-item svg,
 #attCardMenu .att-menu-item svg,
-#attAlignMenu .att-menu-item svg{flex:none;opacity:.85;}
+#attAlignMenu .att-menu-item svg,
+#extMenu .att-menu-item svg{flex:none;opacity:.85;}
 .att-menu-label{flex:1;}
 .att-menu-head{
   font-size:11px;font-weight:700;letter-spacing:.08em;

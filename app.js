@@ -5123,6 +5123,44 @@ function wireEvents() {
     runAttAlignChoice(btn.getAttribute("data-align"));
   });
 
+  /* v2.120: the external image menu's items run through
+     one delegated listener, like the image menu's; the
+     menu remembers which figure it was opened from. */
+  document.getElementById("extMenu").addEventListener("click", function (ev) {
+    const target = ev.target;
+    const btn = target && target.closest ?
+      target.closest("button[data-ext-act]") : null;
+    if (!btn) { return; }
+    runExtMenuAction(btn.getAttribute("data-ext-act"));
+  });
+
+  /* v2.120: clicking anywhere else closes the external
+     image menu, mirroring the image menu's rule. Clicks
+     inside the menu itself, in the shared alignment
+     submenu, and on a menu button (which toggles the
+     menu for its own image) are excluded. */
+  document.addEventListener("click", function (ev) {
+    const menu = document.getElementById("extMenu");
+    if (!menu || menu.classList.contains("hidden")) { return; }
+    const target = ev.target;
+    if (!target || !target.closest) { return; }
+    if (target.closest("#extMenu")) { return; }
+    if (target.closest("#attAlignMenu")) { return; }
+    if (target.closest(".ss-att-menu-btn")) { return; }
+    closeExtMenu();
+  });
+
+  /* v2.120: the web image dialog's form: submitting
+     judges the typed address and inserts the block;
+     Cancel simply closes. */
+  document.getElementById("extImgForm").addEventListener("submit", function (ev) {
+    ev.preventDefault();
+    submitExtImageDialog();
+  });
+  document.getElementById("extImgCancelBtn").addEventListener("click", function () {
+    closeExtImageDialog();
+  });
+
   /* v2.14.1: the audio card menu's items run through one delegated
      listener, like the image menu's; a disabled item (the read
      only note state) never runs. */
@@ -5599,6 +5637,15 @@ function wireEvents() {
        A click anywhere on an image block that is not a button or a
        link now selects the block. */
     if (holder && note && !note.trashed && !note.archived) {
+      /* v2.120: an external image block selects like
+         an image attachment (grips, resize, its menu);
+         it simply has no record to look up. */
+      if (isExternalImageFigure(holder) &&
+          !(target && target.closest &&
+            target.closest("button, a"))) {
+        selectAttachment(holder);
+        return;
+      }
       const attId = holder.getAttribute("data-attachment-id");
       const att = (note.attachments || []).find(function (a) {
         return a.id === attId;

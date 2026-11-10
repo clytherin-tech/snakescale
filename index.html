@@ -44,7 +44,7 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-11-09-SSN-V21190
+  BUILD STAMP: 2026-11-10-SSN-V21200
   Version: 2.106.0
 
   Revision history:
@@ -6607,6 +6607,7 @@
                 <button type="button" id="insertBtn" title="Insert into the note" aria-haspopup="true">+ Insert &#9662;</button>
                 <div class="tb-menu hidden" id="insertMenu" role="menu">
                   <button type="button" data-insert="attach">Attach file or image</button>
+                  <button type="button" data-insert="webImage">Image from web</button>
                   <button type="button" data-insert="scan">Scan document</button>
                   <button type="button" data-insert="sketch">Sketch</button>
                   <button type="button" data-insert="link">Link</button>
@@ -6964,6 +6965,24 @@
             <button class="att-menu-item" type="button" data-action="viewPreview" id="attViewPreviewItem"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-4.5-4.5L6 21"/></svg><span class="att-menu-label">Preview</span><span class="att-dot" aria-hidden="true"></span></button>
             <div class="att-menu-sep"></div>
             <button class="att-menu-item danger" type="button" data-action="remove"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13"/><path d="M10 11v6M14 11v6"/></svg><span class="att-menu-label">Delete file</span></button>
+          </div>
+
+          <!-- v2.120: the external (web hosted) image menu, a
+               sibling of #attMenu like the menu itself, so it can
+               never be saved into a note. It lists only what an
+               address backed image can honestly offer: the full
+               screen preview, opening the source in a new tab,
+               the shared Image alignment submenu, and Remove
+               (a plain block removal; there is no stored file
+               to delete). Buttons carry data-ext-act values; one
+               delegated listener in the script runs them against
+               the figure the menu was opened from. -->
+          <div id="extMenu" class="hidden" role="menu" aria-label="Web image options">
+            <button class="att-menu-item" type="button" data-ext-act="preview"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M16 3h3a2 2 0 0 1 2 2v3"/><path d="M8 21H5a2 2 0 0 1-2-2v-3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg><span class="att-menu-label">Full screen preview</span></button>
+            <button class="att-menu-item" type="button" data-ext-act="open"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6"/><path d="M20 4 11 13"/><path d="M19 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h5"/></svg><span class="att-menu-label">Open in new tab</span></button>
+            <button class="att-menu-item" type="button" data-ext-act="align" id="extAlignItem" aria-haspopup="true" aria-expanded="false"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h10M4 18h16"/></svg><span class="att-menu-label">Image alignment</span><span class="att-menu-arrow" aria-hidden="true">&#8250;</span></button>
+            <div class="att-menu-sep"></div>
+            <button class="att-menu-item danger" type="button" data-ext-act="remove"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13"/><path d="M10 11v6M14 11v6"/></svg><span class="att-menu-label">Remove</span></button>
           </div>
 
           <!-- v2.11: the alignment submenu for the image menu, its
@@ -7454,6 +7473,34 @@
      captured before this modal opened. Like every modal, it lives
      outside #noteBody, so it can never be saved into a note.
      ========================================================================== -->
+<!-- ==========================================================================
+     v2.120: Image from web
+     The Insert menu's web image dialog: one field for the
+     image's http(s) address. The note keeps the address
+     and loads the picture straight from it; nothing is
+     uploaded or stored. A refused address (a bad scheme,
+     a malformed address) is a line inside the dialog and
+     nothing is inserted. Like every modal, it lives
+     outside #noteBody and can never be saved into a note.
+     ========================================================================== -->
+<div id="extImgDialog" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="extImgTitle">
+  <div class="modal-card">
+    <h2 id="extImgTitle">Image from web</h2>
+    <p class="modal-sub">The note keeps this address and shows the picture straight from the web. Nothing is uploaded or stored, so the picture lasts as long as the address does.</p>
+    <form id="extImgForm">
+      <div class="field">
+        <label for="extImgUrl">Image address</label>
+        <input type="url" id="extImgUrl" placeholder="https://example.com/poster.jpg" autocomplete="off">
+      </div>
+      <p class="error-text hidden" id="extImgError" role="alert"></p>
+      <div class="modal-foot">
+        <button class="btn" id="extImgCancelBtn" type="button">Cancel</button>
+        <button class="btn primary" id="extImgSubmitBtn" type="submit">Insert image</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <div id="noteLinkModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="noteLinkTitle">
   <div class="modal-card">
     <h2 id="noteLinkTitle">Link to a note</h2>

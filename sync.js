@@ -310,8 +310,13 @@ const INCOMING_FILE = "incoming.json";
    reminder marker, the Reminders view can gather its
    notes, and the reminder search operators can judge a
    shell, all before any note file is fetched. A shape 2
-   catalog is not read, by the same rule. */
-const CATALOG_SHAPE_VERSION = 3;
+   catalog is not read, by the same rule.
+   v2.120: shape 4 adds each note's cardExtImage (the
+   address of its first image when that image is an
+   external, web hosted one), so a shell's card can show
+   the poster thumbnail before any note file is fetched.
+   A shape 3 catalog is not read, by the same rule. */
+const CATALOG_SHAPE_VERSION = 4;
 const CATALOG_WRITE_DEBOUNCE_MS = 800;
 
 let catalogWriteTimer = null;      /* pending debounce timer, or null */
@@ -334,6 +339,15 @@ function buildCatalogEntry(note, collection) {
   const loaded = note.bodyLoaded !== false;
   const cardAtt = loaded ? cardThumbnailAttachment(note)
     : (note.shellCardAtt || null);
+  /* v2.120: the card's external image address, the
+     shellCardAtt pattern over cardThumbnailExternalOf:
+     a loaded note derives it from its body (a chosen
+     thumbnail stands in the way, as it does on the
+     card itself); a shell contributes the address its
+     own entry carried. */
+  const cardExt = loaded
+    ? (note.thumbnail ? null : cardThumbnailExternalOf(note))
+    : (note.shellCardExtImage || null);
   /* v2.32: the search facts. A loaded note derives them
      from its body and its attachment records; a shell
      contributes the facts its own entry carried, so a
@@ -365,6 +379,9 @@ function buildCatalogEntry(note, collection) {
     cardAttachment: cardAtt
       ? (sanitizeAttachments([cloneVersionValue(cardAtt)])[0] || null)
       : null,
+    /* v2.120: the external card image address (see
+       cardExt above); a plain string, no record. */
+    cardExtImage: cardExt,
     attachmentCount: loaded ? (note.attachments || []).length
       : (note.attachmentCount || 0),
     todoChecked: loaded ? todoFacts.checked

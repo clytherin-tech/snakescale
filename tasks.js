@@ -1056,6 +1056,15 @@ function noteFromCatalogEntry(entry, collection) {
     reminderAt: entry.reminderAt || null,
     reminderDoneAt: entry.reminderDoneAt || null,
     shellCardAtt: entry.cardAttachment || null,
+    /* v2.120: the entry's external card image address
+       rides onto the shell the same way (see
+       buildCatalogEntry), judged by the one scheme
+       gate and capped, so a hand edited catalog can
+       never put an unusable address on a card. */
+    shellCardExtImage: (typeof entry.cardExtImage === "string" &&
+        entry.cardExtImage.length <= 2048 &&
+        !extImageUrlError(entry.cardExtImage))
+      ? entry.cardExtImage : null,
     attachmentCount: entry.attachmentCount || 0,
     /* v2.32: the entry's search facts ride onto the shell
        (see buildCatalogEntry): checklist state for todo:

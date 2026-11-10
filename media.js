@@ -2245,6 +2245,22 @@ function applyImageFigureWidth(el, px) {
 function decorateAttachmentPlaceholder(note, el, att) {
   if (!el) { return; }
   el.setAttribute("contenteditable", "false");
+  if (isExternalImageFigure(el)) {
+    /* v2.120: an external image block decorates like
+       an image attachment (the inline image class, its
+       size normalized onto the block, the draggable
+       flag in live notes) but never takes an attachment
+       id: it has no record, and the id is what would
+       route it into the record keyed machinery. */
+    el.classList.add("ss-att-image");
+    normalizeImageFigureSize(el);
+    if (note && !note.trashed && !note.archived) {
+      el.setAttribute("draggable", "true");
+    } else {
+      el.removeAttribute("draggable");
+    }
+    return;
+  }
   if (att && att.id) { el.setAttribute("data-attachment-id", att.id); }
   if (isImageAttachment(att)) {
     el.classList.add("ss-att-image");
@@ -2325,7 +2341,391 @@ function appendImageCaption(el, att, capText) {
   el.appendChild(cap);
 }
 
+/* ----- v2.120: external (web hosted) images -------------------
+   A second kind of image block, beside stored attachments.
+   A stored attachment's bytes live in the user's Drive and
+   its figure is an empty shell keyed by data-attachment-id;
+   an external image's bytes never enter the store at all:
+   the figure carries the image's own http(s) address in
+   data-ss-ext-src (with data-ss-ext="1" as the kind mark),
+   the note body is the only place the address lives, and
+   the block renders straight from that address. Chris
+   approved the trade on 2026-11-10 for the movie catalog
+   notes (a table per title, a poster thumbnail per row):
+   a poster breaks if its source address changes and there
+   is no offline copy, in exchange for hundreds of posters
+   costing no Drive space at all. This is a deliberate step
+   away from strict Evernote behavior (Evernote stores its
+   images), stated to Chris up front and accepted.
+
+   The saved shell is the attachment shell's sibling:
+     <figure class="ss-attachment" data-ss-ext="1"
+       data-ss-ext-src="URL" contenteditable="false"
+       style="width: 70px;"></figure>
+   with data-ss-align riding exactly as it does on an
+   attachment figure, and data-ss-ext-alt carrying the
+   image's alt text when it has any. Canonicalization
+   (editor.js) rebuilds that shell and nothing else;
+   hydration (fillExternalImage below) fills it with a
+   live <img>, or, when the source will not load, a quiet
+   placeholder that carries the address. Because the
+   figure has no data-attachment-id, every record keyed
+   path (the body deletion reconciliation, the orphan
+   repair, attachment counts, the missing record
+   furniture) passes it by, by construction.
+
+   Only http and https addresses are ever accepted: typed
+   into the insert dialog, adopted from a bare <img>, or
+   kept by canonicalization. No data: URLs, no file:, no
+   blob: as a saved form, and no scriptable scheme can
+   stand as an external image source, ever. (http is let
+   in beside https because poster and reference hosts in
+   the wild still serve plain http images; the address is
+   only ever an <img> source, never a navigation or a
+   script, so the risk it carries is a broken or swapped
+   picture, which the placeholder reports honestly.) */
+function isExternalImageFigure(el) {
+  return !!el && !!el.classList &&
+    el.classList.contains("ss-attachment") &&
+    el.getAttribute("data-ss-ext") === "1" &&
+    !!el.getAttribute("data-ss-ext-src");
+}
+
+function externalImageSrcOf(el) {
+  return el ? (el.getAttribute("data-ss-ext-src") || "") : "";
+}
+
+/* The one scheme gate every external source passes:
+   the insert dialog before it builds a block, adoption
+   before it wraps an <img>, and canonicalization before
+   it keeps a shell. Returns an empty string when the
+   address may stand, else a sentence for the dialog. */
+function extImageUrlError(raw) {
+  const url = String(raw == null ? "" : raw).trim();
+  if (!url) { return "Enter the image's web address."; }
+  let parsed = null;
+  try { parsed = new URL(url); } catch (e) { parsed = null; }
+  if (!parsed) {
+    return "That is not a complete web address. " +
+      "Include the https:// part.";
+  }
+  if (parsed.protocol !== "https:" &&
+      parsed.protocol !== "http:") {
+    return "Only http and https image addresses can be used.";
+  }
+  return "";
+}
+
+/* Build one external image figure in its saved shell
+   form (the runtime fill is fillExternalImage's work,
+   so a fresh block and a reopened one are filled by
+   the same hands). */
+function buildExternalImageFigure(url, alt) {
+  const fig = document.createElement("figure");
+  fig.setAttribute("class", "ss-attachment");
+  fig.setAttribute("data-ss-ext", "1");
+  fig.setAttribute("data-ss-ext-src", String(url));
+  if (alt) {
+    fig.setAttribute("data-ss-ext-alt", String(alt));
+  }
+  fig.setAttribute("contenteditable", "false");
+  return fig;
+}
+
+/* Fill one external figure with its live content: the
+   image itself, loaded straight from its address, or
+   the quiet placeholder when the address will not
+   load. The placeholder is runtime furniture only;
+   canonicalization rebuilds the shell from the
+   figure's attributes, so it never reaches the file,
+   and a source that comes back is picked up on the
+   next open with no repair step. */
+function fillExternalImage(el) {
+  if (!el) { return; }
+  const url = externalImageSrcOf(el);
+  el.innerHTML = "";
+  if (extImageUrlError(url)) {
+    showExternalImageBroken(el);
+    return;
+  }
+  const img = document.createElement("img");
+  img.className = "ss-att-img";
+  img.alt = el.getAttribute("data-ss-ext-alt") || "";
+  /* The block owns dragging, like an attachment image. */
+  img.setAttribute("draggable", "false");
+  img.setAttribute("loading", "lazy");
+  img.addEventListener("error", function () {
+    showExternalImageBroken(el);
+  });
+  img.src = url;
+  el.appendChild(img);
+  /* A failure the browser already holds (a cached
+     refusal) can finish before the listener above is
+     attached; the completed and empty read catches it. */
+  if (img.complete && img.naturalWidth === 0) {
+    showExternalImageBroken(el);
+  }
+}
+
+/* The broken source face: a quiet box naming the
+   failure and showing the address it could not load
+   (and carrying it as a tooltip), in the figure's own
+   frame, so a table of posters keeps its shape with
+   one cell reporting its dead source. Never an app
+   error, never a modal. */
+function showExternalImageBroken(el) {
+  if (!el) { return; }
+  const url = externalImageSrcOf(el);
+  el.innerHTML = "";
+  const ph = document.createElement("div");
+  ph.className = "ss-ext-broken";
+  ph.setAttribute("title", url);
+  const label = document.createElement("div");
+  label.className = "ss-ext-broken-label";
+  label.textContent = "Image could not be loaded";
+  const addr = document.createElement("div");
+  addr.className = "ss-ext-broken-url";
+  addr.textContent = url;
+  ph.appendChild(label);
+  ph.appendChild(addr);
+  el.appendChild(ph);
+}
+
+/* Wrap every bare <img> in root whose source passes
+   the scheme gate into an external image figure, in
+   place: a paste, a web clip, or a hand written note
+   file that arrives carrying plain image tags becomes
+   the one canonical block, keeping the image's own
+   width (the figure form) and alt text. Images inside
+   an attachment figure are the attachment machinery's,
+   and sources that fail the gate (data:, blob:, a
+   relative path) are left exactly as they stand. Run
+   by canonicalization on every save and by both fill
+   sequences on every open. */
+function adoptBareExternalImages(root) {
+  if (!root || !root.querySelectorAll) { return; }
+  root.querySelectorAll("img").forEach(function (img) {
+    if (img.closest(".ss-attachment")) { return; }
+    const src = img.getAttribute("src") || "";
+    if (extImageUrlError(src)) { return; }
+    const fig = buildExternalImageFigure(
+      src, img.getAttribute("alt") || "");
+    let width = imagePixelWidth(
+      img.style ? img.style.width : "");
+    if (!width) {
+      const attr = img.getAttribute("width") || "";
+      if (/^\d+(\.\d+)?$/.test(attr)) {
+        width = imagePixelWidth(attr + "px");
+      }
+    }
+    if (width) { fig.style.width = width; }
+    img.replaceWith(fig);
+  });
+}
+
+/* ----- v2.120: the external image menu -------------------------
+   The selected external figure's three dot menu is its
+   own small card (#extMenu beside #attMenu in the
+   shell): the actions an address backed image can
+   honestly offer. Full screen preview (the shared
+   lightbox, fed the address), Open in new tab, Image
+   alignment (the shared #attAlignMenu: attMenuEl is
+   pointed at the figure, and runAttAlignChoice reads
+   only the element), and Remove, a plain block removal
+   through the ordinary dirty path (there is no file
+   anywhere to delete, so the undoable attachment
+   deletion engine is not involved). */
+let extMenuEl = null;
+
+function openExternalImageMenu(anchorBtn, el) {
+  const menu = document.getElementById("extMenu");
+  if (!menu || !anchorBtn || !el) { return; }
+  if (extMenuEl === el &&
+      !menu.classList.contains("hidden")) {
+    closeExtMenu();
+    return;
+  }
+  closeAttMenu();
+  extMenuEl = el;
+  attMenuEl = el;
+  menu.classList.remove("hidden");
+  const rect = anchorBtn.getBoundingClientRect();
+  const width = menu.offsetWidth;
+  const height = menu.offsetHeight;
+  let left = Math.min(rect.right - width,
+    window.innerWidth - width - 8);
+  left = Math.max(8, left);
+  let top = rect.bottom + 6;
+  if (top + height > window.innerHeight - 8) {
+    top = Math.max(8, rect.top - height - 6);
+  }
+  menu.style.left = left + "px";
+  menu.style.top = top + "px";
+}
+
+function closeExtMenu() {
+  const menu = document.getElementById("extMenu");
+  if (menu) { menu.classList.add("hidden"); }
+  extMenuEl = null;
+  const item = document.getElementById("extAlignItem");
+  if (item) { item.setAttribute("aria-expanded", "false"); }
+}
+
+/* The shared alignment submenu, opened from the
+   external menu: the same card #attMenu uses, dotted
+   from the figure's own alignment and positioned off
+   the external menu's frame. */
+function showExtAlignMenu() {
+  const menu = document.getElementById("extMenu");
+  const sub = document.getElementById("attAlignMenu");
+  const item = document.getElementById("extAlignItem");
+  if (!menu || !sub || !item || !extMenuEl) { return; }
+  const current = imageAlignOf(extMenuEl);
+  sub.querySelectorAll("button[data-align]")
+    .forEach(function (btn) {
+      btn.classList.toggle("current",
+        btn.getAttribute("data-align") === current);
+    });
+  sub.classList.remove("hidden");
+  item.setAttribute("aria-expanded", "true");
+  const mRect = menu.getBoundingClientRect();
+  const iRect = item.getBoundingClientRect();
+  const width = sub.offsetWidth;
+  const height = sub.offsetHeight;
+  let left = mRect.right + 6;
+  if (left + width > window.innerWidth - 8) {
+    left = Math.max(8, mRect.left - width - 6);
+  }
+  let top = iRect.top - 6;
+  if (top + height > window.innerHeight - 8) {
+    top = Math.max(8, window.innerHeight - height - 8);
+  }
+  sub.style.left = left + "px";
+  sub.style.top = top + "px";
+}
+
+function toggleExtAlignMenu() {
+  if (attAlignMenuOpen()) { closeAttAlignMenu(); }
+  else { showExtAlignMenu(); }
+}
+
+function runExtMenuAction(action) {
+  const el = extMenuEl;
+  if (action === "align") { toggleExtAlignMenu(); return; }
+  closeExtMenu();
+  closeAttMenu();
+  if (!el) { return; }
+  if (action === "preview") {
+    openExternalImageLightbox(el);
+  } else if (action === "open") {
+    window.open(externalImageSrcOf(el), "_blank", "noopener");
+  } else if (action === "remove") {
+    deselectAttachment();
+    el.remove();
+    if (typeof editorHistorySignal === "function") {
+      editorHistorySignal("op");
+    }
+    markDirty();
+  }
+}
+
+/* The full screen preview for an external image: the
+   shared lightbox, with the address itself as the
+   picture source (no blob to own or revoke, so
+   closeImageLightbox's plain src clear is the whole
+   teardown). */
+function openExternalImageLightbox(el) {
+  const box = document.getElementById("imgLightbox");
+  const img = document.getElementById("imgLightboxImg");
+  if (!box || !img || !el) { return; }
+  img.src = externalImageSrcOf(el);
+  img.alt = el.getAttribute("data-ss-ext-alt") ||
+    externalImageSrcOf(el);
+  box.classList.remove("hidden");
+}
+
+/* ----- v2.120: insert an image from the web --------------------
+   The Insert menu's "Image from web" entry: the same
+   preflight shape as the attach flow (an open, live
+   note; the caret captured before the dialog can steal
+   it), then a themed dialog asking for the address.
+   The scheme gate judges the typed address; a refusal
+   is a line in the dialog and nothing is inserted. A
+   good address builds the shell, fills it, and lands
+   it at the caret through the shared placeholder
+   inserter, one editor history step like every other
+   discrete insert. */
+function openExtImageDialog() {
+  const note = currentNote();
+  if (!note) {
+    toast("Open a note first.", true);
+    return;
+  }
+  if (note.trashed) {
+    toast("That note is in the Trash. Restore it to " +
+      "add an image.", true);
+    return;
+  }
+  if (note.archived) {
+    toast("That note is archived. Unarchive it to " +
+      "add an image.", true);
+    return;
+  }
+  captureCaret();
+  const dlg = document.getElementById("extImgDialog");
+  const input = document.getElementById("extImgUrl");
+  const err = document.getElementById("extImgError");
+  if (!dlg || !input) { return; }
+  input.value = "";
+  if (err) {
+    err.textContent = "";
+    err.classList.add("hidden");
+  }
+  dlg.classList.remove("hidden");
+  setTimeout(function () { input.focus(); }, 30);
+}
+
+function closeExtImageDialog() {
+  const dlg = document.getElementById("extImgDialog");
+  if (dlg) { dlg.classList.add("hidden"); }
+}
+
+function submitExtImageDialog() {
+  const input = document.getElementById("extImgUrl");
+  const err = document.getElementById("extImgError");
+  if (!input) { return; }
+  const url = input.value.trim();
+  const problem = extImageUrlError(url);
+  if (problem) {
+    if (err) {
+      err.textContent = problem;
+      err.classList.remove("hidden");
+    }
+    input.focus();
+    return;
+  }
+  const note = currentNote();
+  const fig = buildExternalImageFigure(url, "");
+  decorateAttachmentPlaceholder(note, fig, null);
+  fillExternalImage(fig);
+  insertPlaceholderAtCaret(fig);
+  closeExtImageDialog();
+  markDirty();
+}
+
 async function hydrateOneAttachment(note, el) {
+  /* v2.120: an external image fills from its own
+     address, with no record lookup at all: the missing
+     record branch below is for attachment figures whose
+     record was lost, and an external figure must never
+     land there (on v2.119.0 it did, and wore the missing
+     details furniture with a Remove placeholder button
+     over a poster that was never missing). */
+  if (isExternalImageFigure(el)) {
+    decorateAttachmentPlaceholder(note, el, null);
+    fillExternalImage(el);
+    return;
+  }
   const attId = el.getAttribute("data-attachment-id");
   const att = (note.attachments || []).find(function (a) { return a.id === attId; });
   /* v2.11: capture the caption before anything rebuilds the
@@ -3149,6 +3549,12 @@ function selectAttachment(el) {
     ev.stopPropagation();
     const note = currentNote();
     if (!note || note.trashed || note.archived) { return; }
+    /* v2.120: an external figure's button opens its
+       own menu; the record lookup below is not for it. */
+    if (isExternalImageFigure(el)) {
+      openExternalImageMenu(menuBtn, el);
+      return;
+    }
     const attId = el.getAttribute("data-attachment-id");
     const att = (note.attachments || []).find(function (a) {
       return a.id === attId;
@@ -3205,6 +3611,10 @@ function showAttMenu(anchor) {
 
 function closeAttMenu() {
   closeAttAlignMenu();
+  /* v2.120: the external image menu is the image
+     menu's sibling; closing the one closes the other,
+     so the two never stack. */
+  closeExtMenu();
   const menu = document.getElementById("attMenu");
   if (menu) { menu.classList.add("hidden"); }
   attMenuNote = null;
@@ -3393,7 +3803,12 @@ function startAttachmentResize(ev, corner) {
      drag has a pixel width to work from (see applyImageAlign). */
   convertFillFigureToSized(el);
   const img = el.querySelector("img.ss-att-img");
-  if (!img) { return; }
+  /* v2.120: an external figure whose source failed
+     carries its placeholder instead of an <img>; its
+     grips still resize the block, which is all the
+     drag ever sets. Attachment blocks keep the
+     standing rule. */
+  if (!img && !isExternalImageFigure(el)) { return; }
   const startX = ev.clientX;
   /* The block's rendered width is the size being dragged: for a
      sized block it is the chosen width; for an unsized one it is

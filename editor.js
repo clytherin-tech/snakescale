@@ -72,7 +72,52 @@ function imageViewOf(el) {
 function canonicalizeAttachmentPlaceholders(html) {
   const holder = document.createElement("div");
   holder.innerHTML = html || "";
+  /* v2.120: a bare <img> with an http(s) source (a
+     paste, a web clip, a hand written note file) is
+     adopted into an external image figure before the
+     shell rebuild below, so it saves in the one
+     canonical form and renders as a block everywhere
+     (see adoptBareExternalImages in media.js). */
+  adoptBareExternalImages(holder);
   holder.querySelectorAll(".ss-attachment").forEach(function (el) {
+    /* v2.120: an external image shell rebuilds from
+       its own attributes alone: the kind mark, the
+       source (validated by the one scheme gate: a
+       source that fails it drops the block, because
+       it can never render and no scriptable scheme
+       is ever a saved form), the alt text, the chosen
+       width, and the alignment, each carried in the
+       attachment shell's own forms. Nothing is ever
+       downloaded and no attachment record is ever
+       made for it. (Through v2.119.0 this rebuild,
+       knowing only records, silently discarded the
+       source: a catalog note lost every poster URL
+       on its first ordinary edit and save.) */
+    if (el.getAttribute("data-ss-ext") === "1" ||
+        el.hasAttribute("data-ss-ext-src")) {
+      const extSrc = el.getAttribute("data-ss-ext-src") || "";
+      if (extImageUrlError(extSrc)) { el.remove(); return; }
+      const cleanExt = document.createElement("figure");
+      cleanExt.setAttribute("class", "ss-attachment");
+      cleanExt.setAttribute("data-ss-ext", "1");
+      cleanExt.setAttribute("data-ss-ext-src", extSrc);
+      const extAlt = el.getAttribute("data-ss-ext-alt");
+      if (extAlt) {
+        cleanExt.setAttribute("data-ss-ext-alt", extAlt);
+      }
+      cleanExt.setAttribute("contenteditable", "false");
+      const extWidth = savedImageWidthOf(el);
+      if (extWidth) {
+        cleanExt.setAttribute("style", "width:" + extWidth);
+      }
+      const extAlign = el.getAttribute("data-ss-align");
+      if (extAlign &&
+          IMAGE_ALIGN_VALUES.indexOf(extAlign) >= 0) {
+        cleanExt.setAttribute("data-ss-align", extAlign);
+      }
+      el.replaceWith(cleanExt);
+      return;
+    }
     const id = el.getAttribute("data-attachment-id");
     const clean = document.createElement(el.tagName === "FIGURE" ? "figure" : "div");
     clean.setAttribute("class", "ss-attachment");
@@ -505,6 +550,9 @@ function editorHistoryFillBody(note, bodyHtml) {
   revokeAttachmentUrls();
   attachBodyGuard = true;
   bodyEl.innerHTML = bodyHtml || "";
+  /* v2.120: bare web images take their block form
+     before the decoration pass, as on every fill. */
+  adoptBareExternalImages(bodyEl);
   normalizeChecklists(bodyEl);
   syncChecklistBoxes(bodyEl);
   decorateDoneItems(bodyEl);

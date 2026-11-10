@@ -3858,6 +3858,59 @@ function cardThumbnailAttachment(note) {
   return atts.length ? atts[0] : null;
 }
 
+/* v2.120: the external image a note's card shows in its
+   thumbnail box: the note's FIRST image, when that image
+   is an external (web hosted) one. The card loads it
+   straight from its address, like the block itself does;
+   there is no record and nothing to fetch from the
+   store. A note with a chosen thumbnail (the v2.11
+   front matter field) keeps the attachment rule above
+   untouched: the explicit choice wins, and this returns
+   null. A catalog shell carries the answer its catalog
+   entry resolved (shellCardExtImage, see
+   buildCatalogEntry), so the card paints before the
+   note file is ever fetched. */
+function cardThumbnailExternal(note) {
+  if (!note || note.thumbnail) { return null; }
+  if (note.bodyLoaded === false) {
+    return note.shellCardExtImage || null;
+  }
+  return cardThumbnailExternalOf(note);
+}
+
+/* The first-image scan over one loaded note's body, in
+   document order: an external figure (or a bare web
+   image not yet adopted) yields its address; an image
+   attachment block ends the scan with no external
+   thumbnail (the attachment path governs); file blocks
+   are not images and the scan passes them by. */
+function cardThumbnailExternalOf(note) {
+  if (!note || !note.body) { return null; }
+  const holder = document.createElement("div");
+  holder.innerHTML = note.body;
+  const nodes = holder.querySelectorAll(".ss-attachment, img");
+  for (let i = 0; i < nodes.length; i++) {
+    const el = nodes[i];
+    if (el.classList.contains("ss-attachment")) {
+      if (el.getAttribute("data-attachment-id")) {
+        const att = (note.attachments || []).find(function (a) {
+          return a.id === el.getAttribute("data-attachment-id");
+        });
+        if (att && isImageAttachment(att)) { return null; }
+        continue;
+      }
+      if (isExternalImageFigure(el)) {
+        return externalImageSrcOf(el);
+      }
+      continue;
+    }
+    if (el.closest(".ss-attachment")) { continue; }
+    const src = el.getAttribute("src") || "";
+    if (!extImageUrlError(src)) { return src; }
+  }
+  return null;
+}
+
 /* v2.18: the type icon a card's thumbnail box shows for a non
    image attachment, drawn in the current color so it takes
    the box's brand tint: a waveform for audio (the mockup's
@@ -4097,8 +4150,23 @@ function renderNoteList() {
        loadListThumb path the chosen thumbnail always used;
        anything else shows its attachment type icon centered
        (the audio waveform in Chris's mockup). */
+    /* v2.120: an external first image fills the same
+       box straight from its address (no record, no
+       store fetch); the attachment box below is
+       otherwise exactly as it stood. */
+    const cardExt = cardThumbnailExternal(note);
     const cardAtt = cardThumbnailAttachment(note);
-    if (cardAtt) {
+    if (cardExt) {
+      const box = document.createElement("div");
+      box.className = "card-thumb-box";
+      const thumb = document.createElement("img");
+      thumb.className = "card-thumb";
+      thumb.alt = "";
+      thumb.setAttribute("loading", "lazy");
+      thumb.src = cardExt;
+      box.appendChild(thumb);
+      card.appendChild(box);
+    } else if (cardAtt) {
       const box = document.createElement("div");
       box.className = "card-thumb-box";
       if (isImageAttachment(cardAtt)) {
@@ -7323,6 +7391,11 @@ function renderEditor() {
        pinned value is authoritative and is changed only by the Pin
        note / Unpin note item in the notes list toolbar menu. */
     document.getElementById("noteBody").innerHTML = note.body || "";
+    /* v2.120: bare web images in the stored body take
+       their external figure form before the decoration
+       pass below, so they open as blocks (and save in
+       the canonical shell form) however they arrived. */
+    adoptBareExternalImages(document.getElementById("noteBody"));
     /* v1.6: tag checklists saved before the ss-checklist class
        existed, so they get the bullet free styling and Enter
        behavior of new ones. */

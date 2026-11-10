@@ -67,6 +67,12 @@ function noteBodyToPlainText(html, note) {
   function endLine() { lines.push(cur); cur = ""; }
   function attachmentLine(el) {
     if (cur.trim()) { endLine(); }
+    /* v2.120: an external image's plain text form is
+       its address, the only name it has. */
+    if (isExternalImageFigure(el)) {
+      lines.push("[Image: " + externalImageSrcOf(el) + "]");
+      return;
+    }
     const att = attById[el.getAttribute("data-attachment-id")];
     const name = att ? att.name : "attachment";
     lines.push(att && isImageAttachment(att)
@@ -354,6 +360,14 @@ function buildWordDocumentXml(note) {
     return out.join("");
   }
   function attachmentPara(el) {
+    /* v2.120: an external image exports as its
+       address, the only name it has. */
+    if (isExternalImageFigure(el)) {
+      blocks.push(docxPara(null, docxRun(
+        "[Image: " + externalImageSrcOf(el) + "]",
+        { b: false, i: false, u: false, s: false, code: false })));
+      return;
+    }
     const att = attById[el.getAttribute("data-attachment-id")];
     const name = att ? att.name : "attachment";
     const label = att && isImageAttachment(att)
@@ -6810,6 +6824,15 @@ function runInsertAction(kind) {
        and captures the caret before the dialog opens, so
        the inserted pages land where the caret was. */
     openScanDialog();
+    return;
+  }
+  if (kind === "webImage") {
+    /* v2.120: the web image dialog is the attach
+       flow's sibling: it performs the note and trash
+       checks and captures the caret before the dialog
+       opens, so the inserted block lands where the
+       caret was. */
+    openExtImageDialog();
     return;
   }
   if (kind === "sketch") {
