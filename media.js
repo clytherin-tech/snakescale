@@ -2114,6 +2114,1009 @@ async function driveStoreDeleteFile(path, token) {
     }
   }
 }
+/* --------------------------------------------------------------------------
+   v2.121: Doc-backed notes (Stage 3 of the Google Docs conversion)
+
+   A note whose catalog entry marks it backend "doc" keeps its
+   content in an individual Google Doc in the store instead of
+   in a note file: notebooks and tags stay in the app catalog,
+   editing happens in this app's own editor with its own
+   toolbar, and saving writes the edited content back into
+   that same Doc. This section is the whole transport and
+   conversion layer for that shape; the routing that calls it
+   lives with the note load and save machinery in tasks.js,
+   and the catalog plumbing with the catalog writer in
+   sync.js and the shell builder in tasks.js.
+
+   Transport: everything rides the Drive driver above (the
+   app's own Google token from getGoogleAccessToken, through
+   gdriveFetch). A Doc is created with a Drive files create
+   carrying the document mime type, its content is read with
+   a Drive export to HTML, and it is written with a Drive
+   upload of HTML that Google converts, the same conversion
+   family the coordinator's own Period C test proved reads
+   right. The auth Worker v6 adds the documents scope for
+   this stage; any 403 from a Doc call is read the way the
+   calendar and mail modules read theirs, as a consent the
+   stored sign in does not carry yet, and lands in the
+   module's needs-consent status (see docNotesSetStatus),
+   which the open and save paths surface as a plain failure
+   with the note left untouched, never as an app error.
+   -------------------------------------------------------------------------- */
+
+const DOC_FILE_MIME = "application/vnd.google-apps.document";
+
+/* The module's status word, on the calendar and mail
+   pattern: "idle" before any Doc call, "ok" after one
+   succeeds, "needs-consent" after a 403, "unavailable"
+   after a network or unexpected failure. The note paths
+   read it through docNotesNeedsConsent(); the status
+   itself is kept for the report and for tests. */
+let docNotesStatus = "idle";
+
+function docNotesSetStatus(next) {
+  const prev = docNotesStatus;
+  docNotesStatus = next;
+  if (next === "needs-consent" && prev !== "needs-consent") {
+    /* One plain toast on the transition, so the state is
+       visible without a surface of its own: the notebook
+       is never broken by it, the note simply will not
+       open or save until the permission is granted. */
+    toast("Doc-backed notes need a Google permission this" +
+      " sign in does not have yet. They will work after" +
+      " the sign in update is deployed and you use" +
+      " Refresh connection in Settings.");
+  }
+}
+
+function docNotesNeedsConsent() {
+  return docNotesStatus === "needs-consent";
+}
+
+/* Sign out clears the status with the other runtime
+   state; resetDocNotesState is called from
+   resetCatalogRuntimeState in tasks.js. */
+function resetDocNotesState() {
+  docNotesStatus = "idle";
+}
+
+/* An Error carrying the HTTP status a Doc call met, and
+   the needs-consent flag when that status was a 403, so
+   callers can tell a permission state apart from a plain
+   failure without parsing the message. */
+function docHttpError(status, message) {
+  const err = new Error(message);
+  err.docHttpStatus = status || 0;
+  if (status === 403) { err.docNeedsConsent = true; }
+  return err;
+}
+
+function isDocNeedsConsentError(err) {
+  return !!err && err.docNeedsConsent === true;
+}
+
+/* One Doc API fetch on the calendar pattern: gdriveFetch
+   supplies the token and its one silent renewal; a 403
+   becomes the module's needs-consent state and a consent
+   error; any other non-ok response becomes an error
+   carrying the status and Google's own message when it
+   sent one. */
+async function docApiFetch(url, options) {
+  const res = await gdriveFetch(url, options);
+  if (res.status === 403) {
+    docNotesSetStatus("needs-consent");
+    throw docHttpError(403,
+      "Google refused this Doc request: Doc-backed notes" +
+      " need a permission this sign in does not have yet.");
+  }
+  if (!res.ok) {
+    if (docNotesStatus === "idle" ||
+        docNotesStatus === "ok") {
+      docNotesSetStatus("unavailable");
+    }
+    throw docHttpError(res.status,
+      await gdriveErrorMessage(res,
+        "Google Doc request failed with status " +
+        res.status));
+  }
+  /* A success is the latest word on the module's state:
+     when the permission lands (the sign in update
+     deployed, the connection refreshed), the next good
+     call clears the needs-consent state it replaces. */
+  docNotesSetStatus("ok");
+  return res;
+}
+
+async function docApiJson(url, options) {
+  const res = await docApiFetch(url, options);
+  if (res.status === 204) { return null; }
+  return res.json();
+}
+
+/* Create the Google Doc backing a new Doc-backed note, in
+   the notebook's own store folder (the folder every note
+   file of that notebook lives in; folder listings only
+   ever read note files, so the Doc resting there is never
+   mistaken for one). Returns the new Doc's file id. */
+async function docCreateDocument(note) {
+  const folderId = await driveResolveFolder(
+    "notebooks/" + note.notebook, true);
+  const created = await docApiJson(
+    "https://www.googleapis.com/drive/v3/files", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: note.title || "Untitled note",
+        mimeType: DOC_FILE_MIME,
+        parents: folderId ? [folderId] : []
+      })
+    });
+  if (!created || typeof created.id !== "string" ||
+      !created.id) {
+    throw docHttpError(0,
+      "Google did not return the new Doc's id.");
+  }
+  return { id: created.id };
+}
+
+/* Fetch a Doc's content: its metadata first (which also
+   proves the file is still the Doc this note points at),
+   then an export to HTML. Returns the export HTML, the
+   Doc's file name as the store knows it (kept on the note
+   so a later title edit can rename the Doc on save), and
+   the revision token the load should hold, the same
+   driveTokenFromMetadata the file driver uses. */
+async function docFetchDocument(docId) {
+  const meta = await docApiJson(
+    "https://www.googleapis.com/drive/v3/files/" +
+    encodeURIComponent(docId) +
+    "?fields=" + encodeURIComponent(
+      "id,name,mimeType,headRevisionId,modifiedTime,trashed"));
+  if (!meta || meta.trashed === true ||
+      meta.mimeType !== DOC_FILE_MIME) {
+    throw docHttpError(404,
+      "That note's Google Doc could not be found.");
+  }
+  const res = await docApiFetch(
+    "https://www.googleapis.com/drive/v3/files/" +
+    encodeURIComponent(docId) +
+    "/export?mimeType=" + encodeURIComponent("text/html"));
+  const html = await res.text();
+  return {
+    html: html,
+    name: typeof meta.name === "string" ? meta.name : "",
+    token: driveTokenFromMetadata(meta)
+  };
+}
+
+/* Write a Doc-backed note's content back into its own
+   Doc: an upload of the upload HTML (built by
+   docBuildUploadHtml) that Google converts, addressed to
+   the note's existing Doc id, so a save never creates a
+   second Doc. A title that changed since the Doc was
+   fetched is carried onto the Doc's file name with a
+   small metadata update after the content lands; that
+   rename is best effort, because the content save is the
+   save. Returns the Doc's new revision token. */
+async function docSaveDocument(note, uploadHtml) {
+  const docId = sanitizeDocId(note.docId);
+  if (!docId) {
+    throw docHttpError(0,
+      "This Doc-backed note has no Google Doc to save to.");
+  }
+  const res = await docApiFetch(
+    "https://www.googleapis.com/upload/drive/v3/files/" +
+    encodeURIComponent(docId) +
+    "?uploadType=media&fields=" + encodeURIComponent(
+      "id,headRevisionId,modifiedTime"), {
+      method: "PATCH",
+      headers: { "Content-Type": "text/html; charset=UTF-8" },
+      body: uploadHtml
+    });
+  let data = null;
+  try { data = await res.json(); } catch (e) { data = null; }
+  let token = driveTokenFromMetadata(data);
+  if (typeof note.docName === "string" && note.title &&
+      note.docName !== note.title) {
+    try {
+      await docApiJson(
+        "https://www.googleapis.com/drive/v3/files/" +
+        encodeURIComponent(docId), {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: note.title })
+        });
+      note.docName = note.title;
+    } catch (e) { /* the content save stands */ }
+  }
+  if (!token) {
+    try {
+      const meta = await docApiJson(
+        "https://www.googleapis.com/drive/v3/files/" +
+        encodeURIComponent(docId) +
+        "?fields=" + encodeURIComponent(
+          "id,headRevisionId,modifiedTime"));
+      token = driveTokenFromMetadata(meta);
+    } catch (e) { token = null; }
+  }
+  return { token: token };
+}
+
+/* ----- export HTML to editor body ------------------------------
+   A Google Docs export expresses nearly all formatting as
+   classes whose declarations live in the export's own style
+   element (a span of class c3 is bold because the export
+   says .c3 carries font-weight 700), so a faithful read
+   resolves those classes back into the emphasis the editor
+   itself carries. The converter below is the sanitizer for
+   this route, in place of the web clip sanitizer (which
+   strips style attributes and knows nothing of classes,
+   and would flatten a Doc's formatting to plain text): it
+   emits only the editor's own vocabulary (paragraphs,
+   headings, lists and checklists, tables, block quotes,
+   links, emphasis, text and highlight colors, and image
+   tokens the adoption pass below turns into real image
+   figures), and nothing scriptable can survive it, because
+   no element, attribute, or address is ever copied across
+   without being judged here first. */
+
+/* One style declaration block ("font-weight:700;color:#111")
+   as a plain map of property to value. */
+function docParseStyleDecls(text) {
+  const out = {};
+  String(text || "").split(";").forEach(function (decl) {
+    const i = decl.indexOf(":");
+    if (i < 0) { return; }
+    out[decl.slice(0, i).trim().toLowerCase()] =
+      decl.slice(i + 1).trim();
+  });
+  return out;
+}
+
+/* A color as the editor writes one (lowercase six digit
+   hex), or null when the value is not a plain color the
+   app can carry. Handles the hex and rgb forms a Google
+   export uses. */
+function docNormalizeColor(value) {
+  if (!value) { return null; }
+  const v = String(value).trim().toLowerCase();
+  if (/^#[0-9a-f]{6}$/.test(v)) { return v; }
+  if (/^#[0-9a-f]{3}$/.test(v)) {
+    return "#" + v[1] + v[1] + v[2] + v[2] + v[3] + v[3];
+  }
+  const rgb = v.match(
+    /^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);
+  if (rgb) {
+    const hex = function (n) {
+      const s = Math.min(255, Number(n)).toString(16);
+      return s.length < 2 ? "0" + s : s;
+    };
+    return "#" + hex(rgb[1]) + hex(rgb[2]) + hex(rgb[3]);
+  }
+  return null;
+}
+
+/* The emphasis one declaration map asks for, as the flat
+   record the converter threads down the tree. Default
+   black text and paper white (or transparent) backgrounds
+   carry no emphasis, matching how the editor leaves
+   uncolored text bare. */
+function docEmphasisFromDecls(decls) {
+  const e = { b: false, i: false, u: false, s: false,
+    color: null, bg: null };
+  if (!decls) { return e; }
+  const w = String(decls["font-weight"] || "").toLowerCase();
+  if (w === "bold" || w === "bolder" ||
+      (parseInt(w, 10) || 0) >= 600) { e.b = true; }
+  const fs = String(decls["font-style"] || "").toLowerCase();
+  if (fs === "italic" || fs === "oblique") { e.i = true; }
+  const td = String(decls["text-decoration"] || "") + " " +
+    String(decls["text-decoration-line"] || "");
+  if (td.indexOf("underline") >= 0) { e.u = true; }
+  if (td.indexOf("line-through") >= 0) { e.s = true; }
+  const color = docNormalizeColor(decls["color"]);
+  if (color && color !== "#000000") { e.color = color; }
+  const bg = docNormalizeColor(decls["background-color"]);
+  if (bg && bg !== "#ffffff") { e.bg = bg; }
+  return e;
+}
+
+/* Merge a child's own emphasis over its parent's: flags
+   accumulate, colors are the child's when it sets one. */
+function docMergeEmphasis(parent, own) {
+  return {
+    b: parent.b || own.b,
+    i: parent.i || own.i,
+    u: parent.u || own.u,
+    s: parent.s || own.s,
+    color: own.color || parent.color,
+    bg: own.bg || parent.bg
+  };
+}
+
+/* The emphasis one element asks for: its tag first
+   (b, strong, i, em, u, s), then each of its classes as
+   the export's style element defines them, then its own
+   inline style, which wins where both speak. */
+function docElementEmphasis(el, classStyles) {
+  let e = { b: false, i: false, u: false, s: false,
+    color: null, bg: null };
+  const tag = el.tagName;
+  if (tag === "B" || tag === "STRONG") { e.b = true; }
+  if (tag === "I" || tag === "EM") { e.i = true; }
+  if (tag === "U") { e.u = true; }
+  if (tag === "S" || tag === "STRIKE" || tag === "DEL") {
+    e.s = true;
+  }
+  const classes = (el.getAttribute &&
+    el.getAttribute("class")) || "";
+  classes.split(/\s+/).forEach(function (cls) {
+    if (cls && classStyles[cls]) {
+      e = docMergeEmphasis(e,
+        docEmphasisFromDecls(classStyles[cls]));
+    }
+  });
+  const inline = el.getAttribute &&
+    el.getAttribute("style");
+  if (inline) {
+    e = docMergeEmphasis(e,
+      docEmphasisFromDecls(docParseStyleDecls(inline)));
+  }
+  return e;
+}
+
+/* The class to declarations map of one export document,
+   read from its style elements. Only simple class rules
+   are read; pseudo rules (list markers, link hovers) hold
+   nothing the editor carries. */
+function docExportClassStyles(doc) {
+  const map = Object.create(null);
+  let css = "";
+  doc.querySelectorAll("style").forEach(function (s) {
+    css += (s.textContent || "") + "\n";
+  });
+  const ruleRe = /\.([A-Za-z0-9_-]+)\s*\{([^}]*)\}/g;
+  let m;
+  while ((m = ruleRe.exec(css)) !== null) {
+    map[m[1]] = docParseStyleDecls(m[2]);
+  }
+  return map;
+}
+
+/* Render one text leaf under an emphasis: bare when the
+   emphasis is empty, else wrapped in the editor's own
+   emphasis elements, with a styled span for a color or a
+   highlight. */
+function docRenderText(text, emph) {
+  let out = escapeHtml(text);
+  if (!out) { return ""; }
+  if (emph.color || emph.bg) {
+    let style = "";
+    if (emph.color) { style += "color: " + emph.color + ";"; }
+    if (emph.bg) {
+      style += "background-color: " + emph.bg + ";";
+    }
+    out = "<span style=\"" + style + "\">" + out + "</span>";
+  }
+  if (emph.s) { out = "<s>" + out + "</s>"; }
+  if (emph.u) { out = "<u>" + out + "</u>"; }
+  if (emph.i) { out = "<i>" + out + "</i>"; }
+  if (emph.b) { out = "<b>" + out + "</b>"; }
+  return out;
+}
+
+/* Whether an address may cross into the editor as a
+   link: the same scheme judgment the external image gate
+   makes (http, https, mailto), plus the app's own note
+   links. */
+function docSafeLinkHref(href) {
+  if (typeof href !== "string" || !href) { return null; }
+  if (/^https?:\/\//i.test(href) ||
+      /^mailto:/i.test(href) ||
+      /^ssnote:/i.test(href)) {
+    return href;
+  }
+  return null;
+}
+
+const DOC_BLOCK_TAGS = {
+  P: 1, H1: 1, H2: 1, H3: 1, H4: 1, H5: 1, H6: 1,
+  UL: 1, OL: 1, TABLE: 1, BLOCKQUOTE: 1, HR: 1, PRE: 1,
+  DIV: 1, SECTION: 1, ARTICLE: 1, HEADER: 1, FOOTER: 1,
+  FIGURE: 1, FIGCAPTION: 1
+};
+
+/* The block alignment an element asks for (its own inline
+   style, then its classes), kept only for the values the
+   editor's alignment carries. */
+function docBlockAlignStyle(el, classStyles) {
+  let align = null;
+  const inline = el.getAttribute &&
+    el.getAttribute("style");
+  if (inline) {
+    align = docParseStyleDecls(inline)["text-align"] || null;
+  }
+  if (!align) {
+    const classes = (el.getAttribute &&
+      el.getAttribute("class")) || "";
+    classes.split(/\s+/).forEach(function (cls) {
+      if (!align && cls && classStyles[cls]) {
+        align = classStyles[cls]["text-align"] || null;
+      }
+    });
+  }
+  align = String(align || "").toLowerCase();
+  if (align === "center" || align === "right" ||
+      align === "justify") {
+    return " style=\"text-align: " + align + ";\"";
+  }
+  return "";
+}
+
+/* Inline rendering: the children of one element under an
+   emphasis, recursively. Text leaves carry the emphasis;
+   elements merge their own over it and recurse; a link
+   wraps its rendered children when its address is one the
+   editor may carry; an image becomes a token the adoption
+   pass replaces; a block element met inside an inline
+   context is flattened to its inline content, so no block
+   markup is ever nested where the editor forbids it. */
+function docConvertInlineChildren(el, emph, ctx) {
+  let out = "";
+  el.childNodes.forEach(function (child) {
+    out += docConvertInlineNode(child, emph, ctx);
+  });
+  return out;
+}
+
+function docConvertInlineNode(node, emph, ctx) {
+  if (node.nodeType === 3) {
+    return docRenderText(node.nodeValue, emph);
+  }
+  if (node.nodeType !== 1) { return ""; }
+  const tag = node.tagName;
+  if (tag === "BR") { return "<br>"; }
+  if (tag === "IMG") {
+    const idx = ctx.images.length;
+    ctx.images.push({
+      src: node.getAttribute("src") || "",
+      alt: node.getAttribute("alt") || ""
+    });
+    return "<span data-doc-img=\"" + idx + "\"></span>";
+  }
+  if (tag === "SCRIPT" || tag === "STYLE" ||
+      tag === "HEAD" || tag === "TITLE" ||
+      tag === "META" || tag === "LINK") {
+    return "";
+  }
+  const own = docMergeEmphasis(emph,
+    docElementEmphasis(node, ctx.classStyles));
+  if (tag === "A") {
+    const href = docSafeLinkHref(node.getAttribute("href"));
+    const inner = docConvertInlineChildren(node, own, ctx);
+    if (!href) { return inner; }
+    return "<a href=\"" + escapeHtml(href) + "\">" +
+      inner + "</a>";
+  }
+  if (DOC_BLOCK_TAGS[tag] || tag === "LI" ||
+      tag === "TR" || tag === "TD" || tag === "TH") {
+    /* A block inside an inline context: its own content,
+       flattened, with the lists and tables that can
+       legitimately nest (inside a list item or a cell the
+       block converter itself does the calling, so this
+       path is only the stray case). */
+    return docConvertInlineChildren(node, own, ctx);
+  }
+  return docConvertInlineChildren(node, own, ctx);
+}
+
+/* Block flow: the children of a block container (the
+   export body, a div, a quote, a cell), where runs of
+   inline content gather into paragraphs and block
+   elements convert one by one. */
+function docConvertBlocks(el, emph, ctx) {
+  let html = "";
+  let inlineBuf = "";
+  const flush = function () {
+    const textOnly = inlineBuf.replace(/<[^>]*>/g, "")
+      .replace(/&[a-z]+;/g, " ").trim();
+    if (inlineBuf.indexOf("data-doc-img") >= 0 ||
+        inlineBuf.indexOf("<a ") >= 0 || textOnly) {
+      html += "<p>" + inlineBuf + "</p>";
+    }
+    inlineBuf = "";
+  };
+  el.childNodes.forEach(function (child) {
+    if (child.nodeType === 1 &&
+        DOC_BLOCK_TAGS[child.tagName]) {
+      flush();
+      html += docConvertBlock(child, emph, ctx);
+    } else {
+      inlineBuf += docConvertInlineNode(child, emph, ctx);
+    }
+  });
+  flush();
+  return html;
+}
+
+/* One block element to the editor's vocabulary. */
+function docConvertBlock(el, emph, ctx) {
+  const tag = el.tagName;
+  const own = docMergeEmphasis(emph,
+    docElementEmphasis(el, ctx.classStyles));
+  if (tag === "HR") { return "<hr>"; }
+  if (tag === "PRE") {
+    return "<pre>" +
+      escapeHtml(el.textContent || "") + "</pre>";
+  }
+  if (tag === "UL" || tag === "OL") {
+    return docConvertList(el, own, ctx);
+  }
+  if (tag === "TABLE") {
+    return docConvertTable(el, own, ctx);
+  }
+  if (tag === "BLOCKQUOTE") {
+    return "<blockquote>" +
+      docConvertBlocks(el, own, ctx) + "</blockquote>";
+  }
+  if (tag === "P" || tag === "H1" || tag === "H2" ||
+      tag === "H3" || tag === "H4" || tag === "H5" ||
+      tag === "H6") {
+    const inner = docConvertInlineChildren(el, own, ctx);
+    if (!inner.trim() &&
+        inner.indexOf("data-doc-img") < 0) {
+      return "";
+    }
+    return "<" + tag.toLowerCase() +
+      docBlockAlignStyle(el, ctx.classStyles) + ">" +
+      inner + "</" + tag.toLowerCase() + ">";
+  }
+  /* DIV and the sectioning containers are transparent:
+     their children are the content. A figure holding an
+     image reaches the same end through the image token
+     its inline child leaves behind. */
+  return docConvertBlocks(el, own, ctx);
+}
+
+/* Whether one list item begins with a checkbox glyph, and
+   its state: the forms a Google checklist takes when the
+   glyphs ride in the text itself (a Doc written by an
+   import, or a checklist typed with the glyphs). The
+   glyph is consumed by the check, never left in the
+   text. */
+function docLiGlyphState(li) {
+  const first = li.firstChild;
+  if (!first || first.nodeType !== 3) { return null; }
+  const text = first.nodeValue || "";
+  const m = text.match(/^\s*(☐|☑|✓|✔)\s?/);
+  if (!m) { return null; }
+  return { checked: m[1] !== "☐", rest: text.slice(m[0].length) };
+}
+
+/* One list: an ordered list stays ordered; a list the
+   export marks as a checklist (its class names it), or
+   whose every item carries a checkbox glyph, becomes the
+   editor's checklist form, the saved shape the checklist
+   machinery round trips. A nested list stays inside its
+   item, as the editor nests them. */
+function docConvertList(listEl, emph, ctx) {
+  const ordered = listEl.tagName === "OL";
+  const classAttr = (listEl.getAttribute &&
+    listEl.getAttribute("class")) || "";
+  const items = [];
+  listEl.childNodes.forEach(function (child) {
+    if (child.nodeType === 1 && child.tagName === "LI") {
+      items.push(child);
+    }
+  });
+  let checklist = !ordered &&
+    classAttr.indexOf("checklist") >= 0;
+  const glyphs = items.map(function (li) {
+    return docLiGlyphState(li);
+  });
+  if (!checklist && !ordered && items.length &&
+      glyphs.every(function (g) { return g !== null; })) {
+    checklist = true;
+  }
+  const out = [];
+  items.forEach(function (li, i) {
+    out.push(docConvertListItem(li, emph, ctx,
+      checklist, glyphs[i]));
+  });
+  if (checklist) {
+    return "<ul class=\"ss-checklist\">" + out.join("") +
+      "</ul>";
+  }
+  const tag = ordered ? "ol" : "ul";
+  return "<" + tag + ">" + out.join("") + "</" + tag + ">";
+}
+
+function docConvertListItem(li, emph, ctx, checklist,
+    glyph) {
+  const own = docMergeEmphasis(emph,
+    docElementEmphasis(li, ctx.classStyles));
+  let inner = "";
+  li.childNodes.forEach(function (child, idx) {
+    if (glyph && idx === 0 && child.nodeType === 3) {
+      inner += docRenderText(glyph.rest, own);
+      return;
+    }
+    if (child.nodeType === 1 &&
+        (child.tagName === "UL" ||
+         child.tagName === "OL")) {
+      inner += docConvertList(child,
+        docMergeEmphasis(own,
+          docElementEmphasis(child, ctx.classStyles)),
+        ctx);
+      return;
+    }
+    if (child.nodeType === 1 &&
+        DOC_BLOCK_TAGS[child.tagName]) {
+      /* A paragraph or other block inside an item flattens
+         to its inline content, which is where the editor
+         keeps item text. */
+      inner += docConvertInlineChildren(child,
+        docMergeEmphasis(own,
+          docElementEmphasis(child, ctx.classStyles)),
+        ctx);
+      return;
+    }
+    inner += docConvertInlineNode(child, own, ctx);
+  });
+  let box = "";
+  if (checklist) {
+    box = "<input type=\"checkbox\"" +
+      (glyph && glyph.checked ? " checked" : "") + ">";
+  }
+  return "<li" +
+    (checklist && glyph && glyph.checked
+      ? " class=\"done\"" : "") + ">" + box + inner +
+    "</li>";
+}
+
+/* One table: rows keep their section (head, body) when
+   the export has one; cells keep their spans and their
+   block content, with a single paragraph wrapper shed,
+   the shape the app's own tables take. */
+function docConvertTable(tableEl, emph, ctx) {
+  const own = docMergeEmphasis(emph,
+    docElementEmphasis(tableEl, ctx.classStyles));
+  let out = "<table>";
+  const rowsOf = function (parent) {
+    let rows = "";
+    parent.childNodes.forEach(function (tr) {
+      if (tr.nodeType === 1 && tr.tagName === "TR") {
+        rows += docConvertTableRow(tr, own, ctx);
+      }
+    });
+    return rows;
+  };
+  tableEl.childNodes.forEach(function (child) {
+    if (child.nodeType !== 1) { return; }
+    if (child.tagName === "THEAD") {
+      out += "<thead>" + rowsOf(child) + "</thead>";
+    } else if (child.tagName === "TBODY") {
+      out += "<tbody>" + rowsOf(child) + "</tbody>";
+    } else if (child.tagName === "TFOOT") {
+      out += "<tfoot>" + rowsOf(child) + "</tfoot>";
+    } else if (child.tagName === "TR") {
+      out += docConvertTableRow(child, own, ctx);
+    }
+  });
+  return out + "</table>";
+}
+
+function docConvertTableRow(tr, emph, ctx) {
+  let out = "<tr>";
+  tr.childNodes.forEach(function (cell) {
+    if (cell.nodeType !== 1 ||
+        (cell.tagName !== "TD" && cell.tagName !== "TH")) {
+      return;
+    }
+    const tag = cell.tagName.toLowerCase();
+    let attrs = "";
+    const span = function (name) {
+      const v = parseInt(cell.getAttribute(name), 10);
+      return (v && v > 1) ? v : 0;
+    };
+    if (span("colspan")) {
+      attrs += " colspan=\"" + span("colspan") + "\"";
+    }
+    if (span("rowspan")) {
+      attrs += " rowspan=\"" + span("rowspan") + "\"";
+    }
+    let inner = docConvertBlocks(cell,
+      docMergeEmphasis(emph,
+        docElementEmphasis(cell, ctx.classStyles)), ctx);
+    const single = inner.match(/^<p>([\s\S]*)<\/p>$/);
+    if (single &&
+        single[1].indexOf("</p>") < 0 &&
+        single[1].indexOf("<table") < 0) {
+      inner = single[1];
+    }
+    out += "<" + tag + attrs + ">" + inner + "</" + tag + ">";
+  });
+  return out + "</tr>";
+}
+
+/* The whole export to an editor body plus the images it
+   carried, as tokens in the body and records in the list
+   the adoption pass reads. This function is the fetch
+   route's sanitizer: its output is built only from the
+   vocabulary above. */
+function docExportHtmlToBody(exportHtml) {
+  const parsed = new DOMParser().parseFromString(
+    String(exportHtml || ""), "text/html");
+  const ctx = {
+    classStyles: docExportClassStyles(parsed),
+    images: []
+  };
+  if (!parsed.body) { return { html: "", images: [] }; }
+  const empty = { b: false, i: false, u: false, s: false,
+    color: null, bg: null };
+  return {
+    html: docConvertBlocks(parsed.body, empty, ctx),
+    images: ctx.images
+  };
+}
+
+/* ----- export images become the note's images ------------------
+   Images inside the Doc arrive inside the export: inline
+   ones as data URIs, linked ones at web addresses. Inline
+   ones are adopted as stored attachments, on the drop box
+   attachment pattern (the provider driver uploads the
+   file, the note gains a record, the body gains the
+   canonical figure shell), so the full editor treats them
+   exactly like any stored image. A web addressed image
+   becomes an external image figure, the v2.120 shape. An
+   image that can be neither (an unreadable payload, a
+   refused upload, an address the gates reject) becomes
+   visible text saying an image stood there: an image is
+   never silently dropped. */
+
+/* Session reuse: opening the same Doc again in one session
+   (after it changed elsewhere, say) re-exports the same
+   image bytes; keyed by the note and a cheap hash of the
+   payload, the adoption reuses the record it already made
+   instead of uploading a second copy of the same image.
+   Across sessions an image is adopted afresh; the earlier
+   uploaded copy stays in the attachments folder unlinked,
+   the same standing tradeoff the format already accepts
+   for superseded attachment files. */
+const docAdoptedImageCache = {};
+
+function docDataUriHash(text) {
+  let h1 = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) {
+    h1 ^= text.charCodeAt(i);
+    h1 = Math.imul(h1, 0x01000193) >>> 0;
+  }
+  return text.length + ":" + h1.toString(16);
+}
+
+function docDataUriParts(src) {
+  const m = String(src || "").match(
+    /^data:([^;,]+)?(;base64)?,([\s\S]*)$/);
+  if (!m) { return null; }
+  return {
+    mime: (m[1] || "application/octet-stream")
+      .toLowerCase(),
+    base64: !!m[2],
+    data: m[3]
+  };
+}
+
+async function docAdoptOneImage(note, img) {
+  const src = String((img && img.src) || "");
+  const label = String((img && img.alt) || "").trim();
+  const fallback = "[Image: " + (label || "in the Doc") + "]";
+  const parts = docDataUriParts(src);
+  if (parts && parts.base64 &&
+      parts.mime.indexOf("image/") === 0) {
+    const cacheKey = note.id + "|" + docDataUriHash(src);
+    const cached = docAdoptedImageCache[cacheKey];
+    if (cached) {
+      note.attachments.push(cached);
+      return "<figure class=\"ss-attachment\"" +
+        " data-attachment-id=\"" + cached.id + "\"" +
+        " contenteditable=\"false\"></figure>";
+    }
+    try {
+      const bytes = decodeDropboxBase64(parts.data);
+      if (!bytes || !bytes.length ||
+          bytes.length > DROPBOX_ATT_MAX_BYTES) {
+        return fallback;
+      }
+      const attachCfg = state.attach || {};
+      const svc = attachCfg.defaultProvider || "google";
+      const driver = providers[svc];
+      if (!driver || typeof driver.upload !== "function") {
+        return fallback;
+      }
+      const ext = parts.mime === "image/png" ? ".png"
+        : parts.mime === "image/gif" ? ".gif"
+        : parts.mime === "image/bmp" ? ".bmp"
+        : parts.mime === "image/webp" ? ".webp"
+        : ".jpg";
+      const attId = newNoteId() + "a";
+      const name = (label || "image") +
+        (label.toLowerCase().endsWith(ext) ? "" : ext);
+      const storageName = attId + "__" +
+        sanitizeFileName(name);
+      const file = new File([bytes], name,
+        { type: parts.mime });
+      const uploaded = await driver.upload(file, storageName,
+        function () {});
+      if (!uploaded || !uploaded.fileId) { return fallback; }
+      const record = {
+        id: attId, provider: svc, fileId: uploaded.fileId,
+        name: name, storageName: storageName,
+        mime: parts.mime, size: bytes.length,
+        created: new Date().toISOString()
+      };
+      docAdoptedImageCache[cacheKey] = record;
+      note.attachments.push(record);
+      return "<figure class=\"ss-attachment\"" +
+        " data-attachment-id=\"" + attId + "\"" +
+        " contenteditable=\"false\"></figure>";
+    } catch (e) {
+      return fallback;
+    }
+  }
+  if (/^https?:\/\//i.test(src) && !extImageUrlError(src)) {
+    return buildExternalImageFigure(src, label).outerHTML;
+  }
+  return fallback;
+}
+
+/* Replace every image token in a converted body with its
+   adopted form, in place, and return the finished body
+   string. The note's attachment list is reset first: a
+   Doc-backed note's attachments are exactly the images
+   its Doc currently carries, adopted by this pass. */
+async function docAdoptImages(note, converted) {
+  note.attachments = [];
+  if (!converted.images.length) { return converted.html; }
+  const holder = document.createElement("div");
+  holder.innerHTML = converted.html;
+  const tokens = holder.querySelectorAll("[data-doc-img]");
+  for (let i = 0; i < tokens.length; i++) {
+    const token = tokens[i];
+    const idx = Number(token.getAttribute("data-doc-img"));
+    const img = converted.images[idx];
+    token.outerHTML = await docAdoptOneImage(note, img);
+  }
+  return holder.innerHTML;
+}
+
+/* ----- the body load ----------------------------------------------
+   Fill a Doc-backed shell from its Doc: fetch, convert,
+   adopt its images, and hold the Doc's revision token and
+   file name on the note. Title, tags, and notebook stay
+   the catalog's, which is where they live for this shape.
+   Any failure throws to the caller (ensureNoteBodyLoaded),
+   whose standing contract leaves the note a shell. */
+async function docLoadNoteBody(note) {
+  const docId = sanitizeDocId(note.docId);
+  if (!docId) {
+    throw docHttpError(0,
+      "This note's Google Doc link is missing or damaged," +
+      " so its content cannot be loaded.");
+  }
+  bootCountNoteDownload();
+  const fetched = await docFetchDocument(docId);
+  const converted = docExportHtmlToBody(fetched.html);
+  note.body = await docAdoptImages(note, converted);
+  note.sha = fetched.token;
+  note.docName = fetched.name;
+  /* A chosen card thumbnail names an attachment record;
+     a fresh adoption mints fresh records, so a thumbnail
+     naming none of them is cleared to the automatic
+     choice, the same judgment the file save makes of a
+     dangling choice. */
+  if (note.thumbnail &&
+      !(note.attachments || []).some(function (a) {
+        return a && a.id === note.thumbnail;
+      })) {
+    note.thumbnail = null;
+  }
+  note.previewText = htmlToText(note.body).slice(0, 140);
+}
+
+/* ----- editor body to upload HTML ---------------------------------
+   The save payload: the editor's canonical body with its
+   image figures hydrated inline, wrapped as a small HTML
+   document Google's converter reads. Stored attachment
+   images embed as data URIs (inside this payload only;
+   the note's own saved form is never a data URI), fetched
+   through the provider driver like any attachment
+   download. An attachment that is not an image, or whose
+   bytes cannot be fetched, crosses as a link to its Drive
+   file, so its presence survives in the Doc even when its
+   bytes cannot embed. An external image is fetched and
+   embedded the same way when the fetch succeeds, and
+   crosses at its web address when it does not (Google's
+   importer may or may not fetch a remote image; that is
+   the named gap for external images). */
+
+function blobToDataUri(blob) {
+  return new Promise(function (resolve, reject) {
+    const reader = new FileReader();
+    reader.onload = function () { resolve(reader.result); };
+    reader.onerror = function () {
+      reject(reader.error ||
+        new Error("Reading an image for the Doc failed."));
+    };
+    reader.readAsDataURL(blob);
+  });
+}
+
+/* The width an image figure carries, as a style for the
+   payload image, or empty when it carries none. */
+function docFigureWidthStyle(el) {
+  const m = String(el.getAttribute("style") || "")
+    .match(/width:\s*([0-9]+(?:\.[0-9]+)?)px/);
+  return m ? " style=\"width: " + m[1] + "px;\"" : "";
+}
+
+async function docBuildUploadHtml(note) {
+  const holder = document.createElement("div");
+  holder.innerHTML = note.body || "";
+  const figures = holder.querySelectorAll(
+    "figure.ss-attachment, div.ss-attachment");
+  for (let i = 0; i < figures.length; i++) {
+    const el = figures[i];
+    const widthStyle = docFigureWidthStyle(el);
+    if (el.hasAttribute("data-ss-ext")) {
+      const src = el.getAttribute("data-ss-ext-src") || "";
+      const alt = el.getAttribute("data-ss-ext-alt") || "";
+      let payloadSrc = src;
+      try {
+        const fetched = await fetch(src);
+        if (fetched && fetched.ok) {
+          payloadSrc = await blobToDataUri(
+            await fetched.blob());
+        }
+      } catch (e) { /* the web address crosses instead */ }
+      el.outerHTML = "<img src=\"" +
+        escapeHtml(String(payloadSrc)) + "\" alt=\"" +
+        escapeHtml(alt) + "\"" + widthStyle + ">";
+      continue;
+    }
+    const attId = el.getAttribute("data-attachment-id");
+    const record = (note.attachments || []).find(
+      function (a) { return a && a.id === attId; });
+    if (!record) {
+      el.outerHTML = "[Image]";
+      continue;
+    }
+    const driver = providers[record.provider || "google"];
+    if (String(record.mime || "")
+        .toLowerCase().indexOf("image/") === 0 && driver &&
+        typeof driver.download === "function" &&
+        record.fileId) {
+      try {
+        const blob = await driver.download(record.fileId);
+        const uri = await blobToDataUri(blob);
+        el.outerHTML = "<img src=\"" + uri + "\" alt=\"" +
+          escapeHtml(record.name || "image") + "\"" +
+          widthStyle + ">";
+        continue;
+      } catch (e) { /* the Drive link crosses instead */ }
+    }
+    el.outerHTML = record.fileId
+      ? "<a href=\"https://drive.google.com/file/d/" +
+        encodeURIComponent(record.fileId) + "/view\">" +
+        escapeHtml(record.name || "Attachment") + "</a>"
+      : "[Attachment: " +
+        escapeHtml(record.name || "file") + "]";
+  }
+  return "<!DOCTYPE html><html><head>" +
+    "<meta charset=\"utf-8\"></head><body>" +
+    holder.innerHTML + "</body></html>";
+}
+
+
 /* ----- provider registry ----------------------------------------------
    One consistent internal shape over the attachment services.
    Everything that touches attachments goes through this table,

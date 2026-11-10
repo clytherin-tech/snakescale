@@ -1614,6 +1614,24 @@ function renderListToolbar() {
       kind === "trash" || kind === "archive");
     moveBtn.disabled = !inNotebook;
   }
+  /* v2.121: the Doc switch follows the notebook items'
+     rules (hidden in Trash and Archive, enabled only in
+     a notebook view), and its check span carries the
+     sort menu's tick while the open notebook's switch
+     is on, so the current state is visible in the menu
+     itself. */
+  const docStoreBtn = document.getElementById("nbDocStoreBtn");
+  if (docStoreBtn) {
+    docStoreBtn.classList.toggle("hidden",
+      kind === "trash" || kind === "archive");
+    docStoreBtn.disabled = !inNotebook;
+    const docCheck = docStoreBtn.querySelector(".sort-check");
+    if (docCheck) {
+      docCheck.textContent = inNotebook &&
+        notebookDocStoreEnabled(state.view.value)
+        ? "✓" : "";
+    }
+  }
   /* v2.31: the notebook shortcut item sits with the notebook
      items and follows their rules exactly (shown and enabled
      like Rename). Its label names its target, because this

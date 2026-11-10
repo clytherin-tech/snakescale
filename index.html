@@ -44,7 +44,7 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-11-10-SSN-V21200
+  BUILD STAMP: 2026-11-10-SSN-V21210
   Version: 2.106.0
 
   Revision history:
@@ -6410,6 +6410,16 @@
                  Remove Notebook from Shortcuts) and enables it
                  exactly like Rename. -->
             <button type="button" class="list-menu-item" id="nbShortcutNbBtn" role="menuitem">Add Notebook to Shortcuts</button>
+            <!-- v2.121: the notebook's Doc switch (Stage 3
+                 of the Google Docs conversion): while on,
+                 new notes created in this notebook are
+                 stored as individual Google Docs instead
+                 of note files. It carries the sort menu's
+                 check span, which renderListToolbar fills
+                 while the switch is on, and it governs new
+                 notes only; existing notes are never
+                 converted by it. -->
+            <button type="button" class="list-menu-item" id="nbDocStoreBtn" role="menuitem"><span class="sort-check"></span><span class="sort-label">Store new notes as Google Docs</span></button>
             <button type="button" class="list-menu-item danger" id="nbDeleteBtn" role="menuitem">Delete Notebook</button>
             <!-- v2.2: pinning moved here from the editor's meta row.
                  renderListToolbar sets this item's label (Pin note or

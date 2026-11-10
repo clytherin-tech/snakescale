@@ -1685,6 +1685,26 @@ function moveNoteToNotebook(note, targetSlug) {
     });
   }
   if (note.notebook === targetSlug) { return Promise.resolve(false); }
+  /* v2.121: a Doc-backed note has no file to move: its
+     placement is the catalog's notebook field alone, so
+     the move is that field, a cache write (which rebuilds
+     the catalog entry under the new notebook), and the
+     re-render. The Doc itself stays where it was created
+     in Drive; the catalog is the placement of record, and
+     folder listings never read a Doc as a note file. The
+     open note's editor content is collected first, as the
+     file flow below collects it, so unsaved words are not
+     lost by the flip; they save into the Doc afterwards
+     through the ordinary autosave. */
+  if (isDocBackedNote(note)) {
+    if (state.selectedId === note.id) { collectEditor(note); }
+    note.notebook = targetSlug;
+    clearNoteDivergence(note.id);
+    saveCache();
+    renderAll();
+    toast("Moved to " + target.name);
+    return Promise.resolve(true);
+  }
   /* v2.17.1: a notebook move takes charge of the note's
      placement, like the trash and archive moves: it clears any
      divergence mark and runs its save against the target

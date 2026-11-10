@@ -315,8 +315,18 @@ const INCOMING_FILE = "incoming.json";
    address of its first image when that image is an
    external, web hosted one), so a shell's card can show
    the poster thumbnail before any note file is fetched.
-   A shape 3 catalog is not read, by the same rule. */
-const CATALOG_SHAPE_VERSION = 4;
+   A shape 3 catalog is not read, by the same rule.
+   v2.121: shape 5 adds each note's backend and docId
+   (Stage 3 of the Google Docs conversion): backend is
+   "file" for an ordinary note file and "doc" for a
+   Doc-backed note, whose content lives in an individual
+   Google Doc named by docId instead of in a note file.
+   A Doc-backed entry has no note file, so its fileId is
+   null and the load's listing reconcile leaves it to the
+   catalog's own Doc entry pass (see
+   reconcileCatalogListings). A shape 4 catalog is not
+   read, by the same rule. */
+const CATALOG_SHAPE_VERSION = 5;
 const CATALOG_WRITE_DEBOUNCE_MS = 800;
 
 let catalogWriteTimer = null;      /* pending debounce timer, or null */
@@ -396,7 +406,22 @@ function buildCatalogEntry(note, collection) {
           ? note.shellAttachmentMimes.slice()
           : (cardAtt && cardAtt.mime
               ? [String(cardAtt.mime).toLowerCase()] : [])),
-    fileId: note.fileId || driveCache.fileIds[notePath(note)] || null,
+    /* v2.121: the note's backend and, for a Doc-backed
+       note, its Google Doc's file id (see the shape
+       comment above). A Doc-backed note has no note
+       file, so its fileId is null outright (never the
+       path lookup's guess), and its token is the Doc's
+       own revision token, which the Doc fetch and save
+       keep on note.sha exactly as a file note's token
+       rides there. A shell contributes the pair its own
+       entry carried, judged by the one sanitizer, so a
+       catalog built over shells round trips them
+       unchanged. */
+    backend: isDocBackedNote(note) ? "doc" : "file",
+    docId: isDocBackedNote(note)
+      ? sanitizeDocId(note.docId) : null,
+    fileId: isDocBackedNote(note) ? null
+      : (note.fileId || driveCache.fileIds[notePath(note)] || null),
     token: note.sha || null
   };
 }

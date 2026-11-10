@@ -1036,10 +1036,26 @@ function toggleTaskComplete(id) {
    resource: search operators judge it as they judge a loaded
    note. */
 function noteFromCatalogEntry(entry, collection) {
+  /* v2.121: the entry's backend pair, judged here like
+     every other shell field, so a damaged entry degrades
+     predictably: backend is "doc" only on the exact
+     string, and docId only on the one sanitizer's pass
+     (sanitizeDocId in store.js). A "doc" entry whose
+     docId sanitizes away stays Doc-backed with no id,
+     and its open and save fail soft in the Doc paths; it
+     is never quietly read as a file note, which would
+     have the file paths write a note file at the note's
+     path that the catalog does not mean. */
+  const shellBackend = (entry && entry.backend === "doc")
+    ? "doc" : "file";
+  const shellDocId = shellBackend === "doc"
+    ? sanitizeDocId(entry && entry.docId) : null;
   return {
     id: entry.id,
     title: entry.title || "Untitled note",
     notebook: entry.notebook || "",
+    backend: shellBackend,
+    docId: shellDocId,
     tags: Array.isArray(entry.tags) ? entry.tags.slice() : [],
     created: entry.created || "",
     updated: entry.updated || "",
@@ -1097,6 +1113,22 @@ function ensureNoteBodyLoaded(note) {
   if (noteBodyLoads[note.id]) { return noteBodyLoads[note.id]; }
   const load = (async function () {
     try {
+      if (isDocBackedNote(note)) {
+        /* v2.121: a Doc-backed shell completes from its
+           Google Doc, not from a note file (there is
+           none): docLoadNoteBody (media.js) fetches the
+           Doc, converts its export into the editor's
+           body, adopts its images, and holds the Doc's
+           revision token and file name on the note.
+           Title, tags, and notebook stay the catalog's,
+           which is where they live for this shape. A
+           failure (including the Doc module's
+           needs-consent state) throws into the same catch
+           below, so the note stays a shell and the editor
+           shows its standing could not load state: the
+           notebook is never broken by it. */
+        await docLoadNoteBody(note);
+      } else {
       const file = await storeGetFile(notePath(note));
       if (file) {
         bootCountNoteDownload();   /* v2.21: the boot report's count */
@@ -1125,6 +1157,7 @@ function ensureNoteBodyLoaded(note) {
            drops the note; until then it opens empty rather than
            not at all. */
         note.body = "";
+      }
       }
     } catch (err) {
       return note;   /* still a shell; a later attempt can retry */
@@ -1550,6 +1583,10 @@ function resetCatalogRuntimeState() {
   catalogArmed = false;
   lastCatalogToken = null;
   lastCatalogEntriesText = null;
+  /* v2.121: the Doc entry stash and the Doc module's
+     status reset with the rest of the runtime state. */
+  lastCatalogDocEntries = [];
+  resetDocNotesState();
   pendingIncoming = null;
   incomingProcessedToken = null;
   Object.keys(noteBodyLoads).forEach(function (id) {
@@ -1650,6 +1687,40 @@ async function reconcileCatalogListings(catalog, listings) {
   }
   await take("trash", null, listings.trash);
   await take("archive", null, listings.archive);
+  /* v2.121: Doc-backed entries have no note file, so no
+     listing above can ever take them: they ride the
+     catalog alone. Each well formed Doc entry (sanitized
+     backend "doc" with a Doc id that passes the one
+     sanitizer) whose id no listing took joins its
+     collection's list as a shell, through the same shell
+     builder. When the previous state holds the same note
+     still Doc-backed with a loaded body at the entry's
+     revision, the body and its adopted attachments carry
+     over, exactly as the listing branch above carries
+     them; a revision that moved means the Doc changed
+     elsewhere, and the shell refetches it on open. */
+  (catalog.entries || []).forEach(function (entry) {
+    if (!entry || entry.backend !== "doc") { return; }
+    if (!sanitizeDocId(entry.docId)) { return; }
+    if (seenIds[entry.id]) { return; }
+    seenIds[entry.id] = true;
+    const listName = entry.collection === "notebook"
+      ? "notes" : entry.collection;
+    if (!out[listName]) { return; }
+    const shell = noteFromCatalogEntry(entry, entry.collection);
+    const prev = prevById[entry.id];
+    if (prev && isDocBackedNote(prev) &&
+        typeof prev.body === "string" &&
+        (!entry.token || prev.sha === entry.token)) {
+      shell.body = prev.body;
+      shell.bodyLoaded = true;
+      shell.attachments = prev.attachments || [];
+      shell.docName = prev.docName;
+      shell.previewText =
+        htmlToText(prev.body).slice(0, 140);
+    }
+    out[listName].push(shell);
+  });
   return out;
 }
 
@@ -1724,8 +1795,23 @@ async function loadListingsClassic(listings) {
    here (a missing file, a transport error, unparseable JSON,
    a shape this build does not speak) simply means the classic
    load runs and the catalog is rebuilt from its result. */
+/* v2.121: the Doc-backed entries of the most recent
+   catalog read, sanitized to {entry, collection, listName}
+   triples. They are stashed even from a catalog the load
+   cannot use as a whole (a shape this build does not read,
+   or entries that make the reconcile decline), because a
+   Doc-backed note has no file for the classic load to
+   find: without the stash, a damaged or older catalog
+   would make Doc-backed notes vanish from the load even
+   though their entries are sitting readable in the file.
+   loadAllFromRepo merges them into a classic load only;
+   the reconcile reads the entries itself when it runs.
+   Cleared with the rest of the catalog runtime state. */
+let lastCatalogDocEntries = [];
+
 async function readCatalogForLoad() {
   let catalog = null;
+  lastCatalogDocEntries = [];
   try {
     const catalogFile = await storeGetFile(CATALOG_FILE);
     if (catalogFile) {
@@ -1739,6 +1825,31 @@ async function readCatalogForLoad() {
       try {
         const parsedCatalog = JSON.parse(catalogFile.text);
         if (parsedCatalog &&
+            Array.isArray(parsedCatalog.entries)) {
+          /* v2.121: the Doc entry stash is taken from any
+             parseable catalog, ahead of the shape judgment
+             below, for the reason the declaration above
+             gives. Every candidate is judged by the same
+             sanitizers the shell builder applies. */
+          parsedCatalog.entries.forEach(function (entry) {
+            if (!entry || typeof entry !== "object" ||
+                entry.backend !== "doc" ||
+                typeof entry.id !== "string" || !entry.id ||
+                !sanitizeDocId(entry.docId)) {
+              return;
+            }
+            const collection = entry.collection === "trash" ||
+              entry.collection === "archive"
+              ? entry.collection : "notebook";
+            lastCatalogDocEntries.push({
+              entry: entry,
+              collection: collection,
+              listName: collection === "notebook"
+                ? "notes" : collection
+            });
+          });
+        }
+        if (parsedCatalog &&
             parsedCatalog.version === CATALOG_SHAPE_VERSION &&
             Array.isArray(parsedCatalog.entries)) {
           catalog = parsedCatalog;
@@ -1751,6 +1862,27 @@ async function readCatalogForLoad() {
     }
   } catch (e) { catalog = null; lastCatalogEntriesText = null; }
   return catalog;
+}
+
+/* v2.121: merge the stashed Doc-backed entries into a
+   classic load's lists as shells, skipping any id the
+   listings already produced. Called by loadAllFromRepo
+   only when the reconcile did not run. */
+function mergeCatalogDocShells(loaded) {
+  if (!loaded || !lastCatalogDocEntries.length) { return; }
+  const have = Object.create(null);
+  [loaded.notes, loaded.trash, loaded.archive].forEach(
+    function (list) {
+      (list || []).forEach(function (note) {
+        have[note.id] = true;
+      });
+    });
+  lastCatalogDocEntries.forEach(function (stashed) {
+    if (have[stashed.entry.id]) { return; }
+    have[stashed.entry.id] = true;
+    loaded[stashed.listName].push(
+      noteFromCatalogEntry(stashed.entry, stashed.collection));
+  });
 }
 
 async function loadAllFromRepo() {
@@ -1937,7 +2069,15 @@ async function loadAllFromRepo() {
       loaded = null;   /* the catalog declined; the classic load runs */
     }
   }
-  if (!loaded) { loaded = await loadListingsClassic(listings); }
+  if (!loaded) {
+    loaded = await loadListingsClassic(listings);
+    /* v2.121: the classic load finds files only, so the
+       Doc-backed notes ride in from the catalog read's
+       stash (see readCatalogForLoad); when the reconcile
+       ran it placed them itself and the stash stays
+       unused. */
+    mergeCatalogDocShells(loaded);
+  }
 
   state.notes = loaded.notes;
   state.trash = loaded.trash;
@@ -2931,6 +3071,19 @@ async function saveNoteToRepoNow(note, options) {
   if (options.ambient && noteMatchesLastSaved(note)) {
     return { saved: true, unchanged: true };
   }
+  /* v2.121: a Doc-backed note saves into its Google Doc
+     (see saveDocBackedNote below) and never touches the
+     file machinery under this line: no note file is
+     serialized, no revision check runs against a file,
+     no version is captured (the Doc keeps its own
+     revision history in Google Docs). The branch sits
+     after the divergence pause, the shell completion, the
+     attachment reconciliation, and the ambient gate, so
+     those standing behaviors hold for Doc-backed notes
+     exactly as they do for file notes. */
+  if (isDocBackedNote(note)) {
+    return saveDocBackedNote(note, options);
+  }
   /* v2.8: capture the version history facts BEFORE anything in
      this save can move them. previousSavedContent is the note's
      last saved state, held in the baseline map precisely because
@@ -3104,6 +3257,45 @@ async function saveNoteToRepoNow(note, options) {
     }
     throw err;
   }
+}
+
+/* v2.121: the Doc-backed save, called from
+   saveNoteToRepoNow under the per note chain, so it
+   inherits the chain's serialization like every save.
+   The note's content goes back into its own Google Doc
+   (created here first when the note is new and has none
+   yet), the Doc's new revision token becomes the note's
+   sha, and the note's last saved baseline and the catalog
+   pick the landed state up exactly as a file save's tail
+   leaves them. There is deliberately no offline queue
+   for this shape: a Doc lives behind a live connection,
+   so an offline save fails with a plain message and the
+   editor keeps the words on screen, where the standing
+   dirty state will offer them again. App version history
+   is not captured for Doc-backed notes: the Doc keeps
+   its own revisions in Google Docs (a named Stage 3
+   boundary). A failure of any step (including the Doc
+   module's needs-consent state) throws, and the callers
+   treat it exactly like a failed file save. */
+async function saveDocBackedNote(note, options) {
+  if (typeof state !== "undefined" && state.online === false) {
+    throw new Error("This note is stored as a Google Doc" +
+      " and needs a connection to save. Your words are" +
+      " still in the editor.");
+  }
+  note.updated = new Date().toISOString();
+  const candidateContent = noteContentSnapshot(note);
+  if (!sanitizeDocId(note.docId)) {
+    const created = await docCreateDocument(note);
+    note.docId = created.id;
+    note.docName = note.title || "";
+  }
+  const uploadHtml = await docBuildUploadHtml(note);
+  const saved = await docSaveDocument(note, uploadHtml);
+  note.sha = saved.token || note.sha;
+  rememberLastSavedSnapshot(note.id, candidateContent);
+  saveCache();
+  return { saved: true, doc: true };
 }
 
 /* v2.26: the inverted conflict resolution, the PRIMARY flow

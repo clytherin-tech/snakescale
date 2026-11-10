@@ -2984,6 +2984,21 @@ function wireEvents() {
       toast("Remove from stack failed: " + err.message, true);
     });
   });
+  /* v2.121: the notebook's Doc switch toggles where it
+     stands (the menu item carries the check while it is
+     on, like a sort choice), on the stack items' shape:
+     guard the notebook view, close the panels, flip
+     through setNotebookDocStore, which persists the
+     index and re-renders. */
+  document.getElementById("nbDocStoreBtn").addEventListener("click", function () {
+    if (state.view.kind !== "notebook") { return; }
+    closeListPanels();
+    const slug = state.view.value;
+    setNotebookDocStore(slug, !notebookDocStoreEnabled(slug))
+      .catch(function (err) {
+        toast("Doc switch failed: " + err.message, true);
+      });
+  });
   /* v2.63: Move to... opens the parent panel (the shared
      toggle closes the action menu as it opens the panel,
      exactly like Add to Stack). */

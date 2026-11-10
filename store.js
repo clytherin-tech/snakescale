@@ -214,6 +214,30 @@ function sanitizeAttachments(list) {
   return out;
 }
 
+/* v2.121: one Google Doc file id, judged for the catalog's
+   Doc-backed note entries (see the Doc-backed notes section
+   in media.js). A Drive file id is a plain token of letters,
+   digits, dashes, and underscores; anything else (a hand
+   edited catalog value with spaces, punctuation, or a URL
+   pasted into the field) is refused, so a damaged entry
+   degrades to a Doc-backed note with no Doc id, whose open
+   and save fail soft with a plain message, never to a
+   wild request. Returns the id unchanged, or null. */
+function sanitizeDocId(value) {
+  if (typeof value !== "string") { return null; }
+  if (value.length < 4 || value.length > 200) { return null; }
+  if (!/^[A-Za-z0-9_-]+$/.test(value)) { return null; }
+  return value;
+}
+
+/* Whether a note object is Doc-backed (v2.121): the one
+   test every routing decision reads, so a note whose
+   backend field is absent or damaged reads as the file
+   note every note was before this release. */
+function isDocBackedNote(note) {
+  return !!note && note.backend === "doc";
+}
+
 /* v1.2: counts note files whose attachments line could not be parsed
    during a load. loadAllFromRepo turns a nonzero count into one readable
    toast instead of failing the whole load. */

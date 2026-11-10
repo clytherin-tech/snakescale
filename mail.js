@@ -7149,6 +7149,14 @@ async function createNoteFromTemplate(tpl) {
   const note = makeNote(notebookSlug || fallbackNotebookSlug(),
     tpl.title || "Untitled note",
     canonicalizeAttachmentPlaceholders(tpl.body || ""));
+  /* v2.121: a template note created in a notebook whose
+     Doc switch is on is Doc-backed, on the New Note rule
+     (see createNoteInRepo): its content saves into a new
+     Google Doc. */
+  if (notebookDocStoreEnabled(note.notebook)) {
+    note.backend = "doc";
+    note.docId = null;
+  }
   state.notes.unshift(note);
   saveCache();
   renderAll();
@@ -7377,6 +7385,10 @@ function makeNote(notebookSlug, title, body) {
     reminderDoneAt: null,
     sha: null,
     fileId: null,      /* v2.20: assigned by the first store write or load */
+    backend: "file",   /* v2.121: an ordinary note file; the notebook
+                          create flows in this file mark a new note
+                          "doc" when its notebook's Doc switch is on */
+    docId: null,       /* v2.121: a Doc-backed note's Google Doc id */
     trashed: false,
     trashedFrom: null,
     archived: false,        /* v1.5 */
@@ -7392,6 +7404,15 @@ async function createNoteInRepo(notebookSlug) {
   /* v2.72: a create naming no notebook takes the
      default notebook (fallbackNotebookSlug). */
   const note = makeNote(notebookSlug || fallbackNotebookSlug());
+  /* v2.121: when the target notebook's Doc switch is on,
+     the new note is Doc-backed: its first save (the
+     background save below) creates its Google Doc and
+     every later save writes into that same Doc. The note
+     opens empty in the editor exactly like a file note. */
+  if (notebookDocStoreEnabled(note.notebook)) {
+    note.backend = "doc";
+    note.docId = null;
+  }
   state.notes.unshift(note);
   /* v1.4.4: the note opens immediately. Before this change the editor
      waited for the full upload chain (on Drive: resolve the folder,
@@ -8278,6 +8299,22 @@ function unarchiveNote(note, quiet) {
    its trashedFrom (so Restore still returns it to the notebook it
    originally came from), and its file moves out of archive/. */
 function moveNoteToTrashNow(note, quiet) {
+  /* v2.121: trashing a Doc-backed note continues it as a
+     file note: this function's flow below writes the note
+     file at the trash path (the wrapper above completed
+     the shell from the Doc, so the body is here to
+     write), and clearing the backend pair here is what
+     makes every later step, restore included, treat it
+     as the file note it now is. The Google Doc itself is
+     left in Drive, unlinked from the app: a named Stage
+     3 limitation, not a silent deletion. */
+  if (isDocBackedNote(note)) {
+    note.backend = "file";
+    note.docId = null;
+    note.docName = undefined;
+    note.fileId = null;
+    note.sha = null;
+  }
   const oldPath = notePath(note);
   const wasArchived = !!note.archived;
   const online = state.online && state.repoExists;
@@ -8492,6 +8529,18 @@ async function confirmDeleteNoteForever(note) {
    archivedFrom remembers the notebook, so Unarchive is a plain
    restore under another name. Pinned is cleared, as with Trash. */
 function archiveNoteNow(note, quiet) {
+  /* v2.121: archiving a Doc-backed note continues it as
+     a file note, on the trash rule (see
+     moveNoteToTrashNow): the flow below writes the note
+     file at the archive path, and the Google Doc is left
+     in Drive unlinked. */
+  if (isDocBackedNote(note)) {
+    note.backend = "file";
+    note.docId = null;
+    note.docName = undefined;
+    note.fileId = null;
+    note.sha = null;
+  }
   const oldPath = notePath(note);
   const online = state.online && state.repoExists;
   note.archived = true;

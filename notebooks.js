@@ -287,6 +287,42 @@ async function setNotebookStack(slug, stackName) {
   renderAll();
 }
 
+/* v2.121: whether a notebook's Doc switch is on: new
+   notes created in it are Doc-backed (Stage 3 of the
+   Google Docs conversion). The switch is a field on the
+   notebook record in the index (docStore), absent for
+   off, which is the default for every notebook,
+   existing ones included: nothing about a notebook
+   changes until the switch is deliberately flipped
+   from its menu. Read by the create flows in mail.js
+   and by the menu state in render.js. */
+function notebookDocStoreEnabled(slug) {
+  const nb = state.notebooks.find(function (n) {
+    return n.slug === slug;
+  });
+  return !!(nb && nb.docStore === true);
+}
+
+/* Flip a notebook's Doc switch, on the setNotebookStack
+   shape: state first and re-render at once, with the
+   index write behind it. Turning it off deletes the
+   field outright, so a notebook that was never switched
+   (or was switched back) keeps its index record
+   byte-identical to what it was before this release.
+   The switch governs NEW notes only: notes already in
+   the notebook keep the backend they were created
+   with, and no existing note is converted by it. */
+async function setNotebookDocStore(slug, on) {
+  const nb = state.notebooks.find(function (n) {
+    return n.slug === slug;
+  });
+  if (!nb) { return; }
+  if (on) { nb.docStore = true; } else { delete nb.docStore; }
+  if (state.online && state.repoExists) { await saveIndex(); }
+  saveCache();
+  renderAll();
+}
+
 /* Rename a stack: the field on every member notebook changes,
    nothing else about any notebook does. The fold record follows
    the name. Callers validate the new name first (see

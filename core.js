@@ -626,6 +626,16 @@ const state = {
      previewText: string|null, (v2.20) a shell's card preview, from the
                     catalog; loaded notes leave it null
      fileId:    string|null,  (v2.20) the Drive file id, when resolved
+     backend:   string,       (v2.121) "file" for an ordinary note
+                    file, "doc" for a Doc-backed note (Stage 3 of
+                    the Google Docs conversion): the note's content
+                    lives in an individual Google Doc instead of a
+                    note file, and notebooks and tags stay in the
+                    catalog. Absent means "file".
+     docId:     string|null,  (v2.121) a Doc-backed note's Google
+                    Doc file id; null for file notes, and null on a
+                    Doc-backed note whose Doc has not been created
+                    yet (its first save creates it)
      trashed:   boolean,
      trashedFrom: string|null  notebook slug the note was trashed from
      archived:  boolean,       (v1.5)
