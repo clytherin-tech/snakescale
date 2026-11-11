@@ -4631,6 +4631,15 @@ async function docLoadNoteBody(note) {
   } else {
     note.body = docApplyTickMemory(note, note.body);
   }
+  /* v2.134: links in the app's own chip forms are
+     dressed back into pills, and re-formed event chips
+     are enriched from the calendar (see the chips
+     section below). The tick memory above judged the
+     body first on purpose: a chip's label is the same
+     text as the link it crossed as, so the dressing
+     changes no item's words. */
+  note.body = docReformChipLinks(note.body, note);
+  await docEnrichReformedEventChips(note);
   note.sha = fetched.token;
   /* v2.127: the modified time this body was fetched at
      rides beside the revision token; the near-live poll
@@ -5058,6 +5067,487 @@ function docApplyGoogleSpacing(holder) {
   }
 }
 
+
+/* ----- chips across the Doc boundary (v2.134) ---------------
+   The simplified Docs contract Chris set: a Doc holds
+   only what crosses cleanly between the app and Google
+   (text, formatting, lists, tables, images, links), and
+   the app's furniture (the pills a note body wears) lives
+   in the app alone. So on a Doc-backed save each chip
+   crosses as the link it really is, and on a Doc-backed
+   open a link in exactly one of the app's own forms is
+   dressed back into the pill it names. The forms:
+
+   - A note link whose target is itself Doc-backed
+     crosses as the target Doc's own address,
+     https://docs.google.com/document/d/<docId>/edit,
+     the form the November 2026 conversion's link repair
+     wrote by hand. A note link whose target is not
+     Doc-backed keeps its ssnote: form in the upload:
+     there is no Doc address for it to carry, and the
+     link stands in the Doc the way it stands in the note
+     file, unresolved by Google and by the app's open
+     path alike.
+   - An email chip crosses as the Gmail message address
+     https://mail.google.com/mail/u/0/#inbox/<message id>.
+     The app had no Gmail web address of its own before
+     this release (a chip click travels inside the app,
+     by message id); this is Gmail's own permalink form
+     for a message, adopted here as the app's form.
+   - An event chip crosses as the calendar event address
+     https://www.google.com/calendar/event?eid=<eid>,
+     the htmlLink form Google Calendar itself returns
+     for an event: the eid is the base64url of
+     "<event id> <calendar id>", the two facts the chip
+     carries. The chip's third fact, its start, has no
+     place in that address; see the enrichment below for
+     how a re-formed chip earns it back honestly.
+   - A tag pill crosses as its plain hashtag text, and
+     dresses back only where the note itself carries the
+     tag (the note's tags are the app's own furniture,
+     kept in the catalog): a hashtag the note does not
+     stand behind stays text.
+
+   Recognition is exact by design. A hand pasted link
+   that is not one of these forms (a Docs address in
+   view form, a Gmail address in another account slot
+   or the search form, a calendar address whose eid
+   does not decode to the two token form, a Docs
+   address for a document the catalog does not hold as
+   a Doc-backed note) is never turned into a chip: the
+   anchor stands as the ordinary link it is. Google's
+   export wraps addresses in its redirect form
+   (https://www.google.com/url?q=<the address>), so the
+   judging unwraps that one wrapper first, the same
+   address in either dress being the same link. Nothing
+   here runs for a file-backed note: its save never
+   builds an upload, and its load never comes through
+   the Doc path, so its chips and its chip form links
+   stand byte for byte as they were. */
+
+/* The note a Doc address names: a live, trashed, or
+   archived note the catalog holds as Doc-backed with
+   exactly this Doc id, or null. */
+function docNoteByDocId(docId) {
+  if (typeof state === "undefined" || !state) {
+    return null;
+  }
+  const lists = [state.notes, state.trash, state.archive];
+  for (let i = 0; i < lists.length; i++) {
+    const hit = (lists[i] || []).find(function (n) {
+      return isDocBackedNote(n) &&
+        sanitizeDocId(n.docId) === docId;
+    });
+    if (hit) { return hit; }
+  }
+  return null;
+}
+
+/* The address a link is judged by: Google's export
+   redirect wrapper unwrapped when it stands, the
+   address itself otherwise. Judging only; nothing is
+   rewritten by this. */
+function docChipJudgeHref(href) {
+  const raw = String(href || "");
+  const m = raw.match(
+    /^https:\/\/www\.google\.com\/url\?q=([^&]+)/);
+  if (m) {
+    try { return decodeURIComponent(m[1]); }
+    catch (e) { return raw; }
+  }
+  return raw;
+}
+
+/* An event chip's eid: base64url of the two token form
+   "<event id> <calendar id>", the shape Google's own
+   htmlLink carries. */
+function docChipEventEid(eventId, calId) {
+  let out = "";
+  try {
+    out = btoa(String(eventId) + " " + String(calId));
+  } catch (e) { return ""; }
+  return out.replace(/\+/g, "-").replace(/\//g, "_")
+    .replace(/=+$/, "");
+}
+
+/* The two tokens an eid decodes to, or null when it
+   decodes to anything else (one token, three tokens,
+   an empty side, undecodable bytes): such an eid is
+   not the app's form and names no chip. */
+function docChipEventFromEid(eid) {
+  let s = String(eid || "").replace(/-/g, "+")
+    .replace(/_/g, "/");
+  while (s.length % 4) { s += "="; }
+  let raw = "";
+  try { raw = atob(s); } catch (e) { return null; }
+  const cut = raw.indexOf(" ");
+  if (cut <= 0 || cut === raw.length - 1) { return null; }
+  const eventId = raw.slice(0, cut);
+  const calId = raw.slice(cut + 1);
+  if (!eventId || !calId || /\s/.test(eventId) ||
+      /\s/.test(calId)) {
+    return null;
+  }
+  return { eventId: eventId, calId: calId };
+}
+
+/* The event an address names, judged against the one
+   calendar event form, or null. The query is parsed by
+   hand so a base64 eid keeps its characters (a form
+   decoder would turn its plus signs into spaces). */
+function docChipEventFromHref(href) {
+  const prefix = "https://www.google.com/calendar/event?";
+  if (String(href || "").indexOf(prefix) !== 0) {
+    return null;
+  }
+  const query = String(href).slice(prefix.length)
+    .split("#")[0];
+  const parts = query.split("&");
+  for (let i = 0; i < parts.length; i++) {
+    const eq = parts[i].indexOf("=");
+    if (eq < 0) { continue; }
+    if (parts[i].slice(0, eq) !== "eid") { continue; }
+    let raw = parts[i].slice(eq + 1);
+    try { raw = decodeURIComponent(raw); }
+    catch (e) { return null; }
+    return docChipEventFromEid(raw);
+  }
+  return null;
+}
+
+/* An email chip standing where a link stood: the born
+   chip's own shape (buildMailChipEl's), its identity
+   the recovered message id, its face the label the
+   link carried. */
+function docMailChipFromLink(id, label) {
+  const chip = document.createElement("span");
+  chip.className = "ss-mail-chip";
+  chip.setAttribute("contenteditable", "false");
+  chip.setAttribute("data-ss-mail-id", id);
+  chip.title = label;
+  const icon = document.createElement("span");
+  icon.className = "ss-mail-chip-icon";
+  icon.setAttribute("aria-hidden", "true");
+  icon.innerHTML =
+    typeof MAIL_CHIP_ICON === "string" ? MAIL_CHIP_ICON : "";
+  chip.appendChild(icon);
+  const lab = document.createElement("span");
+  lab.className = "ss-mail-chip-label";
+  lab.textContent = label;
+  chip.appendChild(lab);
+  return chip;
+}
+
+/* An event chip standing where a link stood: the born
+   chip's shape (buildEventChipEl's) minus the start,
+   which the link cannot carry; the load path's
+   enrichment (below) asks the calendar for it. Its
+   face is the label the link carried, exactly. */
+function docEventChipFromLink(calId, eventId, label) {
+  const chip = document.createElement("span");
+  chip.className = "ss-event-chip";
+  chip.setAttribute("contenteditable", "false");
+  chip.setAttribute("data-ss-event-cal", calId);
+  chip.setAttribute("data-ss-event-id", eventId);
+  chip.title = label;
+  const dot = document.createElement("span");
+  dot.className = "ss-event-chip-dot";
+  dot.setAttribute("aria-hidden", "true");
+  chip.appendChild(dot);
+  const lab = document.createElement("span");
+  lab.className = "ss-event-chip-label";
+  lab.textContent = label;
+  chip.appendChild(lab);
+  return chip;
+}
+
+/* The save side of the crossing, run on the upload
+   holder inside docBuildUploadHtml: every chip in the
+   body becomes the link it really is, or its hashtag
+   text. The note's own body is never touched (the
+   holder is the upload's copy). */
+function docTranslateChipsForUpload(holder) {
+  holder.querySelectorAll("a.ss-note-link")
+    .forEach(function (a) {
+      const targetId = noteLinkIdOf(a);
+      if (!targetId) { return; }
+      const target = findNoteById(targetId);
+      if (!target || !isDocBackedNote(target)) { return; }
+      const docId = sanitizeDocId(target.docId);
+      if (!docId) { return; }
+      a.setAttribute("href",
+        "https://docs.google.com/document/d/" + docId +
+        "/edit");
+      a.removeAttribute("class");
+      a.removeAttribute("data-ss-link-view");
+    });
+  holder.querySelectorAll(".ss-mail-chip")
+    .forEach(function (el) {
+      const id = el.getAttribute("data-ss-mail-id") || "";
+      const labelEl = el.querySelector(
+        ".ss-mail-chip-label");
+      const label = labelEl ? labelEl.textContent
+        : (el.textContent || "");
+      if (!id) {
+        el.replaceWith(document.createTextNode(label));
+        return;
+      }
+      const a = document.createElement("a");
+      a.setAttribute("href",
+        "https://mail.google.com/mail/u/0/#inbox/" + id);
+      a.textContent = label;
+      el.replaceWith(a);
+    });
+  holder.querySelectorAll(".ss-event-chip")
+    .forEach(function (el) {
+      const calId = el.getAttribute(
+        "data-ss-event-cal") || "";
+      const eventId = el.getAttribute(
+        "data-ss-event-id") || "";
+      const labelEl = el.querySelector(
+        ".ss-event-chip-label");
+      const label = labelEl ? labelEl.textContent
+        : (el.textContent || "");
+      const eid = (calId && eventId)
+        ? docChipEventEid(eventId, calId) : "";
+      if (!eid) {
+        el.replaceWith(document.createTextNode(label));
+        return;
+      }
+      const a = document.createElement("a");
+      a.setAttribute("href",
+        "https://www.google.com/calendar/event?eid=" +
+        eid);
+      a.textContent = label;
+      el.replaceWith(a);
+    });
+  holder.querySelectorAll(".ss-tag-pill")
+    .forEach(function (el) {
+      const tag = el.getAttribute("data-ss-tag") || "";
+      let text = el.textContent || "";
+      if (tag && text.indexOf("#") !== 0) {
+        text = "#" + tag;
+      }
+      el.replaceWith(document.createTextNode(text));
+    });
+}
+
+/* One anchor judged for the crossing back: the chip it
+   names, built fresh, or null when the anchor is not in
+   one of the app's forms (or names a note the catalog
+   does not hold as Doc-backed). */
+function docChipFromAnchor(a) {
+  const judged = docChipJudgeHref(a.getAttribute("href"));
+  const label = a.textContent || "";
+  const dm = judged.match(
+    /^https:\/\/docs\.google\.com\/document\/d\/([A-Za-z0-9_-]+)\/edit$/);
+  if (dm) {
+    const target = docNoteByDocId(dm[1]);
+    if (!target) { return null; }
+    const na = document.createElement("a");
+    na.setAttribute("href", "ssnote:" + target.id);
+    na.setAttribute("class", "ss-note-link");
+    na.setAttribute("title",
+      target.title || "Untitled note");
+    na.setAttribute("data-ss-link-view", "mention");
+    na.textContent = label;
+    return na;
+  }
+  const gm = judged.match(
+    /^https:\/\/mail\.google\.com\/mail\/u\/0\/#inbox\/([^\s/?&#]+)$/);
+  if (gm) { return docMailChipFromLink(gm[1], label); }
+  const ev = docChipEventFromHref(judged);
+  if (ev) {
+    return docEventChipFromLink(ev.calId, ev.eventId,
+      label);
+  }
+  return null;
+}
+
+/* Dress one text node's hashtag tokens as tag pills,
+   for the tags the note itself carries: a token is a
+   hashtag standing at the start of the text or after
+   whitespace, ending where a tag character ends, and
+   the pill it becomes is the born pill's shape
+   (pickTagLinkRow's). Returns whether anything was
+   dressed. */
+function docDressHashtagsInTextNode(textNode, pattern) {
+  const text = textNode.nodeValue;
+  pattern.lastIndex = 0;
+  const frag = document.createDocumentFragment();
+  let last = 0;
+  let any = false;
+  let m;
+  while ((m = pattern.exec(text)) !== null) {
+    const start = m.index + m[1].length;
+    const end = start + 1 + m[2].length;
+    if (start > last) {
+      frag.appendChild(document.createTextNode(
+        text.slice(last, start)));
+    }
+    const pill = document.createElement("span");
+    pill.className = "ss-tag-pill";
+    pill.setAttribute("contenteditable", "false");
+    pill.setAttribute("data-ss-tag", m[2]);
+    pill.textContent = "#" + m[2];
+    frag.appendChild(pill);
+    last = end;
+    any = true;
+  }
+  if (!any) { return false; }
+  if (last < text.length) {
+    frag.appendChild(document.createTextNode(
+      text.slice(last)));
+  }
+  textNode.replaceWith(frag);
+  return true;
+}
+
+/* The hashtag half of the open crossing: walk the
+   body's text (never inside a link, a chip, a pill, or
+   any non-editable island) and dress the tokens naming
+   the note's own tags. */
+function docDressTagHashtags(holder, tags) {
+  const names = (tags || []).filter(function (t) {
+    return typeof t === "string" && !!t;
+  }).sort(function (a, b) { return b.length - a.length; });
+  if (!names.length) { return false; }
+  const escaped = names.map(function (t) {
+    /* The escape wears a function replacement, not the
+       dollar form: the suite's assembler (and the old
+       standalone bundler) passes file text through a
+       replacement string, where a dollar sequence in
+       the source would be read as an instruction. */
+    return t.replace(/[.*+?^${}()|[\]\\]/g,
+      function (c) { return "\\" + c; });
+  });
+  const pattern = new RegExp("(^|\\s)#(" +
+    escaped.join("|") + ")(?![A-Za-z0-9_-])", "g");
+  const walker = document.createTreeWalker(holder,
+    NodeFilter.SHOW_TEXT, {
+      acceptNode: function (node) {
+        if (!node.nodeValue ||
+            node.nodeValue.indexOf("#") < 0) {
+          return NodeFilter.FILTER_REJECT;
+        }
+        let p = node.parentNode;
+        while (p && p !== holder) {
+          if (p.nodeType === 1) {
+            if (p.tagName === "A" ||
+                p.tagName === "SCRIPT" ||
+                p.tagName === "STYLE" ||
+                p.getAttribute("contenteditable") ===
+                  "false" ||
+                (p.classList && (
+                  p.classList.contains("ss-note-link") ||
+                  p.classList.contains("ss-mail-chip") ||
+                  p.classList.contains("ss-event-chip") ||
+                  p.classList.contains("ss-tag-pill")))) {
+              return NodeFilter.FILTER_REJECT;
+            }
+          }
+          p = p.parentNode;
+        }
+        return NodeFilter.FILTER_ACCEPT;
+      }
+    });
+  const nodes = [];
+  let n;
+  while ((n = walker.nextNode())) { nodes.push(n); }
+  let changed = false;
+  nodes.forEach(function (textNode) {
+    if (docDressHashtagsInTextNode(textNode, pattern)) {
+      changed = true;
+    }
+  });
+  return changed;
+}
+
+/* The open side of the crossing, run on a body the Doc
+   converter produced (docLoadNoteBody is its one
+   caller): links in the app's own forms are dressed
+   back into pills, and hashtag text naming one of the
+   note's own tags is dressed as its pill. A body with
+   no chip form in it comes back byte-identical: the
+   holder is only serialized when something changed. */
+function docReformChipLinks(html, note) {
+  const src = String(html == null ? "" : html);
+  if (!src) { return src; }
+  const holder = document.createElement("div");
+  holder.innerHTML = src;
+  let changed = false;
+  const anchors = Array.prototype.slice.call(
+    holder.querySelectorAll("a[href]"));
+  anchors.forEach(function (a) {
+    if (!holder.contains(a)) { return; }
+    const chip = docChipFromAnchor(a);
+    if (chip) {
+      a.replaceWith(chip);
+      changed = true;
+    }
+  });
+  if (note && Array.isArray(note.tags) &&
+      note.tags.length) {
+    if (docDressTagHashtags(holder, note.tags)) {
+      changed = true;
+    }
+  }
+  return changed ? holder.innerHTML : src;
+}
+
+/* The enrichment: a re-formed event chip stands with
+   its calendar and event ids but no start, because the
+   link it crossed as cannot carry one. The calendar
+   module is asked for the event itself (the chip
+   click's own fetch, gcalFetchEventById); an event it
+   vouches for replaces the chip with the full born
+   chip (buildEventChipEl's face, start included), and
+   anything else (a gone event, a failed fetch, no
+   calendar module) leaves the link faced chip exactly
+   as re-formed, its start honestly absent rather than
+   invented. Fail soft throughout: the note's load
+   never waits on this beyond the asks themselves, and
+   a note with no bare event chips spends none. */
+async function docEnrichReformedEventChips(note) {
+  if (!note || !note.body) { return; }
+  if (typeof gcalFetchEventById !== "function" ||
+      typeof buildEventChipEl !== "function") { return; }
+  const holder = document.createElement("div");
+  holder.innerHTML = note.body;
+  const bare = Array.prototype.slice.call(
+    holder.querySelectorAll("span.ss-event-chip"))
+    .filter(function (c) {
+      return !c.getAttribute("data-ss-event-start");
+    });
+  if (!bare.length) { return; }
+  const seen = {};
+  let changed = false;
+  for (let i = 0; i < bare.length; i++) {
+    const calId = bare[i].getAttribute(
+      "data-ss-event-cal") || "";
+    const eventId = bare[i].getAttribute(
+      "data-ss-event-id") || "";
+    if (!calId || !eventId) { continue; }
+    const key = calId + "|" + eventId;
+    if (!(key in seen)) {
+      let ev = null;
+      try {
+        const got = await gcalFetchEventById(calId,
+          eventId);
+        if (got && got.outcome === "ok" && got.ev) {
+          ev = got.ev;
+        }
+      } catch (e) { ev = null; }
+      seen[key] = ev;
+    }
+    if (seen[key]) {
+      bare[i].replaceWith(buildEventChipEl(seen[key]));
+      changed = true;
+    }
+  }
+  if (changed) { note.body = holder.innerHTML; }
+}
+
 async function docBuildUploadHtml(note) {
   const holder = document.createElement("div");
   holder.innerHTML = note.body || "";
@@ -5136,6 +5626,11 @@ async function docBuildUploadHtml(note) {
     .forEach(function (ul) {
       ul.removeAttribute("class");
     });
+  /* v2.134: the chips cross as the links they really
+     are (see the chips section above); this is the
+     upload's last transformation, so what leaves is
+     exactly what was judged. */
+  docTranslateChipsForUpload(holder);
   return "<!DOCTYPE html><html><head>" +
     "<meta charset=\"utf-8\"></head><body>" +
     holder.innerHTML + "</body></html>";

@@ -2434,16 +2434,31 @@ body.dark .modal:hover::-webkit-scrollbar-thumb{
    Preview faces keep their block card dress: their
    rules key on two attributes and outrank this one.
    Both surfaces, both themes through the standing
-   tokens. */
+   tokens.
+   v2.134: the four pills (this note link, the event
+   chip, the mail chip, the tag pill) now share ONE box:
+   the same padding (1px 10px 1px 7px, the majority
+   measure the tag pill's old 0 9px never matched), the
+   same .92em size, an explicit shared line-height of
+   1.4 (never the dress's own, so the box cannot change
+   height between the app dress and the Doc dress), the
+   same 1px border and 20px radius, and
+   vertical-align:middle, so a row of pills stands at
+   one height on one center line. Each kind keeps its
+   own face (the tag pill's accent ground, the chips'
+   dot and glyph, this anchor's 320px cap and its own
+   ellipsis, the reason it stays inline-block while the
+   chips stand inline-flex around their inner spans);
+   only the box is shared. */
 #noteBody a.ss-note-link,
 .home-scratch-body a.ss-note-link{
   display:inline-block;
   border:1px solid var(--border);background:var(--soft);
   color:var(--text);border-radius:20px;
   padding:1px 10px 1px 7px;margin:0 1px;
-  font-size:.92em;cursor:pointer;white-space:nowrap;
-  vertical-align:baseline;user-select:none;
-  text-decoration:none;max-width:320px;
+  font-size:.92em;line-height:1.4;cursor:pointer;
+  white-space:nowrap;vertical-align:middle;
+  user-select:none;text-decoration:none;max-width:320px;
   overflow:hidden;text-overflow:ellipsis;
 }
 #noteBody a.ss-note-link:hover,
@@ -4563,8 +4578,9 @@ body.dark .task-cal-more{color:var(--accent);}
   display:inline-flex;align-items:center;gap:6px;
   border:1px solid var(--border);background:var(--soft);
   border-radius:20px;padding:1px 10px 1px 7px;margin:0 1px;
-  font-size:.92em;cursor:pointer;white-space:nowrap;
-  vertical-align:baseline;user-select:none;
+  font-size:.92em;line-height:1.4;cursor:pointer;
+  white-space:nowrap;vertical-align:middle;
+  user-select:none;
 }
 #noteBody .ss-event-chip:hover,
 .home-scratch-body .ss-event-chip:hover{border-color:var(--accent);}
@@ -4640,8 +4656,9 @@ body.dark .task-cal-more{color:var(--accent);}
 .home-scratch-body .ss-tag-pill{
   display:inline-block;border:1px solid var(--border);
   background:var(--accent-soft);color:var(--text);
-  border-radius:20px;padding:0 9px;margin:0 1px;
-  font-size:.92em;cursor:pointer;white-space:nowrap;
+  border-radius:20px;padding:1px 10px 1px 7px;margin:0 1px;
+  font-size:.92em;line-height:1.4;cursor:pointer;
+  white-space:nowrap;vertical-align:middle;
   user-select:none;
 }
 #noteBody .ss-tag-pill:hover,
@@ -4875,8 +4892,9 @@ body.dark .task-cal-more{color:var(--accent);}
   display:inline-flex;align-items:center;gap:6px;
   border:1px solid var(--border);background:var(--soft);
   border-radius:20px;padding:1px 10px 1px 7px;margin:0 1px;
-  font-size:.92em;cursor:pointer;white-space:nowrap;
-  vertical-align:baseline;user-select:none;
+  font-size:.92em;line-height:1.4;cursor:pointer;
+  white-space:nowrap;vertical-align:middle;
+  user-select:none;
 }
 #noteBody .ss-mail-chip:hover,
 .home-scratch-body .ss-mail-chip:hover{border-color:var(--accent);}
