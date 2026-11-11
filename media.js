@@ -2387,7 +2387,26 @@ function docFindGlyphChecklistRuns(docJson, kinds) {
       current = null;
       return;
     }
+    /* v2.129: the glyph run is measured on the
+       paragraph's text without its terminating
+       newline (every document paragraph's text ends
+       with the one newline that ends the paragraph;
+       it is the paragraph's, not the item's). An
+       empty checklist item imports as the glyph alone
+       before that newline (Google's importer trims
+       the trailing space the upload carried), and the
+       old measurement let the optional whitespace
+       after the glyph eat the newline itself, so the
+       delete the post-pass sent removed the glyph AND
+       the newline and the empty item merged into the
+       item after it and was gone (the CAD Testing
+       Checklist's lost 319th item, proven from the
+       conversion run's captured document JSON and
+       post-pass requests). Measured without the
+       newline, a bare glyph measures 1, a glyph and
+       its space before real text still measure 2. */
     const m = docJsonParagraphText(par)
+      .replace(/\n$/, "")
       .match(/^\s*(☐|☑|✓|✔)\s?/);
     if (!m) { current = null; return; }
     const item = {
@@ -3129,8 +3148,46 @@ function docConvertBlocks(el, emph, ctx) {
            all wearing the list's own class name: gather
            the whole run (formatting whitespace between
            the stretches is not content) and rebuild the
-           one nested list it describes. */
+           one nested list it describes.
+           v2.129: a list Google's HTML importer built
+           from nested HTML does not keep one id either:
+           each deeper level stands as its own document
+           list (its own id) whose items carry the
+           deeper level, and the parent level's stretches
+           resume under the parent's id after them (the
+           two Testing Checklists' Docs stand exactly
+           so). The run therefore also gathers a stretch
+           wearing a new id when it sits deeper than the
+           stretch before it, or deeper than the run's
+           first stretch (a fragment still inside this
+           list's nesting), and any stretch whose id the
+           run already holds (a level resuming after its
+           sublist). A stretch at the run's own level or
+           shallower under a new id is a different list
+           standing next to this one and ends the run,
+           so two lists in a row stay two, and a checklist
+           whose items resume after a nested stretch
+           stands as the editor's own bodies stand (the
+           resumed items in a following list element),
+           the segmentation the tick record is captured
+           in. One exception, for a run that opens on a
+           numbered list: a stretch returning to the
+           run's first level after the run descended
+           joins the run even under a new id, because a
+           numbered item carries its position in the
+           rendering, so a resumed stretch standing as
+           its own list would renumber from one. A second
+           numbered list starting fresh beside the first,
+           with no descent between them, still ends the
+           run, so a numbering restart keeps its
+           restart. */
         const run = [child];
+        const runIds = Object.create(null);
+        runIds[seg.id] = true;
+        const baseLevel = seg.level;
+        const runNumbered = child.tagName === "OL";
+        let prevLevel = seg.level;
+        let descended = false;
         let j = i + 1;
         while (j < kids.length) {
           const sib = kids[j];
@@ -3143,8 +3200,18 @@ function docConvertBlocks(el, emph, ctx) {
               (sib.tagName === "UL" ||
                sib.tagName === "OL")) {
             const s2 = docListSegment(sib);
-            if (s2 && s2.id === seg.id) {
+            if (s2 && (runIds[s2.id] ||
+                s2.level > prevLevel ||
+                s2.level > baseLevel ||
+                (runNumbered && descended &&
+                 s2.level === baseLevel &&
+                 prevLevel > s2.level))) {
               run.push(sib);
+              runIds[s2.id] = true;
+              if (s2.level > baseLevel) {
+                descended = true;
+              }
+              prevLevel = s2.level;
               j++;
               continue;
             }
@@ -3461,11 +3528,24 @@ function docConvertListRun(run, emph, ctx) {
   /* Flatten the run to items. Depth is the item's
      segment level judged against the run's shallowest;
      an item whose own left margin steps deeper than
-     its segment (a level the export folded into the
-     segment above it) rides the margin instead: Google
-     steps a level by 18pt of margin past the list's
-     first level at 18pt. */
-  let minMargin = null;
+     the other items of ITS OWN segment (a level the
+     export folded into the segment above it) rides the
+     margin instead. The margin is judged inside the
+     segment, never against the whole run: how many
+     points one level steps is the Doc's own indent
+     (18pt in the documents the v2.125 pass measured,
+     30pt in the CAD Testing Checklist's Doc, whose
+     levels stand at 30, 60, and 90pt), and v2.129's
+     gathered runs join fragments whose ids differ, so
+     a fragment's level can sit at a margin another
+     list's deeper level uses. Inside one segment the
+     items of one level share one margin, so a step
+     past the segment's own least margin, measured in
+     the run's own level step (the least gap between
+     the levels' least margins), is a folded level and
+     nothing else. */
+  const segMinMargin = [];
+  const levelBase = {};
   const raw = [];
   run.forEach(function (el, ri) {
     const seg = segs[ri];
@@ -3479,11 +3559,18 @@ function docConvertListRun(run, emph, ctx) {
       const ml = docCssLength(decls["margin-left"]);
       const val = ml ? parseFloat(ml) *
         (/px$/.test(ml) ? 72 / 96 : 1) : null;
-      if (val !== null &&
-          (minMargin === null || val < minMargin)) {
-        minMargin = val;
+      if (val !== null) {
+        if (segMinMargin[ri] === undefined ||
+            val < segMinMargin[ri]) {
+          segMinMargin[ri] = val;
+        }
+        if (seg && (levelBase[seg.level] === undefined ||
+            val < levelBase[seg.level])) {
+          levelBase[seg.level] = val;
+        }
       }
       raw.push({ li: child, seg: seg, rule: rule,
+        segIndex: ri,
         listEl: el, marginVal: val,
         /* v2.127: the item's own leading glyph, read
            only (nothing is consumed here; the item
@@ -3497,11 +3584,24 @@ function docConvertListRun(run, emph, ctx) {
         glyphState: docLiGlyphState(child) });
     });
   });
+  const levelKeys = Object.keys(levelBase)
+    .map(Number).sort(function (a, b) { return a - b; });
+  let marginStep = 0;
+  for (let li2 = 1; li2 < levelKeys.length; li2++) {
+    const gap = levelBase[levelKeys[li2]] -
+      levelBase[levelKeys[li2 - 1]];
+    if (gap > 0 &&
+        (marginStep === 0 || gap < marginStep)) {
+      marginStep = gap;
+    }
+  }
+  if (!marginStep) { marginStep = 18; }
   const items = raw.map(function (it) {
     let depth = it.seg ? it.seg.level - minLevel : 0;
-    if (it.marginVal !== null && minMargin !== null) {
-      const byMargin = Math.round(
-        (it.marginVal - minMargin) / 18);
+    const segMin = segMinMargin[it.segIndex];
+    if (it.marginVal !== null && segMin !== undefined) {
+      const byMargin = depth + Math.round(
+        (it.marginVal - segMin) / marginStep);
       depth = Math.max(depth, byMargin);
     }
     it.depth = Math.max(0, depth);
@@ -4048,9 +4148,17 @@ function docTickItemChecked(li) {
 /* The tick record one body carries (the shape
    sanitizeDocTicks in store.js judges), or null when
    no box in it stands checked. Every checklist in the
-   body is recorded, nested ones included, in document
-   order: the same enumeration docApplyTickMemory
-   matches against. */
+   body that holds items is recorded, nested ones
+   included, in document order: the same enumeration
+   docApplyTickMemory matches against. A checklist
+   holding no items is not recorded (v2.129): it has
+   no ticks to remember, and a body can carry a stray
+   empty checklist the editor left behind (the CAD
+   Testing Checklist's stored body carries two) that
+   no Doc round trip reproduces, so recording it
+   shifted every later list in the record one place
+   away from the list the converter builds for it and
+   those lists' ticks stopped landing. */
 function docTicksFromBody(body) {
   if (!body || body.indexOf("ss-checklist") < 0) {
     return null;
@@ -4069,7 +4177,7 @@ function docTicksFromBody(body) {
       items.push({ t: docTickItemText(lis[i]),
         c: checked });
     }
-    lists.push({ items: items });
+    if (items.length) { lists.push({ items: items }); }
   }
   if (!anyChecked) { return null; }
   return { v: 1, lists: lists };
@@ -4097,9 +4205,13 @@ function docTicksFromBody(body) {
      and the items standing around a removed one gain
      no tick from a neighbor, and a removed item's tick
      simply has nowhere to land. Matching never crosses
-     lists: list N of the body answers to list N of the
+     lists: the Nth item-holding checklist of the body
+     answers to the Nth item-holding list of the
      record, in the document order both were captured
-     in. */
+     in. Itemless lists answer to nothing on either
+     side (v2.129, the same repair docTicksFromBody
+     carries): a record written before it can still
+     hold an empty list, and it claims no body list. */
 function docApplyTickMemory(note, body) {
   const record = sanitizeDocTicks(note && note.docTicks);
   if (!record || !body ||
@@ -4108,11 +4220,19 @@ function docApplyTickMemory(note, body) {
   }
   const holder = document.createElement("div");
   holder.innerHTML = body;
-  const uls = holder.querySelectorAll("ul.ss-checklist");
+  const allUls = holder.querySelectorAll("ul.ss-checklist");
+  const uls = [];
+  for (let q = 0; q < allUls.length; q++) {
+    if (docTickListItems(allUls[q]).length) {
+      uls.push(allUls[q]);
+    }
+  }
+  const memLists = (record.lists || []).filter(
+    function (l) { return l && l.items && l.items.length; });
   let changed = false;
   for (let u = 0; u < uls.length; u++) {
-    const mem = record.lists[u];
-    if (!mem || !mem.items) { continue; }
+    const mem = memLists[u];
+    if (!mem) { continue; }
     const lis = docTickListItems(uls[u]);
     const texts = lis.map(function (li) {
       return docTickItemText(li);
