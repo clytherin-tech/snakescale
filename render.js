@@ -4270,6 +4270,96 @@ function renderNoteList() {
    -------------------------------------------------------------------------- */
 let syncOpenNoteRefresh = null;
 
+/* v2.132: a refused refill is remembered, and retried.
+   Until now, when a fetched body differed and the
+   editor comparison below refused the in-place refill
+   (the editor held anything the baseline did not: real
+   typing, a tags edit in flight, a canonical form that
+   does not round trip), the refusal was final for as
+   long as the reader stayed on the note. The fetch had
+   already landed the fresh body on the note object,
+   and both drivers (a sync's load, the poll's tick)
+   had already re-remembered the baseline FROM that
+   body, so every later judgment compared the fresh
+   body against itself and saw nothing to retry with.
+   The screen kept the old text until a note switch or
+   a restart, silently. The refusal now stashes the
+   pre-change context here, by note id, with the
+   markers and the content the fetch landed, and the
+   retry below re-arms that exact context when a later
+   moment (a poll tick, a visibility return, an
+   autosave settle, a switch back in) finds the note
+   open again. The dirty editor is still never
+   overwritten: the retry is the same judgment run
+   again, and it lands only when the editor has
+   settled back to the stashed baseline. The stash
+   clears when the refill lands, when a switch fill
+   shows the body, when the note's own save takes
+   ownership of the outcome, or when a newer fetch
+   replaces the stashed one (a refusal under a newer
+   context simply re-stashes). */
+const pendingNoteRefills = Object.create(null);
+
+function stashPendingNoteRefill(note, ctx) {
+  pendingNoteRefills[note.id] = {
+    ctx: ctx,
+    sha: note.sha || null,
+    docModifiedTime: note.docModifiedTime || null,
+    fetched: noteContentSnapshot(note)
+  };
+}
+
+function clearPendingNoteRefill(id) {
+  if (id && pendingNoteRefills[id]) {
+    delete pendingNoteRefills[id];
+  }
+}
+
+/* Re-judge a refused refill for the open note, if one
+   stands. The note must still hold the very body the
+   stash describes: a save or a newer fetch since the
+   refusal has moved its markers or replaced its
+   content, and either one owns the outcome, so the
+   stash clears instead of judging. A landing clears
+   the stash in renderEditor's fill below; a renewed
+   refusal re-stashes under the same context. */
+function retryPendingNoteRefill() {
+  const note = (typeof currentNote === "function")
+    ? currentNote() : null;
+  if (!note) { return; }
+  const stash = pendingNoteRefills[note.id];
+  if (!stash) { return; }
+  if (renderEditor._forId !== note.id) { return; }
+  if ((note.sha || null) !== stash.sha ||
+      !versionTextContentEqual(stash.fetched,
+        noteContentSnapshot(note))) {
+    delete pendingNoteRefills[note.id];
+    return;
+  }
+  syncOpenNoteRefresh = stash.ctx;
+  try {
+    renderAll();
+  } finally {
+    syncOpenNoteRefresh = null;
+  }
+}
+
+/* The autosave settle hook (called from
+   runEditorAutosave in editor-tools.js): a pass that
+   SAVED the note hands the outcome to the save, so a
+   pending refill for it clears; a pass that landed
+   nothing (the untouched gate's no-op, a pause, a
+   failure) re-judges the pending refill with the
+   editor as the pass left it. */
+function settlePendingNoteRefill(note, saved) {
+  if (!note) { return; }
+  if (saved) { clearPendingNoteRefill(note.id); return; }
+  if (typeof currentNote === "function" &&
+      currentNote() && currentNote().id === note.id) {
+    retryPendingNoteRefill();
+  }
+}
+
 /* The pre-sync snapshot of the open note, taken by syncNow
    before its flush: the note's id, a clone of its last saved
    content baseline (null when the note somehow has none, in
@@ -4307,7 +4397,17 @@ function syncShouldRefillOpenNote(note) {
       .map(function (t) { return t.trim(); })
       .filter(function (t) { return t.length > 0; })
   };
-  return versionTextContentEqual(editorNow, ctx.baseline);
+  if (versionTextContentEqual(editorNow, ctx.baseline)) {
+    return true;
+  }
+  /* v2.132: the content changed and the editor is not
+     at the baseline: this refusal is the pending
+     refill case (see the stash above). The dirty
+     editor is never overwritten, today or on any
+     retry; the refusal is simply no longer silent
+     and final. */
+  stashPendingNoteRefill(note, ctx);
+  return false;
 }
 
 /* The caret as a character offset into a body's text: the
@@ -7362,6 +7462,11 @@ function renderEditor() {
   let returnView = null;
   let returnAtTop = false;
   if (renderEditor._forId !== note.id || syncRefill) {
+    /* v2.132: a fill, whether a note switch's or a
+       sync refill's landing, shows the note object's
+       body, so any pending refill for this note has
+       landed by being shown: its stash clears. */
+    clearPendingNoteRefill(note.id);
     if (syncRefill) { refillView = captureEditorViewState(); }
     else {
       returnView = recalledEditorViewState(note.id);

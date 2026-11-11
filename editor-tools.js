@@ -3019,6 +3019,12 @@ async function runEditorAutosave() {
        transcription for the open note can land at the
        card, and parked jobs for other notes can land in
        their stored bodies. */
+    /* v2.132: the autosave settle (see
+       settlePendingNoteRefill in render.js): this
+       no-op landing re-judges any pending refill. */
+    if (typeof settlePendingNoteRefill === "function") {
+      settlePendingNoteRefill(note, false);
+    }
     void drainParkedTranscripts();
     return "landed";
   }
@@ -3091,6 +3097,14 @@ async function runEditorAutosave() {
      themselves re-check the settlement, so a pass that
      landed nothing simply parks them again). */
   void drainParkedTranscripts();
+  /* v2.132: the autosave settle (see
+     settlePendingNoteRefill in render.js): a landed
+     save owns the note's outcome and clears any
+     pending refill; a pass that landed nothing
+     re-judges it. */
+  if (typeof settlePendingNoteRefill === "function") {
+    settlePendingNoteRefill(note, saveLanded);
+  }
   return saveLanded ? "landed" : (savePaused ? "held" : "failed");
 }
 

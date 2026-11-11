@@ -1703,11 +1703,72 @@ async function reconcileCatalogListings(catalog, listings) {
   const seenIds = Object.create(null);
   const out = { notes: [], trash: [], archive: [] };
 
+  /* v2.132: the Doc claims. A catalog entry that stands
+     Doc-backed claims its note id against the file pass:
+     the note's live form is its Doc, and a same id .md
+     still sitting in the folder (every converted note's
+     frozen fallback, kept on purpose) is NOT the note.
+     Until this build, take() claimed every .md before
+     the Doc pass ran, so a Doc-backed note with a
+     fallback beside it was downloaded, parsed, and
+     rebuilt as a file note on every load; the Doc pass
+     then skipped the id as already seen, and the Doc
+     was never judged at all. The app served the frozen
+     fallback forever while the catalog kept pointing
+     at the Doc: the Daily Time Log case of November 11,
+     2026, whose fallback read Total Hours 5.50 while
+     its Doc stood at 7.75, on every device and every
+     restart, because the cause is the store's shape
+     plus the claim order, not any device or session.
+     The claim set is keyed the way the entries stand:
+     notebook entries by their notebook slug and id,
+     trash and archive entries by collection and id.
+     A claimed .md is skipped whole below: never
+     downloaded, never parsed, never marked seen, so
+     the Doc pass runs for the id exactly as it does
+     for a Doc with no fallback. The file stays in the
+     store untouched; the load simply stops mistaking
+     it for the note while the catalog says Doc. */
+  const docClaims = Object.create(null);
+  (catalog.entries || []).forEach(function (entry) {
+    if (!entry || entry.backend !== "doc") { return; }
+    if (typeof entry.id !== "string" || !entry.id) {
+      return;
+    }
+    if (!sanitizeDocId(entry.docId)) { return; }
+    if (entry.collection === "notebook") {
+      docClaims["notebook|" + (entry.notebook || "") +
+        "|" + entry.id] = true;
+    } else if (entry.collection === "trash" ||
+        entry.collection === "archive") {
+      docClaims[entry.collection + "||" + entry.id] = true;
+    }
+  });
+  const claimedIds = Object.create(null);
+
   async function take(collection, slug, entries) {
     const listName = collection === "notebook" ? "notes" : collection;
     for (const entry of (entries || [])) {
       if (entry.isDir || !/\.md$/i.test(entry.name)) { continue; }
       const fallbackId = entry.name.replace(/\.md$/i, "");
+      /* v2.132: a Doc-claimed id's .md is the note's
+         frozen fallback, not the note (see the claim
+         set above): skip it whole and let the Doc pass
+         judge the id. A claimed id listed twice is the
+         same store corruption the duplicate signal
+         below exists for, so it signals too. */
+      const claimKey = collection === "notebook"
+        ? "notebook|" + slug + "|" + fallbackId
+        : collection + "||" + fallbackId;
+      if (docClaims[claimKey]) {
+        if (claimedIds[fallbackId]) {
+          throw catalogFallbackSignal(
+            "A note id appears twice in the store: " +
+            fallbackId);
+        }
+        claimedIds[fallbackId] = true;
+        continue;
+      }
       if (seenIds[fallbackId]) {
         throw catalogFallbackSignal(
           "A note id appears twice in the store: " + fallbackId);
@@ -1808,12 +1869,25 @@ async function reconcileCatalogListings(catalog, listings) {
     const prev = prevById[entry.id];
     const liveMark = docLiveTokens[entry.docId] || null;
     const liveToken = liveMark ? liveMark.token : null;
+    /* v2.132: the pair proof, hardened. Both modified
+       times present judge by their equality, as v2.127
+       left them. A missing modified time on either side
+       is proof only when the token is mtime based,
+       where token equality IS modified time equality
+       (the token is the modified time, restated). With
+       a rev: token and a missing modified time, the
+       pair is unproven and the shell refetches: a
+       standing revision can no longer carry a body
+       whose modified time was never judged. */
+    const pairMtimesOk = (liveMark && liveMark.modifiedTime &&
+        prev && prev.docModifiedTime)
+      ? liveMark.modifiedTime === prev.docModifiedTime
+      : (typeof liveToken === "string" &&
+         liveToken.indexOf("mtime:") === 0);
     if (prev && isDocBackedNote(prev) &&
         typeof prev.body === "string" &&
         liveToken && prev.sha &&
-        liveToken === prev.sha &&
-        (!liveMark.modifiedTime || !prev.docModifiedTime ||
-         liveMark.modifiedTime === prev.docModifiedTime)) {
+        liveToken === prev.sha && pairMtimesOk) {
       shell.body = prev.body;
       shell.bodyLoaded = true;
       shell.sha = liveToken;
@@ -1836,6 +1910,30 @@ async function reconcileCatalogListings(catalog, listings) {
   return out;
 }
 
+/* v2.132: the classic load honors the same Doc claims
+   as the reconcile (see the claim set in
+   reconcileCatalogListings). The claims here come from
+   the catalog read's Doc entry stash
+   (lastCatalogDocEntries, taken from any parseable
+   catalog, even one this load cannot use whole): a
+   stashed Doc entry claims its id, so the classic load
+   never produces a same id file note over it, and
+   mergeCatalogDocShells below joins the note as the
+   shell it is. A store with no readable catalog
+   stashes nothing, and the classic load behaves
+   exactly as it always has. */
+function classicDocClaimed(collection, slug, id) {
+  return lastCatalogDocEntries.some(function (stashed) {
+    if (!stashed || !stashed.entry ||
+        stashed.entry.id !== id) { return false; }
+    if (collection === "notebook") {
+      return stashed.collection === "notebook" &&
+        (stashed.entry.notebook || "") === (slug || "");
+    }
+    return stashed.collection === collection;
+  });
+}
+
 /* The classic load: every note body downloaded and parsed, as
    every load worked before v2.20. It runs when there is no
    usable catalog and whenever reconciliation declines, driven by
@@ -1847,11 +1945,16 @@ async function loadListingsClassic(listings) {
     const entries = listings.notebooks[nb.slug];
     for (const entry of (entries || [])) {
       if (entry.isDir || !/\.md$/i.test(entry.name)) { continue; }
+      const fallbackId = entry.name.replace(/\.md$/i, "");
+      /* v2.132: a Doc-claimed id's file is its frozen
+         fallback, not the note (see classicDocClaimed). */
+      if (classicDocClaimed("notebook", nb.slug, fallbackId)) {
+        continue;
+      }
       const file = await storeGetFile(
         "notebooks/" + nb.slug + "/" + entry.name);
       if (!file) { continue; }
       bootCountNoteDownload();   /* v2.21: the boot report's count */
-      const fallbackId = entry.name.replace(/\.md$/i, "");
       const note = parseNoteFile(file.text, file.token, fallbackId, false);
       if (!note.notebook) { note.notebook = nb.slug; }
       note.fileId = entry.fileId;
@@ -1861,10 +1964,13 @@ async function loadListingsClassic(listings) {
   const trashEntries = listings.trash;
   for (const entry of (trashEntries || [])) {
     if (entry.isDir || !/\.md$/i.test(entry.name)) { continue; }
+    const fallbackId = entry.name.replace(/\.md$/i, "");
+    if (classicDocClaimed("trash", null, fallbackId)) {
+      continue;
+    }
     const file = await storeGetFile("trash/" + entry.name);
     if (!file) { continue; }
     bootCountNoteDownload();   /* v2.21: the boot report's count */
-    const fallbackId = entry.name.replace(/\.md$/i, "");
     const note = parseNoteFile(file.text, file.token, fallbackId, true);
     note.fileId = entry.fileId;
     out.trash.push(note);
@@ -1877,10 +1983,13 @@ async function loadListingsClassic(listings) {
   const archiveEntries = listings.archive;
   for (const entry of (archiveEntries || [])) {
     if (entry.isDir || !/\.md$/i.test(entry.name)) { continue; }
+    const fallbackId = entry.name.replace(/\.md$/i, "");
+    if (classicDocClaimed("archive", null, fallbackId)) {
+      continue;
+    }
     const file = await storeGetFile("archive/" + entry.name);
     if (!file) { continue; }
     bootCountNoteDownload();   /* v2.21: the boot report's count */
-    const fallbackId = entry.name.replace(/\.md$/i, "");
     const note = parseNoteFile(file.text, file.token, fallbackId,
       false, true);
     note.fileId = entry.fileId;
@@ -1985,15 +2094,35 @@ function mergeCatalogDocShells(loaded) {
   const have = Object.create(null);
   [loaded.notes, loaded.trash, loaded.archive].forEach(
     function (list) {
-      (list || []).forEach(function (note) {
-        have[note.id] = true;
+      (list || []).forEach(function (note, index) {
+        have[note.id] = { list: list, index: index, note: note };
       });
     });
   lastCatalogDocEntries.forEach(function (stashed) {
-    if (have[stashed.entry.id]) { return; }
-    have[stashed.entry.id] = true;
-    loaded[stashed.listName].push(
-      noteFromCatalogEntry(stashed.entry, stashed.collection));
+    const found = have[stashed.entry.id];
+    if (found && isDocBackedNote(found.note)) { return; }
+    const shell = noteFromCatalogEntry(stashed.entry,
+      stashed.collection);
+    if (found) {
+      /* v2.132: a same id file note never wins over a
+         stashed Doc entry (see classicDocClaimed): the
+         shell takes its place in the list the file note
+         stood in. The classic load already skips claimed
+         files, so this is the belt to that suspender: a
+         file note that reached the lists anyway (its
+         folder's slug differs from the entry's, say)
+         still does not stand as the note. */
+      found.list[found.index] = shell;
+      have[stashed.entry.id] = {
+        list: found.list, index: found.index, note: shell
+      };
+      return;
+    }
+    have[stashed.entry.id] = {
+      list: loaded[stashed.listName],
+      index: loaded[stashed.listName].length, note: shell
+    };
+    loaded[stashed.listName].push(shell);
   });
 }
 

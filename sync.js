@@ -607,9 +607,11 @@ function saveCatalog() {
    fields stand in the written entry (backend, docId,
    docTicks, and the null fileId a Doc entry carries);
    every other field of the local entry (title, tags,
-   updated, preview, pinned, the reminder fields, the
-   revision token) still wins, so the stale session's
-   real edits land and only the downgrade is refused.
+   updated, preview, pinned, the reminder fields)
+   still wins, so the stale session's real edits land
+   and only the downgrade is refused. v2.132: the
+   stored revision token stands too; the merge below
+   says why a token is a backend marker, not an edit.
 
    The merge needs no exception path: no app flow
    turns a notebook-collection entry from Doc-backed
@@ -657,6 +659,22 @@ function catalogGuardMergedEntries(localEntries, storedEntries) {
     merged.backend = "doc";
     merged.docId = stored.docId;
     merged.fileId = null;
+    /* v2.132: the stored token stands with the pair.
+       Until now the local token won even in the
+       downgrade case, and a token is a backend marker,
+       not an edit: a session that had misread the note
+       from its fallback file (the case the v2.132
+       reconcile fix ends) wrote the FALLBACK FILE's
+       revision token into the stored entry, where it
+       stood under a Doc backend as false evidence
+       about the Doc; the field catalog carried exactly
+       that fingerprint. A stored entry with no usable
+       token leaves the merged entry tokenless rather
+       than keeping the file's token. Legitimate Doc
+       sessions are untouched: their local entries are
+       Doc-backed and never reach this branch. */
+    merged.token = (typeof stored.token === "string" &&
+      stored.token) ? stored.token : null;
     const ticks = sanitizeDocTicks(stored.docTicks);
     if (ticks) { merged.docTicks = ticks; }
     else { delete merged.docTicks; }

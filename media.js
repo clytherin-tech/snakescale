@@ -4680,6 +4680,15 @@ function refreshDocLivePoll() {
         if (visible && docLivePollTimer !== null) {
           docLivePollTick();
         }
+        /* v2.132: a visibility return also retries a
+           pending refill directly, so a note whose poll
+           does not run (a file-backed note a sync
+           changed, say) still lands its refused refill
+           when the reader comes back to the app. */
+        if (visible &&
+            typeof retryPendingNoteRefill === "function") {
+          retryPendingNoteRefill();
+        }
       });
   }
   const hidden = document.hidden ||
@@ -4692,6 +4701,16 @@ function refreshDocLivePoll() {
   docLivePollNoteId = note.id;
   docLivePollTimer = setInterval(docLivePollTick,
     DOC_LIVE_POLL_MS);
+  /* v2.132: a genuine target switch (an open, a return,
+     a re-arm as the app comes back to the front) judges
+     the Doc's live markers NOW, with one immediate tick
+     under the tick's own guards, instead of waiting out
+     the interval: opening and returning revalidate, as
+     a reader would expect them to. The early return
+     above keeps this to one metadata read per genuine
+     switch; the renders that merely re-judge the same
+     standing target spend nothing. */
+  docLivePollTick();
 }
 
 /* One poll tick: read the open Doc's live revision, and
@@ -4716,6 +4735,18 @@ async function docLivePollTick() {
   }
   docLivePollBusy = true;
   try {
+    /* v2.132: a refill an earlier fetch was refused
+       (the editor held unsaved work at the time) is
+       retried before this tick spends its read: the
+       retry judges the editor against the pre-change
+       baseline the refusal stashed, and lands the
+       fetched body if the editor has settled back to
+       it. It runs under the busy flag so the render it
+       may cause cannot double this tick (see
+       retryPendingNoteRefill in render.js). */
+    if (typeof retryPendingNoteRefill === "function") {
+      retryPendingNoteRefill();
+    }
     let meta = null;
     try {
       meta = await docApiJson(
@@ -4754,7 +4785,27 @@ async function docLivePollTick() {
     const mtimeMoved = !!liveModified &&
       !!note.docModifiedTime &&
       liveModified !== note.docModifiedTime;
-    if (!revMoved && !mtimeMoved) {
+    /* v2.132: the pair proof, hardened, the same rule
+       the reconcile's carry now applies. A missing
+       modified time on either side (a baseline that
+       predates the pair, or a metadata read without
+       one) is proof of nothing unless the token is
+       mtime based, where token equality IS modified
+       time equality. With a rev: token and no modified
+       time to judge, the pair is unproven: the tick
+       takes the refetch path below instead of standing
+       down, and it no longer adopts the live modified
+       time as the baseline sight unseen in that case.
+       The quiet adoption still stands where it is
+       proven: both markers present and unmoved, or an
+       mtime token standing equal. */
+    const mtimeMissing = !liveModified ||
+      !note.docModifiedTime;
+    const tokenIsMtime = !!liveToken &&
+      liveToken.indexOf("mtime:") === 0;
+    const pairProven = !revMoved && !mtimeMoved &&
+      (!mtimeMissing || tokenIsMtime);
+    if (pairProven) {
       if (liveModified && !note.docModifiedTime) {
         note.docModifiedTime = liveModified;
       }
