@@ -44,7 +44,7 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-11-11-SSN-V21320
+  BUILD STAMP: 2026-11-11-SSN-V21330
   Version: 2.106.0
 
   Revision history:
@@ -6521,11 +6521,24 @@
   <main id="editorpane">
     <div id="conflictBanner" class="hidden"><span class="conflict-text"></span> <button id="conflictReloadBtn" type="button" class="hidden">Reload note</button></div>
 
-    <!-- Shown when no note is selected. -->
+    <!-- Shown when no note is selected. The could not
+         load block inside it (v2.133) stands hidden until
+         renderEditor puts the load-error class on this
+         pane for a selected shell carrying a recorded
+         body load error; the class hides the standing
+         children and shows the block instead, so a note
+         that failed to load never wears the no selection
+         face, and the standing face is never rewritten. -->
     <div id="noNote" class="no-note">
       <div class="big">No note selected</div>
       <p>Pick a note from the list, or press New Note to start writing.</p>
       <p id="noNoteStorageLine">Everything you write is saved to the SnakeScale Notes folder in your own Google Drive as plain Markdown files, so your notes are never locked inside this app.</p>
+      <div id="noNoteError">
+        <div class="big">This note could not be loaded</div>
+        <p id="noNoteErrorText"></p>
+        <p>The note itself is safe, and nothing was changed. When you are ready, try loading it again.</p>
+        <p><button type="button" class="btn" id="noNoteRetryBtn">Retry</button></p>
+      </div>
     </div>
 
     <!-- The editor itself. -->

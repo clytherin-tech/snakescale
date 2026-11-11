@@ -3249,6 +3249,19 @@ body.dark .modal:hover::-webkit-scrollbar-thumb{
 #maximizeIcon svg{display:block;}
 .no-note{padding:50px 24px;text-align:center;color:var(--muted);}
 .no-note .big{font-size:19px;font-weight:800;color:var(--text);margin-bottom:8px;}
+/* v2.133: the could not load face inside the no note
+   pane. It stands hidden until renderEditor puts the
+   load-error class on #noNote for a shell carrying a
+   recorded load error; the class then hides the
+   standing children and shows this block in their
+   place, so the two faces never mix. Its heading
+   wears the pane's own .big rule, its text the pane's
+   themed colors, and its button the app's standard
+   themed button class, in dark and light alike. */
+#noNoteError{display:none;}
+#noNote.load-error #noNoteError{display:block;}
+#noNote.load-error>:not(#noNoteError){display:none;}
+#noNoteErrorText{overflow-wrap:break-word;}
 
 /* conflict banner */
 #conflictBanner{

@@ -7333,6 +7333,15 @@ function currentNote() {
   return findNoteById(state.selectedId);
 }
 
+/* v2.133: the could not load face's memory: the id and
+   message of the load error the editor pane is already
+   showing, so a failure that keeps failing renders its
+   face once instead of circling render, attempt,
+   render. It is set where the face renders (the shell
+   branch below) and cleared whenever the pane shows
+   anything else. */
+let loadErrorFaceKey = "";
+
 function renderEditor() {
   /* v2.123: the open Doc-backed note's near-live poll
      follows the open note (see refreshDocLivePoll in
@@ -7371,6 +7380,11 @@ function renderEditor() {
   }
   if (thingsWrap) { thingsWrap.classList.add("hidden"); }
   if (!note) {
+    /* v2.133: no note on screen means the standing
+       pane, never a could not load face left standing
+       by the note that was open before. */
+    noNote.classList.remove("load-error");
+    loadErrorFaceKey = "";
     noNote.classList.remove("hidden");
     wrap.classList.add("hidden");
     /* v2.124: no note on screen, so no Doc type dress
@@ -7402,10 +7416,69 @@ function renderEditor() {
      the real one. */
   if (note.bodyLoaded === false) {
     ensureNoteBodyLoaded(note).then(function () {
-      if (note.bodyLoaded !== false && state.selectedId === note.id) {
+      if (state.selectedId !== note.id) { return; }
+      if (note.bodyLoaded !== false) {
         renderEditor();
+        return;
+      }
+      /* v2.133: the load failed and its error stands
+         recorded on the note (ensureNoteBodyLoaded
+         keeps it as bodyLoadError). Render once more so
+         the could not load face below replaces the
+         standing pane and names the failure. The render
+         is keyed by the error itself: the face's own
+         render fires one more attempt, and when that
+         attempt fails with the same message the key
+         already stands, so nothing renders in a
+         circle. A different error renders fresh, and
+         so does the same note reached again after
+         another note, or no note, held the pane (both
+         clear the key). */
+      if (note.bodyLoadError) {
+        const key = note.id + "|" + note.bodyLoadError.message;
+        if (key !== loadErrorFaceKey) {
+          loadErrorFaceKey = key;
+          renderEditor();
+        }
       }
     });
+    /* v2.133: a shell carrying a recorded load error
+       shows the could not load face (the #noNoteError
+       block inside #noNote, switched by the load-error
+       class in styles.css): it names the failure in
+       the error's own words, with its HTTP status when
+       it carries one, states that the note itself is
+       safe and nothing was changed, and offers Retry.
+       The button is wired here, at render time, the
+       way the conflict banner's button is wired: its
+       handler loads the note again and then renders
+       what settled, so a retry works as many times as
+       it is pressed, and a load that lands clears the
+       error on the note and the face with it. A shell
+       with no recorded error (its load never ran, or
+       is still in flight) keeps the standing pane
+       exactly as it stood. */
+    const loadErr = note.bodyLoadError || null;
+    noNote.classList.toggle("load-error", !!loadErr);
+    if (loadErr) {
+      loadErrorFaceKey = note.id + "|" + loadErr.message;
+      const errText = document.getElementById("noNoteErrorText");
+      if (errText) {
+        errText.textContent = loadErr.message +
+          (loadErr.docHttpStatus ?
+            " (HTTP status " + loadErr.docHttpStatus + ")" : "");
+      }
+      const retryBtn = document.getElementById("noNoteRetryBtn");
+      if (retryBtn) {
+        retryBtn.onclick = function () {
+          ensureNoteBodyLoaded(note).then(function () {
+            renderEditor();
+          });
+        };
+      }
+    } else {
+      loadErrorFaceKey = "";
+    }
     noNote.classList.remove("hidden");
     wrap.classList.add("hidden");
     hideLinkBar();
@@ -7414,7 +7487,11 @@ function renderEditor() {
     closeNotebookMenu();
     return;
   }
+  /* v2.133: a loaded note is on screen, so no could
+     not load face stands and its key is forgotten. */
   noNote.classList.add("hidden");
+  noNote.classList.remove("load-error");
+  loadErrorFaceKey = "";
   wrap.classList.remove("hidden");
 
   /* v2.124: a Doc-backed note's page wears Google Docs

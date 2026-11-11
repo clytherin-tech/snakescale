@@ -1170,8 +1170,35 @@ function ensureNoteBodyLoaded(note) {
       }
       }
     } catch (err) {
+      /* v2.133: the failure is recorded on the note
+         itself, as plain data (an Error object would
+         not survive the local snapshot's JSON round
+         trip), so the editor can show a could not load
+         face naming what happened instead of the
+         standing no note pane; renderEditor reads
+         bodyLoadError in its shell branch. Until this
+         build the error was discarded here entirely:
+         not logged, not stored, not shown, so a Doc
+         fetch failing in a session left every
+         Doc-backed note wearing the same face as no
+         selection, forever (the open failure diagnosis
+         of November 11, 2026: the fetch was the
+         unhealthy part all along, and nothing anywhere
+         said so). The record is cleared on the success
+         path below, by whichever attempt lands. */
+      note.bodyLoadError = {
+        message: String(err && err.message ? err.message : err),
+        docHttpStatus: (err && err.docHttpStatus) || 0,
+        docNeedsConsent: !!(err && err.docNeedsConsent)
+      };
       return note;   /* still a shell; a later attempt can retry */
     }
+    /* v2.133: a landed load clears any recorded load
+       error with it, so the could not load face clears
+       wherever it showed, whichever attempt landed the
+       load: the pane's Retry, a note switch and back,
+       or a sync's own load of the shell. */
+    note.bodyLoadError = null;
     note.bodyLoaded = true;
     rememberLastSavedContent(note);
     saveCache();

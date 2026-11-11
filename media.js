@@ -2383,15 +2383,101 @@ function isDocNeedsConsentError(err) {
   return !!err && err.docNeedsConsent === true;
 }
 
+/* v2.133: the facts a failed response's body carries,
+   in Google's documented error shape: the body's own
+   message, and the reason string of every entry in its
+   errors list (error.errors[].reason, the field the
+   Drive API documents for telling one refusal from
+   another: rateLimitExceeded and userRateLimitExceeded
+   for quota, insufficientPermissions and its kin for
+   permission). A response body can be read exactly
+   once, and nothing anywhere else reads a 403's body,
+   so this helper owns that one read on the 403 path;
+   it never throws, and a body that cannot be read, or
+   carries no reason, comes back with an empty reason
+   list, which its caller treats as no evidence either
+   way. */
+async function docErrorBodyFacts(res) {
+  const facts = { message: "", reasons: [] };
+  try {
+    const j = await res.json();
+    const e = (j && j.error) || null;
+    if (e) {
+      if (typeof e.message === "string" && e.message) {
+        facts.message = e.message;
+      }
+      if (Array.isArray(e.errors)) {
+        e.errors.forEach(function (entry) {
+          if (entry && typeof entry.reason === "string" &&
+              entry.reason) {
+            facts.reasons.push(entry.reason);
+          }
+        });
+      }
+    }
+  } catch (readErr) {
+    /* The facts stay empty: the caller keeps the
+       standing judgment when the body gives it no
+       readable reason to judge by. */
+  }
+  return facts;
+}
+
+/* v2.133: the 403 reasons that are quota, not
+   permission. Google's rate limiter answers 403 too,
+   and a rate limit is a transient failure a retry can
+   outlast, not a missing grant. A 403 is judged
+   transient only when every reason its body carries
+   is one of these two; any other reason, or a mix,
+   keeps the consent judgment. */
+function docReasonsAreRateLimit(reasons) {
+  if (!reasons.length) { return false; }
+  return reasons.every(function (reason) {
+    return reason === "rateLimitExceeded" ||
+      reason === "userRateLimitExceeded";
+  });
+}
+
 /* One Doc API fetch on the calendar pattern: gdriveFetch
    supplies the token and its one silent renewal; a 403
    becomes the module's needs-consent state and a consent
-   error; any other non-ok response becomes an error
-   carrying the status and Google's own message when it
-   sent one. */
+   error, unless its error body's reasons are all rate
+   limit reasons, in which case it is a transient failure
+   like any other (v2.133: see the 403 branch below); any
+   other non-ok response becomes an error carrying the
+   status and Google's own message when it sent one. */
 async function docApiFetch(url, options) {
   const res = await gdriveFetch(url, options);
   if (res.status === 403) {
+    /* v2.133: a 403 is judged by its reason before it
+       is judged a missing permission. Google's rate
+       limiter answers 403 too (reason rateLimitExceeded
+       or userRateLimitExceeded in the error body), and
+       latching the needs-consent state for one of those
+       told the user to repair a permission that was
+       never missing, behind a consent toast that could
+       not help, while the failure stayed invisible
+       everywhere else. A rate limit 403 surfaces as an
+       ordinary retryable fetch failure instead: the
+       module's state takes the same unavailable step a
+       plain failure takes below, the thrown error
+       carries the status and Google's own message, and
+       its docNeedsConsent flag is cleared explicitly,
+       since docHttpError sets it for every 403. Any
+       other reason, a mix of reasons, or a body with no
+       readable reason falls through to the standing
+       consent behavior, exactly as it stood. */
+    const facts = await docErrorBodyFacts(res);
+    if (docReasonsAreRateLimit(facts.reasons)) {
+      if (docNotesStatus === "idle" ||
+          docNotesStatus === "ok") {
+        docNotesSetStatus("unavailable");
+      }
+      const limitErr = docHttpError(403, facts.message ||
+        "Google Doc request failed with status 403");
+      limitErr.docNeedsConsent = false;
+      throw limitErr;
+    }
     docNotesSetStatus("needs-consent");
     throw docHttpError(403,
       "Google refused this Doc request: Doc-backed notes" +
