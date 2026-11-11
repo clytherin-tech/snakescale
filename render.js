@@ -7274,6 +7274,10 @@ function renderEditor() {
   if (state.thingsNotebook) {
     noNote.classList.add("hidden");
     wrap.classList.add("hidden");
+    /* v2.124: the Doc type dress belongs to an open note;
+       the Things page owns the pane, so it comes off. */
+    document.getElementById("noteBody").classList.remove(
+      "ss-doc-body");
     hideLinkBar();
     hideTableMenu();
     hideCellMenu();
@@ -7286,6 +7290,10 @@ function renderEditor() {
   if (!note) {
     noNote.classList.remove("hidden");
     wrap.classList.add("hidden");
+    /* v2.124: no note on screen, so no Doc type dress
+       stands on the hidden editor either. */
+    document.getElementById("noteBody").classList.remove(
+      "ss-doc-body");
     /* v1.3.1: no note on screen, so no link popup either.
        v2.9: the popup's successor, the link bar, same rule. */
     hideLinkBar();
@@ -7325,6 +7333,16 @@ function renderEditor() {
   }
   noNote.classList.add("hidden");
   wrap.classList.remove("hidden");
+
+  /* v2.124: a Doc-backed note's page wears Google Docs
+     type (the ss-doc-body rules in styles.css); a file
+     note's page keeps the app's own type. The class is
+     judged here, on every render that shows a note, so
+     a note switch can never leave the wrong dress
+     standing, and it is cleared on the paths above
+     where the editor hides. */
+  document.getElementById("noteBody").classList.toggle(
+    "ss-doc-body", isDocBackedNote(note));
 
   /* v2.16: the auto-sync editor guard. runAutoSync arms it with
      the open note's id and storage revision before its sync;

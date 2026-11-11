@@ -3236,7 +3236,12 @@ async function docLivePollTick() {
    embedded the same way when the fetch succeeds, and
    crosses at its web address when it does not (Google's
    importer may or may not fetch a remote image; that is
-   the named gap for external images). */
+   the named gap for external images). v2.124: before
+   the wrap, the payload's paragraphs, headings, and
+   list items take Google's own spacing (see
+   docApplyGoogleSpacing), so the Doc Google renders
+   from this payload sits the way the note sat on
+   screen. */
 
 function blobToDataUri(blob) {
   return new Promise(function (resolve, reject) {
@@ -3256,6 +3261,51 @@ function docFigureWidthStyle(el) {
   const m = String(el.getAttribute("style") || "")
     .match(/width:\s*([0-9]+(?:\.[0-9]+)?)px/);
   return m ? " style=\"width: " + m[1] + "px;\"" : "";
+}
+
+/* The font size one block tag carries into a Doc, at
+   Google Docs' own defaults: body text (paragraphs
+   and list items) at 11pt, the headings at Google's
+   heading sizes. The note's title is the Doc's file
+   name, never a body element, so Google's 26pt Title
+   style has no element to land on here. */
+const DOC_GOOGLE_FONT_SIZE = {
+  P: "11pt", LI: "11pt",
+  H1: "20pt", H2: "16pt", H3: "14pt",
+  H4: "12pt", H5: "11pt", H6: "11pt"
+};
+
+/* The Google spacing a Doc save carries (v2.124): the
+   upload's paragraphs, headings, and list items take
+   the same spacing the open Doc-backed note wears on
+   screen (the ss-doc-body rules in styles.css), so
+   what Google renders after the round trip is what
+   the app showed: margins zero, line height 1.15,
+   Arial throughout, body text at 11pt and headings
+   at Google's own sizes. An element's own standing
+   declarations (an alignment, above all) survive:
+   the spacing merges over the parsed style, it never
+   replaces the style whole. This runs in the Doc
+   save's payload builder only; a file note's save
+   never passes this way and keeps its exact bytes. */
+function docApplyGoogleSpacing(holder) {
+  const els = holder.querySelectorAll(
+    "p, h1, h2, h3, h4, h5, h6, li");
+  for (let i = 0; i < els.length; i++) {
+    const el = els[i];
+    const decls = docParseStyleDecls(
+      el.getAttribute("style") || "");
+    decls["margin"] = "0";
+    decls["line-height"] = "1.15";
+    decls["font-family"] = "Arial, sans-serif";
+    decls["font-size"] =
+      DOC_GOOGLE_FONT_SIZE[el.tagName] || "11pt";
+    const parts = [];
+    Object.keys(decls).forEach(function (prop) {
+      parts.push(prop + ": " + decls[prop] + ";");
+    });
+    el.setAttribute("style", parts.join(" "));
+  }
 }
 
 async function docBuildUploadHtml(note) {
@@ -3310,6 +3360,7 @@ async function docBuildUploadHtml(note) {
       : "[Attachment: " +
         escapeHtml(record.name || "file") + "]";
   }
+  docApplyGoogleSpacing(holder);
   return "<!DOCTYPE html><html><head>" +
     "<meta charset=\"utf-8\"></head><body>" +
     holder.innerHTML + "</body></html>";

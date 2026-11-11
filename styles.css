@@ -5643,3 +5643,87 @@ body.dark .version-date{color:var(--accent);}
   .gate-card{padding:22px 16px 18px;}
   .gate-brand .wordmark{font-size:24px;}
 }
+
+/* ---------- v2.124: the white note page, and Google
+   Docs type for Doc-backed notes ----------
+   Chris's call (2026-11-10): the open note's document
+   area is a white page with dark text in BOTH themes,
+   while the app around it (sidebar, note lists and
+   cards, toolbars, dialogs, Home, Email, Calendar,
+   Tasks) keeps the Deep Forest theming exactly as it
+   is. The page is #noteBody itself, in its editable
+   state and its read-only state alike (the same
+   element with contenteditable off): white ground,
+   the light theme's ink, a page border and shadow,
+   and page padding in place of the old bare inset.
+   Every in-note element already dresses from the
+   theme tokens (text, muted, border, soft, surface,
+   accent-soft, shadow), so the page restates those
+   tokens at their light values on #noteBody alone:
+   custom properties resolve where they are used, so
+   body text and headings, links, the note link,
+   event, mail, and tag chips, checklist boxes and
+   the done strike, code blocks, tables and their
+   borders, highlight spans, blockquotes, dividers,
+   images and their captions, attachment cards,
+   encrypted passage blocks, the in-note task and
+   table of contents blocks, the caret, and the
+   selection all read on white exactly as they read
+   in the light theme, while the same furniture on
+   any chrome surface, the scratch pad included,
+   keeps following the app theme. The scratch pad is
+   a Home surface, not a note document, and is
+   deliberately not in this section. One literal
+   needed its own word, below: the dark theme's pale
+   provider label on an attachment card. Nothing
+   here changes a stored note: presentation only,
+   so a note opened and saved without edits keeps
+   its stored body exactly as it was. */
+#noteBody{
+  background:#FFFFFF;color:#10231A;caret-color:#10231A;
+  border:1px solid #C9D6C9;border-radius:6px;
+  box-shadow:0 1px 3px rgba(11,61,46,.18),
+    0 14px 34px rgba(11,61,46,.12);
+  padding:30px 38px 44px;
+  --bg:#F7F8F3;--surface:#FFFFFF;
+  --text:#10231A;--text-strong:#10231A;
+  --text-muted:#10231A;--muted:#5A6E5F;
+  --border:#C9D6C9;--soft:#DCE8DC;
+  --accent-soft:#DCE8DC;--selected:#DCE8DC;
+  --shadow:0 4px 18px rgba(11,61,46,.14);
+}
+/* The attachment card's provider pill is the one
+   in-note element the dark theme dresses with a
+   literal pale color (body.dark .ss-att-provider,
+   written for a dark card). On the white page the
+   card is white, so the pill takes the primary ink
+   it wears in the light theme. */
+#noteBody .ss-att-provider{color:var(--primary);}
+@media (max-width:700px){
+  #noteBody{padding:20px 16px 30px;}
+}
+/* A Doc-backed note open in the editor (renderEditor
+   stands the ss-doc-body class on #noteBody for
+   exactly those notes) wears Google Docs' default
+   type, scoped to that state only: Arial 11pt body
+   text, line height 1.15, no space after paragraphs
+   or lists, and Google's heading sizes. A file
+   note's page keeps the app's own type. The matching
+   spacing rides back to Google on save (see
+   docApplyGoogleSpacing in media.js), so the look
+   cannot drift on the round trip. This matches
+   Google's spacing and type defaults; it does not
+   claim Google's own renderer pixel for pixel. */
+#noteBody.ss-doc-body{
+  font-family:Arial,"Helvetica Neue",Helvetica,sans-serif;
+  font-size:11pt;line-height:1.15;
+}
+#noteBody.ss-doc-body p{margin:0;}
+#noteBody.ss-doc-body ul,
+#noteBody.ss-doc-body ol{margin-top:0;margin-bottom:0;}
+#noteBody.ss-doc-body h1{font-size:20pt;margin:0;}
+#noteBody.ss-doc-body h2{font-size:16pt;margin:0;}
+#noteBody.ss-doc-body h3{font-size:14pt;margin:0;}
+#noteBody.ss-doc-body h4{font-size:12pt;margin:0;}
+#noteBody.ss-doc-body h5{font-size:11pt;margin:0;}
+#noteBody.ss-doc-body h6{font-size:11pt;margin:0;}
