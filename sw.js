@@ -104,7 +104,7 @@
 
 "use strict";
 
-const CACHE_NAME = "snakescale-shell-2026-11-11-SSN-V21290";
+const CACHE_NAME = "snakescale-shell-2026-11-11-SSN-V21300";
 
 /* The shell, as paths relative to this worker's scope (the site
    root). "./" and "./index.html" are both listed: the first is the
@@ -150,22 +150,22 @@ const PAGE_KEY = "./index.html";
    build if this block is stale. Never edit it by hand. */
 // BEGIN GENERATED ASSET HASHES (gen_asset_hashes.py)
 const ASSET_HASHES = {
-  "./index.html": "e189f1f01d8e21f53b3a9c5c9c51ee91cc1515ebcefa3ac930b7f011f71fcd30",
+  "./index.html": "f2b58b9f4500ed24ab7031d5fc2d3c6670248286336806daa987a49efbd3a6a8",
   "./styles.css": "f6131afc88c53e48099323518b7f96ce4c1c5bb8c4d144554050c68f7ad66033",
-  "./version.js": "f4bd9c823fe3d80729aaf9919d47fa7735239bda2c3d864ba9cf28aeebb305c1",
+  "./version.js": "ebe5e8d657549f22e53dfc212441d6b8ba7d4d29d4eae53a717853e8557a5be3",
   "./core.js": "762dd5d5d7d7ad502e9d673542c57775aa6eee12990d359b79ac150252855361",
-  "./store.js": "cb2a8dbe4b6082f1165e937a9e0707a820eff3d8014f07ec2f467dfa9e6f9acc",
-  "./sync.js": "5b03c961093984438faaa3ab9b6f84431db82906c81a1bd7962c443258ed7430",
-  "./tasks.js": "805292e96cbe288d8615100b3fc227af10395e1bcaa215cde95af81a2237233c",
-  "./notebooks.js": "28ef950d81e3dd482991483d01f290c3597b5c0a27100b3341c7ea8745c1b36b",
-  "./home.js": "aa0b688bc8f80cb6e3acbdd7721b92f0317db828a971b4b4bd07322134220a12",
+  "./store.js": "7b823b256c17570015d20a46a4ba53eb2705a1b932a7f95c64791984179173f2",
+  "./sync.js": "91dfe1c8c817ef03dae26a03923e1fe7b75e7f70663285075b3401e0acb7a758",
+  "./tasks.js": "38efc988bd7697e8716c787beefa153f253e09ea5e4b0f3d89e6022b2c749418",
+  "./notebooks.js": "eed64ea414be4859d546d5c2d16f1e4218eba8dbffe244c2c92455408ed73f0a",
+  "./home.js": "aad7eec751d6c89f67b701955eb3046b9f49e408641c481e023dac491793f38a",
   "./calendar.js": "1d8926b971eecfa2a7cfd0e285272ad26bc8ff95a88138878f3dff1c078c79b4",
-  "./mail.js": "4235f220359faede00e7497dbd0addd128da6825855b3d6236bfd9bf54cc101c",
-  "./render.js": "e673a1bef822409adc23a5a4e17d9997174d3d55ab8054bc22604659125e452a",
-  "./editor.js": "fb4134534aabb160d1e3ab34fa8a4b219d2c22f310629f7f037efef2ae3c7e2a",
-  "./editor-tools.js": "5fce4cea7e12213e92c2a846dee293d0a06fae0a3d01ed2f10925a7e2503e569",
-  "./media.js": "cfabbb470562b9a696fe1a6c7b505108732203d236a0e2a0430d6f8c09d62df7",
-  "./app.js": "801ba36ec621c5e2d45553d812b6c11c7d2b4c3998f92dd7b9576a3c43fbcc6c",
+  "./mail.js": "f44583acb6689f98106b70be82408bb176242a32e809ba6ddd1f5f6b609884a1",
+  "./render.js": "a65db9d658e1733cf651ccb7ae43bd9a92e0ef0803b9671b6b9a9252604cd1b3",
+  "./editor.js": "463274c1199f8055a81dc82d5319ff459d52dd809d3b39fe197e52be8a55f619",
+  "./editor-tools.js": "af8bf18c825472279088db728967b6ce42729baa54fd0aafcdb06922e59a6532",
+  "./media.js": "0d688ce424473cfc4eac82087550ab50093a85e81841e438c805e7f4a735c697",
+  "./app.js": "37f13cda5640906346c08716743b74b1018ceb74a18cccc133c63ff049d9aeb1",
   "./manifest.webmanifest": "3023da8f798f72a653465cd72fc269090e5c0e18dbc0d2f52afb0d54cda8c16c",
   "./icon-192.png": "d663e8dbb927453044a9760c7ed49d13d6be2c155ffff85245f09a02c319848e",
   "./icon-512.png": "0745bbae85b4dd2c4b726154c043022330ac2067e31944bc4db32e48352cb5f9",

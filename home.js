@@ -1940,6 +1940,9 @@ async function createNoteFromScratchPad() {
     scratchHtmlForPad(state.home.scratch));
   const note = makeNote(fallbackNotebookSlug(),
     scratchPadNoteTitle(new Date()), body);
+  /* v2.130: a newborn note, Doc-backed like every
+     newborn note (markNoteDocBacked in store.js). */
+  markNoteDocBacked(note);
   const holder = document.createElement("div");
   holder.innerHTML = body;
   const tags = [];

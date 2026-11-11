@@ -1611,24 +1611,10 @@ function renderListToolbar() {
       kind === "trash" || kind === "archive");
     moveBtn.disabled = !inNotebook;
   }
-  /* v2.121: the Doc switch follows the notebook items'
-     rules (hidden in Trash and Archive, enabled only in
-     a notebook view), and its check span carries the
-     sort menu's tick while the open notebook's switch
-     is on, so the current state is visible in the menu
-     itself. */
-  const docStoreBtn = document.getElementById("nbDocStoreBtn");
-  if (docStoreBtn) {
-    docStoreBtn.classList.toggle("hidden",
-      kind === "trash" || kind === "archive");
-    docStoreBtn.disabled = !inNotebook;
-    const docCheck = docStoreBtn.querySelector(".sort-check");
-    if (docCheck) {
-      docCheck.textContent = inNotebook &&
-        notebookDocStoreEnabled(state.view.value)
-        ? "✓" : "";
-    }
-  }
+  /* v2.130: the notebook menu's Doc switch item is
+     gone: every notebook stores new notes as Google
+     Docs now, so there is no per-notebook choice left
+     for the menu to carry (see notebooks.js). */
   /* v2.31: the notebook shortcut item sits with the notebook
      items and follows their rules exactly (shown and enabled
      like Rename). Its label names its target, because this
@@ -9039,6 +9025,13 @@ async function addStarterNoteFromSettings() {
     return nb.slug === "personal";
   }) ? "personal" : state.notebooks[0].slug;
   const note = makeStarterNote(slug);
+  /* v2.130: a newborn note, Doc-backed like every
+     newborn note (markNoteDocBacked in store.js). The
+     store seeder's starter note is the one exception:
+     seeding writes through the neutral store layer
+     before any Doc machinery can run, so the seeded
+     starter keeps the file form it is written with. */
+  markNoteDocBacked(note);
   state.notes.unshift(note);
   saveCache();
   renderAll();

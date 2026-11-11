@@ -291,6 +291,29 @@ function isDocBackedNote(note) {
   return !!note && note.backend === "doc";
 }
 
+/* v2.130: every note born into a notebook is Doc-backed.
+   The create flows (the New Note button, templates,
+   duplicate, merge, the table of contents, the file and
+   Word imports, the drop box, the scratch pad, save
+   email to note, the web clip, the @ menu's create, the
+   Settings starter note) mark their newborn note
+   through this one helper, so the backend decision
+   stands in exactly one shape everywhere: backend
+   "doc", no Doc id yet (the first save creates the Doc;
+   see saveDocBackedNote in tasks.js). A note whose Doc
+   cannot be created stays Doc-backed and unsaved,
+   never a file note by fallback: the failure surfaces
+   through the create flow's own toast, and the next
+   save retries the Doc. File-backed notes still exist
+   (notes loaded from note files, and notes restored
+   from Trash or Archive, which keep the file form they
+   were written out with); they are simply never born. */
+function markNoteDocBacked(note) {
+  note.backend = "doc";
+  note.docId = null;
+  return note;
+}
+
 /* v1.2: counts note files whose attachments line could not be parsed
    during a load. loadAllFromRepo turns a nonzero count into one readable
    toast instead of failing the whole load. */

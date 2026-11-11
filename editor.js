@@ -4159,6 +4159,9 @@ function createMentionTargetNote(title) {
   });
   if (!slug || !known) { slug = state.notebooks[0].slug; }
   const note = makeNote(slug, title);
+  /* v2.130: a newborn note, Doc-backed like every
+     newborn note (markNoteDocBacked in store.js). */
+  markNoteDocBacked(note);
   state.notes.unshift(note);
   saveCache();
   renderNoteList();

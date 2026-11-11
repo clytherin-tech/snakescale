@@ -1466,6 +1466,16 @@ async function processIncomingBox() {
     parsed.archivedFrom = null;
     parsed.sha = null;
     parsed.fileId = null;
+    /* v2.130: a drop box import is a note born into its
+       notebook, so it is Doc-backed like every newborn
+       note: the save below creates its Google Doc
+       through the same upload path a typed note takes.
+       A stored attachment figure rides the Doc save's
+       own figure handling (docBuildUploadHtml embeds
+       it in the Doc); a figure that cannot ride crosses
+       as its Drive link, the conversion design's
+       fallback, and the import still completes. */
+    markNoteDocBacked(parsed);
     parsed.bodyLoaded = true;
     if (attItems && attItems.length) {
       const attResult = await importDropboxAttachments(parsed, attItems);
@@ -2055,6 +2065,12 @@ async function loadAllFromRepo() {
     }
     index = buildIndexFromFolders(folderSlugs);
     state.notebooks = index.notebooks;
+    /* v2.130: a stored docStore field (the retired
+       per-notebook Doc switch) never rides into state;
+       see the adoption below. */
+    state.notebooks.forEach(function (nb) {
+      if (nb) { delete nb.docStore; }
+    });
     /* v2.63: the parent fields are sanitized on this
        adoption like every other load path (the rebuilt
        records preserve known notebooks whole, parents
@@ -2069,6 +2085,15 @@ async function loadAllFromRepo() {
     } catch (err) { /* best effort, see saveIndex */ }
   } else {
     state.notebooks = index.notebooks;
+    /* v2.130: a stored docStore field (the retired
+       per-notebook Doc switch, v2.121 to v2.129) is
+       stripped from the records as they are adopted,
+       so no session carries it forward in state; the
+       index writer drops it on write as well
+       (buildIndexObject in sync.js). */
+    state.notebooks.forEach(function (nb) {
+      if (nb) { delete nb.docStore; }
+    });
     /* v2.30: the tag parent map loads with the index and is
        sanitized on the way in; an index written before
        nested tags existed has no field and loads as an all

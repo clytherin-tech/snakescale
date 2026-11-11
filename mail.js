@@ -5140,6 +5140,9 @@ async function mailSaveOpenToNote() {
   const slug = fallbackNotebookSlug();
   const note = makeNote(slug,
     full.subject || "(No subject)", body);
+  /* v2.130: a newborn note, Doc-backed like every
+     newborn note (markNoteDocBacked). */
+  markNoteDocBacked(note);
   state.notes.unshift(note);
   saveCache();
   renderSidebar();
@@ -7149,14 +7152,12 @@ async function createNoteFromTemplate(tpl) {
   const note = makeNote(notebookSlug || fallbackNotebookSlug(),
     tpl.title || "Untitled note",
     canonicalizeAttachmentPlaceholders(tpl.body || ""));
-  /* v2.121: a template note created in a notebook whose
-     Doc switch is on is Doc-backed, on the New Note rule
-     (see createNoteInRepo): its content saves into a new
-     Google Doc. */
-  if (notebookDocStoreEnabled(note.notebook)) {
-    note.backend = "doc";
-    note.docId = null;
-  }
+  /* v2.121: a template note is Doc-backed, on the New
+     Note rule (see createNoteInRepo): its content saves
+     into a new Google Doc. v2.130: that is every
+     notebook's rule now, marked through the one helper
+     (markNoteDocBacked in store.js). */
+  markNoteDocBacked(note);
   state.notes.unshift(note);
   saveCache();
   renderAll();
@@ -7385,9 +7386,14 @@ function makeNote(notebookSlug, title, body) {
     reminderDoneAt: null,
     sha: null,
     fileId: null,      /* v2.20: assigned by the first store write or load */
-    backend: "file",   /* v2.121: an ordinary note file; the notebook
-                          create flows in this file mark a new note
-                          "doc" when its notebook's Doc switch is on */
+    backend: "file",   /* v2.121: a plain note object starts in the
+                          file form; v2.130: every create flow marks
+                          its newborn note Doc-backed through
+                          markNoteDocBacked (store.js) before its
+                          first save, so a note born into a
+                          notebook is never saved as a file. The
+                          file form here is what loads, restores,
+                          and the file machinery itself build on */
     docId: null,       /* v2.121: a Doc-backed note's Google Doc id */
     trashed: false,
     trashedFrom: null,
@@ -7404,15 +7410,15 @@ async function createNoteInRepo(notebookSlug) {
   /* v2.72: a create naming no notebook takes the
      default notebook (fallbackNotebookSlug). */
   const note = makeNote(notebookSlug || fallbackNotebookSlug());
-  /* v2.121: when the target notebook's Doc switch is on,
-     the new note is Doc-backed: its first save (the
-     background save below) creates its Google Doc and
-     every later save writes into that same Doc. The note
+  /* v2.121: the new note is Doc-backed: its first save
+     (the background save below) creates its Google Doc
+     and every later save writes into that same Doc.
+     v2.130: that is every notebook's rule, not a
+     per-notebook switch's (the switch is gone; see
+     notebooks.js), marked at birth through the one
+     helper (markNoteDocBacked in store.js). The note
      opens empty in the editor exactly like a file note. */
-  if (notebookDocStoreEnabled(note.notebook)) {
-    note.backend = "doc";
-    note.docId = null;
-  }
+  markNoteDocBacked(note);
   state.notes.unshift(note);
   /* v1.4.4: the note opens immediately. Before this change the editor
      waited for the full upload chain (on Drive: resolve the folder,
@@ -7729,6 +7735,11 @@ async function tryBuildDuplicateCopy(source, pool) {
     return { error: "Duplicate stopped: " + err.message };
   }
   const copy = makeNote(source.notebook, "", "");
+  /* v2.130: a duplicate is a note born into a notebook,
+     so it is Doc-backed like every newborn note, even
+     when its source is one of the file notes that
+     remain: its first save creates its own Google Doc. */
+  markNoteDocBacked(copy);
   copy.tags = (source.tags || []).slice();
   copy.attachments = copied.records;
   copy.body = canonicalizeAttachmentPlaceholders(
@@ -8022,6 +8033,11 @@ async function mergeSelectedNotes() {
   const first = chosen[0];
   const merged = makeNote(first.notebook,
     first.title || "Untitled note", "");
+  /* v2.130: the merged note is a newborn note, so it is
+     Doc-backed like every newborn note
+     (markNoteDocBacked); the originals keep their own
+     backends until they move to Trash below. */
+  markNoteDocBacked(merged);
   merged.body = canonicalizeAttachmentPlaceholders(parts.join(""));
   merged.tags = tags;
   merged.attachments = records;
@@ -8158,6 +8174,9 @@ async function createTableOfContentsNote() {
   }
   const first = chosen[0];
   const toc = makeNote(first.notebook, "Table of Contents", "");
+  /* v2.130: a newborn note, Doc-backed like every
+     newborn note (markNoteDocBacked). */
+  markNoteDocBacked(toc);
   toc.body = canonicalizeAttachmentPlaceholders(
     chosen.map(tocNoteLinkParagraph).join(""));
   /* Point of no return: the selection empties and the new

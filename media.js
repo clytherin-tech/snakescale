@@ -10152,6 +10152,9 @@ async function filePendingWebClip() {
     const note = makeNote(notebook.slug, payload.title,
       canonicalizeAttachmentPlaceholders(
         webClipBodyFor(payload, cleanResult)));
+    /* v2.130: a newborn note, Doc-backed like every
+       newborn note (markNoteDocBacked in store.js). */
+    markNoteDocBacked(note);
     state.notes.unshift(note);
     saveCache();
     renderAll();

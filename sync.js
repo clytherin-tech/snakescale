@@ -57,8 +57,22 @@ function buildIndexObject() {
     /* v2.63: the notebook records ride wholesale,
        parent fields included, on the same reasoning as
        the tag map below: this is the only writer's
-       shape, so no unrelated save can drop the nesting. */
-    notebooks: state.notebooks,
+       shape, so no unrelated save can drop the nesting.
+       v2.130: one field does not ride: docStore, the
+       retired per-notebook Doc switch (see
+       notebooks.js). It decides nothing now that every
+       notebook stores new notes as Google Docs, so the
+       writer drops it here, and a store whose index
+       still carries it sheds it on the next write. */
+    notebooks: state.notebooks.map(function (nb) {
+      if (!nb || typeof nb !== "object" ||
+          !("docStore" in nb)) {
+        return nb;
+      }
+      const copy = Object.assign({}, nb);
+      delete copy.docStore;
+      return copy;
+    }),
     /* v2.30: the nested tag parent map. It rides every index
        write because buildIndexObject is the only writer's
        shape, so no unrelated save can drop the hierarchy. */
@@ -481,13 +495,123 @@ function saveCatalog() {
   }, CATALOG_WRITE_DEBOUNCE_MS);
 }
 
+/* v2.130: the catalog conversion guard. Twice on
+   November 11, 2026, a long-open app session holding
+   the pre-conversion catalog wrote its stale copy back
+   over the conversion's work, and every converted
+   entry reverted to file-backed in the stored catalog
+   (the Docs themselves were unharmed; the app simply
+   read those notes from their fallback files). The
+   catalog is a cache a stale session may legitimately
+   rewrite with edits of its own, so the guard does not
+   refuse the write: it merges. Before writing, the
+   writer reads the catalog as it currently stands in
+   the store, and for every entry the stored catalog
+   holds as Doc-backed in the notebook collection
+   whose local form is file-backed, the stored Doc
+   fields stand in the written entry (backend, docId,
+   docTicks, and the null fileId a Doc entry carries);
+   every other field of the local entry (title, tags,
+   updated, preview, pinned, the reminder fields, the
+   revision token) still wins, so the stale session's
+   real edits land and only the downgrade is refused.
+
+   The merge needs no exception path: no app flow
+   turns a notebook-collection entry from Doc-backed
+   to file-backed. Trashing a Doc-backed note writes
+   it out as a file note in the TRASH collection (the
+   guard never touches trash or archive entries), and
+   restoring that file note returns it to its notebook
+   still file-backed, never having stood as a notebook
+   entry in file form while the store held it as a
+   Doc. The reconcile's stored-wins judgment for held
+   bodies is a separate, load-side rule, unchanged.
+
+   A stored read that fails skips the write outright:
+   an unguarded write is exactly the accident this
+   section exists to prevent, and a skipped catalog
+   write costs nothing (the writer is a cache
+   maintainer whose failures were always swallowed;
+   the next mutation schedules another write). A store
+   with no catalog yet reads as no stored entries, and
+   the write proceeds unmerged. */
+function catalogGuardMergedEntries(localEntries, storedEntries) {
+  if (!Array.isArray(storedEntries) ||
+      !storedEntries.length) {
+    return localEntries;
+  }
+  const storedDocs = {};
+  storedEntries.forEach(function (entry) {
+    if (entry && entry.collection === "notebook" &&
+        entry.backend === "doc" &&
+        sanitizeDocId(entry.docId)) {
+      storedDocs[entry.id] = entry;
+    }
+  });
+  if (!Object.keys(storedDocs).length) {
+    return localEntries;
+  }
+  return localEntries.map(function (entry) {
+    if (!entry || entry.collection !== "notebook" ||
+        entry.backend === "doc") {
+      return entry;
+    }
+    const stored = storedDocs[entry.id];
+    if (!stored) { return entry; }
+    const merged = Object.assign({}, entry);
+    merged.backend = "doc";
+    merged.docId = stored.docId;
+    merged.fileId = null;
+    const ticks = sanitizeDocTicks(stored.docTicks);
+    if (ticks) { merged.docTicks = ticks; }
+    else { delete merged.docTicks; }
+    return merged;
+  });
+}
+
+/* The stored catalog's entries, for the guard: the
+   parsed entries array; an empty array when the store
+   holds no catalog, or one that does not parse (the
+   load rebuilds such a catalog from the note files,
+   and Doc entries in a catalog no reader can parse
+   are already beyond reach); and null when the read
+   itself failed, which the writer treats as "do not
+   write unguarded". */
+async function readStoredCatalogEntries() {
+  let file;
+  try {
+    file = await storeGetFile(CATALOG_FILE);
+  } catch (err) {
+    return null;
+  }
+  if (!file) { return []; }
+  try {
+    const parsed = JSON.parse(file.text);
+    return parsed && Array.isArray(parsed.entries)
+      ? parsed.entries : [];
+  } catch (err) {
+    return [];
+  }
+}
+
 /* One physical catalog write, from a snapshot of current state.
    Unchanged entries write nothing at all. A lost token race is
    retried once over the winner's token (last writer wins; the
    file is a cache, never a conflict copy candidate), and every
-   failure is swallowed: the next load reconciles or rebuilds. */
+   failure is swallowed: the next load reconciles or rebuilds.
+   v2.130: the snapshot's entries pass the conversion guard
+   above before anything is written (and the conflict retry
+   re-merges against the winner's entries, which its token
+   read already holds), so this write, the only catalog
+   write path there is (saveCache schedules it; nothing
+   else puts catalog.json), can never revert a converted
+   entry to file-backed. */
 async function writeCatalogOnce() {
   const snapshot = buildCatalogObject();
+  const storedEntries = await readStoredCatalogEntries();
+  if (storedEntries === null) { return; }
+  snapshot.entries = catalogGuardMergedEntries(
+    snapshot.entries, storedEntries);
   const entriesText = JSON.stringify(snapshot.entries);
   if (entriesText === lastCatalogEntriesText) { return; }
   const text = JSON.stringify(snapshot, null, 2);
@@ -499,9 +623,29 @@ async function writeCatalogOnce() {
     if (!isStoreConflict(err)) { return; }
     try {
       const fresh = await storeGetFile(CATALOG_FILE);
-      lastCatalogToken = await storePutFile(CATALOG_FILE, text,
+      let retryText = text;
+      let retryEntriesText = entriesText;
+      if (fresh) {
+        let freshEntries = [];
+        try {
+          const parsedFresh = JSON.parse(fresh.text);
+          if (parsedFresh &&
+              Array.isArray(parsedFresh.entries)) {
+            freshEntries = parsedFresh.entries;
+          }
+        } catch (err3) { freshEntries = []; }
+        const retryEntries = catalogGuardMergedEntries(
+          snapshot.entries, freshEntries);
+        retryEntriesText = JSON.stringify(retryEntries);
+        retryText = JSON.stringify({
+          version: snapshot.version,
+          updated: snapshot.updated,
+          entries: retryEntries
+        }, null, 2);
+      }
+      lastCatalogToken = await storePutFile(CATALOG_FILE, retryText,
         fresh ? fresh.token : null, "Update catalog");
-      lastCatalogEntriesText = entriesText;
+      lastCatalogEntriesText = retryEntriesText;
     } catch (err2) { /* swallowed: rebuilt on the next load */ }
   }
 }
