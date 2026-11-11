@@ -2011,12 +2011,6 @@ async function loadAllFromRepo() {
     if (index && index.templates) {
       state.templates = sanitizeTemplates(index.templates);
     }
-    /* v2.89: the passage encryption record is salvaged
-       the same way, ahead of the rebuild that would
-       otherwise drop it. */
-    if (index && index.encryption) {
-      state.encryption = sanitizeEncryptionRecord(index.encryption);
-    }
     index = buildIndexFromFolders(folderSlugs);
     state.notebooks = index.notebooks;
     /* v2.63: the parent fields are sanitized on this
@@ -2058,11 +2052,6 @@ async function loadAllFromRepo() {
        before templates existed has no field and loads
        as an empty My templates list. */
     state.templates = sanitizeTemplates(index.templates);
-    /* v2.89: the passage encryption record loads with
-       the index too, sanitized on the way in; an index
-       written before passage encryption existed has no
-       field and loads as not set up. */
-    state.encryption = sanitizeEncryptionRecord(index.encryption);
     state.index = index;
     /* A notebook folder with no index entry still gets listed, so notes
        are never hidden by a stale index. */

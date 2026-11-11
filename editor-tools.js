@@ -2977,12 +2977,6 @@ async function runEditorAutosave() {
   }
   const previousPath = notePath(note);
   const previousNotebook = note.notebook;
-  /* v2.89: any decrypted passage in the editor is
-     re-encrypted to its current text before the
-     collect below reads the body, so the save writes
-     the passage's present words as ciphertext, never
-     a stale snapshot and never plaintext. */
-  await ssencFlushEditorRegions();
   collectEditor(note);
   /* v2.50: the edit count this save collected. The settle
      below raises the settled count only to here, so an
@@ -6211,9 +6205,7 @@ function clearUnwrapPlainLinks(bodyEl, roots, range) {
     seen.add(a);
     if (a.closest && (a.closest(".ss-attachment") ||
         a.closest(".ss-toc") ||
-        a.closest(".ss-note-tasks") ||
-        a.closest("[data-ssenc]") ||
-        a.closest(".ssenc-open"))) {
+        a.closest(".ss-note-tasks"))) {
       return;
     }
     const tokens = (a.getAttribute("class") || "")
@@ -6936,14 +6928,6 @@ function runMoreAction(kind) {
     document.execCommand("outdent", false, null);
   } else if (kind === "clear") {
     clearFormattingExtended();
-  } else if (kind === "encrypt") {
-    /* v2.89: passage encryption. The flow is async
-       (it may walk the setup or unlock dialog first)
-       and marks the note dirty itself when a block
-       lands, so this branch returns ahead of the
-       shared markDirty below. */
-    void ssencEncryptSelectionFlow();
-    return;
   }
   markDirty();
 }

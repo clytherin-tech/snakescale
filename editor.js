@@ -399,8 +399,9 @@ let editorHistoryObserver = null;
    funnel's own read of the live body, so a snapshot
    and a save of the same state are the same string. */
 function editorHistorySerializedBody() {
+  const bodyEl = document.getElementById("noteBody");
   return canonicalizeAttachmentPlaceholders(
-    ssencSerializedBodyHtml());
+    bodyEl ? bodyEl.innerHTML : "");
 }
 
 /* A position as a character offset into the body's
@@ -572,7 +573,6 @@ function editorHistoryFillBody(note, bodyHtml) {
   refreshTocBlocks(bodyEl);
   decorateSectionFolds(bodyEl);
   refreshNoteTaskBlocks(bodyEl, note);
-  ssencDecorateEditorBody();
   decorateCodeCaretBrs(bodyEl);
   finishNoteOpenAttachments(note).catch(function (err) {
     console.warn("Attachment hydration failed:", err);
@@ -1007,7 +1007,7 @@ function collectEditor(note) {
      region with its locked block, so a collect can
      never fold a decrypted passage into the note. */
   note.body = canonicalizeAttachmentPlaceholders(
-    ssencSerializedBodyHtml());
+    document.getElementById("noteBody").innerHTML);
   /* v1.2: attachment metadata is edited through the attachment actions,
      not the form fields, but re-sanitize here so the saved note always
      carries a clean array on the object. */

@@ -77,11 +77,6 @@ function buildIndexObject() {
     /* v2.38: the custom templates, on the same reasoning
        once more: no unrelated save can drop them either. */
     templates: state.templates,
-    /* v2.89: the passage encryption record, on the same
-       reasoning once more: no unrelated save can drop
-       it, or every encrypted passage in the store
-       becomes unreadable. */
-    encryption: state.encryption,
     updated: new Date().toISOString()
   };
 }
@@ -207,7 +202,7 @@ function buildIndexFromFolders(folderSlugs) {
      too, for the same reason. */
   /* v2.38: the custom templates are carried across the
      same way again, for the same reason. */
-  return { version: 1, notebooks: rebuilt, tagParents: state.tagParents, shortcuts: state.shortcuts, savedSearches: state.savedSearches, home: state.home, templates: state.templates, encryption: state.encryption, updated: new Date().toISOString() };
+  return { version: 1, notebooks: rebuilt, tagParents: state.tagParents, shortcuts: state.shortcuts, savedSearches: state.savedSearches, home: state.home, templates: state.templates, updated: new Date().toISOString() };
 }
 
 /* --------------------------------------------------------------------------

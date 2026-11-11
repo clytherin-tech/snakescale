@@ -1181,9 +1181,6 @@ function anyOverlayOpen() {
     /* v2.13: the first run walkthrough joins the set for the same
        reason: an Escape that dismisses it never exits Maximize. */
     "onboardingModal",
-    /* v2.14: the voice note bar joins the set for the same reason:
-       an Escape that cancels a recording never exits Maximize. */
-    "voiceBar",
     /* v2.14.1: the audio card menu joins the set for the same
        reason: an Escape that closes it never exits Maximize. */
     "attCardMenu",
@@ -4318,7 +4315,7 @@ function syncShouldRefillOpenNote(note) {
     title: document.getElementById("noteTitle").value.trim() ||
       "Untitled note",
     body: canonicalizeAttachmentPlaceholders(
-      ssencSerializedBodyHtml()),
+      document.getElementById("noteBody").innerHTML),
     tags: document.getElementById("noteTags").value
       .split(",")
       .map(function (t) { return t.trim(); })
@@ -7502,8 +7499,7 @@ function renderEditor() {
        standing form for this session: while the vault
        is unlocked they decrypt in place; while locked
        the stored blocks already show their faces. */
-    ssencDecorateEditorBody();
-    /* v2.99.0: the body just filled takes its code
+      /* v2.99.0: the body just filled takes its code
        blocks' caret furniture (see decorateCode
        CaretBrs), so a block whose stored text ends
        in a newline stands at full height, its empty
@@ -8035,11 +8031,6 @@ function syncSettingsControls() {
      choice, its options rebuilt from the notebooks that
      stand (see renderDefaultNotebookSelect). */
   renderDefaultNotebookSelect();
-  /* v2.76: the Transcription model select shows the saved
-     choice (Fast unless this device chose otherwise). */
-  const speechSelect = document.getElementById(
-    "settingsTranscriptionModelSelect");
-  if (speechSelect) { speechSelect.value = speechModelKey(); }
   /* v2.24: the Notifications section shows the live
      permission and the saved reminders switch. */
   renderNotificationSettings();
@@ -8065,9 +8056,6 @@ function syncSettingsControls() {
      like the contacts ask above it. */
   renderPushSettingsRow();
   if (mailSignedInAble()) { ensurePushRegistration(); }
-  /* v2.89: the Encrypted text row shows the vault's
-     standing state and this device's unlock duration. */
-  renderSsencSettingsRow();
   const gcalNowParts = taskTodayParts();
   ensureGcalMonth(gcalNowParts.y, gcalNowParts.m);
   /* v2.21: the Last load readout shows this session's boot. */
@@ -8184,25 +8172,6 @@ function applyDefaultNotebookFromSelect() {
   } else {
     state.defaultNotebook = "";
     select.value = "";
-  }
-  saveSettings();
-}
-
-/* v2.76: the Transcription model select's change handler.
-   The choice persists at once, like every Settings
-   control, on this device only, and governs the next
-   transcription started; a run in flight keeps the model
-   it started with (see transcribeAudioAttachment). */
-function applySpeechModelFromSelect() {
-  const select = document.getElementById(
-    "settingsTranscriptionModelSelect");
-  if (!select) { return; }
-  if (select.value === "normal" || select.value === "best" ||
-      select.value === "fast") {
-    state.transcriptionModel = select.value;
-  } else {
-    state.transcriptionModel = "fast";
-    select.value = "fast";
   }
   saveSettings();
 }
@@ -9132,7 +9101,7 @@ function editorContentSnapshot(note) {
       .map(function (t) { return t.trim(); })
       .filter(function (t) { return t.length > 0; }),
     body: canonicalizeAttachmentPlaceholders(
-      ssencSerializedBodyHtml()),
+      document.getElementById("noteBody").innerHTML),
     attachments: sanitizeAttachments(cloneVersionValue(note.attachments || []))
   };
 }

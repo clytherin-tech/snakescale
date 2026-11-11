@@ -44,7 +44,7 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-11-11-SSN-V21250
+  BUILD STAMP: 2026-11-11-SSN-V21260
   Version: 2.106.0
 
   Revision history:
@@ -6631,14 +6631,6 @@
                   <button type="button" data-insert="inlineCode">Inline code</button>
                 </div>
               </span>
-              <!-- v2.14: Voice note sits beside Insert. It records
-                   from the microphone with a live transcript (the
-                   browser's built in speech recognition) and, on
-                   Stop, saves the recording as an attachment and
-                   writes the transcript into the note. The icon is
-                   an inline SVG in currentColor, like the list
-                   buttons, so it follows the theme. -->
-              <button type="button" id="voiceNoteBtn" title="Voice note" aria-label="Voice note"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false"><rect x="6" y="1.3" width="4" height="7" rx="2" fill="currentColor" stroke="none"/><path d="M3.8 6.2a4.2 4.2 0 0 0 8.4 0" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><path d="M8 10.6v2.6M5.4 13.9h5.2" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg></button>
             </div>
             <!-- Group 2: text style, font family, font size -->
             <div class="tb-group">
@@ -6739,7 +6731,6 @@
                   <button type="button" data-more="indent">Indent</button>
                   <button type="button" data-more="outdent">Outdent</button>
                   <button type="button" data-more="clear">Remove formatting</button>
-                  <button type="button" data-more="encrypt">Encrypt selected text</button>
                 </div>
               </span>
             </div>
@@ -6767,25 +6758,6 @@
           <div id="uploadPanel" class="hidden" aria-live="polite">
             <span id="uploadText">Uploading...</span>
             <div class="bar"><div id="uploadBarFill"></div></div>
-          </div>
-          <!-- v2.14: the voice note bar. It lives while a recording
-               runs: a pulsing record dot, the elapsed timer, the
-               live transcript as it is recognized (final words in
-               full strength, the words still being recognized
-               dimmed, and a note line for when transcription is
-               unavailable or stops), and Stop and Cancel. It is a
-               sibling of #noteBody in .editor-inner, so nothing in
-               it can ever be saved into a note. v2.14.1: it is a
-               fixed card the script parks at the caret's line
-               when the recording starts (see positionVoiceBar)
-               and leaves anchored there until the recording
-               ends. -->
-          <div id="voiceBar" class="voice-bar hidden" role="status">
-            <span class="voice-dot" aria-hidden="true"></span>
-            <span id="voiceTimer" class="voice-timer">00:00</span>
-            <div class="voice-transcript"><span id="voiceFinalText"></span><span id="voiceInterimText" class="voice-interim"></span><span id="voiceRecNote" class="voice-rec-note hidden"></span></div>
-            <button type="button" id="voiceStopBtn" class="btn small">Stop</button>
-            <button type="button" id="voiceCancelBtn" class="btn small">Cancel</button>
           </div>
           <input type="file" id="attachFileInput" multiple class="hidden" aria-hidden="true">
           <!-- v2.45: the scan dialog's two capture doors. The
@@ -7029,7 +7001,6 @@
             <button class="att-menu-item" type="button" data-card-action="download"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v11"/><path d="m7 10 5 5 5-5"/><path d="M4 21h16"/></svg><span class="att-menu-label">Download</span></button>
             <button class="att-menu-item" type="button" data-card-action="rename"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg><span class="att-menu-label">Rename</span></button>
             <button class="att-menu-item danger" type="button" data-card-action="delete"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13"/><path d="M10 11v6M14 11v6"/></svg><span class="att-menu-label">Delete</span></button>
-            <button class="att-menu-item" type="button" data-card-action="transcribe"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10v4"/><path d="M8.5 7v10"/><path d="M13 4v16"/><path d="M17.5 7v10"/><path d="M21 10v4"/></svg><span class="att-menu-label">Transcribe</span></button>
           </div>
 
           <!-- v2.91.0: the note editor's own right click
@@ -7066,8 +7037,6 @@
               <button class="att-menu-item" type="button" data-format-cmd="strike"><span class="ctx-check">&#10003;</span>Strikethrough</button>
               <button class="att-menu-item" type="button" data-format-cmd="clear"><span class="ctx-check">&#10003;</span>Clear Formatting</button>
             </div>
-            <button class="att-menu-item" type="button" data-ctx-action="encrypt">Encrypt selected text</button>
-            <button class="att-menu-item hidden" type="button" data-ctx-action="vault">Unlock encrypted text</button>
             <!-- v2.101.0: the Numbering style item and
                  its submenu. The item stands only while
                  the caret is in a numbered list; the
@@ -7748,52 +7717,6 @@
         </select>
         <div class="settings-help">What a paste carrying formatting does first. After any rich paste, the Paste options popup beside the pasted text still offers the other two modes for that paste.</div>
       </div>
-      <!-- v2.76: the transcription model choice. The select
-           is the whole control, like the paste choice above:
-           its shown value is the saved choice, and it is
-           saved on this device only, because each device
-           downloads and caches the model it uses. A run
-           already going keeps the model it started with. -->
-      <div class="field">
-        <label for="settingsTranscriptionModelSelect">Transcription model</label>
-        <select id="settingsTranscriptionModelSelect">
-          <option value="fast">Fast</option>
-          <option value="normal">Normal</option>
-          <option value="best">Best</option>
-        </select>
-        <div class="settings-help">Which speech model reads a recording when you Transcribe it, on this device. The model downloads the first time it is used and is cached on this device after that. Fast is the smallest download and the quickest read; Normal reads more accurately; Best reads the most accurately and is the largest download. Changing this never re-reads a recording: it applies to the next transcription you start.</div>
-      </div>
-      <!-- v2.89.0: passage encryption. The state line
-           names the vault's standing state on this
-           device (Not set up, Locked, or Unlocked, from
-           renderSsencSettingsRow), the select is the
-           unlock duration (this device only, like the
-           model choice above), and the two buttons are
-           the manual doors: Unlock (or Set up encryption
-           before a passphrase exists) and Lock, each
-           standing only in the state it serves. -->
-      <div class="field">
-        <label for="settingsSsencUnlockSelect">Keep encrypted text unlocked for</label>
-        <div class="settings-help" id="settingsSsencStatus">Not set up</div>
-        <select id="settingsSsencUnlockSelect">
-          <option value="10">10 minutes</option>
-          <option value="15">15 minutes</option>
-          <option value="30">30 minutes</option>
-          <option value="60">60 minutes</option>
-          <option value="120">120 minutes</option>
-          <option value="close">Until app or window closes</option>
-        </select>
-        <div class="settings-help">How long encrypted text stays unlocked after you enter your passphrase, on this device. Locking happens sooner if you sign out or press Lock. The passphrase itself is never stored anywhere. If you forget it, the recovery key below can let you set a new one; if both are lost, encrypted text cannot be recovered.</div>
-        <div class="settings-orphan-actions">
-          <button class="btn hidden" id="settingsSsencUnlockBtn" type="button">Set up encryption</button>
-          <button class="btn hidden" id="settingsSsencLockBtn" type="button">Lock</button>
-          <button class="btn hidden" id="settingsSsencChangeBtn" type="button">Change passphrase</button>
-        </div>
-        <div class="settings-help" id="settingsSsencRecoveryStatus"></div>
-        <div class="settings-orphan-actions">
-          <button class="btn hidden" id="settingsSsencRecoveryBtn" type="button">Set up recovery key</button>
-        </div>
-      </div>
     </section>
 
     <section class="settings-section hidden" id="settingsPanelHistory" role="tabpanel" data-settings-panel="history" aria-labelledby="settingsHistoryTitle">
@@ -8190,147 +8113,6 @@
      the close prompt: Save draft, Discard, or Keep
      writing, so nothing typed is ever lost silently.
      ========================================================================== -->
-<!-- ==========================================================================
-     v2.89.0: the passage encryption dialogs. Setup asks
-     for a passphrase and its confirmation and says in
-     plain words, before anything is created, that this
-     version has no way to recover a forgotten
-     passphrase. Unlock asks for the one passphrase;
-     a wrong one is answered in the dialog's error line
-     and changes no state. The passphrase is read from
-     the field at the confirm click and never stored.
-     v2.93.0: the Unlock dialog's field and buttons
-     stand in a real form (ssencUnlockForm) whose
-     submit is the dialog's one confirm path, so
-     pressing Enter in the passphrase field submits
-     exactly as clicking Unlock does. The setup
-     dialog keeps its buttons and click handlers, as
-     shipped.
-     ========================================================================== -->
-<div id="ssencSetupModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="ssencSetupTitle">
-  <div class="modal-card">
-    <h2 id="ssencSetupTitle">Set up encrypted text</h2>
-    <p class="modal-sub">Choose the one passphrase that will lock and unlock encrypted text in your notes. Encryption happens on this device; the passphrase is never sent or stored anywhere. After you set it, you will be shown a recovery key to save: if you ever forget the passphrase, that key lets you set a new one. If both are lost, the encrypted text would be lost. Type it the same way twice to set it.</p>
-    <div class="field">
-      <label for="ssencSetupPass1">Passphrase</label>
-      <input id="ssencSetupPass1" type="password" autocomplete="new-password">
-    </div>
-    <div class="field">
-      <label for="ssencSetupPass2">Passphrase again</label>
-      <input id="ssencSetupPass2" type="password" autocomplete="new-password">
-    </div>
-    <div class="gcal-ev-error hidden" id="ssencSetupError">
-      <span id="ssencSetupErrorText"></span>
-    </div>
-    <div class="modal-foot">
-      <button class="btn" id="ssencSetupCancelBtn" type="button">Cancel</button>
-      <button class="btn primary" id="ssencSetupSaveBtn" type="button">Set up encryption</button>
-    </div>
-  </div>
-</div>
-
-<div id="ssencUnlockModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="ssencUnlockTitle">
-  <div class="modal-card">
-    <h2 id="ssencUnlockTitle">Unlock encrypted text</h2>
-    <p class="modal-sub">Enter the passphrase you set up for encrypted text. It stays unlocked for the time chosen in Settings, on this device only.</p>
-    <form id="ssencUnlockForm">
-      <div class="field">
-        <label for="ssencUnlockPass">Passphrase</label>
-        <input id="ssencUnlockPass" type="password" autocomplete="current-password">
-      </div>
-      <div class="gcal-ev-error hidden" id="ssencUnlockError">
-        <span id="ssencUnlockErrorText"></span>
-      </div>
-      <div class="modal-foot">
-        <button class="btn hidden" id="ssencUnlockRecoveryBtn" type="button">Use recovery key</button>
-        <button class="btn" id="ssencUnlockCancelBtn" type="button">Cancel</button>
-        <button class="btn primary" id="ssencUnlockBtn" type="submit">Unlock</button>
-      </div>
-    </form>
-  </div>
-</div>
-<!-- v2.94.0: recovery dialogs. Recover runs in
-     two steps inside its one form: the code first
-     (accepted typed messily), then the new
-     passphrase the design requires before anything
-     opens. The show dialog carries the minted code
-     exactly once, and its only door out is the
-     acknowledgement button. Change passphrase is
-     the Settings home's third dialog: current,
-     new, and confirmation, one form, one submit. -->
-<div id="ssencRecoverModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="ssencRecoverTitle">
-  <div class="modal-card">
-    <h2 id="ssencRecoverTitle">Recover encrypted text</h2>
-    <p class="modal-sub">Enter the recovery key you saved. Dashes and spaces do not matter, and neither does letter case. If the key is right, you will set a new passphrase, and the old one stops working. The recovery key itself stays the same; you can replace it later in Settings with Regenerate recovery key.</p>
-    <form id="ssencRecoverForm">
-      <div class="field" id="ssencRecoverCodeField">
-        <label for="ssencRecoverCode">Recovery key</label>
-        <input id="ssencRecoverCode" class="ssenc-recovery-code" type="text" autocomplete="off" spellcheck="false">
-      </div>
-      <div id="ssencRecoverNewFields" class="hidden">
-        <div class="field">
-          <label for="ssencRecoverPass1">New passphrase</label>
-          <input id="ssencRecoverPass1" type="password" autocomplete="new-password">
-        </div>
-        <div class="field">
-          <label for="ssencRecoverPass2">New passphrase again</label>
-          <input id="ssencRecoverPass2" type="password" autocomplete="new-password">
-        </div>
-      </div>
-      <div class="gcal-ev-error hidden" id="ssencRecoverError">
-        <span id="ssencRecoverErrorText"></span>
-      </div>
-      <div class="modal-foot">
-        <button class="btn" id="ssencRecoverCancelBtn" type="button">Back</button>
-        <button class="btn primary" id="ssencRecoverBtn" type="submit">Use recovery key</button>
-      </div>
-    </form>
-  </div>
-</div>
-
-<div id="ssencRecoveryShowModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="ssencRecoveryShowTitle">
-  <div class="modal-card">
-    <h2 id="ssencRecoveryShowTitle">Save your recovery key</h2>
-    <p class="modal-sub">This is the only time this key is shown. Save it somewhere safe: if you forget your passphrase, this key is the only way back into your encrypted text. Anyone holding it can open that text, so keep it like the passphrase itself.</p>
-    <div class="field">
-      <label for="ssencRecoveryCodeText">Recovery key</label>
-      <input id="ssencRecoveryCodeText" class="ssenc-recovery-code" type="text" readonly autocomplete="off" spellcheck="false">
-    </div>
-    <div class="modal-foot">
-      <button class="btn" id="ssencRecoveryCopyBtn" type="button">Copy</button>
-      <button class="btn primary" id="ssencRecoveryAckBtn" type="button">I have saved this key</button>
-    </div>
-  </div>
-</div>
-
-<div id="ssencChangeModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="ssencChangeTitle">
-  <div class="modal-card">
-    <h2 id="ssencChangeTitle">Change passphrase</h2>
-    <p class="modal-sub">Enter your current passphrase and the new one. The encrypted text itself is not touched: the same vault key is locked under the new passphrase instead, so your recovery key keeps working. The old passphrase stops working at once.</p>
-    <form id="ssencChangeForm">
-      <div class="field">
-        <label for="ssencChangePass0">Current passphrase</label>
-        <input id="ssencChangePass0" type="password" autocomplete="current-password">
-      </div>
-      <div class="field">
-        <label for="ssencChangePass1">New passphrase</label>
-        <input id="ssencChangePass1" type="password" autocomplete="new-password">
-      </div>
-      <div class="field">
-        <label for="ssencChangePass2">New passphrase again</label>
-        <input id="ssencChangePass2" type="password" autocomplete="new-password">
-      </div>
-      <div class="gcal-ev-error hidden" id="ssencChangeError">
-        <span id="ssencChangeErrorText"></span>
-      </div>
-      <div class="modal-foot">
-        <button class="btn" id="ssencChangeCancelBtn" type="button">Cancel</button>
-        <button class="btn primary" id="ssencChangeBtn" type="submit">Change passphrase</button>
-      </div>
-    </form>
-  </div>
-</div>
-
 <div id="mailSnoozeMenu" class="note-ctx-menu hidden" role="menu" aria-label="Snooze until">
   <div class="note-ctx-head">Snooze until</div>
   <div id="mailSnoozeMenuRows"></div>

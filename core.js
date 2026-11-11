@@ -473,47 +473,6 @@ const state = {
                             // edited in the Settings
                             // modal, NOT in the synced
                             // index.
-  encryption: null,         // v2.89: the passage
-                            // encryption record (see
-                            // sanitizeEncryptionRecord):
-                            // {version, kdfSalt,
-                            // kdfIterations, wrappedKey},
-                            // the vault key wrapped
-                            // under the user's one
-                            // passphrase. It lives in
-                            // index.json (see
-                            // buildIndexObject), NOT in
-                            // settings, for the same
-                            // reason the tag parent map
-                            // does: every device must
-                            // find the same record to
-                            // unlock the same passages.
-                            // It holds nothing secret
-                            // shaped; the passphrase
-                            // and the unwrapped key
-                            // live only in page memory.
-  ssencUnlockChoice: 30,    // v2.89: how long encrypted
-                            // text stays unlocked on
-                            // this device, in minutes,
-                            // or "close" for until the
-                            // app or window closes. The
-                            // default is 30 and the
-                            // Settings select offers
-                            // nothing under 10. Per
-                            // device (remembered in
-                            // settings), because the
-                            // unlock itself is a device
-                            // session fact.
-  transcriptionModel: "fast", // v2.76: the transcription
-                            // model choice ("fast",
-                            // "normal", or "best"; see
-                            // SPEECH_MODELS). Per device
-                            // like the other choices here,
-                            // because the model files
-                            // cache on the device that
-                            // downloads them; remembered
-                            // in settings and edited in
-                            // the Settings modal.
   versionsLimit: 10,        // v2.8: how many past versions to keep
                             // per note (0 turns version history
                             // off), remembered in settings and
@@ -671,13 +630,6 @@ function escapeHtml(value) {
 function htmlToText(html) {
   const div = document.createElement("div");
   div.innerHTML = html || "";
-  /* v2.89: a locked encrypted passage contributes no
-     text at all (neither its face nor, obviously, its
-     contents), so previews and search never carry a
-     word of it; the note's other text derives exactly
-     as before. */
-  div.querySelectorAll("[data-ssenc]").forEach(
-    function (el) { el.remove(); });
   return (div.textContent || "").replace(/\s+/g, " ").trim();
 }
 
@@ -1296,13 +1248,6 @@ async function signOut() {
      Drive, so nothing is lost by leaving. */
   cancelAllPendingAttachmentDeletes();
 
-  /* v2.89: signing out locks the encryption vault,
-     always and immediately: the open note's decrypted
-     passages are re-encrypted in place first, then
-     the key is cleared, before any of the wipes below
-     run. */
-  await ssencLockVault();
-
   let googleToken = state.providerTokens.google || null;
   if (!googleToken) {
     try { googleToken = await getProviderToken("google"); }
@@ -1574,25 +1519,6 @@ function loadSettings() {
   if (typeof s.defaultNotebook === "string") {
     state.defaultNotebook = s.defaultNotebook;
   }
-  /* v2.76: the transcription model choice. Fast is the
-     default (the model every earlier build used), so
-     only an explicitly stored "normal" or "best" moves
-     it; anything else (an absent field from an older
-     build, a damaged value) leaves Fast in place. */
-  if (s.transcriptionModel === "normal" ||
-      s.transcriptionModel === "best") {
-    state.transcriptionModel = s.transcriptionModel;
-  }
-  /* v2.89: the encrypted text unlock duration. Only
-     the values the Settings select offers are honored
-     (10, 15, 30, 60, or 120 minutes, or "close");
-     anything else (an absent field from an older
-     build, a damaged value) leaves the 30 minute
-     default in place. */
-  if (s.ssencUnlockChoice === "close" ||
-      [10, 15, 30, 60, 120].indexOf(s.ssencUnlockChoice) >= 0) {
-    state.ssencUnlockChoice = s.ssencUnlockChoice;
-  }
 }
 
 
@@ -1616,9 +1542,7 @@ function saveSettings() {
     noteReminders: state.noteReminders,   // v2.35: note reminder notifications
     noteReminderFired: state.noteReminderFired,   // v2.35: the fired stamps
     startView: state.startView,   // v2.33: the When opening choice
-    defaultNotebook: state.defaultNotebook,   // v2.72: the default notebook
-    transcriptionModel: state.transcriptionModel,   // v2.76: the transcription model choice
-    ssencUnlockChoice: state.ssencUnlockChoice   // v2.89: the encrypted text unlock duration
+    defaultNotebook: state.defaultNotebook   // v2.72: the default notebook
   }));
 }
 
@@ -1687,11 +1611,6 @@ function cacheSnapshot() {
     /* v2.38: the custom templates ride it too, so a cache
        first paint can open the same gallery. */
     templates: state.templates,
-    /* v2.89: the passage encryption record rides it
-       too (it is ciphertext and bookkeeping, never key
-       material), so a cache first paint knows whether
-       encrypted text is set up here. */
-    encryption: state.encryption,
     /* v2.44: the tasks ride it as well, the field v2.24
        never plumbed in, so a cache first paint shows the
        same Tasks view and Home widgets the store load
@@ -1739,10 +1658,6 @@ function applyCacheSnapshot(c) {
      list, exactly like an index.json written before
      v2.38 does. */
   state.templates = sanitizeTemplates(c.templates);
-  /* v2.89: snapshots written before passage encryption
-     existed have no record; they load as not set up,
-     exactly like an index.json written before v2.89. */
-  state.encryption = sanitizeEncryptionRecord(c.encryption);
   /* v2.44: snapshots written before tasks rode the cache
      have no list; they load as an empty Tasks view,
      exactly like an index.json written before v2.24
