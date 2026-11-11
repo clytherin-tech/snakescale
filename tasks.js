@@ -1603,6 +1603,41 @@ function catalogFallbackSignal(message) {
   return err;
 }
 
+/* v2.122: the load's listings already carry every child's
+   CURRENT Drive token (driveStoreListDir maps each child's
+   live metadata through driveTokenFromMetadata, head
+   revision first), so a Google Doc sitting in any listed
+   folder gives up its live revision token here with no
+   extra call: file id to token, for every non-folder child
+   of every listed folder (notebooks, trash, archive; a
+   Doc-backed note's Doc stays in its creation folder even
+   when the note itself moves notebooks, so the map spans
+   them all). The reconcile's Doc pass below judges its
+   body carry against this map. An id absent from the map
+   (the Doc was moved out of every listed folder in Drive,
+   or a listing could not see it) reads as no token, and
+   the carry fails toward a refetch, never toward serving
+   a body whose freshness cannot be proven. */
+function docLiveTokenMap(listings) {
+  const map = Object.create(null);
+  if (!listings) { return map; }
+  const takeList = function (entries) {
+    (entries || []).forEach(function (entry) {
+      if (!entry || entry.isDir) { return; }
+      if (typeof entry.fileId === "string" && entry.fileId &&
+          typeof entry.token === "string" && entry.token) {
+        map[entry.fileId] = entry.token;
+      }
+    });
+  };
+  Object.keys(listings.notebooks || {}).forEach(function (slug) {
+    takeList(listings.notebooks[slug]);
+  });
+  takeList(listings.trash);
+  takeList(listings.archive);
+  return map;
+}
+
 /* The fast path: reconcile the catalog against the gathered
    listings (one snapshot of the store's shape, taken by
    loadAllFromRepo). Trusted entries become shells, or full notes
@@ -1698,7 +1733,24 @@ async function reconcileCatalogListings(catalog, listings) {
      revision, the body and its adopted attachments carry
      over, exactly as the listing branch above carries
      them; a revision that moved means the Doc changed
-     elsewhere, and the shell refetches it on open. */
+     elsewhere, and the shell refetches it on open.
+     v2.122: the revision that last clause speaks of is
+     the Doc's LIVE revision, read from this load's own
+     listings (see docLiveTokenMap) and compared against
+     the token the held body was fetched or saved at
+     (prev.sha). The v2.121 test compared prev.sha
+     against the catalog entry's token instead, and both
+     of those were written by THIS app at its last fetch
+     or save, so an edit made in Google Docs, which moves
+     the Doc's real head revision and nothing the app
+     recorded, could never fail it: the app compared
+     itself against itself and carried the stale body
+     through every reload, Sync Now, and reopen (Chris's
+     device report). An entry whose Doc the listings
+     cannot see now fails the same way a moved revision
+     does, toward the refetch, never toward the stale
+     body. */
+  const docLiveTokens = docLiveTokenMap(listings);
   (catalog.entries || []).forEach(function (entry) {
     if (!entry || entry.backend !== "doc") { return; }
     if (!sanitizeDocId(entry.docId)) { return; }
@@ -1709,11 +1761,14 @@ async function reconcileCatalogListings(catalog, listings) {
     if (!out[listName]) { return; }
     const shell = noteFromCatalogEntry(entry, entry.collection);
     const prev = prevById[entry.id];
+    const liveToken = docLiveTokens[entry.docId] || null;
     if (prev && isDocBackedNote(prev) &&
         typeof prev.body === "string" &&
-        (!entry.token || prev.sha === entry.token)) {
+        liveToken && prev.sha &&
+        liveToken === prev.sha) {
       shell.body = prev.body;
       shell.bodyLoaded = true;
+      shell.sha = liveToken;
       shell.attachments = prev.attachments || [];
       shell.docName = prev.docName;
       shell.previewText =
