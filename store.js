@@ -230,6 +230,59 @@ function sanitizeDocId(value) {
   return value;
 }
 
+/* v2.128: one Doc-backed note's checklist tick memory,
+   judged for the catalog's docTicks field (see the tick
+   memory section in media.js). v2.127 proved that once a
+   checklist stands in a Doc as a real Google task list,
+   whether a box is checked exists on no Google API
+   surface, so the app itself remembers the ticks: the
+   record names, for each checklist in the note's body
+   (in document order), its items in order, each with
+   its normalized text and its checked flag, and the
+   ticks are reapplied to the body every time the body
+   is rebuilt from the Doc. The shape is exact: {v: 1,
+   lists: [{items: [{t: string, c: boolean}]}]}, with
+   hard caps (200 lists, 2000 items per list, 5000
+   items overall, 500 characters of text per item), so
+   a hand edited or damaged catalog value can never
+   grow the catalog or slow a load. Anything off shape
+   reads as no memory (null), and a record in which no
+   item stands checked also reads as null: the field
+   exists only where it holds state worth remembering.
+   Returns a fresh normalized record, or null. */
+function sanitizeDocTicks(value) {
+  if (!value || typeof value !== "object" ||
+      Array.isArray(value)) { return null; }
+  if (value.v !== 1 || !Array.isArray(value.lists)) {
+    return null;
+  }
+  if (value.lists.length > 200) { return null; }
+  const lists = [];
+  let total = 0;
+  let anyChecked = false;
+  for (let li = 0; li < value.lists.length; li++) {
+    const rawList = value.lists[li];
+    if (!rawList || typeof rawList !== "object" ||
+        !Array.isArray(rawList.items)) { return null; }
+    if (rawList.items.length > 2000) { return null; }
+    const items = [];
+    for (let ii = 0; ii < rawList.items.length; ii++) {
+      const rawItem = rawList.items[ii];
+      if (!rawItem || typeof rawItem !== "object" ||
+          typeof rawItem.t !== "string") { return null; }
+      total += 1;
+      if (total > 5000) { return null; }
+      const checked = rawItem.c === true;
+      if (checked) { anyChecked = true; }
+      items.push({ t: rawItem.t.slice(0, 500),
+        c: checked });
+    }
+    lists.push({ items: items });
+  }
+  if (!anyChecked) { return null; }
+  return { v: 1, lists: lists };
+}
+
 /* Whether a note object is Doc-backed (v2.121): the one
    test every routing decision reads, so a note whose
    backend field is absent or damaged reads as the file

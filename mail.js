@@ -8311,6 +8311,10 @@ function moveNoteToTrashNow(note, quiet) {
   if (isDocBackedNote(note)) {
     note.backend = "file";
     note.docId = null;
+    /* v2.128: the tick memory leaves with the backend
+       pair: the file note this becomes carries its
+       ticks in its body, as every file note does. */
+    note.docTicks = null;
     note.docName = undefined;
     note.fileId = null;
     note.sha = null;
@@ -8537,6 +8541,9 @@ function archiveNoteNow(note, quiet) {
   if (isDocBackedNote(note)) {
     note.backend = "file";
     note.docId = null;
+    /* v2.128: the tick memory leaves with the backend
+       pair, on the trash rule (see moveNoteToTrashNow). */
+    note.docTicks = null;
     note.docName = undefined;
     note.fileId = null;
     note.sha = null;

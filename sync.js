@@ -320,8 +320,17 @@ const INCOMING_FILE = "incoming.json";
    null and the load's listing reconcile leaves it to the
    catalog's own Doc entry pass (see
    reconcileCatalogListings). A shape 4 catalog is not
-   read, by the same rule. */
-const CATALOG_SHAPE_VERSION = 5;
+   read, by the same rule.
+   v2.128: shape 6 adds a Doc-backed entry's docTicks,
+   its checklist tick memory (see buildCatalogEntry and
+   sanitizeDocTicks in store.js): the record of which
+   checklist boxes stand checked, remembered by the app
+   because a real Google task list's ticks exist on no
+   Google API surface (v2.127). The field stands only on
+   a Doc-backed entry whose note holds checklist state;
+   every other entry omits it entirely. A shape 5
+   catalog is not read, by the same rule. */
+const CATALOG_SHAPE_VERSION = 6;
 const CATALOG_WRITE_DEBOUNCE_MS = 800;
 
 let catalogWriteTimer = null;      /* pending debounce timer, or null */
@@ -361,7 +370,7 @@ function buildCatalogEntry(note, collection) {
      search operators todo: and resource: can judge a
      shell without fetching its file. */
   const todoFacts = loaded ? checklistFactsFromHtml(note.body) : null;
-  return {
+  const entry = {
     id: note.id,
     collection: collection,
     title: note.title || "Untitled note",
@@ -419,6 +428,19 @@ function buildCatalogEntry(note, collection) {
       : (note.fileId || driveCache.fileIds[notePath(note)] || null),
     token: note.sha || null
   };
+  /* v2.128: the tick memory (see the shape comment
+     above). It stands only on a Doc-backed entry whose
+     note holds checklist state: the record the note
+     object carries, judged by the one sanitizer, so a
+     catalog built over shells round trips it unchanged
+     and a damaged value never reaches the file. A file
+     note never carries the field: its ticks live in its
+     body, as they always have. */
+  if (isDocBackedNote(note)) {
+    const ticks = sanitizeDocTicks(note.docTicks);
+    if (ticks) { entry.docTicks = ticks; }
+  }
+  return entry;
 }
 
 function buildCatalogObject() {

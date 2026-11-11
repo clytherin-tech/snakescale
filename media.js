@@ -3386,6 +3386,12 @@ function docConvertListItem(li, emph, ctx, checklist,
   const own = docMergeEmphasis(emph,
     docElementEmphasis(li, ctx.classStyles));
   if (glyph) { glyph.leaf.nodeValue = glyph.rest; }
+  /* v2.128: a checklist item converted from its text
+     glyph means this conversion's states came out of
+     the text itself (the glyph led form), which the
+     tick memory treats as the freshest truth standing
+     (see docLoadNoteBody). */
+  if (checklist && glyph) { ctx.carriedStates = true; }
   const parentBase = docBase(ctx);
   ctx.baseStack.push({
     font: own.font || parentBase.font,
@@ -3796,13 +3802,20 @@ function docExportHtmlToBody(exportHtml, listKinds) {
     baseStack: [],
     images: []
   };
-  if (!parsed.body) { return { html: "", images: [] }; }
+  if (!parsed.body) {
+    return { html: "", images: [], carriedStates: false };
+  }
   const empty = { b: false, i: false, u: false, s: false,
     color: null, bg: null, font: null, size: null,
     sup: false, sub: false };
   return {
     html: docConvertBlocks(parsed.body, empty, ctx),
-    images: ctx.images
+    images: ctx.images,
+    /* v2.128: whether any checklist item's state came
+       out of a text glyph in this conversion (the glyph
+       led form), as opposed to the real task list form
+       whose states no surface carries. */
+    carriedStates: !!ctx.carriedStates
   };
 }
 
@@ -3946,6 +3959,208 @@ async function docAdoptImages(note, converted) {
   return holder.innerHTML;
 }
 
+/* ----- checklist tick memory (v2.128) ----------------------------
+   v2.127 proved that once a checklist stands in a Doc
+   as a real Google task list, whether a box is checked
+   exists on no Google API surface: the export flattens
+   the list to bullets and the document JSON carries no
+   state field, so ticks made in this app were lost the
+   next time the body was rebuilt from the Doc. Chris's
+   call (2026-11-11): the app remembers the ticks
+   itself. The record (sanitizeDocTicks in store.js)
+   rides the note's catalog entry (docTicks, shape 6)
+   and names, for each checklist in the body in
+   document order, its items in order with their
+   normalized text and checked flags.
+
+   Capture: every Doc-backed save recomputes the record
+   from the body it just wrote (saveDocBackedNote in
+   tasks.js calls docTicksFromBody), so a tick toggled
+   in the editor rides the ordinary save cycle and no
+   separate write channel exists.
+
+   Apply: every body built from the Doc (docLoadNoteBody
+   below: opens, poll refills, and Sync Now refills all
+   funnel through it) has the remembered ticks reapplied
+   by docApplyTickMemory, under the conservative
+   matching rule stated there. The one exception: when
+   the incoming conversion carried its states in the
+   text (the glyph led form, which stands whenever the
+   post-pass has not converted the list, or could not),
+   those states are the freshest truth: the body keeps
+   them exactly as converted, and the memory is
+   refreshed from them instead of overriding them with
+   an older record. */
+
+/* One checklist item's own text: the item's text with
+   its nested lists and its box left out, whitespace
+   collapsed and trimmed. This is the text the memory
+   records and the text a later body is matched
+   against, so an item's sublist never speaks for the
+   item itself. */
+function docTickItemText(li) {
+  const clone = li.cloneNode(true);
+  const subs = clone.querySelectorAll("ul, ol");
+  for (let i = 0; i < subs.length; i++) {
+    subs[i].remove();
+  }
+  const boxes = clone.querySelectorAll("input");
+  for (let i = 0; i < boxes.length; i++) {
+    boxes[i].remove();
+  }
+  return String(clone.textContent || "")
+    .replace(/\s+/g, " ").trim();
+}
+
+/* The direct items of one checklist element, in order. */
+function docTickListItems(ul) {
+  const items = [];
+  for (let i = 0; i < ul.children.length; i++) {
+    if (ul.children[i].tagName === "LI") {
+      items.push(ul.children[i]);
+    }
+  }
+  return items;
+}
+
+/* One item's box, or null: the first input among the
+   item's own children, which is where the editor and
+   the converter both put it, ahead of any sublist. */
+function docTickItemBox(li) {
+  for (let i = 0; i < li.children.length; i++) {
+    if (li.children[i].tagName === "INPUT") {
+      return li.children[i];
+    }
+  }
+  return null;
+}
+
+/* Whether one item stands checked, judged by the rule
+   checklistFactsFromHtml judges by: its box is
+   checked, or its item carries the done class the
+   editor keeps in step with the box. */
+function docTickItemChecked(li) {
+  const box = docTickItemBox(li);
+  return !!(box && box.checked) ||
+    li.classList.contains("done");
+}
+
+/* The tick record one body carries (the shape
+   sanitizeDocTicks in store.js judges), or null when
+   no box in it stands checked. Every checklist in the
+   body is recorded, nested ones included, in document
+   order: the same enumeration docApplyTickMemory
+   matches against. */
+function docTicksFromBody(body) {
+  if (!body || body.indexOf("ss-checklist") < 0) {
+    return null;
+  }
+  const holder = document.createElement("div");
+  holder.innerHTML = body;
+  const lists = [];
+  let anyChecked = false;
+  const uls = holder.querySelectorAll("ul.ss-checklist");
+  for (let u = 0; u < uls.length; u++) {
+    const items = [];
+    const lis = docTickListItems(uls[u]);
+    for (let i = 0; i < lis.length; i++) {
+      const checked = docTickItemChecked(lis[i]);
+      if (checked) { anyChecked = true; }
+      items.push({ t: docTickItemText(lis[i]),
+        c: checked });
+    }
+    lists.push({ items: items });
+  }
+  if (!anyChecked) { return null; }
+  return { v: 1, lists: lists };
+}
+
+/* Reapply a note's remembered ticks to a body freshly
+   built from its Doc, and return the body (the input
+   string itself when nothing was applied). The
+   matching rule, per checklist, is conservative, so a
+   tick only ever lands on an item it belongs to:
+   - First, position and text together: an item whose
+     recorded twin at the same position carries the
+     same normalized text and stands checked is
+     checked.
+   - Then, a unique text rematch for the checked
+     records the first pass left unclaimed (an item
+     inserted above theirs in Google shifts positions
+     without changing texts): a still unchecked item
+     whose text names exactly one unclaimed checked
+     record, and which is itself the only unchecked
+     item in the list carrying that text, is checked,
+     claiming that record.
+   - Everything else stands as the conversion left it:
+     an item whose text changed, an item Google added,
+     and the items standing around a removed one gain
+     no tick from a neighbor, and a removed item's tick
+     simply has nowhere to land. Matching never crosses
+     lists: list N of the body answers to list N of the
+     record, in the document order both were captured
+     in. */
+function docApplyTickMemory(note, body) {
+  const record = sanitizeDocTicks(note && note.docTicks);
+  if (!record || !body ||
+      body.indexOf("ss-checklist") < 0) {
+    return body;
+  }
+  const holder = document.createElement("div");
+  holder.innerHTML = body;
+  const uls = holder.querySelectorAll("ul.ss-checklist");
+  let changed = false;
+  for (let u = 0; u < uls.length; u++) {
+    const mem = record.lists[u];
+    if (!mem || !mem.items) { continue; }
+    const lis = docTickListItems(uls[u]);
+    const texts = lis.map(function (li) {
+      return docTickItemText(li);
+    });
+    const claimed = Object.create(null);
+    const checks = lis.map(function () { return false; });
+    lis.forEach(function (li, i) {
+      if (i < mem.items.length && mem.items[i].c &&
+          mem.items[i].t === texts[i]) {
+        checks[i] = true;
+        claimed[i] = true;
+      }
+    });
+    lis.forEach(function (li, i) {
+      if (checks[i]) { return; }
+      let memHit = -1;
+      let memCount = 0;
+      mem.items.forEach(function (m, mi) {
+        if (m.c && m.t === texts[i] && !claimed[mi]) {
+          memCount += 1;
+          memHit = mi;
+        }
+      });
+      if (memCount !== 1) { return; }
+      let bodyCount = 0;
+      texts.forEach(function (t, oi) {
+        if (!checks[oi] && t === texts[i]) {
+          bodyCount += 1;
+        }
+      });
+      if (bodyCount !== 1) { return; }
+      checks[i] = true;
+      claimed[memHit] = true;
+    });
+    lis.forEach(function (li, i) {
+      if (!checks[i]) { return; }
+      const box = docTickItemBox(li);
+      if (box) {
+        box.checked = true;
+        box.setAttribute("checked", "");
+      }
+      li.classList.add("done");
+      changed = true;
+    });
+  }
+  return changed ? holder.innerHTML : body;
+}
+
 /* ----- the body load ----------------------------------------------
    Fill a Doc-backed shell from its Doc: fetch, convert,
    adopt its images, and hold the Doc's revision token and
@@ -3965,6 +4180,18 @@ async function docLoadNoteBody(note) {
   const converted = docExportHtmlToBody(fetched.html,
     fetched.listKinds);
   note.body = await docAdoptImages(note, converted);
+  /* v2.128: the tick memory (see the section above).
+     A conversion that carried its states in the text
+     (the glyph led form) is the freshest truth: the
+     body keeps those states as converted and the
+     memory refreshes from them. Any other build (the
+     real task list form, whose states no surface
+     carries) has the remembered ticks reapplied. */
+  if (converted.carriedStates) {
+    note.docTicks = docTicksFromBody(note.body);
+  } else {
+    note.body = docApplyTickMemory(note, note.body);
+  }
   note.sha = fetched.token;
   /* v2.127: the modified time this body was fetched at
      rides beside the revision token; the near-live poll

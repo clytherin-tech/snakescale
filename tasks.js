@@ -1050,12 +1050,22 @@ function noteFromCatalogEntry(entry, collection) {
     ? "doc" : "file";
   const shellDocId = shellBackend === "doc"
     ? sanitizeDocId(entry && entry.docId) : null;
+  /* v2.128: the entry's tick memory rides onto the shell
+     with the pair, judged by its own sanitizer
+     (sanitizeDocTicks in store.js), so a Doc-backed
+     shell holds the record its first body build will
+     reapply, and a catalog rebuilt over shells round
+     trips it unchanged. A file entry never carries it:
+     the sanitizer is not even consulted. */
+  const shellDocTicks = shellBackend === "doc"
+    ? sanitizeDocTicks(entry && entry.docTicks) : null;
   return {
     id: entry.id,
     title: entry.title || "Untitled note",
     notebook: entry.notebook || "",
     backend: shellBackend,
     docId: shellDocId,
+    docTicks: shellDocTicks,
     tags: Array.isArray(entry.tags) ? entry.tags.slice() : [],
     created: entry.created || "",
     updated: entry.updated || "",
@@ -1794,6 +1804,13 @@ async function reconcileCatalogListings(catalog, listings) {
       shell.sha = liveToken;
       shell.docModifiedTime = liveMark.modifiedTime ||
         prev.docModifiedTime || null;
+      /* v2.128: the carried body was built under the
+         session note's tick memory, so the session's
+         record (the fresher of the pair, captured by
+         its saves) rides with it when it holds one; the
+         entry's own record stands otherwise. */
+      const prevTicks = sanitizeDocTicks(prev.docTicks);
+      if (prevTicks) { shell.docTicks = prevTicks; }
       shell.attachments = prev.attachments || [];
       shell.docName = prev.docName;
       shell.previewText =
@@ -3370,6 +3387,14 @@ async function saveDocBackedNote(note, options) {
   if (saved.modifiedTime) {
     note.docModifiedTime = saved.modifiedTime;
   }
+  /* v2.128: the tick memory is recomputed from the body
+     this save just wrote and stands on the note, where
+     the catalog write this save's saveCache schedules
+     picks it up (buildCatalogEntry). A body with no
+     checked box clears the record outright, so a note
+     whose last tick was unticked in the app does not
+     keep a stale memory. */
+  note.docTicks = docTicksFromBody(note.body);
   rememberLastSavedSnapshot(note.id, candidateContent);
   saveCache();
   /* v2.123: a Doc note's identity settles inside this
