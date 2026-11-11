@@ -2290,31 +2290,6 @@ function wireEvents() {
   document.getElementById("noteBody").addEventListener("input", function () {
     queueNoteTasksRefresh();
   });
-  /* v2.48.0: the same body events feed collapsible
-     sections, through separate listeners, the ones above
-     and below untouched: input events rederive the
-     toggles and folds once they settle; a press on a fold
-     toggle is kept from moving the caret, so the click
-     that follows folds without disturbing any selection;
-     the click itself folds or unfolds through the one
-     toggle path; and keydown runs the fold boundary
-     guards, which only ever unfold before a key acts. */
-  document.getElementById("noteBody").addEventListener("input", function () {
-    queueSectionFoldRefresh();
-  });
-  document.getElementById("noteBody").addEventListener("mousedown", function (ev) {
-    if (ev.target && ev.target.closest &&
-        ev.target.closest(".ss-fold-toggle")) {
-      ev.preventDefault();
-    }
-  });
-  document.getElementById("noteBody").addEventListener("click", function (ev) {
-    const btn = ev.target && ev.target.closest
-      ? ev.target.closest(".ss-fold-toggle") : null;
-    if (btn && btn.parentNode) { toggleSectionFold(btn.parentNode); }
-  });
-  document.getElementById("noteBody").addEventListener("keydown",
-    onSectionFoldKeydown);
 
   /* v2.14: block grip wiring. Pointer movement over the editor
      tracks the block under the pointer; movement anywhere outside

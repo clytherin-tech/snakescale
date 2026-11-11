@@ -3330,42 +3330,6 @@ body.dark #conflictReloadBtn{background:#574512;color:#FFE1A8;border-color:#A887
 #noteBody .ss-note-tasks-title{font-weight:700;font-size:.92em;color:var(--text);margin-bottom:6px;}
 #noteBody .ss-note-tasks-empty{color:var(--muted);font-size:.92em;}
 #noteBody .ss-note-tasks-foot{margin-top:8px;}
-/* v2.48.0: collapsible sections. The fold toggle is a small
-   themed button rendered as the first child of every top
-   level H1 to H3 in the editor: a CSS triangle (no text, so
-   a heading's textContent, the TOC's entries, and every
-   text extraction stay exactly the heading's own words)
-   pointing down while the section is open and rotated to
-   point right while it is folded. The button is editor
-   chrome: contenteditable false, stripped by the save
-   funnel, and never in a saved body. A folded section's
-   blocks carry the runtime only class ss-fold-hidden and
-   are display none on screen; the class is stripped by
-   the save funnel too, and the print builder strips it as
-   well, so a fold is a screen state for reading and a
-   folded section prints and exports expanded. Theme
-   variables only, so dark and light read the same. */
-#noteBody .ss-fold-toggle{
-  display:inline-flex;align-items:center;justify-content:center;
-  width:20px;height:20px;margin:0 4px 0 0;padding:0;
-  border:none;border-radius:5px;background:transparent;
-  color:var(--muted);cursor:pointer;vertical-align:middle;
-  font-size:0;line-height:0;user-select:none;-webkit-user-select:none;
-}
-#noteBody .ss-fold-toggle:hover{background:var(--soft);color:var(--text);}
-#noteBody .ss-fold-toggle:focus-visible{
-  outline:2px solid var(--accent);outline-offset:1px;
-}
-#noteBody .ss-fold-chevron{
-  display:block;width:0;height:0;pointer-events:none;
-  border-left:6px solid transparent;border-right:6px solid transparent;
-  border-top:8px solid currentColor;transition:transform .15s ease;
-}
-#noteBody .ss-fold-toggle.ss-fold-closed .ss-fold-chevron{
-  transform:rotate(-90deg);
-}
-#noteBody .ss-fold-hidden{display:none;}
-
 /* ---------- v1.2 attachments: upload progress panel ---------- */
 #uploadPanel{
   border:1px solid var(--border);border-radius:var(--radius-card);

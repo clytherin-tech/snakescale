@@ -198,19 +198,20 @@ function canonicalizeAttachmentPlaceholders(html) {
      and a stale one self corrects on the next save. Notes
      without a TOC block skip the pass entirely, and their
      headings keep no ids: byte identical to before. */
-  /* v2.48.0: the fold chrome canonicalizes like the link
-     faces above. The toggle buttons are editor furniture
-     and never reach the file; the ss-fold-hidden class is
-     a runtime view state rederived from the attributes on
-     every render, so it is stripped here too (the contrast
-     with ss-filtered-out above is deliberate: that class
-     is a saved table setting, this one is not). What DOES
-     pass through is the saved state itself,
-     data-ss-folded="1" on an H1 to H3 heading, untouched
-     exactly as the heading's other attributes are; the
-     attribute on anything else, or with any other value,
-     is damage and is stripped, so a fold can only ever be
-     a heading's. */
+  /* v2.127: collapsible sections are gone (Chris's
+     call, 2026-11-11: note editing follows Google Docs
+     now, and Docs has no heading folds), so the fold
+     chrome and its saved state canonicalize OUT here:
+     any toggle button a pre-removal body or paste still
+     carries is removed, the runtime hidden class is
+     stripped, and the data-ss-folded attribute is
+     removed on every element, so a note saved by this
+     build carries no fold markup at all and nothing in
+     it can render hidden. The removal is render safe
+     for stored folded notes: with the decoration and
+     the display none rule both gone, a stored
+     data-ss-folded is inert text on the heading until
+     the next save cleans it. */
   holder.querySelectorAll(".ss-fold-toggle").forEach(function (el) {
     el.remove();
   });
@@ -219,10 +220,7 @@ function canonicalizeAttachmentPlaceholders(html) {
     if (!el.classList.length) { el.removeAttribute("class"); }
   });
   holder.querySelectorAll("[data-ss-folded]").forEach(function (el) {
-    if (!/^(H1|H2|H3)$/.test(el.tagName) ||
-        el.getAttribute("data-ss-folded") !== "1") {
-      el.removeAttribute("data-ss-folded");
-    }
+    el.removeAttribute("data-ss-folded");
   });
   /* v2.49.0: a note tasks block canonicalizes harder
      than an attachment or a table of contents: the
@@ -571,7 +569,6 @@ function editorHistoryFillBody(note, bodyHtml) {
   decorateLinkViews(bodyEl);
   decorateTaskLinks(bodyEl);
   refreshTocBlocks(bodyEl);
-  decorateSectionFolds(bodyEl);
   refreshNoteTaskBlocks(bodyEl, note);
   decorateCodeCaretBrs(bodyEl);
   finishNoteOpenAttachments(note).catch(function (err) {
@@ -7182,19 +7179,6 @@ function scrollToTocHeading(id) {
   const headings = bodyEl.querySelectorAll("h1, h2, h3");
   for (let i = 0; i < headings.length; i++) {
     if (headings[i].getAttribute("id") === id) {
-      /* v2.48.0: a target sitting inside a folded section
-         is hidden, and a jump to a hidden heading lands
-         nowhere the reader can see, so the sections
-         hiding it unfold first. That unfold edits the
-         saved fold state, so it marks the note dirty like
-         the toggle itself does. A visible target (a
-         folded heading itself included: the heading
-         always stands) jumps exactly as before. */
-      if (headings[i].classList.contains("ss-fold-hidden")) {
-        if (unfoldHeadingsHiding(bodyEl, headings[i])) {
-          markDirty();
-        }
-      }
       headings[i].scrollIntoView({ block: "start" });
       return;
     }
@@ -7489,362 +7473,3 @@ function insertNoteTasksBlock() {
   if (note) { refreshNoteTaskBlocks(bodyEl, note); }
   placeCaretIn(follow, 0);
 }
-
-/* ----- v2.48.0: collapsible sections -----------------------------------
-   Phase 4 release 4 of the Evernote parity program, built to
-   Evernote's collapsible sections (its help article "Toggle
-   lists, toggle blocks, and collapsible sections"): apply a
-   header style and an arrow appears at the start of the
-   line; tap the arrow to expand or collapse the section and
-   show or hide its contents; text, images, and other
-   elements can live inside or outside header sections; the
-   fold follows the note. Here the arrow is a themed button
-   (class ss-fold-toggle) rendered as the first child of
-   every top level H1, H2, and H3, the levels the table of
-   contents block already draws from. (Evernote also offers
-   an Extra small header level, standalone toggle blocks,
-   toggle lists, and dragging a collapsed section as one
-   block; none of those are this release, and the header
-   levels are this editor's own three.)
-
-   THE FOLD STATE IS SAVED STATE, carried on the heading
-   element itself as data-ss-folded="1", the one shape that
-   follows the note the way Evernote's does: it is in the
-   saved body, so it syncs, reloads, duplicates, merges,
-   templates, and restores exactly like the heading's other
-   attributes, and a note that never folds serializes byte
-   identically to v2.47.0 (the attribute exists only on a
-   heading the user actually folded, and removing it is
-   exactly the pre fold byte form). The save funnel
-   (canonicalizeAttachmentPlaceholders) passes the
-   attribute through on H1 to H3 headings and strips it
-   anywhere else; it strips the toggle buttons and the
-   runtime hidden class outright, in the same spirit as the
-   link faces and the cell selection: chrome and view state
-   never reach the file, the attribute does.
-
-   HIDING IS A CLASS, NEVER A REMOVAL. applySectionFolds
-   walks the body's top level children once, tracking the
-   level of the folded heading whose section is currently
-   open ended: every block after a folded heading, up to
-   the next heading of the same or higher level, carries
-   ss-fold-hidden and is display none on screen. The blocks
-   stay in the DOM the whole time, so saving while folded
-   saves the hidden content too (the funnel strips only the
-   class), search and the catalog read the saved body and
-   see folded words like any others, backlink scanning is
-   untouched, and undo works on ordinary content. Nesting
-   is level correct by construction: folding an H1 hides
-   its H2 subsections whole, and unfolding it recomputes
-   from the attributes, so a subsection the user folded
-   earlier is still folded (its attribute never moved).
-
-   EDITING AT A FOLD BOUNDARY IS GUARDED, because a hidden
-   block the caret cannot see must never be edited blind:
-     - Enter or forward Delete inside a folded heading
-       unfolds that heading first, then the key does its
-       ordinary work in the open. (Evernote instead puts a
-       new line outside the section on Enter at the end of
-       a collapsed header; unfolding was chosen here
-       because it keeps every keystroke's result visible,
-       which is the safer property in this editor, and the
-       difference is named in the release notes.)
-     - Backspace at the very start of a block whose
-       previous sibling is fold hidden unfolds the sections
-       hiding that sibling first, so the merge the key is
-       about to make happens between two visible blocks.
-     - Deleting a folded heading cannot swallow its
-       section: the hidden blocks are siblings, not
-       children, and once the heading is gone the input
-       driven refresh recomputes the folds and they stand
-       visible as ordinary content.
-   The print builder strips the hidden class and the
-   toggles, so a folded section prints expanded, and the
-   exports read the canonical saved body, which never
-   carries the class at all: a fold is a screen state for
-   reading, never a way to leave content out of a copy. */
-
-/* The heading level (1 to 3) of an element, or 0 when it
-   is not one of the section headings. The TOC's own level
-   table is the single source, so the fold and the table
-   of contents can never disagree about which headings
-   are sections. */
-function foldHeadingLevel(el) {
-  if (!el || !el.tagName) { return 0; }
-  return TOC_HEADING_TAGS[el.tagName] || 0;
-}
-
-/* Whether a heading element currently carries the saved
-   folded state. The attribute is the whole record: no
-   side table, no per device state. */
-function isFoldedHeading(el) {
-  return foldHeadingLevel(el) > 0 &&
-    !!el && el.getAttribute("data-ss-folded") === "1";
-}
-
-/* The toggle button a heading wears, or null. Toggles are
-   direct children of their heading, so a shallow look is
-   the whole search. */
-function foldToggleOf(heading) {
-  if (!heading || !heading.querySelector) { return null; }
-  const found = heading.querySelectorAll(".ss-fold-toggle");
-  return found.length ? found[0] : null;
-}
-
-/* Bring one heading's toggle in line with its fold state:
-   the closed class (which rotates the triangle to point
-   right), the expanded state for assistive tools, and a
-   label naming the action and the section. The label
-   reads the heading's text, which the toggle itself never
-   pollutes: its triangle is pure CSS and it holds no text
-   nodes at all. */
-function syncFoldToggle(heading) {
-  const btn = foldToggleOf(heading);
-  if (!btn) { return; }
-  const folded = isFoldedHeading(heading);
-  btn.classList.toggle("ss-fold-closed", folded);
-  btn.setAttribute("aria-expanded", folded ? "false" : "true");
-  const label = (folded ? "Expand section: " : "Collapse section: ") +
-    (heading.textContent || "").trim();
-  btn.setAttribute("aria-label", label);
-  btn.title = label;
-}
-
-/* Give a top level heading its toggle when it lacks one
-   (a fresh heading, a heading whose contents were just
-   retyped wholesale, an undone edit), drop any duplicates
-   a paste or an undo tangle left behind, and sync the
-   survivor. The button is contenteditable false, so the
-   caret can never enter it and text editing flows around
-   it exactly as around an attachment block. */
-function ensureFoldToggle(heading) {
-  const found = heading.querySelectorAll(".ss-fold-toggle");
-  for (let i = 1; i < found.length; i++) { found[i].remove(); }
-  if (!found.length) {
-    const btn = document.createElement("button");
-    btn.setAttribute("type", "button");
-    btn.setAttribute("class", "ss-fold-toggle");
-    btn.setAttribute("contenteditable", "false");
-    const chevron = document.createElement("span");
-    chevron.setAttribute("class", "ss-fold-chevron");
-    chevron.setAttribute("aria-hidden", "true");
-    btn.appendChild(chevron);
-    heading.insertBefore(btn, heading.firstChild);
-  }
-  syncFoldToggle(heading);
-}
-
-/* Recompute which top level blocks a body's folds hide.
-   One pass in document order: foldLevel is the level of
-   the folded heading whose section is currently running
-   (0 when none). A heading at the running level or higher
-   ends the section and stands visible itself; a deeper
-   heading is inside it and hides with its own section;
-   any other block hides exactly while a section runs.
-   Purely derived from the headings' saved attributes, so
-   it is idempotent and safe to run after any edit. The
-   class is touched only when a block's state actually
-   changes, and an emptied class attribute is removed
-   with it: a classList toggle on a block that was never
-   hidden would otherwise leave a class="" residue in the
-   live DOM for the save funnel to carry, and a block that
-   was never folded must serialize exactly as it did
-   before this release. */
-function applySectionFolds(bodyEl) {
-  if (!bodyEl || !bodyEl.children) { return; }
-  let foldLevel = 0;
-  Array.prototype.forEach.call(bodyEl.children, function (child) {
-    const level = foldHeadingLevel(child);
-    let hidden = false;
-    if (level) {
-      if (foldLevel && level > foldLevel) {
-        hidden = true;
-      } else {
-        foldLevel = 0;
-        if (isFoldedHeading(child)) { foldLevel = level; }
-      }
-    } else {
-      hidden = !!foldLevel;
-    }
-    const has = child.classList.contains("ss-fold-hidden");
-    if (hidden && !has) {
-      child.classList.add("ss-fold-hidden");
-    } else if (!hidden && has) {
-      child.classList.remove("ss-fold-hidden");
-      if (!child.classList.length) { child.removeAttribute("class"); }
-    }
-  });
-}
-
-/* The full editor decoration for folds: every top level
-   heading wears exactly one synced toggle, stray toggles
-   anywhere else (a pasted copy nested in a list, a toggle
-   whose heading was demoted to a paragraph) are removed,
-   and the hidden classes are recomputed. Runs at render,
-   beside the TOC refresh, and (debounced) after body
-   input, so headings created, demoted, deleted, undone,
-   or redone by any path settle to the same state. */
-function decorateSectionFolds(bodyEl) {
-  if (!bodyEl || !bodyEl.querySelectorAll) { return; }
-  bodyEl.querySelectorAll(".ss-fold-toggle").forEach(function (btn) {
-    const host = btn.parentNode;
-    if (!host || host.parentNode !== bodyEl ||
-        !foldHeadingLevel(host)) {
-      btn.remove();
-    }
-  });
-  Array.prototype.forEach.call(bodyEl.children, function (child) {
-    if (foldHeadingLevel(child)) { ensureFoldToggle(child); }
-  });
-  applySectionFolds(bodyEl);
-}
-
-/* Set or clear one heading's saved fold state and settle
-   the editor around it: the toggle's face and every
-   hidden class the change implies. */
-function setHeadingFolded(heading, folded) {
-  if (!heading || !foldHeadingLevel(heading)) { return; }
-  if (folded) { heading.setAttribute("data-ss-folded", "1"); }
-  else { heading.removeAttribute("data-ss-folded"); }
-  syncFoldToggle(heading);
-  if (heading.parentNode) { applySectionFolds(heading.parentNode); }
-}
-
-/* The arrow's own behavior, from the body's click wiring:
-   fold or unfold the heading's section and mark the note
-   dirty, so the state the user sees is the state that
-   saves. A locked note (Trash or Archive, where the body
-   is not editable) never folds: the arrow is reading
-   chrome there and the saved state is not this view's to
-   change. */
-function toggleSectionFold(heading) {
-  const bodyEl = document.getElementById("noteBody");
-  if (!bodyEl || !heading || heading.parentNode !== bodyEl) { return; }
-  if (bodyEl.contentEditable !== "true") { return; }
-  setHeadingFolded(heading, !isFoldedHeading(heading));
-  markDirty();
-}
-
-/* Unfold every folded heading whose section hides the
-   given top level block, and return how many unfolded.
-   The pass replays applySectionFolds' walk up to the
-   block, keeping the stack of folded headings still in
-   force there (a heading ends the folds at its own level
-   or higher before its own state is counted); the block,
-   if it is itself a heading, is hidden only by folds
-   strictly above its level, which the final filter keeps.
-   Used by the table of contents jump (a folded target
-   must be reachable) and by the Backspace boundary guard. */
-function unfoldHeadingsHiding(bodyEl, target) {
-  if (!bodyEl || !target || target.parentNode !== bodyEl) { return 0; }
-  const active = [];
-  const children = Array.prototype.slice.call(bodyEl.children);
-  for (let i = 0; i < children.length; i++) {
-    const child = children[i];
-    if (child === target) { break; }
-    const level = foldHeadingLevel(child);
-    if (!level) { continue; }
-    for (let j = active.length - 1; j >= 0; j--) {
-      if (active[j].level >= level) { active.splice(j, 1); }
-    }
-    if (isFoldedHeading(child)) {
-      active.push({ el: child, level: level });
-    }
-  }
-  const targetLevel = foldHeadingLevel(target);
-  const hiding = active.filter(function (entry) {
-    return !targetLevel || entry.level < targetLevel;
-  });
-  hiding.forEach(function (entry) {
-    entry.el.removeAttribute("data-ss-folded");
-    syncFoldToggle(entry.el);
-  });
-  if (hiding.length) { applySectionFolds(bodyEl); }
-  return hiding.length;
-}
-
-/* The debounced refresh the body's input events feed,
-   mirroring queueTocRefresh: typing, paste, the style
-   dropdown, block drags, undo, and redo all arrive as
-   input events, and once they settle the toggles and the
-   hidden classes are rederived, so a heading deleted
-   while folded gives its section back as visible content
-   and a heading created anywhere gains its arrow. */
-const queueSectionFoldRefresh = debounce(function () {
-  const bodyEl = document.getElementById("noteBody");
-  if (bodyEl) { decorateSectionFolds(bodyEl); }
-}, 150);
-
-/* Whether the caret sits at the very start (or very end)
-   of a top level block: the text of the block before (or
-   after) the caret is empty. The toggle contributes no
-   text, so a caret before the heading's first letter is
-   the start even though the button precedes it in the
-   DOM. Shared by the boundary guards below. */
-function caretAtBlockEdge(block, atStart) {
-  const sel = window.getSelection();
-  if (!sel || !sel.rangeCount) { return false; }
-  const range = sel.getRangeAt(0);
-  if (!range.collapsed || !block.contains(range.startContainer)) {
-    return false;
-  }
-  const probe = document.createRange();
-  probe.selectNodeContents(block);
-  if (atStart) { probe.setEnd(range.startContainer, range.startOffset); }
-  else { probe.setStart(range.endContainer, range.endOffset); }
-  return probe.toString() === "";
-}
-
-/* The top level block the caret sits in, or null when the
-   selection is not a collapsed caret inside the body. */
-function caretTopBlock(bodyEl) {
-  const sel = window.getSelection();
-  if (!sel || !sel.rangeCount) { return null; }
-  const range = sel.getRangeAt(0);
-  if (!range.collapsed) { return null; }
-  let node = range.startContainer;
-  if (!bodyEl.contains(node)) { return null; }
-  while (node && node.parentNode !== bodyEl) { node = node.parentNode; }
-  return node || null;
-}
-
-/* The boundary guards described in the section header,
-   bound to the body's keydown beside the other body
-   wirings. The handler only ever UNFOLDS and then steps
-   aside: it never prevents a key, never moves the caret,
-   and never touches content, so every key keeps the exact
-   behavior it had before this release, with the single
-   difference that the blocks it is about to act on are
-   visible when it acts. */
-function onSectionFoldKeydown(ev) {
-  if (!ev || ev.ctrlKey || ev.metaKey || ev.altKey) { return; }
-  if (ev.key !== "Enter" && ev.key !== "Backspace" &&
-      ev.key !== "Delete") {
-    return;
-  }
-  const bodyEl = document.getElementById("noteBody");
-  if (!bodyEl || bodyEl.contentEditable !== "true") { return; }
-  const block = caretTopBlock(bodyEl);
-  if (!block) { return; }
-  if (ev.key === "Enter" || ev.key === "Delete") {
-    /* Inside a folded heading, Enter (any position) and a
-       forward Delete at the heading's end would act on or
-       past content the reader cannot see; unfold first. */
-    if (isFoldedHeading(block) &&
-        (ev.key === "Enter" || caretAtBlockEdge(block, false))) {
-      setHeadingFolded(block, false);
-      markDirty();
-    }
-    return;
-  }
-  /* Backspace at the start of a block whose previous
-     sibling is fold hidden would merge this block into a
-     hidden one; unfold whatever hides that sibling, so
-     the merge joins two visible blocks. */
-  const prev = block.previousElementSibling;
-  if (prev && prev.classList.contains("ss-fold-hidden") &&
-      caretAtBlockEdge(block, true)) {
-    if (unfoldHeadingsHiding(bodyEl, prev)) { markDirty(); }
-  }
-}
-

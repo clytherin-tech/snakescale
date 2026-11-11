@@ -684,19 +684,6 @@ function buildPrintDocument(note, bodyHtml) {
     el.classList.remove("ss-filtered-out");
     if (!el.classList.length) { el.removeAttribute("class"); }
   });
-  /* v2.48.0: a fold is a screen state for reading, never
-     a way to leave content out of a printed copy, so the
-     runtime hidden class is stripped from the print copy
-     the same way (every folded section prints expanded),
-     and any fold toggle in the copy goes with it. The
-     note itself is not touched. */
-  printHolder.querySelectorAll(".ss-fold-hidden").forEach(function (el) {
-    el.classList.remove("ss-fold-hidden");
-    if (!el.classList.length) { el.removeAttribute("class"); }
-  });
-  printHolder.querySelectorAll(".ss-fold-toggle").forEach(function (el) {
-    el.remove();
-  });
   /* v2.9: the body the print view receives is a clone of the LIVE
      body, faces and wrapped originals included. Faces are editor
      presentation and would double every faced link's text on
@@ -5789,12 +5776,6 @@ function clearDeepCleanElement(el) {
      the same rule: the deep clean never unwraps, strips,
      or descends into it or anything inside it. */
   if (el.closest && el.closest(".ss-note-tasks")) { return false; }
-  /* v2.48.0: a fold toggle is editor chrome in the same
-     sense: the deep clean never unwraps, strips, or
-     descends into it (its chevron span would otherwise
-     meet the span unwrap rule and the arrow would lose
-     its triangle while the fold itself survived). */
-  if (el.closest && el.closest(".ss-fold-toggle")) { return false; }
   if (el.tagName === "INPUT") { return false; }
   let stripped = false;
   if (el.hasAttribute("style")) {

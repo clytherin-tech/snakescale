@@ -7482,11 +7482,6 @@ function renderEditor() {
        one whose stored snapshot went stale, shows correct
        entries before anything is touched. */
     refreshTocBlocks(document.getElementById("noteBody"));
-    /* v2.48.0: the fold toggles are rebuilt and the
-       saved fold states reapplied on the body just
-       filled, beside the TOC refresh, so a note reopens
-       with its sections folded exactly as saved. */
-    decorateSectionFolds(document.getElementById("noteBody"));
     /* v2.49.0: the note's tasks blocks paint from the
        task state as it stands at this render, the cache
        paint's copy included: the block is a window, and

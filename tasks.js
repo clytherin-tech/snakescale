@@ -1626,7 +1626,15 @@ function docLiveTokenMap(listings) {
       if (!entry || entry.isDir) { return; }
       if (typeof entry.fileId === "string" && entry.fileId &&
           typeof entry.token === "string" && entry.token) {
-        map[entry.fileId] = entry.token;
+        /* v2.127: the entry's modified time rides beside
+           its token. A Doc's head revision lags its edits
+           while its modified time moves at once, so the
+           carry below judges the pair, not the token
+           alone. */
+        map[entry.fileId] = {
+          token: entry.token,
+          modifiedTime: entry.modifiedTime || null
+        };
       }
     });
   };
@@ -1749,7 +1757,19 @@ async function reconcileCatalogListings(catalog, listings) {
      device report). An entry whose Doc the listings
      cannot see now fails the same way a moved revision
      does, toward the refetch, never toward the stale
-     body. */
+     body.
+     v2.127: the pair the v2.122 pass judges is now both
+     of the Doc's live markers, the token and the listing
+     modified time, against both markers the held body
+     was fetched or saved at (prev.sha, prev.docModifiedTime).
+     The token alone re-opened the same stale window on
+     the load path that the poll had: Google advances a
+     Doc's head revision lazily, so a Google side edit
+     could leave the live token equal to the recorded one
+     while the Doc had already moved, and a body carrying
+     no recorded modified time could adopt the moved one
+     as its own baseline. Judged on the pair, the carry
+     also records the live modified time on the shell. */
   const docLiveTokens = docLiveTokenMap(listings);
   (catalog.entries || []).forEach(function (entry) {
     if (!entry || entry.backend !== "doc") { return; }
@@ -1761,14 +1781,19 @@ async function reconcileCatalogListings(catalog, listings) {
     if (!out[listName]) { return; }
     const shell = noteFromCatalogEntry(entry, entry.collection);
     const prev = prevById[entry.id];
-    const liveToken = docLiveTokens[entry.docId] || null;
+    const liveMark = docLiveTokens[entry.docId] || null;
+    const liveToken = liveMark ? liveMark.token : null;
     if (prev && isDocBackedNote(prev) &&
         typeof prev.body === "string" &&
         liveToken && prev.sha &&
-        liveToken === prev.sha) {
+        liveToken === prev.sha &&
+        (!liveMark.modifiedTime || !prev.docModifiedTime ||
+         liveMark.modifiedTime === prev.docModifiedTime)) {
       shell.body = prev.body;
       shell.bodyLoaded = true;
       shell.sha = liveToken;
+      shell.docModifiedTime = liveMark.modifiedTime ||
+        prev.docModifiedTime || null;
       shell.attachments = prev.attachments || [];
       shell.docName = prev.docName;
       shell.previewText =
@@ -3335,8 +3360,16 @@ async function saveDocBackedNote(note, options) {
     note.docName = note.title || "";
   }
   const uploadHtml = await docBuildUploadHtml(note);
-  const saved = await docSaveDocument(note, uploadHtml);
+  const saved = await docSaveDocument(note, uploadHtml, {
+    checklist: docUploadChecklistCount(uploadHtml) > 0
+  });
   note.sha = saved.token || note.sha;
+  /* v2.127: the modified time this body was saved at
+     rides beside the token, so the near-live poll does
+     not read the app's own save as an outside change. */
+  if (saved.modifiedTime) {
+    note.docModifiedTime = saved.modifiedTime;
+  }
   rememberLastSavedSnapshot(note.id, candidateContent);
   saveCache();
   /* v2.123: a Doc note's identity settles inside this

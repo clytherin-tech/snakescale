@@ -1985,7 +1985,15 @@ async function driveStoreListDir(path) {
          without a single extra call. Folders carry neither. */
       fileId: child.mimeType === DRIVE_FOLDER_MIME ? null : child.id,
       token: child.mimeType === DRIVE_FOLDER_MIME
-        ? null : driveTokenFromMetadata(child)
+        ? null : driveTokenFromMetadata(child),
+      /* v2.127: the child's modified time rides along too.
+         A Google Doc's head revision can lag its edits by
+         minutes while its modified time moves at once, so
+         the reconcile's Doc pass (docLiveMarkMap in
+         tasks.js) judges a held Doc body against both of
+         the Doc's live markers, not the revision alone. */
+      modifiedTime: child.mimeType === DRIVE_FOLDER_MIME
+        ? null : (child.modifiedTime || null)
     };
   });
 }
@@ -2235,6 +2243,221 @@ async function docApiJson(url, options) {
   return res.json();
 }
 
+/* ----- the Docs API as a soft channel (v2.127) --------------
+   The Drive HTML export flattens a Google Docs checkbox
+   list into an ordinary bullet list (measured on a real
+   API made checklist: its export wears bullet markers and
+   no glyph text, indistinguishable from bullets), so the
+   export alone can never tell the converter which lists
+   are checklists. The document's own JSON can: a checkbox
+   list's levels carry glyphFormat "%0" with no glyph type,
+   where a bullet level carries no glyphFormat and a
+   numbered level carries a glyph type. These helpers read
+   that JSON on a channel that can only ever soften, never
+   break, a Doc open or save: every failure reads as no
+   information, the export conversion proceeds exactly as
+   it did before, and the module's consent state (owned by
+   docApiFetch) is never touched from here. Checked state,
+   by the same measurement, exists on no API surface at
+   all: no field of the document JSON carries it and no
+   batchUpdate request sets it, so it crosses only as the
+   glyph text of the not yet converted form (see the
+   post-pass at docSaveDocument). */
+
+async function docFetchDocumentJson(docId) {
+  try {
+    const res = await gdriveFetch(
+      "https://docs.googleapis.com/v1/documents/" +
+      encodeURIComponent(docId));
+    if (!res || !res.ok) { return null; }
+    return await res.json();
+  } catch (e) {
+    return null;
+  }
+}
+
+/* One batchUpdate against the Docs API on the same soft
+   terms: true when Google accepted the requests, false
+   on any failure, never a throw. */
+async function docDocsApiBatchUpdate(docId, requests) {
+  try {
+    const res = await gdriveFetch(
+      "https://docs.googleapis.com/v1/documents/" +
+      encodeURIComponent(docId) + ":batchUpdate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ requests: requests })
+      });
+    return !!res && !!res.ok;
+  } catch (e) {
+    return false;
+  }
+}
+
+/* The key one list wears on both sides of the boundary:
+   the document JSON names a list "kix.<id>" while the
+   export's classes spell it "lst-kix_<id>-<level>", and
+   an id's own dots (kix.list.1) come through the export
+   as underscores (lst-kix_list_1-0). Normalizing both
+   sides through this one function is what lets a
+   converter level find its JSON level. */
+function docKindListKey(listId) {
+  return String(listId || "")
+    .replace(/^kix\./, "").replace(/\./g, "_");
+}
+
+/* Which levels of which lists in a document JSON are
+   checkbox levels, as a map of normalized list id to a
+   set of levels. The signature is the measured one
+   (from a real API made checklist, all nine levels):
+   a level whose glyphFormat is exactly its own counter
+   placeholder and nothing else ("%0" at level 0, "%1"
+   at level 1, and so on) and whose glyph type is
+   absent or unspecified. A numbered level fails the
+   test twice over (its format carries its mark after
+   the placeholder, "%0." and friends, and its type is
+   set), and a bullet level carries no format at all. */
+function docChecklistKindsFromJson(docJson) {
+  const kinds = Object.create(null);
+  if (!docJson || !docJson.lists) { return kinds; }
+  Object.keys(docJson.lists).forEach(function (listId) {
+    const levels = ((docJson.lists[listId] || {})
+      .listProperties || {}).nestingLevels || [];
+    const marked = Object.create(null);
+    levels.forEach(function (lvl, i) {
+      if (!lvl) { return; }
+      if (typeof lvl.glyphFormat === "string" &&
+          /^%\d+$/.test(lvl.glyphFormat) &&
+          (!lvl.glyphType ||
+           lvl.glyphType === "GLYPH_TYPE_UNSPECIFIED")) {
+        marked[i] = true;
+      }
+    });
+    if (Object.keys(marked).length) {
+      kinds[docKindListKey(listId)] = marked;
+    }
+  });
+  return kinds;
+}
+
+/* The full text of one paragraph in a document JSON:
+   its text runs joined, the string the glyph judgment
+   reads (a run boundary inside the text is invisible
+   here, exactly as it is in the rendered Doc). */
+function docJsonParagraphText(par) {
+  let text = "";
+  (par.elements || []).forEach(function (e) {
+    if (e.textRun &&
+        typeof e.textRun.content === "string") {
+      text += e.textRun.content;
+    }
+  });
+  return text;
+}
+
+/* Find the checklist runs a save's upload left in a Doc,
+   in the shape the post-pass converts: consecutive
+   bullet paragraphs of one list whose text leads with a
+   checkbox glyph, the form Google's HTML import makes
+   of the app's glyph led checklist items (and the form
+   Chris's own test Doc stands in). A list the document
+   already carries as a checkbox list (its kinds) is
+   left alone. Each run also carries the range its
+   paragraphs will stand at once every glyph ahead of
+   them is deleted, which is the range the bullet
+   conversion is addressed to. */
+function docFindGlyphChecklistRuns(docJson, kinds) {
+  const runs = [];
+  if (!docJson || !docJson.body ||
+      !Array.isArray(docJson.body.content)) {
+    return runs;
+  }
+  let current = null;
+  docJson.body.content.forEach(function (el) {
+    const par = el && el.paragraph;
+    if (!par || !par.bullet ||
+        typeof el.startIndex !== "number") {
+      current = null;
+      return;
+    }
+    const listId = par.bullet.listId || "";
+    const marked = kinds &&
+      kinds[docKindListKey(listId)];
+    if (marked && marked[par.bullet.nestingLevel || 0]) {
+      current = null;
+      return;
+    }
+    const m = docJsonParagraphText(par)
+      .match(/^\s*(☐|☑|✓|✔)\s?/);
+    if (!m) { current = null; return; }
+    const item = {
+      startIndex: el.startIndex,
+      endIndex: el.endIndex,
+      glyphLength: m[0].length,
+      listId: listId
+    };
+    if (current && current.listId === listId) {
+      current.items.push(item);
+    } else {
+      current = { listId: listId, items: [item] };
+      runs.push(current);
+    }
+  });
+  let shift = 0;
+  runs.forEach(function (run) {
+    let own = 0;
+    run.items.forEach(function (it) {
+      own += it.glyphLength;
+    });
+    run.bulletRange = {
+      startIndex: run.items[0].startIndex - shift,
+      endIndex: run.items[run.items.length - 1].endIndex -
+        shift - own
+    };
+    shift += own;
+  });
+  return runs;
+}
+
+/* Turn a just saved Doc's glyph led checklist items
+   into a real Google Docs task list: delete each item's
+   leading glyph, then set the checkbox bullet preset
+   over each run's paragraphs. Best effort by design:
+   the save it rides on has already landed, any failure
+   leaves the glyph led form standing (which the import
+   converter reads back as a working checklist with its
+   states), and the next save tries again, because every
+   save uploads the checklist in the glyph led form
+   afresh. Returns whether the conversion ran. */
+async function docConvertChecklistsPostPass(docId) {
+  const docJson = await docFetchDocumentJson(docId);
+  if (!docJson) { return false; }
+  const runs = docFindGlyphChecklistRuns(docJson,
+    docChecklistKindsFromJson(docJson));
+  if (!runs.length) { return false; }
+  const dels = [];
+  runs.forEach(function (run) {
+    run.items.forEach(function (it) { dels.push(it); });
+  });
+  dels.sort(function (a, b) {
+    return b.startIndex - a.startIndex;
+  });
+  const delOk = await docDocsApiBatchUpdate(docId,
+    dels.map(function (it) {
+      return { deleteContentRange: { range: {
+        startIndex: it.startIndex,
+        endIndex: it.startIndex + it.glyphLength } } };
+    }));
+  if (!delOk) { return false; }
+  return docDocsApiBatchUpdate(docId,
+    runs.map(function (run) {
+      return { createParagraphBullets: {
+        range: { startIndex: run.bulletRange.startIndex,
+          endIndex: run.bulletRange.endIndex },
+        bulletPreset: "BULLET_CHECKBOX" } };
+    }));
+}
+
 /* Create the Google Doc backing a new Doc-backed note, in
    the notebook's own store folder (the folder every note
    file of that notebook lives in; folder listings only
@@ -2265,9 +2488,16 @@ async function docCreateDocument(note) {
    proves the file is still the Doc this note points at),
    then an export to HTML. Returns the export HTML, the
    Doc's file name as the store knows it (kept on the note
-   so a later title edit can rename the Doc on save), and
-   the revision token the load should hold, the same
-   driveTokenFromMetadata the file driver uses. */
+   so a later title edit can rename the Doc on save), the
+   revision token the load should hold, the same
+   driveTokenFromMetadata the file driver uses, and
+   (v2.127) BOTH of the Doc's live markers the load was
+   taken at, the token and the metadata's modified time,
+   plus the document JSON's word on which of its lists
+   are checkbox lists (docChecklistKindsFromJson; the
+   export cannot say, see the soft channel above). The
+   JSON read is soft: any failure leaves listKinds empty
+   and the conversion proceeds export only. */
 async function docFetchDocument(docId) {
   const meta = await docApiJson(
     "https://www.googleapis.com/drive/v3/files/" +
@@ -2284,10 +2514,13 @@ async function docFetchDocument(docId) {
     encodeURIComponent(docId) +
     "/export?mimeType=" + encodeURIComponent("text/html"));
   const html = await res.text();
+  const docJson = await docFetchDocumentJson(docId);
   return {
     html: html,
     name: typeof meta.name === "string" ? meta.name : "",
-    token: driveTokenFromMetadata(meta)
+    token: driveTokenFromMetadata(meta),
+    modifiedTime: meta.modifiedTime || null,
+    listKinds: docChecklistKindsFromJson(docJson)
   };
 }
 
@@ -2299,8 +2532,18 @@ async function docFetchDocument(docId) {
    fetched is carried onto the Doc's file name with a
    small metadata update after the content lands; that
    rename is best effort, because the content save is the
-   save. Returns the Doc's new revision token. */
-async function docSaveDocument(note, uploadHtml) {
+   save. Returns the Doc's new live markers, the revision
+   token and the modified time (v2.127: the near-live
+   poll judges both, so a save must settle both, read
+   after everything this save did, the rename and the
+   checklist post-pass included, so the app's own save
+   never reads as an external change). When the upload
+   carried checklist items (the caller counts them in
+   the payload), the glyph led items the import just
+   made are converted in place into a real Google Docs
+   task list (docConvertChecklistsPostPass): best
+   effort, riding on the landed save, never failing it. */
+async function docSaveDocument(note, uploadHtml, options) {
   const docId = sanitizeDocId(note.docId);
   if (!docId) {
     throw docHttpError(0,
@@ -2318,6 +2561,8 @@ async function docSaveDocument(note, uploadHtml) {
   let data = null;
   try { data = await res.json(); } catch (e) { data = null; }
   let token = driveTokenFromMetadata(data);
+  let modifiedTime = (data && data.modifiedTime) || null;
+  let renamed = false;
   if (typeof note.docName === "string" && note.title &&
       note.docName !== note.title) {
     try {
@@ -2329,19 +2574,45 @@ async function docSaveDocument(note, uploadHtml) {
           body: JSON.stringify({ name: note.title })
         });
       note.docName = note.title;
+      renamed = true;
     } catch (e) { /* the content save stands */ }
   }
-  if (!token) {
+  let postPassed = false;
+  if (options && options.checklist) {
+    try {
+      postPassed = await docConvertChecklistsPostPass(docId);
+    } catch (e) {
+      /* best effort by design; the save stands */
+      console.warn("Checklist conversion after a Doc" +
+        " save did not run:", e);
+    }
+  }
+  if (!token || renamed || postPassed) {
     try {
       const meta = await docApiJson(
         "https://www.googleapis.com/drive/v3/files/" +
         encodeURIComponent(docId) +
         "?fields=" + encodeURIComponent(
           "id,headRevisionId,modifiedTime"));
-      token = driveTokenFromMetadata(meta);
-    } catch (e) { token = null; }
+      token = driveTokenFromMetadata(meta) || token;
+      modifiedTime = (meta && meta.modifiedTime) ||
+        modifiedTime;
+    } catch (e) { /* the upload's own markers stand */ }
   }
-  return { token: token };
+  return { token: token, modifiedTime: modifiedTime };
+}
+
+/* How many checklist items an upload payload carries,
+   counted on the payload itself: the glyph led list
+   items docBuildUploadHtml writes for the app's
+   checklists. The count only decides whether the save's
+   post-pass is worth its document read; the post-pass
+   finder makes the precise judgment on the document
+   Google actually holds. */
+function docUploadChecklistCount(uploadHtml) {
+  const m = String(uploadHtml || "")
+    .match(/<li[^>]*>\s*(☐|☑|✓|✔)/g);
+  return m ? m.length : 0;
 }
 
 /* ----- export HTML to editor body ------------------------------
@@ -3051,6 +3322,17 @@ function docConvertList(listEl, emph, ctx) {
   });
   let checklist = !ordered &&
     classAttr.indexOf("checklist") >= 0;
+  /* v2.127: the document JSON's word on this list's own
+     level (a list element wearing the export's list
+     class names its level) outranks every inference:
+     when the JSON calls the level a checkbox level, the
+     list is a checklist. */
+  const seg0 = docListSegment(listEl);
+  if (!checklist && !ordered && seg0 && ctx.listKinds &&
+      ctx.listKinds[seg0.id] &&
+      ctx.listKinds[seg0.id][seg0.level]) {
+    checklist = true;
+  }
   const rule = docListRuleFor(listEl, ctx);
   if (!checklist && !ordered && rule &&
       (rule.glyph === "☐" || rule.glyph === "☑")) {
@@ -3196,7 +3478,17 @@ function docConvertListRun(run, emph, ctx) {
         minMargin = val;
       }
       raw.push({ li: child, seg: seg, rule: rule,
-        listEl: el, marginVal: val });
+        listEl: el, marginVal: val,
+        /* v2.127: the item's own leading glyph, read
+           only (nothing is consumed here; the item
+           converter consumes when the list proves a
+           checklist). A level whose every item leads
+           with a glyph is the shape a glyph led
+           checklist stands in after Google's import
+           (bullet marker rule, glyphs in the text), and
+           it is judged with the single list converter's
+           own every-item rule below. */
+        glyphState: docLiGlyphState(child) });
     });
   });
   const items = raw.map(function (it) {
@@ -3213,8 +3505,42 @@ function docConvertListRun(run, emph, ctx) {
     return !!rule &&
       (rule.glyph === "\u2610" || rule.glyph === "\u2611");
   };
+  /* v2.127: a level's items all leading with checkbox
+     glyphs mark the level a checklist even when its
+     marker rule names a plain bullet: that is the real
+     shape of a checklist that crossed Google's HTML
+     import (Chris's test Doc: bullet rules in the style
+     element, ballot glyphs in the item text), and it is
+     the single list converter's every-item rule applied
+     to a run's levels. A numbered level is never marked
+     this way (a counter rule or an ordered element is a
+     number's own claim), and a level with even one
+     glyphless item stays what its rule says. */
+  const glyphGroups = Object.create(null);
+  items.forEach(function (it) {
+    const key = (it.seg ? it.seg.id : "own") + "|" +
+      it.depth;
+    const g = glyphGroups[key] ||
+      (glyphGroups[key] = { all: true, plain: true });
+    if (!it.glyphState) { g.all = false; }
+    if (it.listEl.tagName !== "UL" ||
+        (it.rule && it.rule.counterStyle)) {
+      g.plain = false;
+    }
+    it.glyphKey = key;
+  });
   const kindOf = function (it) {
+    /* The document JSON's word first: a level it calls
+       a checkbox level (a real Google task list, whose
+       export form is a plain bullet list) is one. */
+    if (ctx.listKinds && it.seg &&
+        ctx.listKinds[it.seg.id] &&
+        ctx.listKinds[it.seg.id][it.seg.level]) {
+      return "check";
+    }
     if (isCheck(it.rule)) { return "check"; }
+    const g = glyphGroups[it.glyphKey];
+    if (g && g.all && g.plain) { return "check"; }
     if (it.listEl.tagName === "OL") { return "ol"; }
     if (it.rule && it.rule.counterStyle) { return "ol"; }
     return "ul";
@@ -3456,12 +3782,17 @@ function docConvertTableRow(tr, emph, ctx) {
    the adoption pass reads. This function is the fetch
    route's sanitizer: its output is built only from the
    vocabulary above. */
-function docExportHtmlToBody(exportHtml) {
+function docExportHtmlToBody(exportHtml, listKinds) {
   const parsed = new DOMParser().parseFromString(
     String(exportHtml || ""), "text/html");
   const ctx = {
     classStyles: docExportClassStyles(parsed),
     listRules: docExportListRules(parsed),
+    /* v2.127: which list levels the document JSON calls
+       checkbox levels (docChecklistKindsFromJson), or
+       null when no JSON came with this conversion (the
+       export only judgment, exactly as before). */
+    listKinds: listKinds || null,
     baseStack: [],
     images: []
   };
@@ -3631,9 +3962,14 @@ async function docLoadNoteBody(note) {
   }
   bootCountNoteDownload();
   const fetched = await docFetchDocument(docId);
-  const converted = docExportHtmlToBody(fetched.html);
+  const converted = docExportHtmlToBody(fetched.html,
+    fetched.listKinds);
   note.body = await docAdoptImages(note, converted);
   note.sha = fetched.token;
+  /* v2.127: the modified time this body was fetched at
+     rides beside the revision token; the near-live poll
+     judges the Doc against both markers. */
+  note.docModifiedTime = fetched.modifiedTime || null;
   note.docName = fetched.name;
   /* A chosen card thumbnail names an attachment record;
      a fresh adoption mints fresh records, so a thumbnail
@@ -3696,7 +4032,12 @@ async function docLoadNoteBody(note) {
    - No false refresh from the note's own saves: a save
      lands the Doc's new revision token on note.sha
      (docSaveDocument returns it), so the next tick sees
-     equality. One busy flag covers the tick's own work,
+     equality. v2.127: the save lands BOTH markers (the
+     modified time beside the token, read after the
+     save's own writes), and the tick judges both, the
+     modified time being the marker that moves at once
+     when the Doc changes in Google (see the tick). One
+     busy flag covers the tick's own work,
      a tick that finds a save or a body load for the note
      already in flight (the per-note op chain, the body
      load map) simply skips, and a tick whose own fetch
@@ -3809,7 +4150,36 @@ async function docLivePollTick() {
       return;
     }
     const liveToken = driveTokenFromMetadata(meta);
-    if (!liveToken || liveToken === note.sha) { return; }
+    const liveModified = (meta &&
+      typeof meta.modifiedTime === "string" &&
+      meta.modifiedTime) ? meta.modifiedTime : null;
+    /* v2.127: the revision token is the slow marker for
+       a Doc. driveTokenFromMetadata prefers the head
+       revision, and Google advances a Doc's head
+       revision lazily, minutes behind an edit, while
+       the same metadata read's modified time moves at
+       once (Chris's device report: Google side edits
+       took minutes to reach the open note although the
+       poll runs every five seconds, and a manual Sync
+       Now, judging fresh by other paths, pulled them in
+       immediately). The tick now judges BOTH markers
+       the held body was fetched or saved at: a move in
+       either is a change. The modified time alone never
+       stands a tick down: a note whose baseline predates
+       this build (no recorded modified time) adopts the
+       live one quietly on a quiet tick, and judges by
+       revision until then. */
+    const revMoved = !!liveToken &&
+      liveToken !== note.sha;
+    const mtimeMoved = !!liveModified &&
+      !!note.docModifiedTime &&
+      liveModified !== note.docModifiedTime;
+    if (!revMoved && !mtimeMoved) {
+      if (liveModified && !note.docModifiedTime) {
+        note.docModifiedTime = liveModified;
+      }
+      return;
+    }
     /* The Doc moved elsewhere. Snapshot the open note's
        sync context before the fetch, exactly as syncNow
        does, so the refill judgment compares the editor
