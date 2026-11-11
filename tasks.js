@@ -1601,6 +1601,11 @@ function resetCatalogRuntimeState() {
   }
   catalogWriteDirty = false;
   catalogArmed = false;
+  /* v2.131: the catalog build's entry memory belongs
+     to this session's state, like the tokens beside
+     it; a new session rebuilds it from its own first
+     build. */
+  catalogEntryMemory = Object.create(null);
   lastCatalogToken = null;
   lastCatalogEntriesText = null;
   /* v2.121: the Doc entry stash and the Doc module's
@@ -2320,17 +2325,6 @@ async function syncNow(showToast) {
      consent state is left to its Connect path). */
   refreshGcalAfterSync();
   refreshMailAfterSync();
-    /* v2.20: the drop box imports inside the sync, after the
-       load and before the render, so what it brought in shows
-       up in this same pass (and an auto-sync cycle imports
-       too). Its failures are contained inside it; a broken box
-       must never fail the sync around it. */
-    try {
-      await processIncomingBox();
-    } catch (err) {
-      console.warn("Drop box processing failed: " +
-        (err && err.message));
-    }
     /* v2.20: if the load left the OPEN note as a catalog shell
        (its stored revision moved past the body this session
        held, so reconciliation trusted the listing and kept no
@@ -2361,6 +2355,38 @@ async function syncNow(showToast) {
       syncOpenNoteRefresh = null;
     }
     restoreSyncPlace(syncPlace);
+    /* v2.131: the drop box drains AFTER the render now.
+       It ran between the load and the render since
+       v2.20, so a bulk import's serial saves held the
+       library's repaint hostage for their whole length
+       (the five note movie catalog import cost seconds
+       of it), and each import's save scheduled its own
+       catalog write behind the drain because the drain
+       took no write hold. The loaded library paints
+       first; the drain then runs under the bulk write
+       hold (v2.69), so its imports land exactly one
+       catalog write between them on the hold's
+       release, and a second render shows what arrived,
+       still inside this same pass. The open note's
+       completion above still precedes the drain: an
+       import is always a new note, so nothing the
+       drain brings can be the open note, and the
+       completion's overwrite guard keeps its place
+       ahead of every render either way. The drain's
+       failures stay contained inside it; a broken box
+       must never fail the sync around it. */
+    if (pendingIncoming) {
+      holdCatalogWrites();
+      try {
+        await processIncomingBox();
+      } catch (err) {
+        console.warn("Drop box processing failed: " +
+          (err && err.message));
+      } finally {
+        releaseCatalogWrites();
+      }
+      renderAll();
+    }
     /* v2.36: the auto sync editor guard can let renderEditor
        return early when the OPEN note did not change, even
        when the sync rewrote a note that links to it; sweep

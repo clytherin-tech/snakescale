@@ -1049,6 +1049,17 @@ function rebuildAutoSyncKnownIds() {
   });
   [state.notes, state.trash, state.archive].forEach(function (list) {
     (list || []).forEach(function (note) {
+      /* v2.131: a Doc-backed note's corpus id is its
+         Doc's file id, mapped back to the note exactly
+         as a note file's id is, so the already
+         reflected test below can judge the echo of
+         this app's own Doc saves instead of spending
+         a full sync pass on each one (see
+         autoSyncChangeTouchesStore). */
+      if (isDocBackedNote(note)) {
+        const docId = sanitizeDocId(note.docId);
+        if (docId) { ids.add(docId); byFile[docId] = note.id; }
+      }
       (note.attachments || []).forEach(function (att) {
         if (att && att.fileId) { ids.add(att.fileId); }
       });
@@ -1099,6 +1110,33 @@ function autoSyncChangeTouchesStore(change) {
     }
     return true;
   }
+  /* v2.131: the mail snooze registry gets its own
+     answer too, and it is never "sync". Nothing in a
+     sync pass reads the registry; its consumer is the
+     reconcile the auto sync tick itself runs after
+     the poll, and that reconcile now judges from its
+     page memory until the memory is marked stale. A
+     change naming the file at the token this page
+     last read or wrote is this page's own write
+     echoing: the memory stands and nothing happens.
+     Any other change (the push Worker restoring due
+     mail is the standing case, or a snooze made on
+     another device) marks the memory stale, so the
+     tick's own reconcile re-reads the file before it
+     judges; the sync this answer declines would have
+     bought nothing the reconcile does not do itself. */
+  const snoozeFileId = driveCache.fileIds[MAIL_SNOOZE_FILE];
+  if (snoozeFileId && change.fileId === snoozeFileId) {
+    if (!change.removed && change.file) {
+      const snoozeToken = driveTokenFromMetadata(change.file);
+      if (snoozeToken &&
+          snoozeToken === mailSnoozeCacheToken()) {
+        return false;
+      }
+    }
+    mailSnoozeInvalidateCache();
+    return false;
+  }
   let inCorpus = autoSyncKnownIds.has(change.fileId);
   if (!inCorpus && !change.removed && change.file &&
       Array.isArray(change.file.parents)) {
@@ -1114,7 +1152,36 @@ function autoSyncChangeTouchesStore(change) {
   if (noteId && change.file) {
     const note = findNoteById(noteId);
     const token = driveTokenFromMetadata(change.file);
-    if (note && token && note.sha === token) { return false; }
+    if (note && token) {
+      if (isDocBackedNote(note)) {
+        /* v2.131: a Doc change is judged by the same
+           pair the load's reconcile trusts (v2.127):
+           the change's revision token against the
+           token the held body was fetched or saved at,
+           and its modified time against the recorded
+           modified time. A change matching BOTH is
+           this app's own save echoing (a save settles
+           both markers, read after its own writes), so
+           it triggers nothing. Any mismatch, including
+           a held body with no recorded modified time
+           yet, still triggers: a Google side edit
+           always moves the modified time, so it can
+           never be suppressed by this test, and the
+           token alone is never trusted for a Doc (the
+           lazy revision window v2.127 closed). */
+        const liveModified =
+          typeof change.file.modifiedTime === "string" &&
+          change.file.modifiedTime
+            ? change.file.modifiedTime : null;
+        if (token === note.sha && liveModified &&
+            note.docModifiedTime &&
+            liveModified === note.docModifiedTime) {
+          return false;
+        }
+      } else if (note.sha === token) {
+        return false;
+      }
+    }
   }
   return true;
 }
@@ -1799,7 +1866,19 @@ const driveCache = {
   rootId: null,
   rootCreated: false,
   folderIds: Object.create(null),
-  fileIds: Object.create(null)
+  fileIds: Object.create(null),
+  /* v2.131: the last revision token this driver
+     learned for each file it resolved or wrote,
+     beside the id it learned it for. A store root
+     file's read returns it (see driveStoreGetFile),
+     so a root read no longer re-resolves the path
+     just to stand on a token. */
+  fileTokens: Object.create(null),
+  /* v2.131: the bytes each root file token was
+     observed for, remembered beside it (see
+     driveStoreGetFile): a by-id read may return the
+     remembered token only for those very bytes. */
+  fileTexts: Object.create(null)
 };
 
 /* Forget every resolved Drive ID. Called on Google sign in and sign out,
@@ -1810,6 +1889,8 @@ function resetDriveNotesCache() {
   driveCache.rootCreated = false;
   driveCache.folderIds = Object.create(null);
   driveCache.fileIds = Object.create(null);
+  driveCache.fileTokens = Object.create(null);
+  driveCache.fileTexts = Object.create(null);
 }
 
 /* Escape one value for a Drive query string. Drive query strings are
@@ -1951,11 +2032,87 @@ async function driveResolveFileMeta(path, createParents) {
   const parentId = await driveResolveFolder(parentPath, createParents);
   if (!parentId) { return null; }
   const meta = await driveFindChild(parentId, segments[segments.length - 1], false);
-  if (meta) { driveCache.fileIds[path] = meta.id; }
+  if (meta) {
+    driveCache.fileIds[path] = meta.id;
+    /* v2.131: the token this resolution just proved
+       rides beside the id, so a later read of a store
+       root file can return it without re-resolving
+       (see driveStoreGetFile). */
+    driveCache.fileTokens[path] = driveTokenFromMetadata(meta);
+  }
   return meta;
 }
 
 async function driveStoreGetFile(path) {
+  /* v2.131: a store root file (tasks, index, catalog,
+     the drop box, the mail snooze registry) whose id
+     this driver already holds is read straight by
+     that id: one media get instead of the root
+     revalidation, the root children listing, and the
+     media get the resolution below spends on it, on
+     every sync pass, several times over. The token
+     returned must be the token OF THE BYTES RETURNED:
+     root file tokens are freshness judges (the drop
+     box stash's processed test, the tasks and snooze
+     writers' claims), so a token older than the bytes
+     would read a newly filled drop box as already
+     processed and deadlock both writers' claims. The
+     driver therefore remembers the bytes it last
+     read or wrote beside the token observed for
+     them: fetched bytes equal to the remembered
+     bytes prove the remembered token for them, and
+     it is returned with no second request. Differing
+     bytes (the file moved outside this page: the
+     email importer filling the drop box is the
+     standing case) cost one metadata read by the
+     same id, which learns the live token and pairs
+     it with the new bytes. A write that follows
+     still asserts its claim against the file's live
+     metadata on the checked put path, exactly as
+     before, so the conflict rule's strength is
+     unchanged. A 404 means the id names nothing any
+     more (the file was replaced outside the app):
+     the cached triple is forgotten and the checked
+     resolution below finds whatever now stands at
+     the path, or reports it missing. */
+  if (splitStorePath(path).length === 1) {
+    const knownId = driveCache.fileIds[path];
+    if (knownId) {
+      const res = await gdriveFetch(
+        "https://www.googleapis.com/drive/v3/files/" +
+        encodeURIComponent(knownId) + "?alt=media");
+      if (res.status === 404) {
+        delete driveCache.fileIds[path];
+        delete driveCache.fileTokens[path];
+        delete driveCache.fileTexts[path];
+        /* fall through to the checked resolution */
+      } else if (!res.ok) {
+        throw new Error(await gdriveErrorMessage(res,
+          "Google Drive read failed with status " + res.status));
+      } else {
+        const text = await res.text();
+        const knownToken = driveCache.fileTokens[path];
+        if (knownToken &&
+            driveCache.fileTexts[path] === text) {
+          return { text: text, token: knownToken };
+        }
+        let meta = null;
+        try { meta = await driveReadMeta(knownId); }
+        catch (e) { meta = null; }
+        if (!meta) {
+          delete driveCache.fileIds[path];
+          delete driveCache.fileTokens[path];
+          delete driveCache.fileTexts[path];
+          /* fall through to the checked resolution */
+        } else {
+          const liveToken = driveTokenFromMetadata(meta);
+          driveCache.fileTokens[path] = liveToken;
+          driveCache.fileTexts[path] = text;
+          return { text: text, token: liveToken };
+        }
+      }
+    }
+  }
   const meta = await driveResolveFileMeta(path, false);
   if (!meta) { return null; }
   const res = await gdriveFetch(
@@ -1967,7 +2124,14 @@ async function driveStoreGetFile(path) {
       "Google Drive read failed with status " + res.status));
   }
   const text = await res.text();
-  return { text: text, token: driveTokenFromMetadata(meta) };
+  const slowToken = driveTokenFromMetadata(meta);
+  if (splitStorePath(path).length === 1) {
+    /* v2.131: pair the bytes with the token (see the
+       by-id read above). */
+    driveCache.fileTokens[path] = slowToken;
+    driveCache.fileTexts[path] = text;
+  }
+  return { text: text, token: slowToken };
 }
 
 async function driveStoreListDir(path) {
@@ -2039,10 +2203,17 @@ async function driveStorePutFile(path, text, expectedToken, options) {
         "Google Drive write failed with status " + res.status));
     }
     const data = await res.json();
-    driveCache.fileIds[path] = existing.id;
-    return driveTokenFromMetadata(data) ||
+    const newToken = driveTokenFromMetadata(data) ||
       driveTokenFromMetadata(await driveGetFileMeta(existing.id)) ||
       currentToken;
+    driveCache.fileIds[path] = existing.id;
+    /* v2.131: the write's token is the driver's newest
+       knowledge of this file (see driveStoreGetFile). */
+    driveCache.fileTokens[path] = newToken;
+    if (segments.length === 1) {
+      driveCache.fileTexts[path] = String(text);
+    }
+    return newToken;
   }
 
   /* A caller holding a token for a file that no longer exists is in the
@@ -2080,9 +2251,14 @@ async function driveStorePutFile(path, text, expectedToken, options) {
       "Google Drive create failed with status " + res.status));
   }
   const data = await res.json();
-  driveCache.fileIds[path] = data.id;
-  return driveTokenFromMetadata(data) ||
+  const createdToken = driveTokenFromMetadata(data) ||
     driveTokenFromMetadata(await driveGetFileMeta(data.id));
+  driveCache.fileIds[path] = data.id;
+  driveCache.fileTokens[path] = createdToken;
+  if (segments.length === 1) {
+    driveCache.fileTexts[path] = String(text);
+  }
+  return createdToken;
 }
 
 async function driveStoreDeleteFile(path, token) {
@@ -2097,6 +2273,8 @@ async function driveStoreDeleteFile(path, token) {
       "Google Drive delete failed with status " + res.status));
   }
   delete driveCache.fileIds[path];
+  delete driveCache.fileTokens[path];
+  delete driveCache.fileTexts[path];
 
   /* Close the real folder gap described at the top of this driver: when
      a notebook folder under notebooks/ becomes empty, remove the folder
@@ -2517,7 +2695,50 @@ async function docCreateDocument(note) {
    export cannot say, see the soft channel above). The
    JSON read is soft: any failure leaves listKinds empty
    and the conversion proceeds export only. */
+/* v2.131: one fetch of a Doc at a time. docLoadNoteBody
+   is docFetchDocument's one caller, and it is reached
+   from two directions that can overlap: the near-live
+   poll refetching the open note, and a sync whose
+   reconcile left the same note a shell and whose
+   completion fetches it again. The two hold different
+   note objects for the same Doc, so the body load map
+   in tasks.js (keyed by note, promising a filled note)
+   cannot merge them; the fetch itself can, and it is
+   the fetch the profile counted twice (a metadata
+   read, an export, and a documents.get, spent two
+   times over for one Doc in one window). While a
+   fetch of a Doc stands in flight, a second ask for
+   the same Doc shares it and both callers fill their
+   own note from the one result; the registry forgets
+   the fetch the moment it settles, so the next ask
+   always reads the Doc fresh. */
+const docFetchInFlight = Object.create(null);
+
 async function docFetchDocument(docId) {
+  if (docFetchInFlight[docId]) {
+    return docFetchInFlight[docId];
+  }
+  const flight = docFetchDocumentOnce(docId);
+  docFetchInFlight[docId] = flight;
+  const forget = function () {
+    if (docFetchInFlight[docId] === flight) {
+      delete docFetchInFlight[docId];
+    }
+  };
+  flight.then(forget, forget);
+  return flight;
+}
+
+/* Does this export HTML carry any list markup at all?
+   Google's export spells lists as ul, ol, and li
+   elements; the style block's list class names carry
+   no angle brackets, so a tag test on the fetched
+   bytes is exact. */
+function docExportCarriesListMarkup(html) {
+  return /<(ul|ol|li)[\s>]/i.test(String(html || ""));
+}
+
+async function docFetchDocumentOnce(docId) {
   const meta = await docApiJson(
     "https://www.googleapis.com/drive/v3/files/" +
     encodeURIComponent(docId) +
@@ -2533,7 +2754,19 @@ async function docFetchDocument(docId) {
     encodeURIComponent(docId) +
     "/export?mimeType=" + encodeURIComponent("text/html"));
   const html = await res.text();
-  const docJson = await docFetchDocumentJson(docId);
+  /* v2.131: the documents.get leg exists for one
+     reader, the converter's checklist kinds, which
+     only a Doc whose export carries list markup can
+     use: a listless export converts identically
+     without it (its kinds come back empty either
+     way), so the leg is spent only when the HTML
+     just fetched actually holds a list. The gate is
+     the export's own content, never the note's
+     catalog facts, so a Doc that gains its first
+     list in Google still converts with its kinds on
+     its next fetch. */
+  const docJson = docExportCarriesListMarkup(html)
+    ? await docFetchDocumentJson(docId) : null;
   return {
     html: html,
     name: typeof meta.name === "string" ? meta.name : "",

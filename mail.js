@@ -422,7 +422,71 @@ const MAIL_SNOOZE_ZONE = "America/New_York";
    write re-reads it (mailSnoozeWriteEntries). */
 let mailSnoozeEntries = [];
 let mailSnoozeLoaded = false;
+/* v2.131: the reconcile's own memory of the registry:
+   the entries and the store token of the file as this
+   page last read or wrote it, and the Drive file id
+   they belong to. The reconcile runs on every auto
+   sync tick and every sync tail, and until now it
+   re-read the registry fresh from Drive every time
+   (a full store read, three requests) even in total
+   quiet, around 360 requests an hour for a file whose
+   contents change only when a snooze is set on some
+   device or comes due and the Worker restores it. It
+   now judges due returns from this memory while the
+   memory stands, and re-reads only when it does not:
+   before the first read, and after the change
+   watcher marks it stale (mailSnoozeInvalidateCache,
+   called from media.js when the Drive change feed
+   names this file at a token this page does not
+   hold). Local writes stand the memory themselves
+   (see mailSnoozeWriteEntries), so a snooze or
+   unsnooze made here never waits for a re-read
+   either. The memory names the file id it was read
+   from, and a store whose resolved id differs (a
+   sign out cleared the driver's caches, so a
+   different account's registry would resolve to a
+   different file) can never use it: it re-reads
+   first, exactly as a cold page does. */
+let mailSnoozeCache = null;   /* {entries, token, fileId} */
+let mailSnoozeCacheStale = true;
 let mailSnoozeReconcileRunning = false;
+
+function mailSnoozeCacheUsable() {
+  return !!mailSnoozeCache && !mailSnoozeCacheStale &&
+    !!mailSnoozeCache.fileId &&
+    driveCache.fileIds[MAIL_SNOOZE_FILE] ===
+      mailSnoozeCache.fileId;
+}
+
+/* Stand the memory (and the working copy with it) on
+   a read or a write this page just proved. */
+function mailSnoozeStandCache(entries, token) {
+  mailSnoozeCache = {
+    entries: entries,
+    token: token || null,
+    fileId: driveCache.fileIds[MAIL_SNOOZE_FILE] || null
+  };
+  mailSnoozeCacheStale = false;
+  mailSnoozeEntries = entries;
+  mailSnoozeLoaded = true;
+}
+
+/* The token the change watcher compares a change's
+   token against: the registry's token as this page
+   last read or wrote it, or null when it holds none
+   worth trusting (no read yet, or a write whose
+   token the driver could not report). */
+function mailSnoozeCacheToken() {
+  return mailSnoozeCache && !mailSnoozeCacheStale
+    ? mailSnoozeCache.token : null;
+}
+
+/* Mark the memory stale: something outside this page
+   moved the registry file, so the next reconcile (or
+   ensured load) re-reads it before judging. */
+function mailSnoozeInvalidateCache() {
+  mailSnoozeCacheStale = true;
+}
 let mailSnoozeMenuCtx = null;
 let mailSnoozePickCtx = null;
 
@@ -468,23 +532,41 @@ function mailSnoozeSanitizeEntries(raw) {
 async function mailSnoozeReadFresh() {
   const file = await storeGetFile(MAIL_SNOOZE_FILE);
   if (!file) {
+    /* v2.131: a missing file is a proved empty
+       registry, and the memory stands on it; its
+       file id is null (nothing resolved), so the
+       reconcile's usability test keeps re-probing
+       for the file's existence on later passes
+       instead of trusting an absence forever (see
+       the memory's declaration). */
+    mailSnoozeStandCache([], null);
     return { entries: [], token: null, broken: false };
   }
+  let out;
   try {
     const parsed = JSON.parse(file.text);
     if (!parsed || typeof parsed !== "object" ||
         !Array.isArray(parsed.entries)) {
-      return { entries: [], token: file.token,
+      out = { entries: [], token: file.token,
         broken: true };
+    } else {
+      out = {
+        entries: mailSnoozeSanitizeEntries(parsed.entries),
+        token: file.token, broken: false
+      };
     }
-    return {
-      entries: mailSnoozeSanitizeEntries(parsed.entries),
-      token: file.token, broken: false
-    };
   } catch (e) {
-    return { entries: [], token: file.token,
+    out = { entries: [], token: file.token,
       broken: true };
   }
+  /* v2.131: a whole read stands the reconcile's
+     memory on what it proved. A broken file stands
+     nothing: writers refuse it and the reconcile
+     leaves it alone, exactly as before. */
+  if (!out.broken) {
+    mailSnoozeStandCache(out.entries, out.token);
+  }
+  return out;
 }
 
 /* One registry write, under the merge discipline:
@@ -515,10 +597,16 @@ async function mailSnoozeWriteEntries(change) {
     const text = JSON.stringify(
       { version: 1, entries: next }, null, 2);
     try {
-      await storePutFile(MAIL_SNOOZE_FILE, text,
-        fresh.token, "Update the mail snooze schedule");
-      mailSnoozeEntries = next;
-      mailSnoozeLoaded = true;
+      const putToken = await storePutFile(MAIL_SNOOZE_FILE,
+        text, fresh.token,
+        "Update the mail snooze schedule");
+      /* v2.131: the write stands the reconcile's
+         memory on the winning list and the token the
+         write itself created, so the change feed's
+         echo of this very write is recognized as
+         this page's own (see the watcher in
+         media.js) and no re-read follows it. */
+      mailSnoozeStandCache(next, putToken);
       return true;
     } catch (e) {
       if (!isStoreConflict(e)) { return false; }
@@ -536,7 +624,19 @@ async function mailSnoozeWriteEntries(change) {
    A broken file leaves the copy unloaded, so the
    next look asks again. */
 async function mailSnoozeEnsureLoaded() {
-  if (mailSnoozeLoaded) { return; }
+  if (mailSnoozeLoaded && !mailSnoozeCacheStale) {
+    return;
+  }
+  /* v2.131: a standing reconcile memory answers the
+     load without a read (a sync's landing reset the
+     working copy, which is account furniture; the
+     memory is the registry as last proved, and it
+     answers for it). */
+  if (mailSnoozeCacheUsable()) {
+    mailSnoozeEntries = mailSnoozeCache.entries;
+    mailSnoozeLoaded = true;
+    return;
+  }
   try {
     const fresh = await mailSnoozeReadFresh();
     if (!fresh.broken) {
@@ -806,12 +906,27 @@ async function mailSnoozeReconcile() {
   if (!state.repoExists) { return; }
   mailSnoozeReconcileRunning = true;
   try {
-    const fresh = await mailSnoozeReadFresh();
-    if (fresh.broken) { return; }
-    mailSnoozeEntries = fresh.entries;
-    mailSnoozeLoaded = true;
+    /* v2.131: judge from the page's memory of the
+       registry while it stands (see the memory's
+       declaration above); a memory that does not
+       stand is refreshed by the one fresh read,
+       which stands it again for the next pass. The
+       restore work below (the modifies, the merged
+       write back) is unchanged, and its write still
+       re-reads fresh under the merge discipline, as
+       every registry write does. */
+    let entries;
+    if (mailSnoozeCacheUsable()) {
+      entries = mailSnoozeCache.entries;
+      mailSnoozeEntries = entries;
+      mailSnoozeLoaded = true;
+    } else {
+      const fresh = await mailSnoozeReadFresh();
+      if (fresh.broken) { return; }
+      entries = fresh.entries;
+    }
     const now = Date.now();
-    const due = fresh.entries.filter(function (e) {
+    const due = entries.filter(function (e) {
       return Date.parse(e.snoozeUntil) <= now;
     });
     if (!due.length) { return; }

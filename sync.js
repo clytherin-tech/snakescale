@@ -457,17 +457,112 @@ function buildCatalogEntry(note, collection) {
   return entry;
 }
 
+/* v2.131: the catalog build's entry memory. Until
+   now, every catalog write attempt rebuilt all of
+   the store's entries from their notes (for a loaded
+   note, re-deriving its preview and checklist facts
+   from its body HTML) just to run writeCatalogOnce's
+   change test, and on a large store that is real
+   main thread time on every pass and every save
+   burst, spent learning that nothing changed. The
+   build now remembers, per note id, the entry it
+   last built and a stamp of every input that entry
+   was built from; an entry whose stamp still
+   matches is reused as it stands, and only a note
+   whose inputs moved is rebuilt. The stamp is the
+   discipline: it names every input buildCatalogEntry
+   reads (see catalogEntryStamp), so any doubt
+   rebuilds, and the assembled entries, the change
+   test's text, and everything the conversion guard
+   then does with them are exactly what a full
+   rebuild would produce. The memory is remade as a
+   map on every build, so a note that left the state
+   takes its remembered entry with it, and sign out
+   forgets the whole memory with the rest of the
+   catalog runtime state. */
+let catalogEntryMemory = Object.create(null);
+
+/* Every input buildCatalogEntry reads for one note,
+   in one comparable shape: the collection, the
+   loaded or shell branch it takes, the note's own
+   scalar fields by value, its tags and (for a loaded
+   note) its attachment records by their serialized
+   form, its body by the string itself, its shell
+   facts when it is a shell, the file id the driver's
+   cache would give its entry, and its tick memory by
+   identity (the record is only ever replaced whole,
+   never edited in place: see the assignments in
+   media.js, tasks.js, and mail.js). */
+function catalogEntryStamp(note, collection) {
+  const loaded = note.bodyLoaded !== false;
+  return [
+    collection,
+    loaded ? 1 : 0,
+    note.title || "",
+    note.notebook || "",
+    note.trashedFrom || null,
+    note.archivedFrom || null,
+    JSON.stringify(note.tags || []),
+    note.created || "",
+    note.updated || "",
+    !!note.pinned,
+    note.thumbnail || null,
+    note.reminderAt || null,
+    note.reminderDoneAt || null,
+    note.sha || null,
+    note.fileId || null,
+    driveCache.fileIds[notePath(note)] || null,
+    isDocBackedNote(note) ? 1 : 0,
+    note.docId || null,
+    note.docTicks || null,
+    loaded ? (note.body || "") : null,
+    loaded ? JSON.stringify(note.attachments || []) : null,
+    loaded ? null : JSON.stringify(note.shellCardAtt || null),
+    loaded ? null : (note.shellCardExtImage || null),
+    loaded ? null : (note.previewText || ""),
+    loaded ? null : (note.attachmentCount || 0),
+    loaded ? null : !!note.shellTodoChecked,
+    loaded ? null : !!note.shellTodoUnchecked,
+    loaded ? null : JSON.stringify(
+      Array.isArray(note.shellAttachmentMimes)
+        ? note.shellAttachmentMimes : [])
+  ];
+}
+
+function catalogEntryStampsEqual(a, b) {
+  if (!a || !b || a.length !== b.length) { return false; }
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) { return false; }
+  }
+  return true;
+}
+
 function buildCatalogObject() {
   const entries = [];
+  const memory = Object.create(null);
+  const take = function (note, collection) {
+    const stamp = catalogEntryStamp(note, collection);
+    const held = catalogEntryMemory[note.id];
+    let entry;
+    if (held &&
+        catalogEntryStampsEqual(held.stamp, stamp)) {
+      entry = held.entry;
+    } else {
+      entry = buildCatalogEntry(note, collection);
+    }
+    memory[note.id] = { stamp: stamp, entry: entry };
+    entries.push(entry);
+  };
   state.notes.forEach(function (note) {
-    entries.push(buildCatalogEntry(note, "notebook"));
+    take(note, "notebook");
   });
   state.trash.forEach(function (note) {
-    entries.push(buildCatalogEntry(note, "trash"));
+    take(note, "trash");
   });
   state.archive.forEach(function (note) {
-    entries.push(buildCatalogEntry(note, "archive"));
+    take(note, "archive");
   });
+  catalogEntryMemory = memory;
   return {
     version: CATALOG_SHAPE_VERSION,
     updated: new Date().toISOString(),
