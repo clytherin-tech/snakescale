@@ -2399,14 +2399,53 @@ function docNormalizeColor(value) {
   return null;
 }
 
+/* A font family as the editor writes one: the first
+   family of the list, unquoted ("Georgia",
+   "Courier New"), or null when there is none. */
+function docNormalizeFamily(value) {
+  if (!value) { return null; }
+  const v = String(value).split(",")[0].trim()
+    .replace(/^["']+|["']+$/g, "").trim();
+  return v || null;
+}
+
+/* A font size as a plain number and unit ("14pt",
+   "11.5pt"), or null when the value is not a length
+   the app can carry. */
+function docNormalizeSize(value) {
+  if (!value) { return null; }
+  const m = String(value).trim()
+    .match(/^([0-9]+(?:\.[0-9]+)?)(pt|px)$/i);
+  if (!m) { return null; }
+  return String(parseFloat(m[1])) + m[2].toLowerCase();
+}
+
+/* Whether two carried sizes are the same size. */
+function docSameSize(a, b) {
+  if (!a || !b) { return false; }
+  const ma = String(a).match(/^([0-9.]+)(pt|px)$/);
+  const mb = String(b).match(/^([0-9.]+)(pt|px)$/);
+  if (!ma || !mb || ma[2] !== mb[2]) { return false; }
+  return Math.abs(parseFloat(ma[1]) - parseFloat(mb[1])) < 0.01;
+}
+
 /* The emphasis one declaration map asks for, as the flat
    record the converter threads down the tree. Default
    black text and paper white (or transparent) backgrounds
    carry no emphasis, matching how the editor leaves
-   uncolored text bare. */
+   uncolored text bare. v2.125: the record also carries
+   the run's font family and size and its superscript or
+   subscript lift (Google writes all three as span
+   declarations: font-family, font-size, and
+   vertical-align super or sub; baseline, which every
+   export span carries, is no lift). Whether a carried
+   family or size is written out is judged against the
+   block it stands in (see docRenderText), so a Doc in
+   its default dress converts as bare as it did before. */
 function docEmphasisFromDecls(decls) {
   const e = { b: false, i: false, u: false, s: false,
-    color: null, bg: null };
+    color: null, bg: null, font: null, size: null,
+    sup: false, sub: false };
   if (!decls) { return e; }
   const w = String(decls["font-weight"] || "").toLowerCase();
   if (w === "bold" || w === "bolder" ||
@@ -2421,11 +2460,18 @@ function docEmphasisFromDecls(decls) {
   if (color && color !== "#000000") { e.color = color; }
   const bg = docNormalizeColor(decls["background-color"]);
   if (bg && bg !== "#ffffff") { e.bg = bg; }
+  e.font = docNormalizeFamily(decls["font-family"]);
+  e.size = docNormalizeSize(decls["font-size"]);
+  const va = String(decls["vertical-align"] || "")
+    .toLowerCase();
+  if (va === "super") { e.sup = true; }
+  if (va === "sub") { e.sub = true; }
   return e;
 }
 
 /* Merge a child's own emphasis over its parent's: flags
-   accumulate, colors are the child's when it sets one. */
+   accumulate, colors, family, and size are the child's
+   when it sets one. */
 function docMergeEmphasis(parent, own) {
   return {
     b: parent.b || own.b,
@@ -2433,7 +2479,11 @@ function docMergeEmphasis(parent, own) {
     u: parent.u || own.u,
     s: parent.s || own.s,
     color: own.color || parent.color,
-    bg: own.bg || parent.bg
+    bg: own.bg || parent.bg,
+    font: own.font || parent.font,
+    size: own.size || parent.size,
+    sup: parent.sup || own.sup,
+    sub: parent.sub || own.sub
   };
 }
 
@@ -2443,7 +2493,8 @@ function docMergeEmphasis(parent, own) {
    inline style, which wins where both speak. */
 function docElementEmphasis(el, classStyles) {
   let e = { b: false, i: false, u: false, s: false,
-    color: null, bg: null };
+    color: null, bg: null, font: null, size: null,
+    sup: false, sub: false };
   const tag = el.tagName;
   if (tag === "B" || tag === "STRONG") { e.b = true; }
   if (tag === "I" || tag === "EM") { e.i = true; }
@@ -2451,6 +2502,8 @@ function docElementEmphasis(el, classStyles) {
   if (tag === "S" || tag === "STRIKE" || tag === "DEL") {
     e.s = true;
   }
+  if (tag === "SUP") { e.sup = true; }
+  if (tag === "SUB") { e.sub = true; }
   const classes = (el.getAttribute &&
     el.getAttribute("class")) || "";
   classes.split(/\s+/).forEach(function (cls) {
@@ -2486,21 +2539,93 @@ function docExportClassStyles(doc) {
   return map;
 }
 
+/* One list level's marker, read from the content of its
+   :before rule: a bullet glyph (● ○ ■), a checkbox glyph
+   (☐ ☑, the mark of a checklist level), or the counter
+   style of a numbered level (decimal, lower-alpha, and
+   the rest, named in the counter() call). */
+function docListRuleFromContent(content) {
+  const out = { glyph: null, counterStyle: null };
+  const c = String(content || "");
+  const counter = c.match(
+    /counter\(\s*[A-Za-z0-9_-]+\s*,\s*([A-Za-z-]+)\s*\)/);
+  if (counter) {
+    out.counterStyle = counter[1].toLowerCase();
+  }
+  const decoded = c.replace(
+    /\\([0-9a-fA-F]{4,6})\s?/g, function (all, hex) {
+      return String.fromCharCode(parseInt(hex, 16));
+    }).replace(/\\(.)/g, "$1");
+  const glyphs = ["☐", "☑", "●", "○", "■"];
+  for (let i = 0; i < glyphs.length; i++) {
+    if (decoded.indexOf(glyphs[i]) >= 0) {
+      out.glyph = glyphs[i];
+      break;
+    }
+  }
+  return out;
+}
+
+/* The list marker rules of one export document, keyed
+   by the full list class token (lst-kix_list_1-0 and
+   its kin): Google draws every list marker from a
+   :before rule in the export's style element, so the
+   rules are where a level's marker, and a checklist's
+   very identity, can be read. */
+function docExportListRules(doc) {
+  const map = Object.create(null);
+  let css = "";
+  doc.querySelectorAll("style").forEach(function (s) {
+    css += (s.textContent || "") + "\n";
+  });
+  const re = /\.(lst-kix_[A-Za-z0-9_-]+)\s*>\s*li\s*:before\s*\{([^}]*)\}/g;
+  let m;
+  while ((m = re.exec(css)) !== null) {
+    map[m[1]] = docListRuleFromContent(
+      docParseStyleDecls(m[2])["content"] || "");
+  }
+  return map;
+}
+
+/* The font base a text leaf stands in: the family and
+   size of the block being converted (the top of the
+   converter's base stack), or the Google default dress
+   at the root. A run whose family or size matches its
+   base needs no span for it, which is what keeps a Doc
+   in its default dress converting bare. */
+function docBase(ctx) {
+  if (ctx.baseStack && ctx.baseStack.length) {
+    return ctx.baseStack[ctx.baseStack.length - 1];
+  }
+  return { font: "Arial", size: "11pt" };
+}
+
 /* Render one text leaf under an emphasis: bare when the
    emphasis is empty, else wrapped in the editor's own
-   emphasis elements, with a styled span for a color or a
-   highlight. */
-function docRenderText(text, emph) {
+   emphasis elements, with a styled span for a color, a
+   highlight, or a font family or size that differs
+   from the block base it stands in, and a sup or sub
+   element for a lifted or lowered run. */
+function docRenderText(text, emph, base) {
   let out = escapeHtml(text);
   if (!out) { return ""; }
-  if (emph.color || emph.bg) {
-    let style = "";
-    if (emph.color) { style += "color: " + emph.color + ";"; }
-    if (emph.bg) {
-      style += "background-color: " + emph.bg + ";";
-    }
+  let style = "";
+  if (emph.color) { style += "color: " + emph.color + ";"; }
+  if (emph.bg) {
+    style += "background-color: " + emph.bg + ";";
+  }
+  if (emph.font && (!base || emph.font !== base.font)) {
+    style += "font-family: " + emph.font + ";";
+  }
+  if (emph.size &&
+      (!base || !docSameSize(emph.size, base.size))) {
+    style += "font-size: " + emph.size + ";";
+  }
+  if (style) {
     out = "<span style=\"" + style + "\">" + out + "</span>";
   }
+  if (emph.sup) { out = "<sup>" + out + "</sup>"; }
+  if (emph.sub) { out = "<sub>" + out + "</sub>"; }
   if (emph.s) { out = "<s>" + out + "</s>"; }
   if (emph.u) { out = "<u>" + out + "</u>"; }
   if (emph.i) { out = "<i>" + out + "</i>"; }
@@ -2529,31 +2654,122 @@ const DOC_BLOCK_TAGS = {
   FIGURE: 1, FIGCAPTION: 1
 };
 
-/* The block alignment an element asks for (its own inline
-   style, then its classes), kept only for the values the
-   editor's alignment carries. */
-function docBlockAlignStyle(el, classStyles) {
-  let align = null;
+/* One element's full declaration map: its classes as the
+   export's style element defines them, in class order,
+   with its own inline style winning where both speak. */
+function docElementDecls(el, classStyles) {
+  const out = {};
+  const classes = (el.getAttribute &&
+    el.getAttribute("class")) || "";
+  classes.split(/\s+/).forEach(function (cls) {
+    if (cls && classStyles[cls]) {
+      Object.assign(out, classStyles[cls]);
+    }
+  });
   const inline = el.getAttribute &&
     el.getAttribute("style");
   if (inline) {
-    align = docParseStyleDecls(inline)["text-align"] || null;
+    Object.assign(out, docParseStyleDecls(inline));
   }
-  if (!align) {
-    const classes = (el.getAttribute &&
-      el.getAttribute("class")) || "";
-    classes.split(/\s+/).forEach(function (cls) {
-      if (!align && cls && classStyles[cls]) {
-        align = classStyles[cls]["text-align"] || null;
-      }
-    });
-  }
-  align = String(align || "").toLowerCase();
+  return out;
+}
+
+/* A nonzero CSS length as a plain number and unit
+   ("36pt"), or null for zero, absent, or unparseable
+   values. */
+function docCssLength(value) {
+  if (value == null) { return null; }
+  const m = String(value).trim()
+    .match(/^(-?[0-9]+(?:\.[0-9]+)?)(pt|px)$/i);
+  if (!m) { return null; }
+  const num = parseFloat(m[1]);
+  if (!num) { return null; }
+  return String(num) + m[2].toLowerCase();
+}
+
+/* Google's own heading sizes, the same table the Doc
+   save dresses headings with: a heading whose export
+   size differs from its level's default (a Word-born
+   heading, say) carries its size on the element, and a
+   heading at the default needs nothing. */
+const DOC_HEADING_SIZE = {
+  H1: "20pt", H2: "16pt", H3: "14pt",
+  H4: "12pt", H5: "11pt", H6: "11pt"
+};
+
+/* The style a converted paragraph or heading carries:
+   its alignment (as before), plus the paragraph's own
+   spacing and dress from the export, judged against
+   the Google defaults so a default paragraph stays
+   bare. Line spacing other than 1.15 carries; space
+   before and after carry (Google writes them as the
+   paragraph's padding, in the class form as margins:
+   either is read, padding first); an indent carries
+   as margin-left and a first line indent as
+   text-indent; a font family that differs from the
+   base it stands in, and a font size that differs
+   from the level's default, carry on the element. */
+function docBlockStyle(el, classStyles, own, tag, base) {
+  const decls = docElementDecls(el, classStyles);
+  const parts = [];
+  const align = String(decls["text-align"] || "")
+    .toLowerCase();
   if (align === "center" || align === "right" ||
       align === "justify") {
-    return " style=\"text-align: " + align + ";\"";
+    parts.push("text-align: " + align + ";");
   }
-  return "";
+  const lh = decls["line-height"];
+  if (lh != null && String(lh).trim() !== "") {
+    const asLen = docCssLength(lh);
+    if (asLen) {
+      parts.push("line-height: " + asLen + ";");
+    } else {
+      const f = parseFloat(lh);
+      if (isFinite(f) && Math.abs(f - 1.15) > 0.01) {
+        parts.push("line-height: " + String(f) + ";");
+      }
+    }
+  }
+  const before = docCssLength(decls["padding-top"]) ||
+    docCssLength(decls["margin-top"]);
+  if (before) { parts.push("margin-top: " + before + ";"); }
+  const after = docCssLength(decls["padding-bottom"]) ||
+    docCssLength(decls["margin-bottom"]);
+  if (after) { parts.push("margin-bottom: " + after + ";"); }
+  const indent = docCssLength(decls["margin-left"]) ||
+    docCssLength(decls["padding-left"]);
+  if (indent && indent.charAt(0) !== "-") {
+    parts.push("margin-left: " + indent + ";");
+  }
+  const firstLine = docCssLength(decls["text-indent"]);
+  if (firstLine && firstLine.charAt(0) !== "-") {
+    parts.push("text-indent: " + firstLine + ";");
+  }
+  if (own.font && own.font !== base.font) {
+    parts.push("font-family: " + own.font + ";");
+  }
+  const sizeDefault = DOC_HEADING_SIZE[tag] || base.size;
+  if (own.size && !docSameSize(own.size, sizeDefault)) {
+    parts.push("font-size: " + own.size + ";");
+  }
+  return parts.length
+    ? " style=\"" + parts.join(" ") + "\"" : "";
+}
+
+/* The width an export image carries, in pixels: its
+   style width, else its width attribute, with points
+   converted at the CSS rate. Null when it carries
+   none, which is the figure's natural width. */
+function docImageWidth(img) {
+  const decls = docParseStyleDecls(
+    img.getAttribute("style") || "");
+  let v = decls["width"] || img.getAttribute("width") || "";
+  const m = String(v).trim()
+    .match(/^([0-9]+(?:\.[0-9]+)?)(pt|px)?$/);
+  if (!m) { return null; }
+  let px = parseFloat(m[1]);
+  if (m[2] === "pt") { px = px * 96 / 72; }
+  return Math.round(px);
 }
 
 /* Inline rendering: the children of one element under an
@@ -2574,7 +2790,7 @@ function docConvertInlineChildren(el, emph, ctx) {
 
 function docConvertInlineNode(node, emph, ctx) {
   if (node.nodeType === 3) {
-    return docRenderText(node.nodeValue, emph);
+    return docRenderText(node.nodeValue, emph, docBase(ctx));
   }
   if (node.nodeType !== 1) { return ""; }
   const tag = node.tagName;
@@ -2583,7 +2799,8 @@ function docConvertInlineNode(node, emph, ctx) {
     const idx = ctx.images.length;
     ctx.images.push({
       src: node.getAttribute("src") || "",
-      alt: node.getAttribute("alt") || ""
+      alt: node.getAttribute("alt") || "",
+      width: docImageWidth(node)
     });
     return "<span data-doc-img=\"" + idx + "\"></span>";
   }
@@ -2629,7 +2846,47 @@ function docConvertBlocks(el, emph, ctx) {
     }
     inlineBuf = "";
   };
-  el.childNodes.forEach(function (child) {
+  const kids = Array.prototype.slice.call(el.childNodes);
+  for (let i = 0; i < kids.length; i++) {
+    const child = kids[i];
+    if (child.nodeType === 1 &&
+        (child.tagName === "UL" ||
+         child.tagName === "OL")) {
+      const seg = docListSegment(child);
+      if (seg) {
+        /* A Google list arrives as a flat run of
+           sibling list elements, one per level stretch,
+           all wearing the list's own class name: gather
+           the whole run (formatting whitespace between
+           the stretches is not content) and rebuild the
+           one nested list it describes. */
+        const run = [child];
+        let j = i + 1;
+        while (j < kids.length) {
+          const sib = kids[j];
+          if (sib.nodeType === 3 &&
+              !(sib.nodeValue || "").trim()) {
+            j++;
+            continue;
+          }
+          if (sib.nodeType === 1 &&
+              (sib.tagName === "UL" ||
+               sib.tagName === "OL")) {
+            const s2 = docListSegment(sib);
+            if (s2 && s2.id === seg.id) {
+              run.push(sib);
+              j++;
+              continue;
+            }
+          }
+          break;
+        }
+        flush();
+        html += docConvertListRun(run, emph, ctx);
+        i = j - 1;
+        continue;
+      }
+    }
     if (child.nodeType === 1 &&
         DOC_BLOCK_TAGS[child.tagName]) {
       flush();
@@ -2637,9 +2894,29 @@ function docConvertBlocks(el, emph, ctx) {
     } else {
       inlineBuf += docConvertInlineNode(child, emph, ctx);
     }
-  });
+  }
   flush();
   return html;
+}
+
+/* The list segment one list element is: Google names
+   every list element of a Doc with a class of the form
+   lst-kix_<list id>-<level>. Returns the id, the level,
+   and the full class token the marker rules key on, or
+   null when the element wears no such class (a list of
+   the app's own making, converted as it stands). */
+function docListSegment(el) {
+  const classes = (el.getAttribute &&
+    el.getAttribute("class")) || "";
+  let seg = null;
+  classes.split(/\s+/).forEach(function (cls) {
+    const m = cls.match(/^lst-kix_(.+)-(\d+)$/);
+    if (m) {
+      seg = { id: m[1], level: parseInt(m[2], 10),
+        token: cls };
+    }
+  });
+  return seg;
 }
 
 /* One block element to the editor's vocabulary. */
@@ -2665,13 +2942,30 @@ function docConvertBlock(el, emph, ctx) {
   if (tag === "P" || tag === "H1" || tag === "H2" ||
       tag === "H3" || tag === "H4" || tag === "H5" ||
       tag === "H6") {
+    const parentBase = docBase(ctx);
+    const blockBase = {
+      font: own.font || parentBase.font,
+      size: own.size || DOC_HEADING_SIZE[tag] ||
+        parentBase.size
+    };
+    ctx.baseStack.push(blockBase);
     const inner = docConvertInlineChildren(el, own, ctx);
+    ctx.baseStack.pop();
+    const style = docBlockStyle(el, ctx.classStyles,
+      own, tag, parentBase);
     if (!inner.trim() &&
         inner.indexOf("data-doc-img") < 0) {
-      return "";
+      /* v2.125: an empty paragraph is content: it is the
+         blank line between the lines around it, and
+         dropping it (the old behavior) closed the gap
+         Chris saw close up in the app. It converts to
+         the editor's own empty paragraph, one break in
+         an otherwise empty block, in leading, middle,
+         trailing, and consecutive positions alike. */
+      return "<" + tag.toLowerCase() + style + "><br></" +
+        tag.toLowerCase() + ">";
     }
-    return "<" + tag.toLowerCase() +
-      docBlockAlignStyle(el, ctx.classStyles) + ">" +
+    return "<" + tag.toLowerCase() + style + ">" +
       inner + "</" + tag.toLowerCase() + ">";
   }
   /* DIV and the sectioning containers are transparent:
@@ -2681,19 +2975,40 @@ function docConvertBlock(el, emph, ctx) {
   return docConvertBlocks(el, own, ctx);
 }
 
+/* The first text leaf of an element, descending through
+   inline wrappers only (an export wraps every run in a
+   span, so an item's first words rarely sit in a bare
+   text node). A block element or a nested list on the
+   way down means the item's own text is not what leads. */
+function docFirstTextLeaf(el) {
+  let node = el;
+  while (node && node.nodeType === 1) {
+    if (DOC_BLOCK_TAGS[node.tagName] ||
+        node.tagName === "UL" || node.tagName === "OL" ||
+        node.tagName === "TABLE") {
+      return null;
+    }
+    node = node.firstChild;
+  }
+  return node && node.nodeType === 3 ? node : null;
+}
+
 /* Whether one list item begins with a checkbox glyph, and
    its state: the forms a Google checklist takes when the
    glyphs ride in the text itself (a Doc written by an
    import, or a checklist typed with the glyphs). The
    glyph is consumed by the check, never left in the
-   text. */
+   text: the caller writes the rest back into the leaf
+   (the parsed export is a throwaway, so the leaf itself
+   is the honest place to consume it). */
 function docLiGlyphState(li) {
-  const first = li.firstChild;
-  if (!first || first.nodeType !== 3) { return null; }
-  const text = first.nodeValue || "";
+  const leaf = docFirstTextLeaf(li);
+  if (!leaf) { return null; }
+  const text = leaf.nodeValue || "";
   const m = text.match(/^\s*(☐|☑|✓|✔)\s?/);
   if (!m) { return null; }
-  return { checked: m[1] !== "☐", rest: text.slice(m[0].length) };
+  return { checked: m[1] !== "☐", leaf: leaf,
+    rest: text.slice(m[0].length) };
 }
 
 /* One list: an ordered list stays ordered; a list the
@@ -2702,6 +3017,29 @@ function docLiGlyphState(li) {
    editor's checklist form, the saved shape the checklist
    machinery round trips. A nested list stays inside its
    item, as the editor nests them. */
+/* The app's numbering cycle by depth (decimal, then
+   lower-alpha, then lower-roman, repeating, the
+   styles.css depth rules), and the ss-num class that
+   overrides a level's style when Google's own differs. */
+const DOC_NUM_CYCLE = ["decimal", "lower-alpha",
+  "lower-roman"];
+const DOC_NUM_CLASS = {
+  "decimal": "ss-num-decimal",
+  "upper-alpha": "ss-num-upper-alpha",
+  "lower-alpha": "ss-num-lower-alpha",
+  "upper-roman": "ss-num-upper-roman",
+  "lower-roman": "ss-num-lower-roman"
+};
+
+/* The marker rule one list element's own class names,
+   or null: the export's :before declarations for its
+   list level. */
+function docListRuleFor(el, ctx) {
+  const seg = docListSegment(el);
+  if (!seg || !ctx.listRules) { return null; }
+  return ctx.listRules[seg.token] || null;
+}
+
 function docConvertList(listEl, emph, ctx) {
   const ordered = listEl.tagName === "OL";
   const classAttr = (listEl.getAttribute &&
@@ -2714,6 +3052,11 @@ function docConvertList(listEl, emph, ctx) {
   });
   let checklist = !ordered &&
     classAttr.indexOf("checklist") >= 0;
+  const rule = docListRuleFor(listEl, ctx);
+  if (!checklist && !ordered && rule &&
+      (rule.glyph === "☐" || rule.glyph === "☑")) {
+    checklist = true;
+  }
   const glyphs = items.map(function (li) {
     return docLiGlyphState(li);
   });
@@ -2731,19 +3074,44 @@ function docConvertList(listEl, emph, ctx) {
       "</ul>";
   }
   const tag = ordered ? "ol" : "ul";
-  return "<" + tag + ">" + out.join("") + "</" + tag + ">";
+  let attrs = "";
+  if (ordered) {
+    const standingNum =
+      (classAttr.match(/ss-num-[a-z-]+/) || [null])[0];
+    if (rule && rule.counterStyle &&
+        rule.counterStyle !== "decimal" &&
+        DOC_NUM_CLASS[rule.counterStyle]) {
+      attrs += " class=\"" +
+        DOC_NUM_CLASS[rule.counterStyle] + "\"";
+    } else if (standingNum &&
+        DOC_NUM_CLASS[standingNum.slice(7)]) {
+      /* A list of the app's own making (a reimport of a
+         save, above all) keeps the numbering style its
+         class already names. */
+      attrs += " class=\"" + standingNum + "\"";
+    }
+    const start = parseInt(
+      listEl.getAttribute("start"), 10);
+    if (start && start !== 1) {
+      attrs += " start=\"" + start + "\"";
+    }
+  }
+  return "<" + tag + attrs + ">" + out.join("") +
+    "</" + tag + ">";
 }
 
 function docConvertListItem(li, emph, ctx, checklist,
     glyph) {
   const own = docMergeEmphasis(emph,
     docElementEmphasis(li, ctx.classStyles));
+  if (glyph) { glyph.leaf.nodeValue = glyph.rest; }
+  const parentBase = docBase(ctx);
+  ctx.baseStack.push({
+    font: own.font || parentBase.font,
+    size: own.size || parentBase.size
+  });
   let inner = "";
-  li.childNodes.forEach(function (child, idx) {
-    if (glyph && idx === 0 && child.nodeType === 3) {
-      inner += docRenderText(glyph.rest, own);
-      return;
-    }
+  li.childNodes.forEach(function (child) {
     if (child.nodeType === 1 &&
         (child.tagName === "UL" ||
          child.tagName === "OL")) {
@@ -2766,6 +3134,8 @@ function docConvertListItem(li, emph, ctx, checklist,
     }
     inner += docConvertInlineNode(child, own, ctx);
   });
+  ctx.baseStack.pop();
+  if (!inner.trim()) { inner = "<br>"; }
   let box = "";
   if (checklist) {
     box = "<input type=\"checkbox\"" +
@@ -2777,6 +3147,162 @@ function docConvertListItem(li, emph, ctx, checklist,
     "</li>";
 }
 
+/* Convert one gathered run of Google list segments (see
+   docConvertBlocks) into the one nested list it
+   describes. The shape is rebuilt from the segments:
+   every item knows its segment's level, and the marker
+   each level wears comes from the :before rules: a
+   checklist glyph makes the level a checklist (its
+   items' own checked state comes from their text
+   glyphs where the export carries them), a counter
+   makes it numbered with that style, and a bullet
+   glyph (or no rule) makes it bulleted. Numbering runs
+   continuously across the run's stretches of a level,
+   restarting only where the level follows a shallower
+   item, which is how Google's own counter rules read;
+   a stretch whose first item carries a start attribute
+   restarts its level there. */
+function docConvertListRun(run, emph, ctx) {
+  const segs = run.map(function (el) {
+    return docListSegment(el);
+  });
+  let minLevel = Infinity;
+  segs.forEach(function (s) {
+    if (s && s.level < minLevel) { minLevel = s.level; }
+  });
+  if (!isFinite(minLevel)) { minLevel = 0; }
+  /* Flatten the run to items. Depth is the item's
+     segment level judged against the run's shallowest;
+     an item whose own left margin steps deeper than
+     its segment (a level the export folded into the
+     segment above it) rides the margin instead: Google
+     steps a level by 18pt of margin past the list's
+     first level at 18pt. */
+  let minMargin = null;
+  const raw = [];
+  run.forEach(function (el, ri) {
+    const seg = segs[ri];
+    const rule = seg && ctx.listRules
+      ? (ctx.listRules[seg.token] || null) : null;
+    el.childNodes.forEach(function (child) {
+      if (child.nodeType !== 1 ||
+          child.tagName !== "LI") { return; }
+      const decls = docElementDecls(child,
+        ctx.classStyles);
+      const ml = docCssLength(decls["margin-left"]);
+      const val = ml ? parseFloat(ml) *
+        (/px$/.test(ml) ? 72 / 96 : 1) : null;
+      if (val !== null &&
+          (minMargin === null || val < minMargin)) {
+        minMargin = val;
+      }
+      raw.push({ li: child, seg: seg, rule: rule,
+        listEl: el, marginVal: val });
+    });
+  });
+  const items = raw.map(function (it) {
+    let depth = it.seg ? it.seg.level - minLevel : 0;
+    if (it.marginVal !== null && minMargin !== null) {
+      const byMargin = Math.round(
+        (it.marginVal - minMargin) / 18);
+      depth = Math.max(depth, byMargin);
+    }
+    it.depth = Math.max(0, depth);
+    return it;
+  });
+  const isCheck = function (rule) {
+    return !!rule &&
+      (rule.glyph === "\u2610" || rule.glyph === "\u2611");
+  };
+  const kindOf = function (it) {
+    if (isCheck(it.rule)) { return "check"; }
+    if (it.listEl.tagName === "OL") { return "ol"; }
+    if (it.rule && it.rule.counterStyle) { return "ol"; }
+    return "ul";
+  };
+  /* Tree build over a stack of open lists, each entry
+     carrying its own depth and the item it hangs from
+     (its holder; null at the root). An item joins the
+     open list of its depth and kind, opening one where
+     none stands: under the previous item when it
+     deepens, beside the list it replaces when only the
+     kind changes. */
+  const rootLists = [];
+  const stack = [];
+  let prev = null;
+  items.forEach(function (it) {
+    const kind = kindOf(it);
+    while (stack.length &&
+        stack[stack.length - 1].depth > it.depth) {
+      stack.pop();
+    }
+    let top = stack[stack.length - 1];
+    let holder = prev;
+    if (top && top.depth === it.depth &&
+        top.list.kind !== kind) {
+      holder = top.list.holder;
+      stack.pop();
+      top = stack[stack.length - 1];
+    }
+    if (!top || top.depth < it.depth) {
+      it.depth = top ? top.depth + 1 : 0;
+      const nl = { kind: kind, items: [],
+        depth: it.depth, segEl: it.listEl,
+        rule: it.rule, holder: holder };
+      if (holder) {
+        holder.children = holder.children || [];
+        holder.children.push(nl);
+      } else {
+        rootLists.push(nl);
+      }
+      stack.push({ list: nl, depth: it.depth });
+      top = stack[stack.length - 1];
+    }
+    const node = { li: it.li, children: [] };
+    top.list.items.push(node);
+    prev = node;
+  });
+  const renderList = function (list) {
+    const glyphs = list.items.map(function (n) {
+      return docLiGlyphState(n.li);
+    });
+    const parts = list.items.map(function (n, i) {
+      let html = docConvertListItem(n.li, emph, ctx,
+        list.kind === "check",
+        list.kind === "check" ? glyphs[i] : null);
+      n.children.forEach(function (sub) {
+        html = html.replace(/<\/li>$/, "") +
+          renderList(sub) + "</li>";
+      });
+      return html;
+    });
+    if (list.kind === "check") {
+      return "<ul class=\"ss-checklist\">" +
+        parts.join("") + "</ul>";
+    }
+    if (list.kind === "ol") {
+      let attrs = "";
+      const style = list.rule && list.rule.counterStyle;
+      if (style && DOC_NUM_CLASS[style] &&
+          style !== DOC_NUM_CYCLE[list.depth % 3]) {
+        attrs += " class=\"" + DOC_NUM_CLASS[style] +
+          "\"";
+      }
+      const start = parseInt(list.segEl &&
+        list.segEl.getAttribute("start"), 10);
+      if (start && start !== 1) {
+        attrs += " start=\"" + start + "\"";
+      }
+      return "<ol" + attrs + ">" + parts.join("") +
+        "</ol>";
+    }
+    return "<ul>" + parts.join("") + "</ul>";
+  };
+  return rootLists.map(function (l) {
+    return renderList(l);
+  }).join("");
+}
+
 /* One table: rows keep their section (head, body) when
    the export has one; cells keep their spans and their
    block content, with a single paragraph wrapper shed,
@@ -2784,7 +3310,76 @@ function docConvertListItem(li, emph, ctx, checklist,
 function docConvertTable(tableEl, emph, ctx) {
   const own = docMergeEmphasis(emph,
     docElementEmphasis(tableEl, ctx.classStyles));
-  let out = "<table>";
+  /* Column widths: the export carries each column's
+     width on the first row's cells (and on a colgroup
+     when it writes one); the editor carries them on a
+     colgroup in pixels with the table's width the sum
+     of its columns, so the widths cross as the app's
+     own form when every column has one. */
+  let firstRow = tableEl.querySelector("tr");
+  let colgroup = "";
+  let tableAttrs = "";
+  /* A colgroup the export (or a previous save) carries
+     is read first: its columns are the widths. */
+  const ownCols = [];
+  tableEl.childNodes.forEach(function (child) {
+    if (child.nodeType === 1 &&
+        child.tagName === "COLGROUP") {
+      child.childNodes.forEach(function (col) {
+        if (col.nodeType === 1 && col.tagName === "COL") {
+          const decls = docParseStyleDecls(
+            col.getAttribute("style") || "");
+          ownCols.push(docCssLength(decls["width"]));
+        }
+      });
+    }
+  });
+  if (ownCols.length && ownCols.every(function (w) {
+    return !!w;
+  })) {
+    let total = 0;
+    const px = ownCols.map(function (w) {
+      const v = Math.round(parseFloat(w) *
+        (/px$/.test(w) ? 1 : 96 / 72));
+      total += v;
+      return v;
+    });
+    colgroup = "<colgroup>" + px.map(function (w) {
+      return "<col style=\"width: " + w + "px;\">";
+    }).join("") + "</colgroup>";
+    tableAttrs = " class=\"ss-table\" style=\"width: " +
+      total + "px;\"";
+    firstRow = null;
+  }
+  if (firstRow) {
+    const widths = [];
+    firstRow.childNodes.forEach(function (cell) {
+      if (cell.nodeType !== 1 ||
+          (cell.tagName !== "TD" &&
+           cell.tagName !== "TH")) { return; }
+      const span = parseInt(cell.getAttribute("colspan"),
+        10) || 1;
+      const decls = docElementDecls(cell, ctx.classStyles);
+      const w = docCssLength(decls["width"]);
+      const px = w ? Math.round(parseFloat(w) *
+        (/px$/.test(w) ? 1 : 96 / 72)) : 0;
+      for (let i = 0; i < span; i++) {
+        widths.push(px ? Math.round(px / span) : 0);
+      }
+    });
+    if (widths.length && widths.every(function (w) {
+      return w > 0;
+    })) {
+      let total = 0;
+      widths.forEach(function (w) { total += w; });
+      colgroup = "<colgroup>" + widths.map(function (w) {
+        return "<col style=\"width: " + w + "px;\">";
+      }).join("") + "</colgroup>";
+      tableAttrs = " class=\"ss-table\" style=\"width: " +
+        total + "px;\"";
+    }
+  }
+  let out = "<table" + tableAttrs + ">" + colgroup;
   const rowsOf = function (parent) {
     let rows = "";
     parent.childNodes.forEach(function (tr) {
@@ -2828,9 +3423,24 @@ function docConvertTableRow(tr, emph, ctx) {
     if (span("rowspan")) {
       attrs += " rowspan=\"" + span("rowspan") + "\"";
     }
-    let inner = docConvertBlocks(cell,
-      docMergeEmphasis(emph,
-        docElementEmphasis(cell, ctx.classStyles)), ctx);
+    /* v2.125: the cell's own background stays on the
+       cell: before, it slid down the emphasis chain and
+       landed as a highlight span over the cell's text,
+       so the shading sat on the words instead of the
+       cell. The cell's emphasis below therefore excludes
+       it. */
+    const cellDecls = docElementDecls(cell,
+      ctx.classStyles);
+    const cellBg = docNormalizeColor(
+      cellDecls["background-color"]);
+    if (cellBg && cellBg !== "#ffffff") {
+      attrs += " style=\"background-color: " + cellBg +
+        ";\"";
+    }
+    const cellEmph = docMergeEmphasis(emph,
+      docElementEmphasis(cell, ctx.classStyles));
+    cellEmph.bg = null;
+    let inner = docConvertBlocks(cell, cellEmph, ctx);
     const single = inner.match(/^<p>([\s\S]*)<\/p>$/);
     if (single &&
         single[1].indexOf("</p>") < 0 &&
@@ -2852,11 +3462,14 @@ function docExportHtmlToBody(exportHtml) {
     String(exportHtml || ""), "text/html");
   const ctx = {
     classStyles: docExportClassStyles(parsed),
+    listRules: docExportListRules(parsed),
+    baseStack: [],
     images: []
   };
   if (!parsed.body) { return { html: "", images: [] }; }
   const empty = { b: false, i: false, u: false, s: false,
-    color: null, bg: null };
+    color: null, bg: null, font: null, size: null,
+    sup: false, sub: false };
   return {
     html: docConvertBlocks(parsed.body, empty, ctx),
     images: ctx.images
@@ -2913,6 +3526,11 @@ async function docAdoptOneImage(note, img) {
   const src = String((img && img.src) || "");
   const label = String((img && img.alt) || "").trim();
   const fallback = "[Image: " + (label || "in the Doc") + "]";
+  /* v2.125: the display width the image carried in the
+     Doc rides onto the adopted figure, in the figure
+     style the editor itself preserves across saves. */
+  const widthStyle = img && img.width
+    ? " style=\"width: " + img.width + "px;\"" : "";
   const parts = docDataUriParts(src);
   if (parts && parts.base64 &&
       parts.mime.indexOf("image/") === 0) {
@@ -2922,6 +3540,7 @@ async function docAdoptOneImage(note, img) {
       note.attachments.push(cached);
       return "<figure class=\"ss-attachment\"" +
         " data-attachment-id=\"" + cached.id + "\"" +
+        widthStyle +
         " contenteditable=\"false\"></figure>";
     }
     try {
@@ -2961,13 +3580,18 @@ async function docAdoptOneImage(note, img) {
       note.attachments.push(record);
       return "<figure class=\"ss-attachment\"" +
         " data-attachment-id=\"" + attId + "\"" +
+        widthStyle +
         " contenteditable=\"false\"></figure>";
     } catch (e) {
       return fallback;
     }
   }
   if (/^https?:\/\//i.test(src) && !extImageUrlError(src)) {
-    return buildExternalImageFigure(src, label).outerHTML;
+    const fig = buildExternalImageFigure(src, label);
+    if (img && img.width) {
+      fig.style.width = img.width + "px";
+    }
+    return fig.outerHTML;
   }
   return fallback;
 }
@@ -3287,7 +3911,20 @@ const DOC_GOOGLE_FONT_SIZE = {
    the spacing merges over the parsed style, it never
    replaces the style whole. This runs in the Doc
    save's payload builder only; a file note's save
-   never passes this way and keeps its exact bytes. */
+   never passes this way and keeps its exact bytes.
+   v2.125: the merge is a fill, not a stamp: a
+   paragraph's own line height, margins, font family,
+   and font size (carried in from the Doc, or set in
+   the editor) are the paragraph's own and win; the
+   Google defaults fill only what the element does not
+   already carry. Zero margin falls back per side:
+   margin: 0 is written only where no margin
+   declaration of any form stands, and a longhand
+   margin a paragraph does carry is never cancelled by
+   a shorthand written after it (the old stamp wrote
+   margin: 0 behind margin-bottom and silently ate the
+   spacing; the fill writes the missing longhands
+   beside it instead). */
 function docApplyGoogleSpacing(holder) {
   const els = holder.querySelectorAll(
     "p, h1, h2, h3, h4, h5, h6, li");
@@ -3295,11 +3932,38 @@ function docApplyGoogleSpacing(holder) {
     const el = els[i];
     const decls = docParseStyleDecls(
       el.getAttribute("style") || "");
-    decls["margin"] = "0";
-    decls["line-height"] = "1.15";
-    decls["font-family"] = "Arial, sans-serif";
-    decls["font-size"] =
-      DOC_GOOGLE_FONT_SIZE[el.tagName] || "11pt";
+    const has = function (prop) {
+      return decls[prop] !== undefined &&
+        String(decls[prop]).trim() !== "";
+    };
+    if (!has("line-height")) {
+      decls["line-height"] = "1.15";
+    }
+    if (!has("font-family")) {
+      decls["font-family"] = "Arial, sans-serif";
+    }
+    if (!has("font-size")) {
+      decls["font-size"] =
+        DOC_GOOGLE_FONT_SIZE[el.tagName] || "11pt";
+    }
+    if (!has("margin") && !has("margin-top") &&
+        !has("margin-right") && !has("margin-bottom") &&
+        !has("margin-left")) {
+      decls["margin"] = "0";
+    } else {
+      if (!has("margin-top")) {
+        decls["margin-top"] = "0";
+      }
+      if (!has("margin-right")) {
+        decls["margin-right"] = "0";
+      }
+      if (!has("margin-bottom")) {
+        decls["margin-bottom"] = "0";
+      }
+      if (!has("margin-left")) {
+        decls["margin-left"] = "0";
+      }
+    }
     const parts = [];
     Object.keys(decls).forEach(function (prop) {
       parts.push(prop + ": " + decls[prop] + ";");
@@ -3361,6 +4025,31 @@ async function docBuildUploadHtml(note) {
         escapeHtml(record.name || "file") + "]";
   }
   docApplyGoogleSpacing(holder);
+  /* v2.125: checklist items cross as glyph-led text. In
+     the app's own markup a checklist item is an input
+     element plus a done class, neither of which a Doc
+     can hold: written raw, Google shows a stray box
+     artifact and the done state is invisible there,
+     and the app's converter finds no glyph on the way
+     back. Leading each item with the open or checked
+     glyph as plain text is the form Google itself
+     renders as a task list, and the converter reads
+     the same glyphs on import, so the round trip keeps
+     the list a checklist with its states. */
+  holder.querySelectorAll("ul.ss-checklist > li")
+    .forEach(function (li) {
+      const done = li.classList.contains("done") ||
+        !!li.querySelector("input[type=checkbox]:checked");
+      li.querySelectorAll("input[type=checkbox]")
+        .forEach(function (box) { box.remove(); });
+      li.classList.remove("done");
+      li.insertBefore(document.createTextNode(
+        done ? "☑ " : "☐ "), li.firstChild);
+    });
+  holder.querySelectorAll("ul.ss-checklist")
+    .forEach(function (ul) {
+      ul.removeAttribute("class");
+    });
   return "<!DOCTYPE html><html><head>" +
     "<meta charset=\"utf-8\"></head><body>" +
     holder.innerHTML + "</body></html>";
