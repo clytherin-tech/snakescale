@@ -7251,6 +7251,11 @@ function currentNote() {
 }
 
 function renderEditor() {
+  /* v2.123: the open Doc-backed note's near-live poll
+     follows the open note (see refreshDocLivePoll in
+     media.js): every editor render re-judges whether
+     the poll should run, and for which note. */
+  refreshDocLivePoll();
   const note = currentNote();
   const noNote = document.getElementById("noNote");
   const wrap = document.getElementById("editorWrap");

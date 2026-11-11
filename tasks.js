@@ -3350,6 +3350,15 @@ async function saveDocBackedNote(note, options) {
   note.sha = saved.token || note.sha;
   rememberLastSavedSnapshot(note.id, candidateContent);
   saveCache();
+  /* v2.123: a Doc note's identity settles inside this
+     save: a created note's Doc ID lands above, after
+     the editor render that opened it, so the open
+     note's near-live poll re-judges here as well as at
+     every editor render (refreshDocLivePoll, media.js).
+     For a note already polling this is a no-op; for a
+     just created one it is the moment polling can
+     start. */
+  refreshDocLivePoll();
   return { saved: true, doc: true };
 }
 

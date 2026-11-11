@@ -2178,6 +2178,9 @@ function docNotesNeedsConsent() {
    resetCatalogRuntimeState in tasks.js. */
 function resetDocNotesState() {
   docNotesStatus = "idle";
+  /* v2.123: the open note's near-live poll (below) dies
+     with the rest of the Doc runtime state. */
+  stopDocLivePoll();
 }
 
 /* An Error carrying the HTTP status a Doc call met, and
@@ -3021,6 +3024,202 @@ async function docLoadNoteBody(note) {
     note.thumbnail = null;
   }
   note.previewText = htmlToText(note.body).slice(0, 140);
+}
+
+/* ----- near-live refresh of the open Doc-backed note (v2.123) ------
+   Chris's ask (2026-11-10, right after the v2.122 stale
+   body fix): while a Doc-backed note stands open, an edit
+   made to its Doc in Google Docs should show up in the app
+   within a few seconds, without a sync, a reopen, or a
+   reload. v2.122 made loads and Sync Now judge the held
+   body against the Doc's live revision; this section adds
+   the in-session half: a small poll that asks Drive, every
+   DOC_LIVE_POLL_MS, for the open Doc's current revision
+   token and nothing more.
+
+   The discipline, point by point:
+
+   - One metadata read per tick, for the open Doc only
+     (a files.get judged through driveTokenFromMetadata,
+     the same token scale docFetchDocument returns). No
+     listing sweep, and no export unless the revision
+     actually moved; the full download is spent only on a
+     real external change.
+   - The poll lives and dies with the open note. It runs
+     only while a Doc-backed note with a loaded body is
+     the open note and the app is visible; refreshDocLivePoll
+     is called at the head of every renderEditor (so opens,
+     switches, closes, and shell states re-judge it) and
+     again at the end of every Doc-backed save, because a
+     created note's Doc ID settles inside its first save,
+     after the render that opened it, and a
+     visibilitychange listener suspends it while the app
+     is hidden and resumes it (with one immediate tick)
+     when the app comes back with the same note open.
+     File-backed notes never poll, and nothing else in
+     the app polls because this exists.
+   - A moved revision refills exactly the way a sync's
+     does: the open note's sync context is captured BEFORE
+     the fetch (the same snapshot syncNow takes), the
+     fresh body is fetched through docLoadNoteBody, and
+     renderAll runs with that context armed, so
+     syncShouldRefillOpenNote makes the standing judgment:
+     a clean editor is refilled in place, and an editor
+     with unsaved typing is never overwritten (the fresh
+     body stands on the note and lands on the next fill,
+     as file notes and v2.122 already behave). The note's
+     baseline is re-remembered from the fetched body,
+     exactly as a load remembers it.
+   - No false refresh from the note's own saves: a save
+     lands the Doc's new revision token on note.sha
+     (docSaveDocument returns it), so the next tick sees
+     equality. One busy flag covers the tick's own work,
+     a tick that finds a save or a body load for the note
+     already in flight (the per-note op chain, the body
+     load map) simply skips, and a tick whose own fetch
+     is still running is never doubled.
+   - Fail soft: a failed tick changes nothing on screen,
+     shows no toast and no error, and the next tick tries
+     again. A 403 lands the module in its needs-consent
+     state through docApiFetch as every Doc call does,
+     and there the poll stops instead of hammering a
+     refused endpoint. */
+
+const DOC_LIVE_POLL_MS = 5000;
+
+let docLivePollTimer = null;   /* the interval id, or null */
+let docLivePollNoteId = null;  /* the note the poll serves */
+let docLivePollBusy = false;   /* one tick's work in flight */
+let docLivePollVisArmed = false;
+
+/* The note the poll would serve right now, or null when
+   polling should not run: no open note, a file-backed
+   note, a shell whose body has not loaded yet (its open
+   fetches fresh anyway), a note whose Doc link is
+   damaged, or the module standing in needs-consent. */
+function docLivePollTarget() {
+  if (typeof currentNote !== "function") { return null; }
+  const note = currentNote();
+  if (!note || !isDocBackedNote(note)) { return null; }
+  if (note.bodyLoaded === false) { return null; }
+  if (!sanitizeDocId(note.docId)) { return null; }
+  if (docNotesNeedsConsent()) { return null; }
+  return note;
+}
+
+function stopDocLivePoll() {
+  if (docLivePollTimer !== null) {
+    clearInterval(docLivePollTimer);
+    docLivePollTimer = null;
+  }
+  docLivePollNoteId = null;
+}
+
+/* Re-judge whether the poll should run, and for which
+   note. Called at the head of every renderEditor and
+   from the visibility listener below, so the poll's
+   life follows the open note and the app's visibility
+   exactly, with no other call sites to keep in step. */
+function refreshDocLivePoll() {
+  if (!docLivePollVisArmed) {
+    docLivePollVisArmed = true;
+    document.addEventListener("visibilitychange",
+      function () {
+        const visible =
+          document.visibilityState === "visible" ||
+          !document.hidden;
+        refreshDocLivePoll();
+        /* Coming back to the front with the same note
+           open earns one immediate tick, so a change
+           made while the app was hidden is judged now
+           instead of a full interval later. */
+        if (visible && docLivePollTimer !== null) {
+          docLivePollTick();
+        }
+      });
+  }
+  const hidden = document.hidden ||
+    document.visibilityState === "hidden";
+  const note = hidden ? null : docLivePollTarget();
+  if (!note) { stopDocLivePoll(); return; }
+  if (docLivePollTimer !== null &&
+      docLivePollNoteId === note.id) { return; }
+  stopDocLivePoll();
+  docLivePollNoteId = note.id;
+  docLivePollTimer = setInterval(docLivePollTick,
+    DOC_LIVE_POLL_MS);
+}
+
+/* One poll tick: read the open Doc's live revision, and
+   only on a real move, fetch and refill. See the section
+   comment for the discipline; every failure path out of
+   here is silent by design. */
+async function docLivePollTick() {
+  if (docLivePollBusy) { return; }
+  const note = docLivePollTarget();
+  if (!note || note.id !== docLivePollNoteId) { return; }
+  /* A save or a body load for this note already in
+     flight owns the note's storage state right now; this
+     tick skips, and the next one judges the settled
+     state (a landed save has already set note.sha to
+     the revision it created, so it can never read as an
+     external change). */
+  if ((typeof noteOpChains !== "undefined" &&
+       noteOpChains[note.id]) ||
+      (typeof noteBodyLoads !== "undefined" &&
+       noteBodyLoads[note.id])) {
+    return;
+  }
+  docLivePollBusy = true;
+  try {
+    let meta = null;
+    try {
+      meta = await docApiJson(
+        "https://www.googleapis.com/drive/v3/files/" +
+        encodeURIComponent(sanitizeDocId(note.docId)) +
+        "?fields=" + encodeURIComponent(
+          "id,headRevisionId,modifiedTime"));
+    } catch (err) {
+      if (isDocNeedsConsentError(err)) {
+        stopDocLivePoll();
+      }
+      return;
+    }
+    const liveToken = driveTokenFromMetadata(meta);
+    if (!liveToken || liveToken === note.sha) { return; }
+    /* The Doc moved elsewhere. Snapshot the open note's
+       sync context before the fetch, exactly as syncNow
+       does, so the refill judgment compares the editor
+       against the content it was last saved at, never
+       against the body about to land. */
+    const ctx = (typeof captureOpenNoteSyncContext ===
+      "function") ? captureOpenNoteSyncContext() : null;
+    await docLoadNoteBody(note);
+    rememberLastSavedContent(note);
+    if (ctx && ctx.id === note.id) {
+      syncOpenNoteRefresh = ctx;
+      try {
+        renderAll();
+      } finally {
+        syncOpenNoteRefresh = null;
+      }
+    } else {
+      /* No context to refill under (the snapshot could
+         not be taken): the fresh body stands on the note
+         and lands on the next fill; the render keeps the
+         list's preview honest. */
+      renderAll();
+    }
+  } catch (err) {
+    if (isDocNeedsConsentError(err)) {
+      stopDocLivePoll();
+    }
+    /* Any other failure (the export fetch failed, the
+       Doc was deleted elsewhere) fails soft: the held
+       body stands and the next tick tries again. */
+  } finally {
+    docLivePollBusy = false;
+  }
 }
 
 /* ----- editor body to upload HTML ---------------------------------
