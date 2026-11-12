@@ -1954,6 +1954,51 @@ function wireEvents() {
     openVersionHistory().catch(function (err) { toast(err.message, true); });
   });
   document.getElementById("versionHistoryCloseBtn").addEventListener("click", closeVersionHistory);
+
+  /* v2.138: the editor footer's Share button and its
+     dialog. The button stands between Export and History
+     in the markup; renderEditor judges when it shows. The
+     dialog's dynamic rows wire themselves as they render
+     (render.js); what stands here are the static controls:
+     the two close buttons, the backdrop and Escape close,
+     the add form, the contact suggestion triggers, the
+     link select, Copy link, and Retry. */
+  document.getElementById("shareBtn").addEventListener("click", function () {
+    openShareDialog().catch(function (err) { toast(err.message, true); });
+  });
+  document.getElementById("shareCloseBtn").addEventListener("click", closeShareDialog);
+  document.getElementById("shareCloseXBtn").addEventListener("click", closeShareDialog);
+  document.getElementById("shareModal").addEventListener("click", function (ev) {
+    if (ev.target === ev.currentTarget) { closeShareDialog(); }
+  });
+  document.getElementById("shareModal").addEventListener("keydown", function (ev) {
+    if (ev.key === "Escape") { closeShareDialog(); }
+  });
+  document.getElementById("shareAddForm").addEventListener("submit", function (ev) {
+    ev.preventDefault();
+    shareAddPersonFromForm().catch(function (err) {
+      shareShowMutationError(shareCapture(), err);
+    });
+  });
+  document.getElementById("shareEmailInput").addEventListener("input", shareRenderSuggestions);
+  document.getElementById("shareEmailInput").addEventListener("focus", shareRenderSuggestions);
+  document.getElementById("shareEmailInput").addEventListener("blur", function () {
+    setTimeout(function () {
+      const box = document.getElementById("shareSuggestions");
+      if (box) { box.classList.add("hidden"); }
+    }, 150);
+  });
+  document.getElementById("shareLinkSelect").addEventListener("change", function () {
+    shareChangeLinkRole().catch(function (err) {
+      shareShowMutationError(shareCapture(), err);
+    });
+  });
+  document.getElementById("shareCopyBtn").addEventListener("click", function () {
+    shareCopyLink().catch(function (err) { toast(err.message, true); });
+  });
+  document.getElementById("shareRetryBtn").addEventListener("click", function () {
+    loadShareDialogState();
+  });
   document.getElementById("versionHistoryModal").addEventListener("click", function (ev) {
     if (ev.target === ev.currentTarget) { closeVersionHistory(); }
   });

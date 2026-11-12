@@ -44,7 +44,7 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-11-12-SSN-V21370
+  BUILD STAMP: 2026-11-12-SSN-V21380
   Version: 2.106.0
 
   Revision history:
@@ -7277,6 +7277,13 @@
               <button type="button" data-export="pdf">PDF (print)</button>
             </div>
           </span>
+          <!-- v2.138: Share opens Google sharing for the
+               open note's Google Doc. renderEditor shows
+               it only for a live Doc-backed note with a
+               Doc to share; the dialog itself is below,
+               beside the History modal it stands next to
+               in the footer. -->
+          <button class="btn small hidden" id="shareBtn" type="button" title="Share this note through Google Docs">Share</button>
           <!-- v2.8: History opens the open note's version list
                (versionHistoryModal, below), with preview and
                restore. It stays available on locked notes too:
@@ -8489,6 +8496,81 @@
     <div class="version-preview hidden" id="versionHistoryPreview"></div>
     <div class="modal-foot">
       <button class="btn" id="versionHistoryCloseBtn" type="button">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==========================================================================
+     v2.138: Share this note
+     Opened from the editor footer's Share button, for a live
+     Doc-backed note only. The dialog reads the backing Google
+     Doc's permissions fresh on every open and after every
+     change: Google Drive is the only place sharing state lives,
+     and nothing here is written to the note, the catalog, or
+     settings. People are invited by email with a role and an
+     optional notification; the link section carries the
+     anyone-with-the-link permission and the Copy link button.
+     ========================================================================== -->
+<div id="shareModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="shareTitle">
+  <div class="modal-card share-card">
+    <div class="share-head">
+      <h2 id="shareTitle">Share note</h2>
+      <button class="share-close" id="shareCloseXBtn" type="button" aria-label="Close sharing" title="Close">&times;</button>
+    </div>
+    <p class="modal-sub">Sharing is handled by Google Docs. Anyone you share with opens the note in Google Docs; changes they make there appear here on the next refresh.</p>
+    <div class="share-loading" id="shareLoading">Loading sharing settings...</div>
+    <div class="share-error hidden" id="shareError" role="alert">
+      <span id="shareErrorText"></span>
+      <button class="btn small" id="shareRetryBtn" type="button">Retry</button>
+    </div>
+    <div class="share-content hidden" id="shareContent">
+      <section class="share-section" aria-labelledby="sharePeopleHeading">
+        <h3 id="sharePeopleHeading">People with access</h3>
+        <form id="shareAddForm">
+          <div class="field share-email-field">
+            <label for="shareEmailInput">Email address</label>
+            <input type="email" id="shareEmailInput" placeholder="name@example.com" autocomplete="off">
+            <div class="share-suggestions hidden" id="shareSuggestions" role="listbox" aria-label="Contact suggestions"></div>
+          </div>
+          <div class="share-add-row">
+            <div class="field share-role-field">
+              <label for="shareRoleSelect">Role</label>
+              <select id="shareRoleSelect">
+                <option value="reader">Viewer</option>
+                <option value="commenter">Commenter</option>
+                <option value="writer">Editor</option>
+              </select>
+            </div>
+            <label class="share-notify" for="shareNotifyInput">
+              <input type="checkbox" id="shareNotifyInput" checked>
+              <span>Email a notification to this person</span>
+            </label>
+            <button class="btn primary" id="shareAddBtn" type="submit">Add</button>
+          </div>
+          <p class="share-message" id="shareFormMessage" role="status"></p>
+        </form>
+        <div class="share-people-list" id="sharePeopleList"></div>
+      </section>
+      <section class="share-section" aria-labelledby="shareLinkHeading">
+        <h3 id="shareLinkHeading">Link sharing</h3>
+        <p class="share-link-state" id="shareLinkState"></p>
+        <div class="share-link-row">
+          <div class="field share-link-field">
+            <label for="shareLinkSelect">Anyone with the link</label>
+            <select id="shareLinkSelect">
+              <option value="restricted">Restricted</option>
+              <option value="reader">Viewer</option>
+              <option value="commenter">Commenter</option>
+              <option value="writer">Editor</option>
+            </select>
+          </div>
+          <button class="btn" id="shareCopyBtn" type="button">Copy link</button>
+        </div>
+        <p class="share-message" id="shareLinkMessage" role="status"></p>
+      </section>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" id="shareCloseBtn" type="button">Close</button>
     </div>
   </div>
 </div>

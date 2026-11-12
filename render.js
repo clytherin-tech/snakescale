@@ -1192,6 +1192,10 @@ function anyOverlayOpen() {
      Escape that cancels it never also exits Maximize. */
   if (blockDrag) { return true; }
   const ids = ["noteLinkModal", "settingsModal", "versionHistoryModal",
+    /* v2.138: the Share dialog joins the overlay set for
+       the same reason: an Escape that closes it never
+       also exits Maximize. */
+    "shareModal",
     /* v2.24: the task editor modal joins the set for the same
        reasons as every other dialog. */
     "taskModal",
@@ -7394,6 +7398,7 @@ function renderEditor() {
      Note popups close like they do on the no note path. */
   const thingsWrap = document.getElementById("thingsWrap");
   if (state.thingsNotebook) {
+    updateShareButton();
     noNote.classList.add("hidden");
     wrap.classList.add("hidden");
     /* v2.124: the Doc type dress belongs to an open note;
@@ -7410,6 +7415,7 @@ function renderEditor() {
   }
   if (thingsWrap) { thingsWrap.classList.add("hidden"); }
   if (!note) {
+    updateShareButton();
     /* v2.133: no note on screen means the standing
        pane, never a could not load face left standing
        by the note that was open before. */
@@ -7509,6 +7515,7 @@ function renderEditor() {
     } else {
       loadErrorFaceKey = "";
     }
+    updateShareButton();
     noNote.classList.remove("hidden");
     wrap.classList.add("hidden");
     hideLinkBar();
@@ -7760,6 +7767,7 @@ function renderEditor() {
      editing controls, and its label carries the note's
      reminder state (the moment in words, a done wording, or
      the plain word when none is set). */
+  updateShareButton();
   document.getElementById("noteReminderBtn").disabled = locked;
   document.getElementById("noteReminderBtnLabel").textContent =
     note.reminderAt ? noteReminderLabel(note) : "Reminder";
@@ -9258,6 +9266,720 @@ async function addStarterNoteFromSettings() {
       toast("Starter note created locally; save failed: " + err.message, true);
     });
   return note;
+}
+
+/* --------------------------------------------------------------------------
+   v2.138: Share a note through its Google Doc.
+
+   Chris's ask (November 12, 2026): since every live notebook
+   note is backed by its own Google Doc now, add sharing, in
+   both of Google's forms: invite specific people by email,
+   and anyone-with-the-link sharing. The one entry point is
+   the editor footer's Share button, standing between Export
+   and History, acting on the open note only.
+
+   The rules this section keeps:
+   - Google Drive permissions are the ONLY source of truth.
+     The dialog reads the Doc's file metadata (webViewLink,
+     owners, permissions) fresh every time it opens and again
+     after every successful change. No sharing state is ever
+     stored in the catalog, in settings, in local storage,
+     or in a note file, and opening or using the dialog never
+     saves, alters, or dirties the note's content.
+   - Every call rides the app's shared Drive transport
+     (gdriveJson in media.js), so the standing token, the
+     one silent renewal, and Google's own error wording all
+     behave exactly as they do for every other Drive call.
+     A failed call names Google's message inside the dialog
+     and never closes it.
+   - The note id and Doc id are captured when the dialog
+     opens. A load or change that lands after the open note
+     has changed (or the dialog has closed and reopened for
+     another note) is judged stale by its capture and paints
+     nothing into the dialog that stands.
+   - Contact suggestions come from the People module's own
+     loaded list (peopleContacts, filled by
+     ensurePeopleContacts in mail.js); there is no second
+     contacts fetch, and typing by hand works whether or not
+     contacts are available.
+   -------------------------------------------------------------------------- */
+const SHARE_ROLE_LABELS = {
+  reader: "Viewer", commenter: "Commenter",
+  writer: "Editor", owner: "Owner"
+};
+const SHARE_METADATA_FIELDS =
+  "id,name,webViewLink," +
+  "owners(displayName,emailAddress,permissionId)," +
+  "permissions(id,type,role,emailAddress,displayName," +
+  "domain,deleted,permissionId)";
+let shareDialogState = {
+  noteId: null, docId: null, title: "",
+  data: null, loading: false, busy: false,
+  error: "", formMessage: "", linkMessage: "", seq: 0
+};
+let shareLoadSeq = 0;
+
+function shareNoteCanShare(note) {
+  return !!note && !note.trashed && !note.archived &&
+    isDocBackedNote(note) && !!note.docId;
+}
+
+/* The footer button's standing state, re-judged on every
+   editor render path: it stands only for a live Doc-backed
+   note with a Doc id, and hides for file-backed notes, for
+   Trash and Archive (whose notes are file-backed and
+   locked), for the Things page, and when no note is open. */
+function updateShareButton() {
+  const btn = document.getElementById("shareBtn");
+  if (!btn) { return; }
+  const note = currentNote();
+  const show = !state.thingsNotebook && shareNoteCanShare(note);
+  btn.classList.toggle("hidden", !show);
+  btn.disabled = !show;
+}
+
+function shareFileUrl(docId, tail) {
+  return "https://www.googleapis.com/drive/v3/files/" +
+    encodeURIComponent(docId) + (tail || "");
+}
+
+function sharePermissionUrl(docId, permissionId, query) {
+  return shareFileUrl(docId, "/permissions/" +
+    encodeURIComponent(permissionId) + (query || ""));
+}
+
+function shareRoleLabel(role) {
+  return SHARE_ROLE_LABELS[role] || String(role || "");
+}
+
+function shareCanonicalDocLink(docId) {
+  return "https://docs.google.com/document/d/" +
+    encodeURIComponent(docId) + "/edit";
+}
+
+function shareModalEl() {
+  return document.getElementById("shareModal");
+}
+
+function shareCapture() {
+  return { noteId: shareDialogState.noteId,
+    docId: shareDialogState.docId };
+}
+
+function shareCaptureIsOpen(capture) {
+  const modal = shareModalEl();
+  return !!modal && !modal.classList.contains("hidden") &&
+    shareDialogState.noteId === capture.noteId &&
+    shareDialogState.docId === capture.docId;
+}
+
+function shareLoadIsCurrent(capture, seq) {
+  return shareCaptureIsOpen(capture) &&
+    shareDialogState.seq === seq;
+}
+
+/* Everyone with access, from one metadata read: the Doc's
+   permissions minus the anyone entry (the link section
+   owns that one), with the owners folded in as Owner rows
+   if the permissions list itself ever omits them. */
+function sharePeoplePermissions(data) {
+  const perms = ((data && data.permissions) || []).filter(
+    function (p) {
+      return p && p.type !== "anyone" && !p.deleted;
+    });
+  const hasOwner = perms.some(function (p) {
+    return p.role === "owner";
+  });
+  if (!hasOwner && data && Array.isArray(data.owners)) {
+    data.owners.forEach(function (o) {
+      if (!o) { return; }
+      perms.unshift({
+        id: o.permissionId || ("owner:" +
+          (o.emailAddress || o.displayName || "")),
+        type: "user", role: "owner",
+        emailAddress: o.emailAddress || "",
+        displayName: o.displayName || "",
+        syntheticOwner: true
+      });
+    });
+  }
+  return perms;
+}
+
+function shareAnyonePermission(data) {
+  const perms = (data && data.permissions) || [];
+  for (let i = 0; i < perms.length; i++) {
+    if (perms[i] && perms[i].type === "anyone" &&
+        !perms[i].deleted) {
+      return perms[i];
+    }
+  }
+  return null;
+}
+
+function sharePermissionName(perm) {
+  return perm.displayName || perm.emailAddress ||
+    perm.domain || (perm.type === "group" ? "Group" :
+      perm.type === "domain" ? "Domain" : "Shared user");
+}
+
+function sharePermissionMeta(perm) {
+  const parts = [];
+  if (perm.emailAddress &&
+      perm.emailAddress !== sharePermissionName(perm)) {
+    parts.push(perm.emailAddress);
+  }
+  if (perm.type === "group") { parts.push("Group"); }
+  if (perm.type === "domain") {
+    parts.push(perm.domain ? "Domain" : "Domain");
+  }
+  return parts.join(" - ");
+}
+
+/* The dialog's one render. It rebuilds only the people
+   list (the static form and link controls keep their DOM,
+   so a half typed email survives a re-render); every
+   control's disabled state follows the busy and loading
+   flags, so a change in flight cannot be submitted twice,
+   and a role select only ever fires its change from the
+   user's own pick, never from this render. */
+function renderShareDialog() {
+  const modal = shareModalEl();
+  if (!modal) { return; }
+  const st = shareDialogState;
+  const title = document.getElementById("shareTitle");
+  if (title) {
+    title.textContent = "Share: " +
+      (st.title || "Untitled note");
+  }
+  const loading = document.getElementById("shareLoading");
+  if (loading) {
+    loading.classList.toggle("hidden", !st.loading);
+  }
+  const errBox = document.getElementById("shareError");
+  const errText = document.getElementById("shareErrorText");
+  if (errBox && errText) {
+    errBox.classList.toggle("hidden", !st.error);
+    errText.textContent = st.error || "";
+  }
+  const content = document.getElementById("shareContent");
+  if (content) {
+    content.classList.toggle("hidden", !st.data);
+  }
+  const formMsg = document.getElementById("shareFormMessage");
+  if (formMsg) { formMsg.textContent = st.formMessage || ""; }
+  const linkMsg = document.getElementById("shareLinkMessage");
+  if (linkMsg) { linkMsg.textContent = st.linkMessage || ""; }
+  const frozen = st.busy || st.loading;
+  ["shareEmailInput", "shareRoleSelect", "shareNotifyInput",
+   "shareAddBtn", "shareLinkSelect", "shareCopyBtn",
+   "shareRetryBtn"].forEach(function (id) {
+    const el = document.getElementById(id);
+    if (el) { el.disabled = frozen; }
+  });
+  if (!st.data) { return; }
+
+  const list = document.getElementById("sharePeopleList");
+  if (list) {
+    list.innerHTML = "";
+    const people = sharePeoplePermissions(st.data);
+    let others = 0;
+    people.forEach(function (perm) {
+      if (perm.role !== "owner") { others++; }
+      list.appendChild(buildSharePersonRow(perm));
+    });
+    if (!others) {
+      const none = document.createElement("div");
+      none.className = "share-empty";
+      none.textContent =
+        "Only the owner has access to this note.";
+      list.appendChild(none);
+    }
+  }
+  const anyone = shareAnyonePermission(st.data);
+  const linkSelect = document.getElementById("shareLinkSelect");
+  if (linkSelect) {
+    linkSelect.value = anyone ? anyone.role : "restricted";
+  }
+  const linkState = document.getElementById("shareLinkState");
+  if (linkState) {
+    linkState.textContent = anyone
+      ? "Anyone with the link can " +
+        (anyone.role === "writer" ? "edit" :
+         anyone.role === "commenter" ? "comment on" :
+         "view") + " this note."
+      : "Restricted. Only the people listed above can " +
+        "open this note.";
+  }
+  shareRenderSuggestions();
+}
+
+/* One row of the people list. The owner is a fact, not a
+   control: no role select, no Remove. Everyone else gets
+   a role select carrying their current role and a Remove
+   button, both wired to this permission's own id. */
+function buildSharePersonRow(perm) {
+  const row = document.createElement("div");
+  row.className = "share-person";
+  row.setAttribute("data-permission-id", perm.id || "");
+  if (perm.emailAddress) {
+    row.setAttribute("data-share-email", perm.emailAddress);
+  }
+  const main = document.createElement("div");
+  main.className = "share-person-main";
+  const name = document.createElement("div");
+  name.className = "share-person-name";
+  name.textContent = sharePermissionName(perm);
+  main.appendChild(name);
+  const meta = sharePermissionMeta(perm);
+  if (meta) {
+    const metaEl = document.createElement("div");
+    metaEl.className = "share-person-meta";
+    metaEl.textContent = meta;
+    main.appendChild(metaEl);
+  }
+  row.appendChild(main);
+  if (perm.role === "owner") {
+    const badge = document.createElement("span");
+    badge.className = "share-owner-badge";
+    badge.textContent = "Owner";
+    row.appendChild(badge);
+    return row;
+  }
+  const frozen = shareDialogState.busy ||
+    shareDialogState.loading;
+  const select = document.createElement("select");
+  select.className = "share-role-select";
+  select.setAttribute("aria-label",
+    "Role for " + sharePermissionName(perm));
+  ["reader", "commenter", "writer"].forEach(function (role) {
+    const opt = document.createElement("option");
+    opt.value = role;
+    opt.textContent = shareRoleLabel(role);
+    select.appendChild(opt);
+  });
+  if (["reader", "commenter", "writer"].indexOf(
+      perm.role) < 0) {
+    const opt = document.createElement("option");
+    opt.value = perm.role;
+    opt.textContent = shareRoleLabel(perm.role);
+    select.appendChild(opt);
+  }
+  select.value = perm.role;
+  select.disabled = frozen;
+  select.addEventListener("change", function () {
+    shareChangePermissionRole(perm, select.value)
+      .catch(function (err) {
+        shareShowMutationError(shareCapture(), err);
+      });
+  });
+  row.appendChild(select);
+  const removeBtn = document.createElement("button");
+  removeBtn.type = "button";
+  removeBtn.className = "btn small share-remove-btn";
+  removeBtn.textContent = "Remove";
+  removeBtn.disabled = frozen;
+  removeBtn.addEventListener("click", function () {
+    shareRemovePermission(perm).catch(function (err) {
+      shareShowMutationError(shareCapture(), err);
+    });
+  });
+  row.appendChild(removeBtn);
+  return row;
+}
+
+/* Contact suggestions under the email field: up to eight
+   of the People module's contacts whose name or email
+   matches what is typed. Picking one fills the bare email
+   address. An empty fragment, an unloaded list, and a
+   forbidden or unavailable contacts state all simply show
+   nothing; typing by hand is never blocked. */
+function shareRenderSuggestions() {
+  const box = document.getElementById("shareSuggestions");
+  const input = document.getElementById("shareEmailInput");
+  if (!box || !input) { return; }
+  const frag = input.value.trim().toLowerCase();
+  box.innerHTML = "";
+  if (!frag || !Array.isArray(peopleContacts)) {
+    box.classList.add("hidden");
+    return;
+  }
+  const matches = peopleContacts.filter(function (c) {
+    return c && c.email &&
+      (String(c.email).toLowerCase().indexOf(frag) >= 0 ||
+       String(c.name || "").toLowerCase().indexOf(frag) >= 0);
+  }).slice(0, 8);
+  if (!matches.length) {
+    box.classList.add("hidden");
+    return;
+  }
+  matches.forEach(function (c) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "share-suggestion";
+    btn.setAttribute("role", "option");
+    btn.setAttribute("data-email", c.email);
+    const name = document.createElement("span");
+    name.className = "share-suggestion-name";
+    name.textContent = c.name || c.email;
+    btn.appendChild(name);
+    if (c.name) {
+      const email = document.createElement("span");
+      email.className = "share-suggestion-email";
+      email.textContent = c.email;
+      btn.appendChild(email);
+    }
+    const pick = function (ev) {
+      if (ev) { ev.preventDefault(); }
+      input.value = c.email;
+      box.innerHTML = "";
+      box.classList.add("hidden");
+      input.focus();
+    };
+    btn.addEventListener("mousedown", pick);
+    btn.addEventListener("click", pick);
+    box.appendChild(btn);
+  });
+  box.classList.remove("hidden");
+}
+
+/* While the People module's one load is still in flight,
+   keep the suggestion list honest: when it lands, render
+   once more for the fragment already typed. This waits on
+   the module's own loader; it never starts a second one. */
+async function sharePrimeSuggestions(capture) {
+  let waits = 0;
+  while (peopleLoading && waits < 40) {
+    await new Promise(function (res) {
+      setTimeout(res, 100);
+    });
+    waits++;
+    if (!shareCaptureIsOpen(capture)) { return; }
+  }
+  if (shareCaptureIsOpen(capture)) {
+    shareRenderSuggestions();
+  }
+}
+
+/* The fresh read every open and every landed change runs:
+   one file metadata call carrying the link, the owners,
+   and the permissions the dialog renders. */
+async function loadShareDialogState() {
+  const capture = shareCapture();
+  const seq = ++shareLoadSeq;
+  shareDialogState.seq = seq;
+  shareDialogState.loading = true;
+  shareDialogState.error = "";
+  renderShareDialog();
+  try {
+    const data = await gdriveJson(shareFileUrl(
+      capture.docId,
+      "?fields=" + encodeURIComponent(
+        SHARE_METADATA_FIELDS)));
+    if (!shareLoadIsCurrent(capture, seq)) { return false; }
+    shareDialogState.data = data;
+    shareDialogState.loading = false;
+    renderShareDialog();
+    return true;
+  } catch (err) {
+    if (!shareLoadIsCurrent(capture, seq)) { return false; }
+    shareDialogState.loading = false;
+    shareDialogState.error = err && err.message
+      ? err.message : String(err);
+    renderShareDialog();
+    return false;
+  }
+}
+
+function shareShowMutationError(capture, err) {
+  if (!shareCaptureIsOpen(capture)) { return; }
+  shareDialogState.busy = false;
+  shareDialogState.loading = false;
+  shareDialogState.error = err && err.message
+    ? err.message : String(err);
+  renderShareDialog();
+}
+
+async function openShareDialog() {
+  const note = currentNote();
+  if (!shareNoteCanShare(note)) { return; }
+  shareLoadSeq++;
+  shareDialogState = {
+    noteId: note.id, docId: note.docId,
+    title: note.title || "",
+    data: null, loading: false, busy: false,
+    error: "", formMessage: "", linkMessage: "",
+    seq: shareLoadSeq
+  };
+  const modal = shareModalEl();
+  if (!modal) { return; }
+  modal.classList.remove("hidden");
+  const email = document.getElementById("shareEmailInput");
+  if (email) { email.value = ""; }
+  const role = document.getElementById("shareRoleSelect");
+  if (role) { role.value = "reader"; }
+  const notify = document.getElementById("shareNotifyInput");
+  if (notify) { notify.checked = true; }
+  renderShareDialog();
+  const closeBtn = document.getElementById("shareCloseBtn");
+  if (closeBtn) { closeBtn.focus(); }
+  /* The People module's lazy load starts now so contact
+     suggestions can answer as soon as Chris types; the
+     dialog never waits on it. */
+  ensurePeopleContacts();
+  const capture = shareCapture();
+  sharePrimeSuggestions(capture);
+  await loadShareDialogState();
+  if (shareCaptureIsOpen(capture) &&
+      shareDialogState.data) {
+    const input = document.getElementById("shareEmailInput");
+    if (input) { input.focus(); }
+  }
+}
+
+function closeShareDialog() {
+  const modal = shareModalEl();
+  if (modal) { modal.classList.add("hidden"); }
+  shareLoadSeq++;
+  shareDialogState.seq = shareLoadSeq;
+  shareDialogState.loading = false;
+  shareDialogState.busy = false;
+  const btn = document.getElementById("shareBtn");
+  if (btn && !btn.classList.contains("hidden")) {
+    btn.focus();
+  }
+}
+
+/* Add a person, or, when the email already stands in the
+   list, bring that permission to the chosen role instead
+   of asking Google for a duplicate. The owner's email is
+   a plain statement, never a call. */
+async function shareAddPersonFromForm() {
+  const st = shareDialogState;
+  if (st.busy || st.loading || !st.data) { return; }
+  const capture = shareCapture();
+  const input = document.getElementById("shareEmailInput");
+  const roleEl = document.getElementById("shareRoleSelect");
+  const notifyEl = document.getElementById(
+    "shareNotifyInput");
+  const email = input ? input.value.trim() : "";
+  const role = roleEl ? roleEl.value : "reader";
+  const notify = notifyEl ? !!notifyEl.checked : true;
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    st.formMessage =
+      "Enter a valid email address to share with.";
+    renderShareDialog();
+    if (input) { input.focus(); }
+    return;
+  }
+  const wanted = email.toLowerCase();
+  const people = sharePeoplePermissions(st.data);
+  const owner = people.find(function (p) {
+    return p.role === "owner" && p.emailAddress &&
+      p.emailAddress.toLowerCase() === wanted;
+  }) || ((st.data.owners || []).find(function (o) {
+    return o && o.emailAddress &&
+      o.emailAddress.toLowerCase() === wanted;
+  }) ? { role: "owner" } : null);
+  if (owner) {
+    st.formMessage = email + " already owns this note.";
+    renderShareDialog();
+    return;
+  }
+  const existing = people.find(function (p) {
+    return p.role !== "owner" && p.emailAddress &&
+      p.emailAddress.toLowerCase() === wanted;
+  });
+  st.busy = true;
+  st.error = "";
+  st.formMessage = "";
+  renderShareDialog();
+  try {
+    if (existing) {
+      if (existing.role === role) {
+        st.busy = false;
+        st.formMessage = email + " already has " +
+          shareRoleLabel(role) + " access.";
+        renderShareDialog();
+        return;
+      }
+      await gdriveJson(sharePermissionUrl(
+        capture.docId, existing.id,
+        "?fields=id,type,role,emailAddress,displayName"), {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ role: role })
+        });
+      if (!shareCaptureIsOpen(capture)) { return; }
+      st.formMessage = "Role updated for " + email + ".";
+      toast("Role updated for " + email + ".");
+    } else {
+      await gdriveJson(shareFileUrl(capture.docId,
+        "/permissions?sendNotificationEmail=" +
+        (notify ? "true" : "false") +
+        "&fields=id,type,role,emailAddress,displayName"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            type: "user", role: role, emailAddress: email
+          })
+        });
+      if (!shareCaptureIsOpen(capture)) { return; }
+      if (input) { input.value = ""; }
+      st.formMessage = "Shared with " + email + ".";
+      toast("Shared with " + email + ".");
+    }
+    st.busy = false;
+    renderShareDialog();
+    await loadShareDialogState();
+  } catch (err) {
+    shareShowMutationError(capture, err);
+  }
+}
+
+/* One listed permission's role change. A failure renders
+   the last state Google confirmed, so the select falls
+   back to the role that actually stands. */
+async function shareChangePermissionRole(perm, role) {
+  const st = shareDialogState;
+  if (st.busy || st.loading || !st.data ||
+      perm.role === role) {
+    return;
+  }
+  const capture = shareCapture();
+  st.busy = true;
+  st.error = "";
+  renderShareDialog();
+  try {
+    await gdriveJson(sharePermissionUrl(
+      capture.docId, perm.id,
+      "?fields=id,type,role,emailAddress,displayName"), {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role: role })
+      });
+    if (!shareCaptureIsOpen(capture)) { return; }
+    toast("Role updated for " +
+      sharePermissionName(perm) + ".");
+    st.busy = false;
+    renderShareDialog();
+    await loadShareDialogState();
+  } catch (err) {
+    shareShowMutationError(capture, err);
+  }
+}
+
+async function shareRemovePermission(perm) {
+  const st = shareDialogState;
+  if (st.busy || st.loading || !st.data) { return; }
+  const capture = shareCapture();
+  st.busy = true;
+  st.error = "";
+  renderShareDialog();
+  try {
+    await gdriveJson(sharePermissionUrl(
+      capture.docId, perm.id), { method: "DELETE" });
+    if (!shareCaptureIsOpen(capture)) { return; }
+    toast("Access removed for " +
+      sharePermissionName(perm) + ".");
+    st.busy = false;
+    renderShareDialog();
+    await loadShareDialogState();
+  } catch (err) {
+    shareShowMutationError(capture, err);
+  }
+}
+
+/* The link section's select: Restricted is the absence of
+   the anyone permission, a role creates or patches it,
+   and Restricted again deletes it. Discovery stays off:
+   allowFileDiscovery is false on every create. */
+async function shareChangeLinkRole() {
+  const st = shareDialogState;
+  if (st.busy || st.loading || !st.data) { return; }
+  const select = document.getElementById("shareLinkSelect");
+  if (!select) { return; }
+  const target = select.value;
+  const anyone = shareAnyonePermission(st.data);
+  const current = anyone ? anyone.role : "restricted";
+  if (target === current) { return; }
+  const capture = shareCapture();
+  st.busy = true;
+  st.error = "";
+  st.linkMessage = "";
+  renderShareDialog();
+  try {
+    if (target === "restricted") {
+      await gdriveJson(sharePermissionUrl(
+        capture.docId, anyone.id), { method: "DELETE" });
+    } else if (anyone) {
+      await gdriveJson(sharePermissionUrl(
+        capture.docId, anyone.id,
+        "?fields=id,type,role"), {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ role: target })
+        });
+    } else {
+      await gdriveJson(shareFileUrl(capture.docId,
+        "/permissions?fields=id,type,role"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            type: "anyone", role: target,
+            allowFileDiscovery: false
+          })
+        });
+    }
+    if (!shareCaptureIsOpen(capture)) { return; }
+    st.linkMessage = "Link sharing updated.";
+    toast("Link sharing updated.");
+    st.busy = false;
+    renderShareDialog();
+    await loadShareDialogState();
+  } catch (err) {
+    shareShowMutationError(capture, err);
+  }
+}
+
+/* Copy the Doc's own link: the webViewLink the metadata
+   read returned, or the canonical Docs address for the
+   Doc id when Google did not send one. Copying never
+   changes who can open it; Restricted stays restricted. */
+async function shareCopyLink() {
+  const st = shareDialogState;
+  if (!st.data) { return; }
+  const link = st.data.webViewLink ||
+    shareCanonicalDocLink(st.docId);
+  let copied = false;
+  try {
+    if (navigator.clipboard &&
+        typeof navigator.clipboard.writeText ===
+          "function") {
+      await navigator.clipboard.writeText(link);
+      copied = true;
+    }
+  } catch (err) { copied = false; }
+  if (!copied) {
+    try {
+      const scratch = document.createElement("textarea");
+      scratch.value = link;
+      scratch.setAttribute("readonly", "");
+      scratch.style.position = "fixed";
+      scratch.style.opacity = "0";
+      document.body.appendChild(scratch);
+      scratch.select();
+      copied = document.execCommand("copy");
+      scratch.remove();
+    } catch (err) { copied = false; }
+  }
+  st.linkMessage = copied
+    ? "Link copied."
+    : "Could not copy the link automatically. " +
+      "The link is " + link + ".";
+  renderShareDialog();
+  toast(copied ? "Link copied." :
+    "Could not copy the link.", !copied);
 }
 
 /* --------------------------------------------------------------------------
