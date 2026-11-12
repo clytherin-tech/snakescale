@@ -1617,8 +1617,29 @@ async function gdriveJson(url, options) {
    could have deleted or moved the folder in Drive between
    sessions, and because a cache written before v2.0 points at the
    OLD top level folder, whose parent is not the notes root. */
+/* v2.135: the attachments folder id this session
+   has already validated against Drive. The
+   revalidation read inside
+   googleEnsureAttachmentsFolder exists because
+   the folder could be deleted or moved between
+   sessions; within a session it was spent once
+   per upload, which a many image Doc adoption
+   turned into one metadata read per image on top
+   of the upload's own requests. The memo is
+   keyed by the id itself, so any change of the
+   cached id (a failed validation nulls it, a
+   fresh resolve replaces it, sign out clears it)
+   revalidates on the next ensure exactly as
+   before. */
+let attachFolderValidatedId = null;
+
 async function googleEnsureAttachmentsFolder() {
   const rootId = await driveEnsureNotesRoot();
+  if (state.attach.googleFolderId &&
+      state.attach.googleFolderId ===
+        attachFolderValidatedId) {
+    return state.attach.googleFolderId;
+  }
   if (state.attach.googleFolderId) {
     try {
       const info = await gdriveJson(
@@ -1629,13 +1650,16 @@ async function googleEnsureAttachmentsFolder() {
           info.mimeType === DRIVE_FOLDER_MIME &&
           (info.parents || []).indexOf(rootId) >= 0) {
         driveCache.folderIds[ATTACH_SUBFOLDER_NAME] = info.id;
+        attachFolderValidatedId = info.id;
         return info.id;
       }
     } catch (e) { /* fall through and resolve the folder again */ }
     state.attach.googleFolderId = null;
+    attachFolderValidatedId = null;
   }
   const folderId = await driveResolveFolder(ATTACH_SUBFOLDER_NAME, true);
   state.attach.googleFolderId = folderId;
+  attachFolderValidatedId = folderId;
   saveSettings();
   return folderId;
 }
@@ -2528,16 +2552,94 @@ async function docApiJson(url, options) {
    glyph text of the not yet converted form (see the
    post-pass at docSaveDocument). */
 
-async function docFetchDocumentJson(docId) {
-  try {
-    const res = await gdriveFetch(
-      "https://docs.googleapis.com/v1/documents/" +
-      encodeURIComponent(docId));
-    if (!res || !res.ok) { return null; }
-    return await res.json();
-  } catch (e) {
-    return null;
+/* v2.135: one judged read of a Doc's JSON: the
+   document itself on success, or the failure it met
+   (the HTTP status, and Google's own message when
+   the error body carried one). Until now the plain
+   read below returned the same silent null for a
+   refused permission, a disabled API, a rate limit,
+   and a network blip, and every caller proceeded as
+   if the Doc simply had nothing to say. For the
+   checklist kinds that is a silent corruption: the
+   export of a real Google task list is bullet
+   shaped (measured on a genuine task list Doc:
+   every level's marker rule wears the same bullet
+   glyph a plain list wears), so a Doc whose
+   structure read failed converted its task lists
+   as plain bullets, and the note opened with no
+   checkboxes and no ticks and nothing anywhere
+   said why (Chris's live report, November 11,
+   2026, once the sign in fix let the Docs load at
+   all: every converted checklist rendered as a
+   bullet list). The judged read is attempted twice
+   before a failure is returned, so a transient
+   blip heals inside the leg, and the failure it
+   returns is a fact the load path can surface
+   (see docSurfaceListKindsFailure). The plain
+   read keeps its old contract for its other
+   callers, on top of the judged one. */
+async function docFetchDocumentJsonJudged(docId) {
+  let failure = { status: 0, message: "" };
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const res = await gdriveFetch(
+        "https://docs.googleapis.com/v1/documents/" +
+        encodeURIComponent(docId));
+      if (res && res.ok) {
+        return { json: await res.json(), failure: null };
+      }
+      failure = { status: res ? res.status : 0,
+        message: "" };
+      if (res) {
+        const facts = await docErrorBodyFacts(res);
+        if (facts.message) {
+          failure.message = facts.message;
+        }
+      }
+    } catch (e) {
+      failure = { status: 0, message: "" };
+    }
   }
+  return { json: null, failure: failure };
+}
+
+async function docFetchDocumentJson(docId) {
+  const judged = await docFetchDocumentJsonJudged(docId);
+  return judged.json;
+}
+
+/* v2.135: the load path's word on a failed checklist
+   structure read. The failure is surfaced once per
+   session per distinct failure, as a toast naming
+   the status and Google's own message when there is
+   one, and the latch is re-armed by the next judged
+   read that succeeds, so a healed leg speaks again
+   if it fails again. The note itself still opens
+   either way: the softness of the channel was never
+   the problem; its silence was. */
+let docListKindsFailureSurfaced = "";
+
+function docSurfaceListKindsFailure(failure) {
+  const status = (failure && failure.status) || 0;
+  const message = (failure && failure.message) || "";
+  const sig = status + "|" + message;
+  if (docListKindsFailureSurfaced === sig) { return; }
+  docListKindsFailureSurfaced = sig;
+  let text = "Google did not provide this note's " +
+    "checklist structure" +
+    (status ? " (HTTP status " + status + ")" : "") +
+    ", so it opened without its checkboxes.";
+  if (message) { text += " Google said: " + message; }
+  if (status === 403) {
+    text += " That is this sign in's Docs " +
+      "permission: try Refresh connection in " +
+      "Settings.";
+  }
+  toast(text, true);
+}
+
+function docListKindsRecovered() {
+  docListKindsFailureSurfaced = "";
 }
 
 /* One batchUpdate against the Docs API on the same soft
@@ -2851,14 +2953,30 @@ async function docFetchDocumentOnce(docId) {
      catalog facts, so a Doc that gains its first
      list in Google still converts with its kinds on
      its next fetch. */
-  const docJson = docExportCarriesListMarkup(html)
-    ? await docFetchDocumentJson(docId) : null;
+  const carriesLists = docExportCarriesListMarkup(html);
+  const judged = carriesLists
+    ? await docFetchDocumentJsonJudged(docId)
+    : { json: null, failure: null };
+  if (carriesLists && judged.json) {
+    docListKindsRecovered();
+  }
   return {
     html: html,
     name: typeof meta.name === "string" ? meta.name : "",
     token: driveTokenFromMetadata(meta),
     modifiedTime: meta.modifiedTime || null,
-    listKinds: docChecklistKindsFromJson(docJson)
+    listKinds: docChecklistKindsFromJson(judged.json),
+    /* v2.135: the checklist structure read's failure,
+       when this fetch's export carried lists and the
+       judged read could not produce the document: the
+       load path surfaces it (see
+       docSurfaceListKindsFailure) instead of the note
+       converting its task lists into bullets in
+       silence. Null whenever the read landed, and
+       whenever no list stood to judge. */
+    listKindsFailure: carriesLists && !judged.json
+      ? (judged.failure || { status: 0, message: "" })
+      : null
   };
 }
 
@@ -4284,7 +4402,15 @@ function docDataUriParts(src) {
   };
 }
 
-async function docAdoptOneImage(note, img) {
+/* v2.135: the record an adoption lands rides a
+   sink when the caller passes one (the adoption
+   pool in docAdoptImages collects each image's
+   records in its own bag, so the note's attachment
+   order stays the body's order no matter which
+   adoption settles first); without one it lands
+   on the note as it always did. */
+async function docAdoptOneImage(note, img, sink) {
+  const bag = sink || note.attachments;
   const src = String((img && img.src) || "");
   const label = String((img && img.alt) || "").trim();
   const fallback = "[Image: " + (label || "in the Doc") + "]";
@@ -4299,7 +4425,7 @@ async function docAdoptOneImage(note, img) {
     const cacheKey = note.id + "|" + docDataUriHash(src);
     const cached = docAdoptedImageCache[cacheKey];
     if (cached) {
-      note.attachments.push(cached);
+      bag.push(cached);
       return "<figure class=\"ss-attachment\"" +
         " data-attachment-id=\"" + cached.id + "\"" +
         widthStyle +
@@ -4339,7 +4465,7 @@ async function docAdoptOneImage(note, img) {
         created: new Date().toISOString()
       };
       docAdoptedImageCache[cacheKey] = record;
-      note.attachments.push(record);
+      bag.push(record);
       return "<figure class=\"ss-attachment\"" +
         " data-attachment-id=\"" + attId + "\"" +
         widthStyle +
@@ -4369,11 +4495,48 @@ async function docAdoptImages(note, converted) {
   const holder = document.createElement("div");
   holder.innerHTML = converted.html;
   const tokens = holder.querySelectorAll("[data-doc-img]");
+  /* v2.135: the adoptions run in a small parallel
+     pool instead of strictly one at a time. Each
+     adoption is a resumable Drive upload (an init
+     request, the bytes, and the attachments
+     folder's validation), and the serial loop made
+     a Doc with many images stand as an unopened
+     shell for minutes before its body could land:
+     the Movie Catalog notes carry 37 to 110
+     posters apiece, hundreds of sequential
+     requests, while the smallest, at 11 posters,
+     opened in seconds (Chris's live report,
+     November 11, 2026). Six at a time keeps the
+     burst modest for Google's rate limits while
+     cutting the wait by that factor. Each image's
+     records collect in its own bag and the swaps
+     are applied in token order once every adoption
+     has settled, so the note's attachment order
+     and the body's figures stand exactly as the
+     serial loop left them. */
+  const swaps = new Array(tokens.length);
+  const bags = new Array(tokens.length);
+  let cursor = 0;
+  const worker = async function () {
+    while (cursor < tokens.length) {
+      const i = cursor;
+      cursor += 1;
+      const token = tokens[i];
+      const idx = Number(token.getAttribute("data-doc-img"));
+      bags[i] = [];
+      swaps[i] = await docAdoptOneImage(note,
+        converted.images[idx], bags[i]);
+    }
+  };
+  const pool = [];
+  const width = Math.min(6, tokens.length);
+  for (let k = 0; k < width; k++) { pool.push(worker()); }
+  await Promise.all(pool);
   for (let i = 0; i < tokens.length; i++) {
-    const token = tokens[i];
-    const idx = Number(token.getAttribute("data-doc-img"));
-    const img = converted.images[idx];
-    token.outerHTML = await docAdoptOneImage(note, img);
+    bags[i].forEach(function (rec) {
+      note.attachments.push(rec);
+    });
+    tokens[i].outerHTML = swaps[i];
   }
   return holder.innerHTML;
 }
@@ -4616,6 +4779,14 @@ async function docLoadNoteBody(note) {
   }
   bootCountNoteDownload();
   const fetched = await docFetchDocument(docId);
+  /* v2.135: a checklist structure read that failed
+     on a list carrying Doc is named, once per
+     session per failure, instead of the note
+     quietly opening as bullets (see
+     docSurfaceListKindsFailure). */
+  if (fetched.listKindsFailure) {
+    docSurfaceListKindsFailure(fetched.listKindsFailure);
+  }
   const converted = docExportHtmlToBody(fetched.html,
     fetched.listKinds);
   note.body = await docAdoptImages(note, converted);
