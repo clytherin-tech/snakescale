@@ -9307,11 +9307,22 @@ const SHARE_ROLE_LABELS = {
   reader: "Viewer", commenter: "Commenter",
   writer: "Editor", owner: "Owner"
 };
+/* The metadata read's field selection. Every token
+   names a field the Drive API actually carries: a
+   permission's identifier is its id field, and the
+   Permission resource has no permissionId (that name
+   lives on the User resource, inside owners(...)
+   above). v2.138.0 shipped a trailing permissionId
+   inside permissions(...); Google refused the whole
+   read with "Invalid field selection permissionId"
+   and the dialog never loaded (Chris's field report,
+   November 12, 2026). This hotfix removes the token,
+   and nothing else about the read changes. */
 const SHARE_METADATA_FIELDS =
   "id,name,webViewLink," +
   "owners(displayName,emailAddress,permissionId)," +
   "permissions(id,type,role,emailAddress,displayName," +
-  "domain,deleted,permissionId)";
+  "domain,deleted)";
 let shareDialogState = {
   noteId: null, docId: null, title: "",
   data: null, loading: false, busy: false,
