@@ -5998,6 +5998,40 @@ async function docLivePollTick() {
          list's preview honest. */
       renderAll();
     }
+    /* v2.146: the change this tick adopted carries
+       its recency with it, the same rule the sync's
+       reconcile applies (see reconcileDocBumps in
+       tasks.js): the note's updated stamp becomes
+       the Doc's modified time the fetch just
+       recorded, never the local clock, and
+       saveCache persists it in the catalog entry.
+       When the render above refused the refill and
+       stashed it (the editor holds work the
+       baseline does not), the change has not landed
+       for the reader yet, so the bump waits with
+       the stash and lands when the refill lands
+       (see pendingRefillBumps in render.js). A stash
+       whose markers do not match the note is a
+       leftover from an earlier refusal, not this
+       fetch's deferral: the bump stands. */
+    if (note.docModifiedTime) {
+      const tickStash =
+        (typeof pendingNoteRefills !== "undefined")
+          ? pendingNoteRefills[note.id] : null;
+      const tickStashLive = !!tickStash &&
+        (tickStash.sha || null) ===
+          (note.sha || null) &&
+        (tickStash.docModifiedTime || null) ===
+          (note.docModifiedTime || null);
+      if (tickStashLive &&
+          typeof deferPendingRefillBump === "function") {
+        deferPendingRefillBump(note,
+          note.docModifiedTime);
+      } else if (note.updated !== note.docModifiedTime) {
+        note.updated = note.docModifiedTime;
+        saveCache();
+      }
+    }
   } catch (err) {
     if (isDocNeedsConsentError(err)) {
       stopDocLivePoll();

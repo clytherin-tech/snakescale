@@ -1712,7 +1712,23 @@ function docLiveTokenMap(listings) {
    exactly as the classic load does. Falls back (via
    catalogFallbackSignal) on a malformed entry or a duplicate
    note id in the listings. */
+/* v2.146: the outside Doc change bumps this load
+   judged, by note id: the live modified time the
+   shell's updated stamp was raised to, and the stamp
+   the entry carried before the raise. syncNow reads
+   the record for the open note: when the render that
+   follows the load refuses the refill and stashes it
+   (a dirty editor), the raise is handed to the
+   pending refill machinery instead of standing on a
+   change the reader has not been shown yet, and it
+   lands when the refill lands (see
+   pendingRefillBumps in render.js). Remade by every
+   reconcile, so the record always describes the
+   load that just ran. */
+let reconcileDocBumps = Object.create(null);
+
 async function reconcileCatalogListings(catalog, listings) {
+  reconcileDocBumps = Object.create(null);
   const entriesByKey = Object.create(null);
   (catalog.entries || []).forEach(function (entry) {
     if (!entry || typeof entry !== "object" ||
@@ -1957,6 +1973,51 @@ async function reconcileCatalogListings(catalog, listings) {
       shell.docName = prev.docName;
       shell.previewText =
         htmlToText(prev.body).slice(0, 140);
+    }
+    /* v2.146: an outside change this load adopts
+       carries its recency with it. Recent (and
+       every other updated order) reads the note's
+       updated stamp, and nothing above moves it:
+       the shell keeps the catalog entry's stamp,
+       which the last in-app save anywhere wrote, so
+       a Doc edited outside the app (a direct Google
+       Docs edit above all) refreshed its content
+       here while its stamp, and its place in
+       Recent, stayed behind. The pair judgment
+       above is the proof of the move: the live
+       token or the live modified time differs from
+       the pair the held body was fetched or saved
+       at. Where it proves a move, the shell's
+       updated becomes the Doc's live modified time,
+       the truthful moment the content last
+       changed, never the local clock, and the
+       load's trailing catalog write persists it
+       with the shell. The proof's limits are the
+       guard's: no live mark, or no live modified
+       time in it, proves nothing and stamps
+       nothing (a bump is never fabricated); a held
+       note that is not Doc-backed, or none held at
+       all, keeps the entry's stamp, as a first
+       sight has no held pair to judge against; a
+       pair that stands (the app's own last save
+       above all) proves no move and stamps
+       nothing. The raise is recorded for syncNow's
+       open note handling (see reconcileDocBumps
+       above). */
+    const docPairMoved = !!prev &&
+      isDocBackedNote(prev) && !!liveMark &&
+      typeof liveMark.modifiedTime === "string" &&
+      !!liveMark.modifiedTime &&
+      ((!!liveToken && !!prev.sha &&
+        liveToken !== prev.sha) ||
+       (!!prev.docModifiedTime &&
+        liveMark.modifiedTime !== prev.docModifiedTime));
+    if (docPairMoved) {
+      reconcileDocBumps[entry.id] = {
+        modifiedTime: liveMark.modifiedTime,
+        previousUpdated: shell.updated || ""
+      };
+      shell.updated = liveMark.modifiedTime;
     }
     out[listName].push(shell);
   });
@@ -2832,6 +2893,43 @@ async function syncNow(showToast) {
       syncOpenNoteRefresh = null;
     }
     restoreSyncPlace(syncPlace);
+    /* v2.146: the open note's outside bump, handed
+       to the pending refill when the render above
+       refused it. The load raised the open note's
+       updated stamp with every other adopted change
+       (see reconcileDocBumps); when the refill was
+       refused and stashed (the editor holds work
+       the baseline does not), the change has not
+       landed for the reader yet, so the raise waits
+       with the stash: the stamp returns to what the
+       entry carried, the bump registers against
+       the refill, and the fill that later lands it
+       applies the bump at the landing (see
+       pendingRefillBumps in render.js). A stash
+       whose markers no longer match the note is a
+       leftover an earlier refusal left behind, not
+       this change's deferral: the raise stands. */
+    if (openNoteCtx &&
+        reconcileDocBumps[openNoteCtx.id]) {
+      const openBump =
+        reconcileDocBumps[openNoteCtx.id];
+      const openNow = findNoteById(openNoteCtx.id);
+      const openStash =
+        (typeof pendingNoteRefills !== "undefined")
+          ? pendingNoteRefills[openNoteCtx.id] : null;
+      if (openNow && openStash &&
+          (openStash.sha || null) ===
+            (openNow.sha || null) &&
+          (openStash.docModifiedTime || null) ===
+            (openNow.docModifiedTime || null) &&
+          openNow.updated === openBump.modifiedTime &&
+          typeof deferPendingRefillBump === "function") {
+        openNow.updated = openBump.previousUpdated;
+        deferPendingRefillBump(openNow,
+          openBump.modifiedTime);
+        saveCache();
+      }
+    }
     /* v2.131: the drop box drains AFTER the render now.
        It ran between the load and the render since
        v2.20, so a bulk import's serial saves held the

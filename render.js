@@ -4357,6 +4357,35 @@ let syncOpenNoteRefresh = null;
    context simply re-stashes). */
 const pendingNoteRefills = Object.create(null);
 
+/* v2.146: an outside Doc change whose refill a
+   dirty editor refused (see the stash above) has
+   its recency bump deferred with it. Recent reads
+   the note's updated stamp; raising it while the
+   change stands unlanded would announce a change
+   the reader has not been shown, so the drivers
+   that adopted the change (syncNow's open note
+   handling in tasks.js and the near-live tick in
+   media.js) register the Doc's modified time here
+   instead, and the fill that lands the refill
+   (renderEditor's fill block, below) applies it at
+   the landing. The record is session state like
+   the stash it rides with: the autosave settle
+   that resolves a dirty editor lands the refill,
+   and with it the bump, in the ordinary course. */
+const pendingRefillBumps = Object.create(null);
+
+function deferPendingRefillBump(note, modifiedTime) {
+  if (!note || typeof modifiedTime !== "string" ||
+      !modifiedTime) { return; }
+  pendingRefillBumps[note.id] = modifiedTime;
+}
+
+function dropPendingRefillBump(id) {
+  if (id && pendingRefillBumps[id]) {
+    delete pendingRefillBumps[id];
+  }
+}
+
 function stashPendingNoteRefill(note, ctx) {
   pendingNoteRefills[note.id] = {
     ctx: ctx,
@@ -4391,6 +4420,10 @@ function retryPendingNoteRefill() {
       !versionTextContentEqual(stash.fetched,
         noteContentSnapshot(note))) {
     delete pendingNoteRefills[note.id];
+    /* v2.146: a newer fetch or the note's own save
+       owns the note's recency now, not the deferred
+       bump that rode with this stash. */
+    dropPendingRefillBump(note.id);
     return;
   }
   syncOpenNoteRefresh = stash.ctx;
@@ -4410,7 +4443,14 @@ function retryPendingNoteRefill() {
    editor as the pass left it. */
 function settlePendingNoteRefill(note, saved) {
   if (!note) { return; }
-  if (saved) { clearPendingNoteRefill(note.id); return; }
+  if (saved) {
+    clearPendingNoteRefill(note.id);
+    /* v2.146: the note's own save took ownership of
+       the outcome, and its stamp is the save's own:
+       a deferred outside bump dies with the stash. */
+    dropPendingRefillBump(note.id);
+    return;
+  }
   if (typeof currentNote === "function" &&
       currentNote() && currentNote().id === note.id) {
     retryPendingNoteRefill();
@@ -7599,6 +7639,22 @@ function renderEditor() {
   let returnView = null;
   let returnAtTop = false;
   if (renderEditor._forId !== note.id || syncRefill) {
+    /* v2.146: the fill shows the note's current
+       body, so an outside change whose bump was
+       deferred with its refused refill has landed
+       for the reader: the bump applies here, at the
+       landing, and never moves the stamp backward
+       (a save since the deferral already stamped
+       the note newer). */
+    const landedRefillBump =
+      pendingRefillBumps[note.id];
+    if (landedRefillBump) {
+      delete pendingRefillBumps[note.id];
+      if (landedRefillBump > (note.updated || "")) {
+        note.updated = landedRefillBump;
+        saveCache();
+      }
+    }
     /* v2.132: a fill, whether a note switch's or a
        sync refill's landing, shows the note object's
        body, so any pending refill for this note has
