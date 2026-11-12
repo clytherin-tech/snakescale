@@ -10078,6 +10078,10 @@ function closeVersionHistory() {
   const modal = document.getElementById("versionHistoryModal");
   if (modal) { modal.classList.add("hidden"); }
   versionHistoryOpenNoteId = null;
+  /* v2.141: a versions load still in flight from this
+     dialog is retired with it; its capture can never
+     be current again. */
+  versionGoogleLoadSeq++;
   versionHistoryPreviewVersionId = null;
   const preview = document.getElementById("versionHistoryPreview");
   if (preview) { preview.innerHTML = ""; preview.classList.add("hidden"); }
@@ -10124,7 +10128,298 @@ function buildVersionGoogleSection(docId) {
       "_blank", "noopener");
   });
   section.appendChild(btn);
+  /* v2.141: the live version list's box. It stands
+     empty until renderVersionHistory starts the load
+     that fills it (startVersionGoogleLoad, below);
+     the loader paints its own loading line first. */
+  const box = document.createElement("div");
+  box.className = "version-google-versions";
+  section.appendChild(box);
   return section;
+}
+
+/* v2.141: the Google section's live version list.
+   Chris asked for the Doc's versions listed right in
+   the app instead of going to Google Docs to look,
+   with a button on each version that goes to where
+   it can be restored. The Drive revisions API lists
+   and reads a Doc's revisions, so the list below is
+   read fresh from Google on every dialog open and
+   nothing is stored. Restoring is the one thing no
+   API can do for a Doc (proven November 11, 2026):
+   it works only in the Google Docs version history
+   UI, and Google offers no link that lands on a
+   specific revision, so each row's Restore button
+   opens the Doc itself, and the row's date and
+   author are the matching key in Google's own
+   panel. */
+/* The list read's field selection, kept to what the
+   rows and the preview need. Every token names a
+   field the Drive API actually carries: the list
+   answer is a RevisionList (nextPageToken and
+   revisions), a Revision carries id, modifiedTime,
+   lastModifyingUser and exportLinks, and a User
+   carries displayName. The v2.138.1 hotfix stands as
+   the warning behind this discipline: one token the
+   resource does not carry and Google refuses the
+   whole read. The suite's revisions mock validates
+   this selection token by token, the way Google
+   does. */
+const DOC_REVISIONS_FIELDS =
+  "nextPageToken,revisions(id,modifiedTime," +
+  "lastModifyingUser(displayName),exportLinks)";
+let versionGoogleLoadSeq = 0;
+
+function versionGoogleRevisionsUrl(docId, pageToken) {
+  let url = "https://www.googleapis.com/drive/v3/files/" +
+    encodeURIComponent(docId) + "/revisions?fields=" +
+    encodeURIComponent(DOC_REVISIONS_FIELDS) +
+    "&pageSize=1000";
+  if (pageToken) {
+    url += "&pageToken=" + encodeURIComponent(pageToken);
+  }
+  return url;
+}
+
+/* Every saved version of one Doc, newest first,
+   following Google's pagination to the end. The
+   read rides docApiJson, the app's judged channel
+   for Doc-backed reads: a 403 is judged there by
+   its reason (a rate limit is a transient failure;
+   anything else is the sign in's missing
+   permission), and the error it throws carries the
+   HTTP status and Google's own message, so the
+   section can name what happened instead of
+   failing silently. */
+async function docFetchAllRevisions(docId) {
+  const all = [];
+  let pageToken = null;
+  do {
+    const data = await docApiJson(
+      versionGoogleRevisionsUrl(docId, pageToken));
+    ((data && data.revisions) || []).forEach(
+      function (rev) {
+        if (rev && rev.id) { all.push(rev); }
+      });
+    pageToken = (data && data.nextPageToken) || null;
+  } while (pageToken);
+  all.sort(function (a, b) {
+    const am = String(a.modifiedTime || "");
+    const bm = String(b.modifiedTime || "");
+    if (am === bm) { return 0; }
+    return am < bm ? 1 : -1;
+  });
+  return all;
+}
+
+/* A load paints only into the dialog that asked for
+   it: the capture's place in the load sequence is
+   still the latest, the dialog still stands for the
+   capture's note, and the capture's list box is
+   still on the page. */
+function versionGoogleCaptureIsCurrent(capture) {
+  return !!capture &&
+    capture.seq === versionGoogleLoadSeq &&
+    versionHistoryOpenNoteId === capture.noteId &&
+    !!capture.box && !!capture.box.isConnected;
+}
+
+function startVersionGoogleLoad(capture) {
+  loadVersionGoogleVersions(capture).catch(
+    function () {
+      /* The loader names its own failures inside the
+         section; nothing escapes it. */
+    });
+}
+
+/* The loader: a loading line first, then the rows,
+   or a named failure with a Retry that reads again.
+   The app snapshots below render on their own path
+   either way; this read never blocks or blanks the
+   dialog. */
+async function loadVersionGoogleVersions(capture) {
+  const box = capture.box;
+  if (!box) { return; }
+  box.innerHTML = "";
+  const loading = document.createElement("div");
+  loading.className = "version-google-loading";
+  loading.textContent =
+    "Loading versions from Google Docs...";
+  box.appendChild(loading);
+  let revisions = null;
+  let failure = null;
+  try {
+    revisions = await docFetchAllRevisions(capture.docId);
+  } catch (err) { failure = err; }
+  if (!versionGoogleCaptureIsCurrent(capture)) { return; }
+  box.innerHTML = "";
+  if (failure) {
+    const line = document.createElement("div");
+    line.className = "version-google-error";
+    let msg = "Google could not list this Doc's " +
+      "versions: " + (failure && failure.message
+        ? failure.message : String(failure));
+    if (failure && failure.docNeedsConsent) {
+      msg += " Try Refresh connection in Settings.";
+    }
+    line.textContent = msg;
+    box.appendChild(line);
+    const retry = document.createElement("button");
+    retry.type = "button";
+    retry.className = "btn small version-google-retry";
+    retry.textContent = "Retry";
+    retry.addEventListener("click", function () {
+      if (versionHistoryOpenNoteId !== capture.noteId) {
+        return;
+      }
+      startVersionGoogleLoad(capture);
+    });
+    box.appendChild(retry);
+    return;
+  }
+  if (!revisions || !revisions.length) {
+    const none = document.createElement("div");
+    none.className = "version-google-loading";
+    none.textContent = "Google reported no saved " +
+      "versions for this Doc yet.";
+    box.appendChild(none);
+    return;
+  }
+  revisions.forEach(function (rev) {
+    box.appendChild(buildVersionGoogleRow(capture, rev));
+  });
+}
+
+/* One Google version row: the version's date and
+   time (the same label the app snapshot rows use),
+   and who saved it when Google names them, with a
+   Preview and a Restore. Restore opens the Doc in
+   Google Docs, the only place a Doc version can be
+   restored; the row's date and author are the key
+   that finds this version in Google's own panel. */
+function buildVersionGoogleRow(capture, rev) {
+  const row = document.createElement("div");
+  row.className = "version-row version-google-row";
+  row.setAttribute("data-revision-id", rev.id);
+  const main = document.createElement("div");
+  main.className = "version-row-main";
+  const date = document.createElement("div");
+  date.className = "version-date";
+  date.textContent = versionDateLabel(rev.modifiedTime);
+  main.appendChild(date);
+  const author = (rev.lastModifyingUser &&
+    rev.lastModifyingUser.displayName) || "";
+  if (author) {
+    const by = document.createElement("div");
+    by.className = "version-google-author";
+    by.textContent = author;
+    main.appendChild(by);
+  }
+  row.appendChild(main);
+  const actions = document.createElement("div");
+  actions.className = "version-actions";
+  const previewBtn = document.createElement("button");
+  previewBtn.type = "button";
+  previewBtn.className = "btn small";
+  previewBtn.textContent = "Preview";
+  previewBtn.addEventListener("click", function () {
+    previewVersionGoogleRevision(capture, rev).catch(
+      function () {
+        /* The preview names its own failures in the
+           pane; nothing escapes it. */
+      });
+  });
+  actions.appendChild(previewBtn);
+  const restoreBtn = document.createElement("button");
+  restoreBtn.type = "button";
+  restoreBtn.className = "btn small version-google-restore";
+  restoreBtn.textContent = "Restore";
+  restoreBtn.title = "Opens this Doc in Google Docs, " +
+    "where this version can be restored";
+  restoreBtn.addEventListener("click", function () {
+    window.open(shareCanonicalDocLink(capture.docId),
+      "_blank", "noopener");
+  });
+  actions.appendChild(restoreBtn);
+  row.appendChild(actions);
+  return row;
+}
+
+/* Read one Google version's content into the
+   dialog's preview pane, through the same rendering
+   the app snapshot preview uses (renderVersionPreview,
+   whose pane is read only and whose CSS turns
+   pointer interaction off), so a previewed version
+   can never navigate or mutate the note. The
+   content rides the revision's own text/html export
+   link, fetched with the app's transport. A version
+   Google offers no readable copy of, or whose read
+   fails, gets a named message in the pane instead
+   of content, never a silent blank, and the rest
+   of the dialog is unaffected. */
+async function previewVersionGoogleRevision(capture, rev) {
+  const link = rev.exportLinks &&
+    rev.exportLinks["text/html"];
+  if (!link) {
+    if (versionGoogleCaptureIsCurrent(capture)) {
+      renderVersionGooglePreviewNote(capture, rev,
+        "Google did not offer a readable copy of " +
+        "this version, so it cannot be previewed " +
+        "here. Its Restore button opens the Doc in " +
+        "Google Docs, where this version can be " +
+        "read and restored.");
+    }
+    return;
+  }
+  let html = null;
+  let failed = false;
+  try {
+    const res = await gdriveFetch(link);
+    if (!res || !res.ok) { failed = true; }
+    else { html = await res.text(); }
+  } catch (e) { failed = true; }
+  if (!versionGoogleCaptureIsCurrent(capture)) { return; }
+  if (failed || html === null) {
+    renderVersionGooglePreviewNote(capture, rev,
+      "That version's preview could not be loaded " +
+      "from Google. Its Restore button opens the " +
+      "Doc in Google Docs, where this version can " +
+      "be read and restored.");
+    return;
+  }
+  renderVersionPreview({
+    id: "google:" + rev.id,
+    title: capture.title || "Untitled",
+    createdAt: rev.modifiedTime,
+    tags: [],
+    body: html,
+    attachments: []
+  });
+}
+
+/* The preview pane's shape for a Google version
+   that cannot be shown: the note's title, the
+   version's date, and the message, in the pane's
+   own furniture. */
+function renderVersionGooglePreviewNote(capture, rev,
+    text) {
+  const preview = document.getElementById(
+    "versionHistoryPreview");
+  if (!preview) { return; }
+  versionHistoryPreviewVersionId = "google:" + rev.id;
+  preview.innerHTML = "";
+  const heading = document.createElement("h3");
+  heading.textContent = capture.title || "Untitled";
+  preview.appendChild(heading);
+  const meta = document.createElement("div");
+  meta.className = "version-preview-meta";
+  meta.textContent = versionDateLabel(rev.modifiedTime);
+  preview.appendChild(meta);
+  const body = document.createElement("div");
+  body.className = "version-preview-body";
+  body.textContent = text;
+  preview.appendChild(body);
+  preview.classList.remove("hidden");
 }
 
 /* v2.139: the small heading naming what stands under
@@ -10165,7 +10460,21 @@ async function renderVersionHistory() {
      get exactly the dialog they have always had. */
   const docNote = shareNoteCanShare(note) ? note : null;
   if (docNote) {
-    list.appendChild(buildVersionGoogleSection(docNote.docId));
+    const section = buildVersionGoogleSection(docNote.docId);
+    list.appendChild(section);
+    /* v2.141: the section's version list loads fresh
+       from Google, judged against this capture: the
+       note and Doc named here, this render's place in
+       the load sequence, and the section's own list
+       box. A list that lands after the dialog has
+       moved on paints nothing (see
+       versionGoogleCaptureIsCurrent). */
+    startVersionGoogleLoad({
+      noteId: docNote.id, docId: docNote.docId,
+      title: docNote.title || "",
+      seq: ++versionGoogleLoadSeq,
+      box: section.querySelector(".version-google-versions")
+    });
   }
   if (currentVersionsLimit() === 0) {
     if (docNote) { list.appendChild(versionSnapshotsHeading()); }

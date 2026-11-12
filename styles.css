@@ -5362,6 +5362,27 @@ body.dark .version-date{color:var(--accent);}
 }
 .version-google-text{font-size:14px;font-weight:700;line-height:1.45;}
 .version-google-path{font-size:13px;color:var(--muted);line-height:1.4;}
+/* v2.141: the Google section's live version list. The
+   box stacks the revision rows (they wear the shared
+   .version-row card), the loading and empty lines wear
+   the muted voice of the dialog's other empty text,
+   and a failed read names itself in the danger voice
+   with its Retry under it. Every color is a theme
+   variable, like the rest of the modal. */
+.version-google-versions{
+  width:100%;display:flex;flex-direction:column;gap:8px;
+  align-items:flex-start;
+}
+.version-google-versions .version-row{width:100%;}
+.version-google-loading{
+  font-size:13px;color:var(--muted);line-height:1.45;
+}
+.version-google-author{
+  font-size:13px;color:var(--muted);line-height:1.4;margin-top:3px;
+}
+.version-google-error{
+  font-size:13px;color:var(--danger);line-height:1.45;
+}
 .version-snapshots-heading{
   font-size:12px;font-weight:800;letter-spacing:1.2px;
   text-transform:uppercase;color:var(--muted);padding:2px 2px 0;
