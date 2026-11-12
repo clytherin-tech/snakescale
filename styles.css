@@ -5346,6 +5346,22 @@ body.dark .version-date{color:var(--accent);}
 .version-empty{
   font-size:14px;color:var(--muted);line-height:1.5;padding:10px 2px;
 }
+/* v2.139: the History dialog's Google section for a
+   live Doc-backed note, and the heading naming the
+   app snapshots that stand under it. Both wear the
+   theme variables, like every other modal surface,
+   so they read the same in dark and light themes. */
+.version-google-section{
+  border:1px solid var(--border);border-radius:var(--radius-card);
+  background:var(--surface);padding:12px;
+  display:flex;flex-direction:column;gap:8px;align-items:flex-start;
+}
+.version-google-text{font-size:14px;font-weight:700;line-height:1.45;}
+.version-google-path{font-size:13px;color:var(--muted);line-height:1.4;}
+.version-snapshots-heading{
+  font-size:12px;font-weight:800;letter-spacing:1.2px;
+  text-transform:uppercase;color:var(--muted);padding:2px 2px 0;
+}
 .version-preview{
   margin-top:16px;border-top:1px solid var(--border);padding-top:14px;
   max-height:380px;overflow-y:auto;

@@ -10085,12 +10085,85 @@ function versionHistoryEmpty(list, text) {
   list.appendChild(empty);
 }
 
+/* v2.139: the Google section at the top of the History
+   list for a live Doc-backed note. It is built from the
+   note and Doc id renderVersionHistory captured before
+   its load is awaited, so it can never point at another
+   note's Doc. The button opens the Doc's canonical edit
+   URL in a new tab; Google offers no deeper link to its
+   revision panel, so the section names the path inside
+   Google (File, then Version history, then See version
+   history) and the button is the door. */
+function buildVersionGoogleSection(docId) {
+  const section = document.createElement("div");
+  section.className = "version-google-section";
+  const text = document.createElement("div");
+  text.className = "version-google-text";
+  text.textContent =
+    "This note is a Google Doc, and its version history " +
+    "lives in Google Docs.";
+  section.appendChild(text);
+  const path = document.createElement("div");
+  path.className = "version-google-path";
+  path.textContent =
+    "In Google Docs, open File, then Version history, " +
+    "then See version history.";
+  section.appendChild(path);
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "btn primary version-google-btn";
+  btn.textContent = "Open version history in Google Docs";
+  btn.setAttribute("data-doc-id", docId);
+  btn.addEventListener("click", function () {
+    window.open(shareCanonicalDocLink(docId),
+      "_blank", "noopener");
+  });
+  section.appendChild(btn);
+  return section;
+}
+
+/* v2.139: the small heading naming what stands under
+   it as this app's own snapshots. It appears for a
+   Doc-backed note whenever the snapshots part of the
+   dialog has anything to say (rows, the off message,
+   or the load failure message), so none of those can
+   be mistaken for the Google history above them. */
+function versionSnapshotsHeading() {
+  const head = document.createElement("div");
+  head.className = "version-snapshots-heading";
+  head.textContent = "App snapshots";
+  return head;
+}
+
 async function renderVersionHistory() {
   const note = versionHistoryNote();
   const list = document.getElementById("versionHistoryList");
   if (!note || !list) { return; }
   list.innerHTML = "";
+  /* v2.139: a live Doc-backed note's real history is
+     its Google Doc's own revisions: app version
+     capture has been off for Doc-backed notes since
+     the conversion (the Stage 3 boundary at
+     saveDocBackedNote in tasks.js), so the dialog
+     leads with the Google section, built from the
+     note captured here, before the load below is
+     awaited. Any app snapshots the note still holds
+     (kept from before its conversion) stand under
+     their own heading below it, and when there are
+     none the Google section stands alone: the old
+     "No versions yet" text would be a false promise
+     for this note, since no app save will ever add
+     a snapshot of it. Google's history does not
+     depend on the app snapshots setting, so the
+     section stands even when that setting is off.
+     File-backed notes (Trash and Archive included)
+     get exactly the dialog they have always had. */
+  const docNote = shareNoteCanShare(note) ? note : null;
+  if (docNote) {
+    list.appendChild(buildVersionGoogleSection(docNote.docId));
+  }
   if (currentVersionsLimit() === 0) {
+    if (docNote) { list.appendChild(versionSnapshotsHeading()); }
     versionHistoryEmpty(list,
       "Version history is off in Settings. Choose how many versions " +
       "to keep per note there to turn it back on.");
@@ -10098,6 +10171,7 @@ async function renderVersionHistory() {
   }
   const loaded = await loadVersionHistory(note.id);
   if (!loaded.ok) {
+    if (docNote) { list.appendChild(versionSnapshotsHeading()); }
     versionHistoryEmpty(list,
       "This note's version history could not be loaded safely, so it " +
       "was left unchanged. Saving the note still works; history " +
@@ -10105,11 +10179,14 @@ async function renderVersionHistory() {
     return;
   }
   if (!loaded.data.versions.length) {
-    versionHistoryEmpty(list,
-      "No versions yet. Versions appear after a previously saved note " +
-      "is changed and saved again.");
+    if (!docNote) {
+      versionHistoryEmpty(list,
+        "No versions yet. Versions appear after a previously saved note " +
+        "is changed and saved again.");
+    }
     return;
   }
+  if (docNote) { list.appendChild(versionSnapshotsHeading()); }
   loaded.data.versions.forEach(function (entry) {
     list.appendChild(buildVersionHistoryRow(note, entry));
   });
