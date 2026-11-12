@@ -2106,9 +2106,27 @@ function handleNoteCardClick(ev, note) {
   }
   /* The plain click: collapse to this note, anchor on
      it, and open it, in that order, so the list the open
-     re-renders already wears the collapsed selection. */
-  set.length = 0;
-  set.push(note.id);
+     re-renders already wears the collapsed selection.
+     v2.143: one exception. When the clicked card stands
+     in a selection of two or more, the selection stands:
+     a plain click on a selected card is the gesture
+     that leads into dragging the whole selection (a
+     click to look at one of the chosen notes first, or
+     the last click of a selection built with a modifier
+     released a moment early), and collapsing here meant
+     the press that followed armed a one note drag over
+     a selection the user was still looking at (Chris's
+     report: the drag grabbed only the first note). The
+     drag press judges the selection as it stands at
+     press time, so the selection has to survive the
+     clicks that precede it. The note still opens;
+     clicking any card outside the selection collapses
+     as always, and a selection of one is this note
+     either way. */
+  if (!(set.length >= 2 && set.indexOf(note.id) >= 0)) {
+    set.length = 0;
+    set.push(note.id);
+  }
   listSelectionAnchor = note.id;
   openNote(note.id);
 }

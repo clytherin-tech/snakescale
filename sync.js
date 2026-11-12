@@ -626,10 +626,13 @@ function saveCatalog() {
 
    A stored read that fails skips the write outright:
    an unguarded write is exactly the accident this
-   section exists to prevent, and a skipped catalog
-   write costs nothing (the writer is a cache
-   maintainer whose failures were always swallowed;
-   the next mutation schedules another write). A store
+   section exists to prevent. Through v2.142 the skip
+   was silent and final for that write; since v2.143 a
+   skipped or failed write stays owed (see
+   writeCatalogOnce below): the writer reports it, the
+   dirty flag stands, and the next trigger retries it,
+   so a move the skip stranded is a delay, never a
+   silent loss. A store
    with no catalog yet reads as no stored entries, and
    the write proceeds unmerged. */
 function catalogGuardMergedEntries(localEntries, storedEntries) {
@@ -710,8 +713,15 @@ async function readStoredCatalogEntries() {
 /* One physical catalog write, from a snapshot of current state.
    Unchanged entries write nothing at all. A lost token race is
    retried once over the winner's token (last writer wins; the
-   file is a cache, never a conflict copy candidate), and every
-   failure is swallowed: the next load reconciles or rebuilds.
+   file is a cache, never a conflict copy candidate).
+   v2.143: the attempt reports its outcome, true when the
+   write landed or there was nothing to write, false when
+   it was skipped (the guard's stored read failed) or
+   failed (the put, or its one conflict retry): the loop
+   below keeps the state owed on a false instead of the
+   failure being swallowed the way it was through
+   v2.142, when a skipped or failed write consumed the
+   only copy of a notebook move after its success toast.
    v2.130: the snapshot's entries pass the conversion guard
    above before anything is written (and the conflict retry
    re-merges against the winner's entries, which its token
@@ -722,18 +732,19 @@ async function readStoredCatalogEntries() {
 async function writeCatalogOnce() {
   const snapshot = buildCatalogObject();
   const storedEntries = await readStoredCatalogEntries();
-  if (storedEntries === null) { return; }
+  if (storedEntries === null) { return false; }
   snapshot.entries = catalogGuardMergedEntries(
     snapshot.entries, storedEntries);
   const entriesText = JSON.stringify(snapshot.entries);
-  if (entriesText === lastCatalogEntriesText) { return; }
+  if (entriesText === lastCatalogEntriesText) { return true; }
   const text = JSON.stringify(snapshot, null, 2);
   try {
     lastCatalogToken = await storePutFile(CATALOG_FILE, text,
       lastCatalogToken, "Update catalog");
     lastCatalogEntriesText = entriesText;
+    return true;
   } catch (err) {
-    if (!isStoreConflict(err)) { return; }
+    if (!isStoreConflict(err)) { return false; }
     try {
       const fresh = await storeGetFile(CATALOG_FILE);
       let retryText = text;
@@ -759,7 +770,12 @@ async function writeCatalogOnce() {
       lastCatalogToken = await storePutFile(CATALOG_FILE, retryText,
         fresh ? fresh.token : null, "Update catalog");
       lastCatalogEntriesText = retryEntriesText;
-    } catch (err2) { /* swallowed: rebuilt on the next load */ }
+      return true;
+    } catch (err2) {
+      /* v2.143: reported, not swallowed: the state
+         stays owed and a later trigger retries. */
+      return false;
+    }
   }
 }
 
@@ -768,29 +784,70 @@ function runCatalogWriteLoop() {
   catalogWritePromise = (async function () {
     while (catalogWriteDirty) {
       catalogWriteDirty = false;
-      await writeCatalogOnce();
+      const landed = await writeCatalogOnce();
+      if (!landed) {
+        /* v2.143: the write was skipped or failed, so
+           the state it carried is still owed to the
+           store: the dirty flag goes back on and the
+           loop stops here. The debt is retried by the
+           next real trigger (the next mutation's
+           debounce, a sync's judged flush, the hide
+           flush), never by spinning in this loop
+           against a store that just refused. */
+        catalogWriteDirty = true;
+        break;
+      }
     }
   })();
   catalogWritePromise.then(function () {
     catalogWritePromise = null;
     settleCatalogFlushWaiters();
+    /* v2.143: the catalog write's landing hook for the
+       service worker update reload guard (see
+       updateReloadBlocked in app.js). A pending
+       catalog write counts as unsaved work there, and
+       every other class the guard counts lands the
+       waiting reload through a hook of its own (the
+       editor's settle, the task editor's close); this
+       is the catalog class's. Only a fully landed
+       write retries: a skipped or failed attempt
+       leaves the debt standing (the dirty flag is
+       back on by the time this runs), and the reload
+       keeps waiting on a write that has not landed. */
+    if (!catalogWriteDirty && catalogWriteTimer === null &&
+        typeof maybeReloadForUpdate === "function") {
+      maybeReloadForUpdate();
+    }
   });
   return catalogWritePromise;
 }
 
 function settleCatalogFlushWaiters() {
-  if (catalogWriteTimer !== null || catalogWritePromise ||
-      catalogWriteDirty) {
+  if (catalogWriteTimer !== null || catalogWritePromise) {
     return;
   }
+  /* v2.143: the waiters settle with the honest verdict,
+     true when nothing is owed, false when a write is
+     still owed after a skipped or failed attempt, so a
+     caller can tell a landed flush from an owed one
+     instead of both looking like success. A standing
+     dirty flag no longer holds the waiters open: the
+     loop that just ended was the attempt, and its
+     failure is exactly what the verdict reports. */
+  const landed = !catalogWriteDirty;
   const waiters = catalogFlushWaiters;
   catalogFlushWaiters = [];
-  waiters.forEach(function (resolve) { resolve(); });
+  waiters.forEach(function (resolve) { resolve(landed); });
 }
 
-/* Resolve once every catalog write scheduled so far has landed
-   (or failed safely). syncNow flushes before its load, the same
-   discipline flushIndexWrites gives index.json. */
+/* Resolve once every catalog write scheduled so far has been
+   attempted, with the verdict: true when the writes landed
+   (or there was nothing to write), false when a write is
+   still owed after a skipped or failed attempt (v2.143;
+   through v2.142 this resolved blind, so a flush could
+   report success over a move that never reached Drive).
+   syncNow flushes before its load and judges the verdict,
+   the same discipline flushIndexWrites gives index.json. */
 function flushCatalogWrites() {
   if (catalogWriteTimer !== null) {
     clearTimeout(catalogWriteTimer);
@@ -799,13 +856,24 @@ function flushCatalogWrites() {
   } else if (!catalogWritePromise && catalogWriteDirty) {
     runCatalogWriteLoop();
   }
-  if (!catalogWritePromise && !catalogWriteDirty &&
-      catalogWriteTimer === null) {
-    return Promise.resolve();
+  if (!catalogWritePromise && catalogWriteTimer === null) {
+    return Promise.resolve(!catalogWriteDirty);
   }
   return new Promise(function (resolve) {
     catalogFlushWaiters.push(resolve);
   });
+}
+
+/* v2.143: is a catalog write owed or in flight (a standing
+   debounce, a running loop, or a dirty flag a failed
+   attempt left standing)? The service worker update
+   reload guard counts it as unsaved work, because a
+   reload inside the window discards the change the
+   write carries exactly as surely as closing the page
+   does. */
+function catalogWritePending() {
+  return catalogWriteTimer !== null || !!catalogWritePromise ||
+    catalogWriteDirty;
 }
 
 /* --------------------------------------------------------------------------

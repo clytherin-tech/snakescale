@@ -1653,8 +1653,18 @@ async function saveNoteAndSettleMove(note, previousPath) {
    shared save run, so no pending autosave can ever pull the note
    back. Dropping on the notebook the note already lives in
    performs no write at all. Since v2.5 the notebook link menu is
-   a second caller of this same path, next to drag and drop. */
-function moveNoteToNotebook(note, targetSlug) {
+   a second caller of this same path, next to drag and drop.
+   v2.143: for a Doc-backed note the catalog write IS the
+   move (there is no file to move), so the move now awaits
+   that write before it reports success; through v2.142 it
+   only scheduled the write and toasted on the flip, and a
+   load, a failed write, or an app switch inside the write
+   window could strand the move after its success toast.
+   options.deferCatalogReport serves the batch drop: the
+   flips accumulate under the batch's one shared write,
+   and the drop runs the one flush and the one verdict at
+   its end. */
+function moveNoteToNotebook(note, targetSlug, options) {
   const target = state.notebooks.find(function (nb) {
     return nb.slug === targetSlug;
   });
@@ -1674,7 +1684,21 @@ function moveNoteToNotebook(note, targetSlug) {
           "could not be moved.", true);
         return false;
       }
-      return moveNoteToNotebook(note, targetSlug);
+      /* v2.143: re-resolve by id before the flip. The
+         body fetch above can span a load, and a load
+         replaces the note objects wholesale; the flip
+         must land on the object current state holds,
+         not on the orphaned one this call captured,
+         whose flip no snapshot would ever carry. The
+         recursion re-enters this same shell branch
+         when the current object is itself still a
+         shell, so its body is fetched in turn. */
+      const current = findNoteById(note.id);
+      if (current && current !== note &&
+          !current.trashed && !current.archived) {
+        return moveNoteToNotebook(current, targetSlug, options);
+      }
+      return moveNoteToNotebook(note, targetSlug, options);
     });
   }
   if (note.notebook === targetSlug) { return Promise.resolve(false); }
@@ -1695,8 +1719,29 @@ function moveNoteToNotebook(note, targetSlug) {
     clearNoteDivergence(note.id);
     saveCache();
     renderAll();
-    toast("Moved to " + target.name);
-    return Promise.resolve(true);
+    /* v2.143: the success toast waits for the catalog
+       write that carries this flip to land, and an
+       unlanded write is named as one: the placement
+       stands in memory and in the write still owed,
+       which retries on the next trigger, but the move
+       is not reported saved while Drive does not hold
+       it. The returned promise carries the same
+       verdict. A batch drop defers the flush and the
+       toast to its end, so the batch lands one write
+       and one verdict for all its Doc-backed movers. */
+    if (options && options.deferCatalogReport) {
+      return Promise.resolve(true);
+    }
+    return flushCatalogWrites().then(function (landed) {
+      if (landed) {
+        toast("Moved to " + target.name);
+      } else {
+        toast("Moved to " + target.name + ", but that " +
+          "move has not saved to Drive yet. It stays " +
+          "owed and retries on the next sync.", true);
+      }
+      return landed;
+    });
   }
   /* v2.17.1: a notebook move takes charge of the note's
      placement, like the trash and archive moves: it clears any
@@ -2847,15 +2892,39 @@ function endNoteDrag(commit) {
       });
       if (!movers.length) { return; }
       clearListSelections();
+      /* v2.143: the carried Doc-backed moves defer
+         their catalog report (see moveNoteToNotebook),
+         so the batch's one shared catalog write earns
+         one flush and one verdict here at the end, not
+         one flush per note. File-backed movers keep
+         their own settle and their own toast inside
+         the move, exactly as they always have. */
+      const docMovers = movers.filter(function (n) {
+        return isDocBackedNote(n);
+      });
+      const targetNb = state.notebooks.find(function (nb) {
+        return nb.slug === slug;
+      });
+      const targetName = targetNb ? targetNb.name : slug;
       let chain = Promise.resolve();
       movers.forEach(function (n) {
         chain = chain.then(function () {
-          return moveNoteToNotebook(n, slug);
+          return moveNoteToNotebook(n, slug,
+            { deferCatalogReport: true });
         });
       });
-      chain.then(function () { renderAll(); }, function () {
+      chain.then(async function () {
         renderAll();
-      });
+        if (!docMovers.length) { return; }
+        const landed = await flushCatalogWrites();
+        if (landed) {
+          toast("Moved to " + targetName);
+        } else {
+          toast("Moved to " + targetName + ", but that " +
+            "move has not saved to Drive yet. It stays " +
+            "owed and retries on the next sync.", true);
+        }
+      }, function () { renderAll(); });
       return;
     }
     if (action === "trash") { trashSelectedNotes(); return; }

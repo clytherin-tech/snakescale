@@ -1756,6 +1756,22 @@ async function reconcileCatalogListings(catalog, listings) {
      The claim set is keyed the way the entries stand:
      notebook entries by their notebook slug and id,
      trash and archive entries by collection and id.
+     v2.143: a notebook entry's claim ALSO stands by
+     its bare id, against fallback files in EVERY
+     notebook folder. A catalog only move (every
+     Doc-backed notebook move) leaves the note's
+     frozen fallback sitting in the source folder
+     while the entry names the target; keyed by the
+     entry's notebook alone, the claim missed in the
+     source folder, the fallback there was downloaded
+     and parsed as the note itself, the Doc pass
+     skipped the id as seen, and the note rendered in
+     its source notebook on every load after a fully
+     landed move, with the load's own trailing catalog
+     write free to carry the source notebook back over
+     the landed one. The id is the note's identity in
+     the catalog (entries are keyed by collection and
+     id), so the claim follows it across folders.
      A claimed .md is skipped whole below: never
      downloaded, never parsed, never marked seen, so
      the Doc pass runs for the id exactly as it does
@@ -1763,6 +1779,7 @@ async function reconcileCatalogListings(catalog, listings) {
      store untouched; the load simply stops mistaking
      it for the note while the catalog says Doc. */
   const docClaims = Object.create(null);
+  const docNotebookIds = Object.create(null);
   (catalog.entries || []).forEach(function (entry) {
     if (!entry || entry.backend !== "doc") { return; }
     if (typeof entry.id !== "string" || !entry.id) {
@@ -1772,6 +1789,7 @@ async function reconcileCatalogListings(catalog, listings) {
     if (entry.collection === "notebook") {
       docClaims["notebook|" + (entry.notebook || "") +
         "|" + entry.id] = true;
+      docNotebookIds[entry.id] = true;
     } else if (entry.collection === "trash" ||
         entry.collection === "archive") {
       docClaims[entry.collection + "||" + entry.id] = true;
@@ -1793,7 +1811,9 @@ async function reconcileCatalogListings(catalog, listings) {
       const claimKey = collection === "notebook"
         ? "notebook|" + slug + "|" + fallbackId
         : collection + "||" + fallbackId;
-      if (docClaims[claimKey]) {
+      if (docClaims[claimKey] ||
+          (collection === "notebook" &&
+           docNotebookIds[fallbackId])) {
         if (claimedIds[fallbackId]) {
           throw catalogFallbackSignal(
             "A note id appears twice in the store: " +
@@ -1960,8 +1980,14 @@ function classicDocClaimed(collection, slug, id) {
     if (!stashed || !stashed.entry ||
         stashed.entry.id !== id) { return false; }
     if (collection === "notebook") {
-      return stashed.collection === "notebook" &&
-        (stashed.entry.notebook || "") === (slug || "");
+      /* v2.143: the claim stands by id across every
+         notebook folder, as the reconcile's does (see
+         the claim set there): after a catalog only
+         move the fallback sits in the source folder
+         while the entry names the target, and the
+         file in the source folder is the note's
+         fallback either way, never the note. */
+      return stashed.collection === "notebook";
     }
     return stashed.collection === collection;
   });
@@ -2521,6 +2547,26 @@ async function finishLoadFromRepo(loaded, tasksPromise, tasksGeneration) {
 }
 
 async function loadAllFromRepo(plan) {
+  /* v2.143: the load fence. Any catalog write this
+     session still owes (a notebook move above all)
+     lands before this load reads anything, on the
+     staged attempt and on the full load alike. The
+     race this ends: a load whose catalog read was
+     issued before a pending write landed installed
+     the pre-move placement wholesale, and the pending
+     write then compared equal against the text that
+     load had read and wrote nothing, so a dragged
+     note vanished from the target list until some
+     later load brought it back. The fence used to
+     live only at syncNow's start, which a load
+     already in flight when the drop happened never
+     passed through again. When nothing is pending
+     the flush resolves at once and spends no request.
+     The verdict is judged by the callers that owe one
+     (syncNow, the move path); a load reached any other
+     way proceeds on the newest state the writer could
+     land. */
+  await flushCatalogWrites();
   /* v2.142: a staged plan (see the staged sync section in
      media.js) narrows this load to what the change feed
      says moved. The staged attempt answers true when it
@@ -2695,7 +2741,23 @@ async function syncNow(showToast) {
     /* v2.20: the same flush discipline for the catalog, so the
        load below reads this device's newest catalog, never one
        its own pending write is about to replace. */
-    await flushCatalogWrites();
+    const catalogLanded = await flushCatalogWrites();
+    /* v2.143: a flush that could not land its write
+       stops the sync here instead of loading over it:
+       the load would install placement older than the
+       owed write, and its trailing write could then
+       carry that older placement back over the move
+       for good. The dirty flag stands, so the next
+       sync, mutation, or hide flush retries the
+       write, and this failure is named on the sync's
+       own error surface rather than passing silently. */
+    if (!catalogLanded) {
+      throw new Error("a pending catalog write did " +
+        "not land, so this sync stopped before its " +
+        "load rather than read placement older than " +
+        "the change it is waiting on. The change is " +
+        "still owed and retries on the next sync.");
+    }
     /* v2.24: and the same for tasks.json, for the same reason. */
     await flushTasksWrites();
     /* v2.142: the staged decision, made after the flushes

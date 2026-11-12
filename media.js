@@ -1713,6 +1713,17 @@ async function flushDeferredSyncTail() {
    fresh evidence changes nothing. */
 async function settleDeferredCollections(plan, loadGen) {
   if (!plan.collections.length) { return true; }
+  /* v2.143: the load fence, on the tail too. A catalog
+     write owed when the tail settles (a notebook move
+     made since the staged pass, above all) lands
+     before this settle judges anything over the
+     retained evidence, because the reconcile it runs
+     reads the retained catalog text; and a write that
+     does not land answers false here, adopting nothing
+     and leaving the staged position unadvanced past a
+     window the owed write belongs to, exactly as a
+     newer pass owning the window does below. */
+  if (!(await flushCatalogWrites())) { return false; }
   if (state.syncing) { return false; }
   if (!lastListings) { return false; }
   if (syncLoadGeneration !== loadGen) { return false; }

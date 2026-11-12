@@ -3783,6 +3783,27 @@ function wireEvents() {
     refreshSyncPill();
   });
 
+  /* v2.143: a pending catalog write flushes as the page
+     hides (the pagehide event, and the hidden turn of
+     visibilitychange), so an app switch inside a move's
+     write window starts the write before the page can
+     be suspended or discarded, instead of the move
+     dying with the page the way Chris's pay period
+     drag did. The flush is the catalog writer's own:
+     it starts the write loop now rather than at the
+     debounce, and a fetch already in flight when the
+     page goes away generally completes. When nothing
+     is pending the flush resolves at once and spends
+     no request. */
+  window.addEventListener("pagehide", function () {
+    flushCatalogWrites();
+  });
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState === "hidden") {
+      flushCatalogWrites();
+    }
+  });
+
   /* v2.15: returning to the tab is a renewal trigger (see
      maybeRenewGoogleOnVisible): background tabs get their
      timers throttled, so the scheduled renewal may not have
@@ -4126,10 +4147,17 @@ function swSpendReloadGuard() {
    with its own landing hook. With no note open there are
    no editor fields holding work; a trashed or archived
    note is read only and never busy (markDirty does not
-   count its edits in the first place). */
+   count its edits in the first place). v2.143 adds a
+   fourth class: a pending catalog write (a notebook
+   move above all), whose landing hook is the catalog
+   flush; a version reload inside its window discards
+   the change it carries exactly as surely as closing
+   the page does, and through v2.142 the guard was
+   blind to it. */
 function updateReloadBlocked() {
   if (pendingWebClip || webClipFiling) { return true; }
   if (taskEditorState && taskEditorState.dirty) { return true; }
+  if (catalogWritePending()) { return true; }
   const note = currentNote();
   if (!note || note.trashed || note.archived) { return false; }
   return swEditorUnsettled();
