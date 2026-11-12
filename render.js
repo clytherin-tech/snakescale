@@ -10361,6 +10361,29 @@ function buildVersionGoogleRow(capture, rev) {
       "_blank", "noopener");
   });
   actions.appendChild(restoreBtn);
+  /* v2.145: the third action, Use this version (see
+     the section below the preview code): this
+     version's content replaces the note's, saved as
+     a new edit through the app's own save path. It
+     stands beside Restore, which is untouched: the
+     two are different doors, and Restore still opens
+     the Doc in Google, the only place a Doc version
+     can be restored in place. */
+  const useBtn = document.createElement("button");
+  useBtn.type = "button";
+  useBtn.className = "btn small version-google-use";
+  useBtn.textContent = "Use this version";
+  useBtn.title = "Replace this note's content with " +
+    "this version, saved as a new edit";
+  useBtn.addEventListener("click", function () {
+    useVersionGoogleRevision(capture, rev, useBtn)
+      .catch(function (err) {
+        toast("Using that version failed: " +
+          (err && err.message ? err.message
+            : String(err)), true);
+      });
+  });
+  actions.appendChild(useBtn);
   row.appendChild(actions);
   return row;
 }
@@ -10441,6 +10464,463 @@ function renderVersionGooglePreviewNote(capture, rev,
   preview.appendChild(body);
   preview.classList.remove("hidden");
   setVersionPreviewOpen(true);
+}
+
+/* v2.145: Use this version, a proof of concept Chris
+   asked to test before deciding whether it stays
+   (November 12, 2026). The settled facts stand: no
+   API can restore a Google Doc revision in place
+   (proven exhaustively November 11, 2026), and
+   Google offers no link that lands on a specific
+   revision. This is a different mechanism entirely:
+   the chosen version's content is written over the
+   note's Doc through the app's OWN save path, the
+   path an ordinary edit takes, so the overwrite
+   lands as a new edit at the head of the Doc's
+   history. The version it came from stays in that
+   history, and the content it replaced stays there
+   too (as the revision the overwrite superseded),
+   and is ALSO kept first as an app snapshot through
+   the standing version machinery, the same promise
+   the app snapshot Restore makes. The Google
+   Restore action is untouched and stays beside it.
+
+   The conversion runs the app's proven Doc open
+   converter (docExportHtmlToBody: list rebuilding,
+   code runs, the works) on the version's own export,
+   with the export only judgment: no API returns a
+   past revision's document JSON, so the checklist
+   kinds and code runs a live open reads from the
+   current Doc's JSON cannot be read for a version,
+   and reading the CURRENT Doc's JSON for an old
+   version would judge a different document. This is
+   the same fallback the open path itself takes when
+   its structure read is unavailable. What that means
+   in practice, stated plainly: a version whose
+   checklists stood as real Google task lists comes
+   back with those items as a plain list, text
+   intact, because the export carries no checkbox
+   signal for them; a version saved in the glyph led
+   form keeps its boxes and its states from the
+   text. Ticks the tick memory can re-match by
+   wording are reapplied wherever the conversion
+   yields checklists (docApplyTickMemory), exactly
+   as an open applies them.
+
+   The flow mirrors restoreVersionNow's discipline,
+   step for step: establish the current content
+   first (unsaved editor edits are saved through the
+   normal worker; a conflict or a pause stops the
+   flow), snapshot the current saved content as a
+   forced app version, apply, save through the
+   normal worker with version capture suppressed
+   (the snapshot already stands), then verify: the
+   Doc is read back fresh and the re-read's
+   converted text and list structure counts must
+   match the converted version's. A failure at any
+   step before the save leaves the note's content
+   untouched (and a failed save restores the note
+   object too, so the screen never shows an
+   overwrite that did not land); a verification
+   mismatch is reported as a failure with the
+   counts, never as a success.
+
+   The confirmation uses the app's standing confirm,
+   the same one this dialog's own Restore uses: it
+   states the three facts (the replacement, saved
+   as a new edit; the current content stays in the
+   version history, with an app snapshot kept
+   first; the tick wording caveat). */
+let versionGoogleUseBusy = false;
+
+/* One converted body's verification facts: its text
+   with whitespace folded the way a reader meets it,
+   and its list structure counts. Checklist counts
+   are recorded too, for the failure wording, but
+   are not part of the match: whether a list stands
+   as a checklist is the conversion's judgment (see
+   the section above), identical on both sides of
+   the comparison, so what the save must prove is
+   the text and the list structure. */
+function docVersionBodyStats(html) {
+  const holder = document.createElement("div");
+  holder.innerHTML = html || "";
+  return {
+    text: String(htmlToText(html || "") || "")
+      .replace(/\s+/g, " ").trim(),
+    ul: holder.querySelectorAll("ul").length,
+    ol: holder.querySelectorAll("ol").length,
+    li: holder.querySelectorAll("li").length,
+    checklists: holder.querySelectorAll(
+      "ul.ss-checklist").length
+  };
+}
+
+function docVersionStatsMatch(a, b) {
+  return a.text === b.text && a.ul === b.ul &&
+    a.ol === b.ol && a.li === b.li;
+}
+
+function docVersionBodiesMatch(aHtml, bHtml) {
+  return docVersionStatsMatch(
+    docVersionBodyStats(aHtml),
+    docVersionBodyStats(bHtml));
+}
+
+/* The counts sentence a verification failure names:
+   what the version's conversion held, what the
+   read back held, each in plain words. */
+function docVersionStatsSentence(expected, found) {
+  const part = function (s) {
+    return (s.ul + s.ol) + " lists, " + s.li +
+      " list items" + (s.text ? "" : ", no text");
+  };
+  let out = "expected " + part(expected) +
+    "; read back " + part(found);
+  if (expected.checklists !== found.checklists) {
+    out += "; checklists expected " +
+      expected.checklists + ", read back " +
+      found.checklists;
+  }
+  if (expected.text !== found.text) {
+    out += "; the text differs";
+  }
+  return out;
+}
+
+/* The click: judge the ask, confirm it, then run
+   the worker inside the note's operation chain,
+   like every other storage operation on the note. */
+async function useVersionGoogleRevision(capture, rev,
+    btn) {
+  const note = findNoteById(capture.noteId);
+  if (!note) { return; }
+  if (versionGoogleUseBusy) { return; }
+  if (!isDocBackedNote(note) ||
+      sanitizeDocId(note.docId) !== capture.docId) {
+    toast("That version belongs to a Google Doc " +
+      "this note no longer points at, so nothing " +
+      "was changed.", true);
+    return;
+  }
+  if (note.trashed || note.archived) {
+    toast(note.trashed
+      ? "Restore this note from Trash before using " +
+        "a version."
+      : "Unarchive this note before using a " +
+        "version.", true);
+    return;
+  }
+  if (currentVersionsLimit() === 0) {
+    toast("Version history is off in Settings, so " +
+      "your current content could not be kept as a " +
+      "version first. Turn it on there to use a " +
+      "version this way.", true);
+    return;
+  }
+  const ok = confirm("Use the version from " +
+    versionDateLabel(rev.modifiedTime) + " of \"" +
+    (note.title || "Untitled note") + "\"?\n\n" +
+    "Your current content will be replaced by that " +
+    "version and saved as a new edit. Your current " +
+    "content stays in the version history (it is " +
+    "kept as an app snapshot first), so this can " +
+    "be undone.\n\n" +
+    "Checklist ticks are the app's memory, matched " +
+    "by wording: an item whose words differ in " +
+    "that version can come back unticked.");
+  if (!ok) { return; }
+  versionGoogleUseBusy = true;
+  if (btn) { btn.disabled = true; }
+  try {
+    await chainNoteOp(note, function () {
+      return useVersionGoogleRevisionNow(capture,
+        rev, note);
+    });
+  } finally {
+    versionGoogleUseBusy = false;
+    if (btn && btn.isConnected) {
+      btn.disabled = false;
+    }
+  }
+}
+
+async function useVersionGoogleRevisionNow(capture,
+    rev, note) {
+  /* Step 0: the note's body must stand loaded on
+     this device. A shell has no authoritative
+     current content to snapshot or to judge the
+     version against, so the flow refuses rather
+     than preserving an empty stand-in. */
+  if (note.bodyLoaded === false) {
+    toast("This note's content is not loaded yet, " +
+      "so a version cannot be used. Open the note " +
+      "first, then try again.", true);
+    return;
+  }
+  /* Step 1: establish "current", exactly as the app
+     snapshot restore does. Unsaved editor edits for
+     this note are collected and saved through the
+     normal worker first; a conflict or a pause
+     stops the flow with the restore's own wording,
+     because guessing which text to preserve would
+     risk losing some of it. */
+  if (renderEditor._forId === note.id &&
+      !note.trashed && !note.archived) {
+    const editorContent = editorContentSnapshot(note);
+    if (!versionContentEqual(editorContent,
+        noteContentSnapshot(note))) {
+      collectEditor(note);
+      let preSaveResult = null;
+      let preSaveError = null;
+      try {
+        preSaveResult = await saveNoteToRepoNow(note);
+      } catch (err) { preSaveError = err; }
+      if (preSaveError) {
+        toast("Your unsaved edits could not be " +
+          "saved first (" + preSaveError.message +
+          "), so nothing was changed.", true);
+        return;
+      }
+      if (preSaveResult && preSaveResult.conflict) {
+        toast("Your current edits were saved as a " +
+          "conflict copy, so using that version was " +
+          "stopped and nothing was replaced.", true);
+        return;
+      }
+      if (preSaveResult && preSaveResult.paused) {
+        toast("This note changed elsewhere and its " +
+          "saving is paused, so using that version " +
+          "was stopped. Reload the note, then try " +
+          "again.", true);
+        return;
+      }
+    }
+  }
+  /* Step 2: read the version's own content, through
+     the same export link and transport its Preview
+     uses. A version Google offers no readable copy
+     of cannot be used, and says so. */
+  const link = rev.exportLinks &&
+    rev.exportLinks["text/html"];
+  if (!link) {
+    toast("Google did not offer a readable copy " +
+      "of that version, so nothing was changed.",
+      true);
+    return;
+  }
+  let revHtml = null;
+  try {
+    const res = await gdriveFetch(link);
+    if (!res || !res.ok) {
+      throw new Error("Google answered " +
+        (res ? "HTTP " + res.status : "no response") +
+        ".");
+    }
+    revHtml = await res.text();
+  } catch (err) {
+    toast("That version could not be read from " +
+      "Google (" +
+      (err && err.message ? err.message
+        : String(err)) +
+      "), so nothing was changed.", true);
+    return;
+  }
+  /* Step 3: convert the version's export through
+     the Doc open converter, export only judgment
+     (see the section above). */
+  const converted = docExportHtmlToBody(revHtml,
+    null, null);
+  /* Step 4: the already-current no-op. Judged on
+     text and list structure, the facts the
+     verification below also judges: applying the
+     head version, or any version whose content the
+     note already holds, changes nothing and says
+     so, with no snapshot and no save. */
+  if (docVersionBodiesMatch(converted.html,
+      note.body || "")) {
+    toast("That version already matches the " +
+      "current note.");
+    return;
+  }
+  /* Step 5: finish the conversion the way an open
+     finishes it, on a scratch holder, so nothing of
+     the note's moves until the save: adopt the
+     export's images, reapply the tick memory by
+     wording where the conversion yielded checklists
+     and carried no states of its own, dress the
+     chip links back into pills, and enrich any
+     event chips the dressing raised. */
+  const scratch = { id: note.id, attachments: [],
+    body: "" };
+  let body = await docAdoptImages(scratch, converted);
+  if (!converted.carriedStates) {
+    body = docApplyTickMemory(note, body);
+  }
+  body = docReformChipLinks(body, note);
+  scratch.body = body;
+  await docEnrichReformedEventChips(scratch);
+  body = scratch.body;
+  /* Step 6: preserve the current saved content as a
+     forced newest app snapshot, bypassing the
+     coalescing window. If it cannot be preserved,
+     the flow stops rather than replacing text the
+     reader could not get back from this dialog. */
+  const currentSaved =
+    lastSavedContentByNoteId[note.id]
+      ? cloneVersionValue(
+          lastSavedContentByNoteId[note.id])
+      : noteContentSnapshot(note);
+  const forced = await maintainVersionHistory(
+    note.id, currentSaved, {
+      forceSnapshot: true,
+      contentChanged: true,
+      notePath: notePath(note)
+    });
+  if (forced.status === "skipped-load" ||
+      forced.status === "skipped-conflict" ||
+      forced.status === "write-failed" ||
+      forced.status === "delete-failed") {
+    toast("Your current content could not be kept " +
+      "as a version first, so nothing was changed.",
+      true);
+    return;
+  }
+  versionHistoryPruneNeeded.delete(note.id);
+  /* Step 7: apply the converted content and save it
+     through the normal worker, with ordinary
+     version capture suppressed (step 6 already
+     preserved the pre-overwrite state, deliberately).
+     A dangling thumbnail choice is cleared exactly
+     as an open clears one. On any failure the note
+     object is put back the way it stood, so neither
+     the store nor the screen shows an overwrite
+     that did not land. */
+  const before = {
+    body: note.body,
+    attachments: cloneVersionValue(
+      note.attachments || []),
+    thumbnail: note.thumbnail || null,
+    previewText: note.previewText,
+    docTicks: cloneVersionValue(note.docTicks || null)
+  };
+  note.body = body;
+  note.attachments = scratch.attachments;
+  if (note.thumbnail && !note.attachments.some(
+      function (a) {
+        return a && a.id === note.thumbnail;
+      })) {
+    note.thumbnail = null;
+  }
+  note.previewText = htmlToText(body).slice(0, 140);
+  let result = null;
+  let saveError = null;
+  try {
+    result = await saveNoteToRepoNow(note, {
+      suppressVersionCapture: true });
+  } catch (err) { saveError = err; }
+  if (saveError || (result &&
+      (result.conflict || result.paused))) {
+    note.body = before.body;
+    note.attachments = before.attachments;
+    note.thumbnail = before.thumbnail;
+    note.previewText = before.previewText;
+    note.docTicks = before.docTicks;
+    if (saveError) {
+      toast("Saving that version failed (" +
+        saveError.message + "), so nothing was " +
+        "changed.", true);
+    } else if (result.conflict) {
+      toast("The save ran into a storage conflict, " +
+        "so nothing was changed.", true);
+    } else {
+      toast("This note changed elsewhere and its " +
+        "saving is paused, so nothing was changed. " +
+        "Reload the note, then try again.", true);
+    }
+    renderAll();
+    return;
+  }
+  /* Step 8: verify. The Doc is read back fresh, on
+     the unshared fetch (a read another caller
+     started before the save could hand back the
+     pre-save bytes), converted the same way, and
+     its text and list structure counts must match
+     the converted version's. A mismatch is a
+     failure with the counts, never a success; the
+     note is then refilled from the Doc itself, so
+     the screen shows what the store actually
+     holds. A read that itself fails leaves the
+     save standing but unverified, and says exactly
+     that. */
+  let verify = null;
+  try {
+    const fetched = await docFetchDocumentOnce(
+      capture.docId);
+    const actual = docExportHtmlToBody(fetched.html,
+      null, null);
+    const expectedStats = docVersionBodyStats(
+      converted.html);
+    const foundStats = docVersionBodyStats(
+      actual.html);
+    verify = {
+      match: docVersionStatsMatch(expectedStats,
+        foundStats),
+      expected: expectedStats,
+      found: foundStats
+    };
+  } catch (err) { verify = { error: err }; }
+  if (verify && verify.error) {
+    saveCache();
+    renderEditor._forId = null;
+    renderAll();
+    if (versionGoogleCaptureIsCurrent(capture)) {
+      await renderVersionHistory();
+    }
+    toast("That version was saved as this note's " +
+      "content, but it could not be read back to " +
+      "check (" +
+      (verify.error && verify.error.message
+        ? verify.error.message
+        : String(verify.error)) + ").", true);
+    return;
+  }
+  if (verify && !verify.match) {
+    try { await docLoadNoteBody(note); }
+    catch (e) { /* A refill failure on top of the
+      mismatch leaves the body that was sent standing
+      on the note; the failure toast below names the
+      mismatch either way, and the next open or sync
+      refill shows the stored truth. */ }
+    saveCache();
+    renderEditor._forId = null;
+    renderAll();
+    if (versionGoogleCaptureIsCurrent(capture)) {
+      await renderVersionHistory();
+    }
+    toast("That version was saved, but reading it " +
+      "back did not match what was sent (" +
+      docVersionStatsSentence(verify.expected,
+        verify.found) +
+      "), so this is reported as a failure, not a " +
+      "success. Your previous content is in the " +
+      "version history.", true);
+    return;
+  }
+  /* Step 9: settle. The editor refills from the
+     overwritten note exactly as it refills for an
+     external edit, and the dialog's list reloads,
+     so the new head the save just made stands at
+     the top of the version list. */
+  saveCache();
+  renderEditor._forId = null;
+  renderAll();
+  if (versionGoogleCaptureIsCurrent(capture)) {
+    await renderVersionHistory();
+  }
+  toast("Version used. It is saved as a new edit " +
+    "and now stands at the head of the version " +
+    "list.");
 }
 
 /* v2.139: the small heading naming what stands under
