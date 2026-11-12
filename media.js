@@ -1020,6 +1020,21 @@ let autoSyncPollRunning = false;   /* one poll (or its sync) at a time */
 let autoSyncKnownIds = new Set();  /* the corpus, rebuilt per load */
 let autoSyncNoteIdByFileId = Object.create(null); /* file id -> note id */
 let autoSyncEditorGuard = null;    /* {id, sha} during an auto-sync */
+/* v2.142: the staged sync's state (see the staged sync
+   section below). syncStagedToken is the change feed
+   position this session's loads have judged through: a
+   sync adopts it after a full load, and a probe or a
+   poll advances it only once the changes behind it have
+   actually been judged by a load or a deferred settle.
+   It lives in memory only, like the watcher's own token.
+   pendingSyncPlan is a plan the watcher poll built from
+   the changes it consumed, waiting for the sync it
+   triggered to spend it: null when no plan waits, and
+   SYNC_PLAN_FULL when the poll's window could not be
+   classified, so the sync must run the full pass. */
+const SYNC_PLAN_FULL = "full";
+let syncStagedToken = null;
+let pendingSyncPlan = null;
 let lastUserActivityAt = Date.now();
 
 /* The idle clock's stamp, wired in wireEvents. */
@@ -1245,6 +1260,9 @@ function autoSyncGatesOpen() {
 async function pollAutoSyncChanges() {
   let token = autoSyncPageToken;
   let touches = false;
+  /* v2.142: the records this poll consumes, kept for the
+     staged classification below. */
+  const records = [];
   for (;;) {
     let res;
     try {
@@ -1267,14 +1285,475 @@ async function pollAutoSyncChanges() {
     if (!res.ok) { return false; }
     const data = await res.json();
     (data.changes || []).forEach(function (change) {
+      records.push(change);
       if (autoSyncChangeTouchesStore(change)) { touches = true; }
     });
     if (data.nextPageToken) { token = data.nextPageToken; continue; }
     if (data.newStartPageToken) {
       autoSyncPageToken = data.newStartPageToken;
     }
+    /* v2.142: the changes this poll consumed are classified
+       into the staged plan the sync it triggers will spend
+       (see classifySyncChanges). The classification never
+       feeds back into the touches judgment above: whether
+       a sync runs is the standing corpus test's answer,
+       exactly as before; the plan only narrows what that
+       sync reads. A plan is stashed only when a sync will
+       actually run; otherwise the records drop with the
+       poll, and a later sync's own probe replays the
+       window from the staged position. */
+    if (touches) {
+      const plan = classifySyncChanges(records);
+      pendingSyncPlan = plan || SYNC_PLAN_FULL;
+      if (plan) {
+        plan.startToken = syncStagedToken;
+        plan.endToken = autoSyncPageToken;
+      }
+    }
     return touches;
   }
+}
+
+/* --------------------------------------------------------------------------
+   v2.142: staged sync
+
+   A sync pass used to re-read the whole store every time:
+   the four root files, the notebooks listing, and a listing
+   for every folder, whether anything had moved or not. The
+   change feed this watcher already polls knows what moved.
+   A staged pass spends that knowledge:
+
+   - Probe first. The pass classifies the changes since the
+     last judged position (syncStagedToken). A poll that
+     triggered the sync classifies the records it consumed;
+     any other sync probes the feed itself. When the
+     classification says nothing the load reads has moved,
+     the pass stops there: no store re-reads, no folder
+     listings, only the position advance and the settle.
+   - Read only what moved. A working staged load re-reads
+     the stores and re-lists the folders the classification
+     names, and stands on the last judged load's retained
+     evidence for everything else (see loadStagedFromRepo
+     in tasks.js). A change the classifier cannot honestly
+     place fails the classification whole, and the pass
+     runs the full load instead, never a narrower guess.
+   - Visible first. The staged load settles the note list
+     and the open note on retained Trash and Archive
+     evidence; the collections the plan marked are
+     re-listed and settled by the deferred tail right
+     after, with the calendar and mail refreshes, and the
+     position advance lands only when that settle has
+     judged them. The drop box drain is NOT deferred: it
+     stays in syncNow's main pass, after the render,
+     because a deferred callback is not a promise the
+     session will live to keep, and an imported note must
+     never be stranded past the session that synced it.
+
+   The safety invariant is that only the timing and the
+   breadth of READS change. The classifier's judgments are
+   the standing ones (the corpus test's token tests for
+   the store files, the pair judgment's world for notes),
+   the reconcile that judges the merged evidence is the
+   same reconcile, and the position advances only over
+   windows a load or a settle has actually judged, so a
+   failure anywhere leaves the next pass to replay the
+   window and judge it again.
+   -------------------------------------------------------------------------- */
+
+/* May a sync stage its load? A judged position must stand
+   and a judged load must have retained its evidence. Both
+   are session facts; a session's first load is always the
+   full one, and sign out forgets both. */
+function syncStagingArmed() {
+  return !!(syncStagedToken && lastListings);
+}
+
+/* Sign out (and any reset of the sync runtime state)
+   forgets the staged state with the watcher's own. */
+function resetSyncStagingState() {
+  syncStagedToken = null;
+  pendingSyncPlan = null;
+  syncTailGeneration++;
+  syncTailPromise = null;
+}
+
+/* Classify one window of change records into a staged
+   plan: which store reads and which folder listings the
+   next load actually needs. The plan is a plain record:
+   the four store flags, the notebook slugs to re-list,
+   the collections (Trash, Archive) owed a deferred
+   settle, and the token window it was judged over.
+   The judgments are the standing ones, reused, not
+   reinvented: the store root files are answered with
+   the same token tests autoSyncChangeTouchesStore
+   applies (a catalog change from another device marks
+   the catalog for re-reading even though it never
+   triggers a sync on its own, because a triggered load
+   must judge the catalog as it now stands; this
+   device's own writes, known by their tokens, mark
+   nothing), the snooze registry only ever invalidates
+   its page memory here as there, and a note file or a
+   Doc is placed by every home it could stand in: the
+   folder whose retained listing holds it, the parents
+   its change record names, and the collection the note
+   itself stands in now, so a move is seen from both
+   ends and both folders are judged fresh. Returns the
+   plan, or null when the window could not be honestly
+   classified. */
+function classifySyncChanges(records) {
+  if (!lastListings) { return null; }
+  const plan = {
+    tasks: false, index: false, catalog: false,
+    incoming: false,
+    folders: [],       /* notebook slugs to re-list */
+    collections: [],   /* "trash" / "archive" to settle deferred */
+    startToken: null, endToken: null, empty: true
+  };
+  const touchFolder = function (slug) {
+    if (slug && plan.folders.indexOf(slug) < 0) {
+      plan.folders.push(slug);
+    }
+  };
+  const touchCollection = function (name) {
+    if (plan.collections.indexOf(name) < 0) {
+      plan.collections.push(name);
+    }
+  };
+  /* The known ids, read live, as the corpus test reads
+     them. */
+  const storeIds = Object.create(null);
+  const markStore = function (path, kind) {
+    const id = driveCache.fileIds[path];
+    if (id) { storeIds[id] = kind; }
+  };
+  markStore(CATALOG_FILE, "catalog");
+  markStore(TASKS_FILE, "tasks");
+  markStore(INCOMING_FILE, "incoming");
+  markStore("index.json", "index");
+  markStore(MAIL_SNOOZE_FILE, "snooze");
+  /* Folder id to its place: a notebook slug ("nb:"), a
+     collection, "structure" for the notebooks root, or
+     "other" for the folders the load never reads
+     (versions, attachments, the root itself). */
+  const folderPlace = Object.create(null);
+  Object.keys(driveCache.folderIds).forEach(function (path) {
+    const id = driveCache.folderIds[path];
+    if (!id) { return; }
+    if (path === "notebooks") {
+      folderPlace[id] = "structure";
+    } else if (path === "trash" || path === "archive") {
+      folderPlace[id] = path;
+    } else if (path.indexOf("notebooks/") === 0) {
+      folderPlace[id] = "nb:" + path.slice("notebooks/".length);
+    } else {
+      folderPlace[id] = "other";
+    }
+  });
+  if (driveCache.rootId) { folderPlace[driveCache.rootId] = "other"; }
+  /* File id to the place whose retained listing holds
+     it. */
+  const holderPlace = Object.create(null);
+  const takeEntries = function (entries, place) {
+    (entries || []).forEach(function (entry) {
+      if (entry && !entry.isDir && entry.fileId) {
+        holderPlace[entry.fileId] = place;
+      }
+    });
+  };
+  Object.keys(lastListings.notebooks || {}).forEach(
+    function (slug) {
+      takeEntries(lastListings.notebooks[slug], "nb:" + slug);
+    });
+  takeEntries(lastListings.trash, "trash");
+  takeEntries(lastListings.archive, "archive");
+  const placeFile = function (place) {
+    if (!place) { return false; }
+    if (place === "structure") { plan.index = true; return true; }
+    if (place === "trash" || place === "archive") {
+      touchCollection(place);
+      return true;
+    }
+    if (place.indexOf("nb:") === 0) {
+      touchFolder(place.slice(3));
+      return true;
+    }
+    return place === "other";
+  };
+  const noteHome = function (noteId) {
+    const note = findNoteById(noteId);
+    if (!note) { return null; }
+    if (note.trashed) { return "trash"; }
+    if (note.archived) { return "archive"; }
+    return note.notebook ? "nb:" + note.notebook : null;
+  };
+  let failed = false;
+  (records || []).forEach(function (change) {
+    if (failed) { return; }
+    if (!change || !change.fileId) { failed = true; return; }
+    const fileId = change.fileId;
+    /* The store root files, each with the corpus
+       test's own answer. */
+    const storeKind = storeIds[fileId];
+    if (storeKind) {
+      if (storeKind === "snooze") {
+        if (!change.removed && change.file) {
+          const snoozeToken = driveTokenFromMetadata(change.file);
+          if (snoozeToken &&
+              snoozeToken === mailSnoozeCacheToken()) {
+            return;
+          }
+        }
+        mailSnoozeInvalidateCache();
+        return;
+      }
+      if (change.removed) { plan[storeKind] = true; return; }
+      const token = change.file
+        ? driveTokenFromMetadata(change.file) : null;
+      if (storeKind === "tasks") {
+        if (!(token && lastTasksToken &&
+            token === lastTasksToken)) {
+          plan.tasks = true;
+        }
+        return;
+      }
+      if (storeKind === "incoming") {
+        if (!(token && incomingProcessedToken &&
+            token === incomingProcessedToken)) {
+          plan.incoming = true;
+        }
+        return;
+      }
+      if (storeKind === "catalog") {
+        if (!(token && lastCatalogToken &&
+            token === lastCatalogToken)) {
+          plan.catalog = true;
+        }
+        return;
+      }
+      /* index.json: no echo token is kept for it, so any
+         change re-reads it; its writes are rare and the
+         read is one request. */
+      plan.index = true;
+      return;
+    }
+    /* A folder itself: its own change is structural for
+       a notebook folder or the notebooks root (a rename
+       or a removal rides here), a listing mark for the
+       collections, and nothing for the folders the load
+       never reads. */
+    if (folderPlace[fileId]) {
+      const place = folderPlace[fileId];
+      if (place === "structure" || place.indexOf("nb:") === 0) {
+        plan.index = true;
+      } else if (place === "trash" || place === "archive") {
+        touchCollection(place);
+      }
+      return;
+    }
+    /* A note file, a Doc, or any other file: place it by
+       every home it could stand in. */
+    let placed = false;
+    if (holderPlace[fileId]) {
+      placed = placeFile(holderPlace[fileId]) || placed;
+    }
+    const noteId = autoSyncNoteIdByFileId[fileId];
+    if (noteId) {
+      placed = placeFile(noteHome(noteId)) || placed;
+    }
+    if (change.file && Array.isArray(change.file.parents)) {
+      change.file.parents.forEach(function (parentId) {
+        if (folderPlace[parentId]) {
+          placed = placeFile(folderPlace[parentId]) || placed;
+        }
+      });
+    }
+    if (placed) { return; }
+    /* A file in a folder the load never reads, placed by
+       its parents above, needs no load input. A change
+       the store does not know is not this pass's business
+       either, exactly as the corpus test answers it.
+       What remains unplaced AND known to the corpus is a
+       file this classifier cannot honestly place: the
+       classification fails whole, and the caller runs
+       the full pass rather than narrow a load on a
+       guess. */
+    if (autoSyncKnownIds.has(fileId)) { failed = true; }
+  });
+  if (failed) { return null; }
+  plan.empty = !plan.tasks && !plan.index && !plan.catalog &&
+    !plan.incoming && !plan.folders.length &&
+    !plan.collections.length;
+  return plan;
+}
+
+/* One probe of the change feed from the staged
+   position, spent by a sync no poll triggered (Sync
+   now, a sign in's settle, the mail import's sync):
+   the same pages, in the same shape, the watcher poll
+   reads, judged by the classifier instead of the
+   corpus test. Returns the plan, or null when the pass
+   cannot be staged: the watcher poll is mid-consumption
+   (its own sync spends its own plan instead), the feed
+   cannot be read, the token went stale (a 410
+   re-baselines the watcher, as the poll's does, and
+   answers null: what moved is unknowable, so the full
+   pass is the only honest answer), or the window could
+   not be classified. Nothing here advances the staged
+   position; it moves only when a load, or a deferred
+   settle, has judged the window behind it. */
+async function probeSyncPlan() {
+  if (!syncStagingArmed()) { return null; }
+  if (autoSyncPollRunning) { return null; }
+  let token = syncStagedToken;
+  const records = [];
+  for (;;) {
+    let res;
+    try {
+      res = await gdriveFetch(
+        "https://www.googleapis.com/drive/v3/changes?pageToken=" +
+        encodeURIComponent(token) + "&pageSize=100&fields=" +
+        encodeURIComponent(
+          "nextPageToken,newStartPageToken,changes(fileId,removed," +
+          "file(id,name,mimeType,parents,trashed,headRevisionId," +
+          "modifiedTime))"));
+    } catch (e) { return null; }
+    if (res.status === 410) {
+      await baselineAutoSync();
+      return null;
+    }
+    if (!res.ok) { return null; }
+    const data = await res.json();
+    (data.changes || []).forEach(function (change) {
+      records.push(change);
+    });
+    if (data.nextPageToken) { token = data.nextPageToken; continue; }
+    const plan = classifySyncChanges(records);
+    if (!plan) { return null; }
+    plan.startToken = syncStagedToken;
+    plan.endToken = data.newStartPageToken || syncStagedToken;
+    return plan;
+  }
+}
+
+/* Advance the staged position over a plan's window,
+   but only from the position the plan started at: a
+   position another pass has already moved is never
+   pulled back or pushed past its own judgment. */
+function advanceSyncStagedPosition(plan) {
+  if (plan && plan.endToken &&
+      syncStagedToken === plan.startToken) {
+    syncStagedToken = plan.endToken;
+  }
+}
+
+/* A staged pass's deferred tail: the Trash and Archive
+   settle for the collections its plan marked, then the
+   calendar and mail refreshes a full pass fires inline,
+   then the position advance, which lands only when the
+   settle actually judged the collections (a settle a
+   newer pass superseded leaves the position standing,
+   so a later pass replays the window and judges it
+   again). The tail is scheduled on the first turn after
+   the visible settle; it is a promise as well as a
+   timer, so the next syncNow can flush it ahead of its
+   own judgments (see flushDeferredSyncTail), and its
+   failures are contained and warned about, never
+   allowed to fail a sync that already settled. */
+let syncTailGeneration = 0;
+let syncTailPromise = null;
+
+function scheduleDeferredSyncTail(plan) {
+  const gen = ++syncTailGeneration;
+  const loadGen = syncLoadGeneration;
+  const run = async function () {
+    try {
+      const judged = await settleDeferredCollections(plan, loadGen);
+      if (judged && gen === syncTailGeneration) {
+        advanceSyncStagedPosition(plan);
+      }
+    } catch (err) {
+      console.warn("Deferred sync settle failed: " +
+        (err && err.message));
+    }
+    refreshGcalAfterSync();
+    refreshMailAfterSync();
+  };
+  const mine = new Promise(function (resolve) {
+    setTimeout(function () { run().then(resolve, resolve); }, 0);
+  });
+  syncTailPromise = mine;
+  mine.then(function () {
+    if (syncTailPromise === mine) { syncTailPromise = null; }
+  });
+}
+
+/* The next sync's first act: a standing tail settles
+   before anything new is judged, so positions and
+   collections are never judged out of order. */
+async function flushDeferredSyncTail() {
+  if (syncTailPromise) {
+    try { await syncTailPromise; } catch (e) { /* contained in the tail */ }
+  }
+}
+
+/* Settle the collections a staged pass deferred: the
+   marked collections are listed fresh and the same
+   reconcile the loads run judges them over merged
+   evidence (the retained notebook listings, the
+   retained catalog), and only the two deferred
+   collections are adopted from its answer; the
+   notebook lists stand exactly as the pass's own load
+   left them. Answers false, adopting nothing, when a
+   newer pass owns the window now (a sync is running,
+   or a newer load has completed since this tail was
+   scheduled): that pass's own plan covers the window,
+   because the staged position has not advanced past
+   it. Answers true when the collections stand judged,
+   including when there was nothing to settle or the
+   fresh evidence changes nothing. */
+async function settleDeferredCollections(plan, loadGen) {
+  if (!plan.collections.length) { return true; }
+  if (state.syncing) { return false; }
+  if (!lastListings) { return false; }
+  if (syncLoadGeneration !== loadGen) { return false; }
+  const listings = {
+    notebooks: lastListings.notebooks,
+    trash: lastListings.trash,
+    archive: lastListings.archive
+  };
+  if (plan.collections.indexOf("trash") >= 0) {
+    listings.trash = await storeListDir("trash");
+  }
+  if (plan.collections.indexOf("archive") >= 0) {
+    listings.archive = await storeListDir("archive");
+  }
+  const catalog = retainedCatalogForLoad();
+  if (!catalog) { return false; }
+  let loaded = null;
+  try {
+    loaded = await reconcileCatalogListings(catalog, listings);
+  } catch (err) {
+    if (!err || !err.catalogFallback) { throw err; }
+    loaded = await loadListingsClassic(listings);
+    mergeCatalogDocShells(loaded);
+  }
+  lastListings.trash = listings.trash;
+  lastListings.archive = listings.archive;
+  const signature = function (list) {
+    return (list || []).map(function (n) {
+      return n.id + "@" + (n.sha || "");
+    }).join(",");
+  };
+  if (signature(loaded.trash) === signature(state.trash) &&
+      signature(loaded.archive) === signature(state.archive)) {
+    return true;
+  }
+  state.trash = loaded.trash;
+  state.archive = loaded.archive;
+  rebuildAutoSyncKnownIds();
+  saveCache();
+  renderAll();
+  return true;
 }
 
 /* Run the sync an auto-sync owes, with the editor guard armed

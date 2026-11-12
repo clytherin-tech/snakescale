@@ -1641,6 +1641,12 @@ function resetCatalogRuntimeState() {
   resetDocNotesState();
   pendingIncoming = null;
   incomingProcessedToken = null;
+  /* v2.142: the staged sync's session state (the judged
+     position, any plan a poll left waiting, the deferred
+     tail, and the retained listings) belongs to the
+     signed in account too. */
+  resetSyncStagingState();
+  lastListings = null;
   Object.keys(noteBodyLoads).forEach(function (id) {
     delete noteBodyLoads[id];
   });
@@ -2057,6 +2063,32 @@ async function loadListingsClassic(listings) {
    Cleared with the rest of the catalog runtime state. */
 let lastCatalogDocEntries = [];
 
+/* v2.121: the Doc entry stash, built from one catalog's
+   entries (see the declaration of lastCatalogDocEntries
+   above). v2.142: lifted out of readCatalogForLoad so a
+   staged load standing on the retained catalog text
+   rebuilds the stash exactly as a fresh read does. */
+function buildCatalogDocStash(entries) {
+  lastCatalogDocEntries = [];
+  (entries || []).forEach(function (entry) {
+    if (!entry || typeof entry !== "object" ||
+        entry.backend !== "doc" ||
+        typeof entry.id !== "string" || !entry.id ||
+        !sanitizeDocId(entry.docId)) {
+      return;
+    }
+    const collection = entry.collection === "trash" ||
+      entry.collection === "archive"
+      ? entry.collection : "notebook";
+    lastCatalogDocEntries.push({
+      entry: entry,
+      collection: collection,
+      listName: collection === "notebook"
+        ? "notes" : collection
+    });
+  });
+}
+
 async function readCatalogForLoad() {
   let catalog = null;
   lastCatalogDocEntries = [];
@@ -2079,23 +2111,7 @@ async function readCatalogForLoad() {
              below, for the reason the declaration above
              gives. Every candidate is judged by the same
              sanitizers the shell builder applies. */
-          parsedCatalog.entries.forEach(function (entry) {
-            if (!entry || typeof entry !== "object" ||
-                entry.backend !== "doc" ||
-                typeof entry.id !== "string" || !entry.id ||
-                !sanitizeDocId(entry.docId)) {
-              return;
-            }
-            const collection = entry.collection === "trash" ||
-              entry.collection === "archive"
-              ? entry.collection : "notebook";
-            lastCatalogDocEntries.push({
-              entry: entry,
-              collection: collection,
-              listName: collection === "notebook"
-                ? "notes" : collection
-            });
-          });
+          buildCatalogDocStash(parsedCatalog.entries);
         }
         if (parsedCatalog &&
             parsedCatalog.version === CATALOG_SHAPE_VERSION &&
@@ -2153,29 +2169,39 @@ function mergeCatalogDocShells(loaded) {
   });
 }
 
-async function loadAllFromRepo() {
-  attachmentParseWarnings = 0;   /* v1.2: reset the malformed metadata count */
-  /* v2.53: the tasks read starts FIRST, before the index
-     read, and lands the moment it resolves. tasks.json is
-     a root level file and needs nothing from the index, so
-     the read races nothing; until v2.52 its result waited
-     at the load's tail, behind every folder listing and
-     the catalog reconcile, and on the owner's device that
-     was the visible gap between the notes painting from
-     cache (2.5 s) and the tasks turning real at the full
-     sync (6.6 s). The landing continuation applies a fast
-     read while the load below is still gathering; the
-     tail's own apply call (same function, same guard)
-     covers a read so slow it arrives only there, and the
-     per load generation keeps a superseded or signed out
-     read from ever applying. A failure inside the landing
-     is contained and warned about, never allowed to fail
-     the load around it: the tail's apply call is the
-     second chance, and the arming gates stay shut until
-     an apply actually runs. */
-  const tasksGeneration = ++tasksLoadGeneration;
-  tasksLoadApplied = false;
-  const tasksPromise = readTasksForLoad();
+/* --------------------------------------------------------------------------
+   v2.142: the staged load's retained evidence
+
+   A full load gathers the store's whole shape: four root
+   files, the notebooks listing, and a listing for every
+   folder. A staged pass (see the staged sync section in
+   media.js) re-reads only what the change feed names, and
+   stands on what the last judged load retained for the
+   rest: lastListings (the exact listing arrays that load
+   judged by, fresh where it listed, carried where it
+   carried) and the catalog entries text (kept current by
+   every read and every guarded write). The reconcile
+   that judges the merged evidence is the same reconcile
+   with the same rules; nothing about a freshness
+   judgment changes, only how much of the evidence is
+   gathered again. Any point where the staged load would
+   have to guess instead of judge answers false, and
+   loadAllFromRepo runs the full load, exactly as every
+   load ran before this build. syncLoadGeneration counts
+   completed loads; the deferred tail tests it to be sure
+   no newer load has superseded the one that scheduled
+   it. Both are session state, forgotten with the rest of
+   the sync runtime state on sign out. */
+let lastListings = null;
+let syncLoadGeneration = 0;
+
+/* The tasks read's early landing, lifted out of
+   loadAllFromRepo in v2.142 so both load paths land a
+   read the same way: the moment it resolves, through
+   the one apply path, with a failure contained and
+   warned about, never allowed to fail the load around
+   it (see applyLoadedTasks for the discipline). */
+function startTasksLanding(tasksPromise, tasksGeneration) {
   tasksPromise.then(function (tasksLoad) {
     try {
       applyLoadedTasks(tasksLoad, tasksGeneration);
@@ -2184,18 +2210,22 @@ async function loadAllFromRepo() {
         (err && err.message));
     }
   });
-  /* v2.21: the index read and the notebooks listing are
-     independent; they run together now. Promise.all keeps the
-     old failure surface: a rejection from either fails the
-     load, as the serial order did. */
-  const indexAndFolders = await Promise.all([
-    storeGetFile("index.json"), storeListDir("notebooks")]);
-  const indexFile = indexAndFolders[0];
+}
+
+/* The index adoption, lifted out of loadAllFromRepo in
+   v2.142 so the staged load runs the identical adoption
+   when the change feed names the index or the folder
+   structure: the parse, the salvage of the side fields
+   from a parsed but unusable index, the rebuild and its
+   persist attempt, the folder with no index entry still
+   getting its notebook, and the parent sanitize, all
+   exactly as the full load has always run them. Answers
+   the folder slugs the disk listing showed. */
+async function adoptLoadedIndex(indexFile, folders) {
   let index = null;
   if (indexFile) {
     try { index = JSON.parse(indexFile.text); } catch (e) { index = null; }
   }
-  const folders = indexAndFolders[1];
   const folderSlugs = (folders || [])
     .filter(function (e) { return e.isDir; })
     .map(function (e) { return e.name; });
@@ -2294,63 +2324,136 @@ async function loadAllFromRepo() {
        notebook (see sanitizeNotebookParents). */
     sanitizeNotebookParents();
   }
+  return folderSlugs;
+}
 
-  /* v2.20: the listings, gathered once for both load paths.
-     v2.21: gathered CONCURRENTLY. Each notebook folder, the
-     trash, and the archive are independent listings, and the
-     catalog read and the drop box read depend on none of
-     them, so all of it starts together and the load awaits
-     the batch. Promise.all preserves the error semantics the
-     serial code had (any listing's failure fails the load;
-     the serial code simply stopped at the first). One known
-     cost: racing folder resolutions can repeat a find child
-     lookup for a shared parent before the folder id cache
-     fills; the results are identical, only the call is
-     duplicated. */
+/* The catalog a staged load stands on when the change
+   feed says catalog.json did not move: the entries text
+   the last read or guarded write left standing in
+   lastCatalogEntriesText, re-parsed into the shape the
+   reconcile consumes and re-stashed exactly as a fresh
+   read leaves it (see buildCatalogDocStash). The writer
+   keeps that text current on every write, so the
+   retained entries are never older than this device's
+   own newest knowledge of the catalog. Answers null
+   when no entries text stands (the catalog never read
+   cleanly this session), which widens the staged load
+   back to the full one. */
+function retainedCatalogForLoad() {
+  if (!lastCatalogEntriesText) { return null; }
+  let entries = null;
+  try {
+    entries = JSON.parse(lastCatalogEntriesText);
+  } catch (e) { return null; }
+  if (!Array.isArray(entries)) { return null; }
+  buildCatalogDocStash(entries);
+  return { version: CATALOG_SHAPE_VERSION, entries: entries };
+}
+
+/* The staged load itself. syncNow hands it the plan the
+   change feed's classification built (see
+   classifySyncChanges in media.js): the stores and
+   folders the window's changes touch are read fresh,
+   and everything else stands on the retained evidence,
+   because the feed certifies nothing there moved. Trash
+   and Archive listings are not read here at all: the
+   retained evidence stands for the visible settle, and
+   the pass's deferred tail re-lists the collections the
+   plan marked and settles them there (see
+   settleDeferredCollections in media.js). Answers true
+   when it carried the load; answers false at any point
+   where judging would become guessing, and
+   loadAllFromRepo then runs the full load instead, as
+   if no plan had been offered. */
+async function loadStagedFromRepo(plan) {
+  if (!lastListings) { return false; }
+  attachmentParseWarnings = 0;   /* v1.2: reset, as the full load does */
+  const tasksGeneration = ++tasksLoadGeneration;
+  tasksLoadApplied = false;
+  let tasksPromise;
+  if (plan.tasks) {
+    tasksPromise = readTasksForLoad();
+    startTasksLanding(tasksPromise, tasksGeneration);
+  } else {
+    /* The tasks stand as the last judged load left them;
+       the generation bump above still orphans any read a
+       previous load left in flight. */
+    tasksPromise = Promise.resolve(null);
+  }
+  if (plan.index) {
+    const indexAndFolders = await Promise.all([
+      storeGetFile("index.json"), storeListDir("notebooks")]);
+    const folderSlugs = await adoptLoadedIndex(
+      indexAndFolders[0], indexAndFolders[1]);
+    /* A notebook the index still names but whose folder
+       the disk listing no longer shows gets the fresh
+       listing a full load would give it; a folder new to
+       the disk was adopted above and has no retained
+       listing, so the gathering below reads it fresh by
+       the same rule. */
+    state.notebooks.forEach(function (nb) {
+      if (folderSlugs.indexOf(nb.slug) < 0 &&
+          plan.folders.indexOf(nb.slug) < 0) {
+        plan.folders.push(nb.slug);
+      }
+    });
+  }
   const listings = { notebooks: {}, trash: null, archive: null };
   const listingJobs = state.notebooks.map(function (nb) {
-    return storeListDir("notebooks/" + nb.slug).then(function (entries) {
-      listings.notebooks[nb.slug] = entries;
-    });
+    const retained = lastListings.notebooks[nb.slug];
+    if (plan.folders.indexOf(nb.slug) >= 0 || !retained) {
+      return storeListDir("notebooks/" + nb.slug).then(
+        function (entries) {
+          listings.notebooks[nb.slug] = entries;
+        });
+    }
+    listings.notebooks[nb.slug] = retained;
+    return null;
   });
-  listingJobs.push(storeListDir("trash").then(function (entries) {
-    listings.trash = entries;
-  }));
-  listingJobs.push(storeListDir("archive").then(function (entries) {
-    listings.archive = entries;
-  }));
-  const catalogPromise = readCatalogForLoad();
-  /* v2.53: the tasks read is not started here any more; it
-     started at the top of this function and may already
-     have landed (see applyLoadedTasks). */
-  /* v2.20: the drop box rides along (creates itself if missing,
-     stashes unprocessed contents for syncNow's import step). */
-  const incomingPromise = loadIncomingStash();
   await Promise.all(listingJobs);
   bootMark("listingsDone");
-  const catalog = await catalogPromise;
+  listings.trash = lastListings.trash;
+  listings.archive = lastListings.archive;
+  let catalog = null;
+  if (plan.catalog) {
+    catalog = await readCatalogForLoad();
+  } else {
+    catalog = retainedCatalogForLoad();
+  }
   bootMark("catalogRead");
-  await incomingPromise;
-
+  if (!catalog) { return false; }
+  if (plan.incoming) {
+    await loadIncomingStash();
+  }
   let loaded = null;
-  if (catalog) {
-    try {
-      loaded = await reconcileCatalogListings(catalog, listings);
-    } catch (err) {
-      if (!err || !err.catalogFallback) { throw err; }
-      loaded = null;   /* the catalog declined; the classic load runs */
-    }
+  try {
+    loaded = await reconcileCatalogListings(catalog, listings);
+  } catch (err) {
+    if (!err || !err.catalogFallback) { throw err; }
+    /* The catalog declined over the merged evidence; the
+       full load's classic path answers with fresh
+       evidence everywhere, exactly as it does today. */
+    return false;
   }
-  if (!loaded) {
-    loaded = await loadListingsClassic(listings);
-    /* v2.121: the classic load finds files only, so the
-       Doc-backed notes ride in from the catalog read's
-       stash (see readCatalogForLoad); when the reconcile
-       ran it placed them itself and the stash stays
-       unused. */
-    mergeCatalogDocShells(loaded);
-  }
+  lastListings = listings;
+  await finishLoadFromRepo(loaded, tasksPromise, tasksGeneration);
+  return true;
+}
 
+/* A load's tail, lifted out of loadAllFromRepo in v2.142
+   so the full load and the staged load finish identically:
+   the loaded lists become the state, the tasks read is
+   settled and applied through the one apply path, the
+   auto-sync corpus is rebuilt from what the load resolved,
+   the version baselines reseed, the catalog arms, the note
+   reminders' post load pass runs, shortcuts prune, and the
+   cache snapshots, with the attachment warning at the end.
+   Every step is the step the full load has always run, in
+   its order. */
+async function finishLoadFromRepo(loaded, tasksPromise, tasksGeneration) {
+  /* v2.142: a completed load is a judged position for
+     the staged sync's deferred tail generation test. */
+  syncLoadGeneration++;
   state.notes = loaded.notes;
   state.trash = loaded.trash;
   state.archive = loaded.archive;
@@ -2417,6 +2520,112 @@ async function loadAllFromRepo() {
   }
 }
 
+async function loadAllFromRepo(plan) {
+  /* v2.142: a staged plan (see the staged sync section in
+     media.js) narrows this load to what the change feed
+     says moved. The staged attempt answers true when it
+     carried the load; any point where it would have to
+     guess instead of judge widens back to the full load
+     below, so the full path remains the answer for
+     everything a plan cannot prove. */
+  if (plan) {
+    const stagedDone = await loadStagedFromRepo(plan);
+    if (stagedDone) { return; }
+  }
+  attachmentParseWarnings = 0;   /* v1.2: reset the malformed metadata count */
+  /* v2.53: the tasks read starts FIRST, before the index
+     read, and lands the moment it resolves. tasks.json is
+     a root level file and needs nothing from the index, so
+     the read races nothing; until v2.52 its result waited
+     at the load's tail, behind every folder listing and
+     the catalog reconcile, and on the owner's device that
+     was the visible gap between the notes painting from
+     cache (2.5 s) and the tasks turning real at the full
+     sync (6.6 s). The landing continuation applies a fast
+     read while the load below is still gathering; the
+     tail's own apply call (same function, same guard)
+     covers a read so slow it arrives only there, and the
+     per load generation keeps a superseded or signed out
+     read from ever applying. A failure inside the landing
+     is contained and warned about, never allowed to fail
+     the load around it: the tail's apply call is the
+     second chance, and the arming gates stay shut until
+     an apply actually runs. */
+  const tasksGeneration = ++tasksLoadGeneration;
+  tasksLoadApplied = false;
+  const tasksPromise = readTasksForLoad();
+  startTasksLanding(tasksPromise, tasksGeneration);
+  /* v2.21: the index read and the notebooks listing are
+     independent; they run together now. Promise.all keeps the
+     old failure surface: a rejection from either fails the
+     load, as the serial order did. */
+  const indexAndFolders = await Promise.all([
+    storeGetFile("index.json"), storeListDir("notebooks")]);
+  await adoptLoadedIndex(indexAndFolders[0], indexAndFolders[1]);
+
+  /* v2.20: the listings, gathered once for both load paths.
+     v2.21: gathered CONCURRENTLY. Each notebook folder, the
+     trash, and the archive are independent listings, and the
+     catalog read and the drop box read depend on none of
+     them, so all of it starts together and the load awaits
+     the batch. Promise.all preserves the error semantics the
+     serial code had (any listing's failure fails the load;
+     the serial code simply stopped at the first). One known
+     cost: racing folder resolutions can repeat a find child
+     lookup for a shared parent before the folder id cache
+     fills; the results are identical, only the call is
+     duplicated. */
+  const listings = { notebooks: {}, trash: null, archive: null };
+  const listingJobs = state.notebooks.map(function (nb) {
+    return storeListDir("notebooks/" + nb.slug).then(function (entries) {
+      listings.notebooks[nb.slug] = entries;
+    });
+  });
+  listingJobs.push(storeListDir("trash").then(function (entries) {
+    listings.trash = entries;
+  }));
+  listingJobs.push(storeListDir("archive").then(function (entries) {
+    listings.archive = entries;
+  }));
+  const catalogPromise = readCatalogForLoad();
+  /* v2.53: the tasks read is not started here any more; it
+     started at the top of this function and may already
+     have landed (see applyLoadedTasks). */
+  /* v2.20: the drop box rides along (creates itself if missing,
+     stashes unprocessed contents for syncNow's import step). */
+  const incomingPromise = loadIncomingStash();
+  await Promise.all(listingJobs);
+  bootMark("listingsDone");
+  const catalog = await catalogPromise;
+  bootMark("catalogRead");
+  await incomingPromise;
+
+  let loaded = null;
+  if (catalog) {
+    try {
+      loaded = await reconcileCatalogListings(catalog, listings);
+    } catch (err) {
+      if (!err || !err.catalogFallback) { throw err; }
+      loaded = null;   /* the catalog declined; the classic load runs */
+    }
+  }
+  if (!loaded) {
+    loaded = await loadListingsClassic(listings);
+    /* v2.121: the classic load finds files only, so the
+       Doc-backed notes ride in from the catalog read's
+       stash (see readCatalogForLoad); when the reconcile
+       ran it placed them itself and the stash stays
+       unused. */
+    mergeCatalogDocShells(loaded);
+  }
+
+  /* v2.142: the listings this load judged by become the
+     retained evidence the staged passes stand on (see
+     the staged sync section in media.js). */
+  lastListings = listings;
+  await finishLoadFromRepo(loaded, tasksPromise, tasksGeneration);
+}
+
 /* v1.4.3: is the Google sign in live, judged from memory only? This is
    the synchronous twin of googleGetStatus below: a Google token is
    loaded in memory and its expiry is still ahead of the same 30 second
@@ -2450,6 +2659,13 @@ function storeSyncReady() {
 async function syncNow(showToast) {
   if (!storeSyncReady()) { return; }
   if (state.syncing) { return; }
+  /* v2.142: the previous staged pass's deferred tail (its
+     Trash and Archive settle and its position advance)
+     lands before this pass judges anything, so the probe
+     window below starts from a position everything
+     deferred has been judged through. */
+  await flushDeferredSyncTail();
+  if (state.syncing) { return; }
   state.syncing = true;
   refreshSyncPill();
   /* v2.16.1: snapshot the open note's pre-sync state (its last
@@ -2462,6 +2678,13 @@ async function syncNow(showToast) {
      and rewrite the baselines, and the snapshot must predate
      all of it to mean "what the user last saw saved". */
   const openNoteCtx = captureOpenNoteSyncContext();
+  /* v2.142: the watcher's change position as this sync
+     begins. When this pass runs the full load, its
+     success adopts the position as the staged position:
+     polls are suppressed while a sync runs, so the token
+     cannot run ahead of the load's own evidence, and
+     everything the load just judged stands behind it. */
+  const tokenAtSyncStart = autoSyncPageToken;
   try {
     await flushQueue();
     /* v1.4.4: a coalesced index write may still be pending (its
@@ -2475,12 +2698,48 @@ async function syncNow(showToast) {
     await flushCatalogWrites();
     /* v2.24: and the same for tasks.json, for the same reason. */
     await flushTasksWrites();
-    await loadAllFromRepo();
+    /* v2.142: the staged decision, made after the flushes
+       so this device's own writes stand in the change
+       window to be judged as its own. A plan the watcher
+       poll built from the changes it consumed is spent
+       first; otherwise, when a judged position stands,
+       the feed is probed and classified here. No plan
+       (or a classification the code could not trust)
+       runs the full pass, exactly as every sync ran
+       before this build. */
+    let plan = null;
+    if (pendingSyncPlan !== null) {
+      plan = pendingSyncPlan === SYNC_PLAN_FULL
+        ? null : pendingSyncPlan;
+      pendingSyncPlan = null;
+    } else if (syncStagingArmed()) {
+      plan = await probeSyncPlan();
+    }
+    if (plan && plan.empty && !pendingIncoming) {
+      /* The probe is the whole pass: nothing the load
+         reads has moved since the last judged position,
+         so there is nothing to settle. The position
+         advances and the pass ends with the pill and
+         the toast, as a working pass ends. */
+      advanceSyncStagedPosition(plan);
+      refreshSyncPill();
+      if (showToast) {
+        toast("Synced with " + storageDisplayName() + ".");
+      }
+      return;
+    }
+    await loadAllFromRepo(plan);
   /* v2.80: a sync refreshes the calendar events with
      everything else (page memory only; a standing
-     consent state is left to its Connect path). */
-  refreshGcalAfterSync();
-  refreshMailAfterSync();
+     consent state is left to its Connect path).
+     v2.142: in a staged pass the two refreshes defer to
+     the pass's deferred tail (see scheduleDeferredSyncTail
+     in media.js), so nothing past the visible settle waits
+     on them; a full pass fires them here, as it always has. */
+  if (!plan) {
+    refreshGcalAfterSync();
+    refreshMailAfterSync();
+  }
     /* v2.20: if the load left the OPEN note as a catalog shell
        (its stored revision moved past the body this session
        held, so reconciliation trusted the listing and kept no
@@ -2549,6 +2808,18 @@ async function syncNow(showToast) {
        the link graph once more here so the open note's
        backlinks bar follows arrivals either way. */
     refreshBacklinksPanel();
+    /* v2.142: the pass's position and its deferred tail.
+       A staged pass schedules its tail (the Trash and
+       Archive settle for the collections the plan marked,
+       the calendar and mail refreshes, and the position
+       advance) to land right after this visible settle; a
+       full pass simply adopts the position it began from,
+       now that its load has judged everything behind it. */
+    if (plan) {
+      scheduleDeferredSyncTail(plan);
+    } else if (tokenAtSyncStart) {
+      syncStagedToken = tokenAtSyncStart;
+    }
     refreshSyncPill();
     if (showToast) { toast("Synced with " + storageDisplayName() + "."); }
   } catch (err) {
