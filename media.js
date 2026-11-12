@@ -2721,6 +2721,353 @@ function docJsonParagraphText(par) {
   return text;
 }
 
+/* ----- code blocks across the Doc boundary (v2.136) -----
+   The simplified Docs contract: a Doc holds what
+   crosses cleanly, and a code block's clean crossing
+   form is monospace text. Measured on Chris's real
+   notes and on scratch Docs made for this build
+   (the full evidence is in this release's build
+   report): the app's <pre class="ss-code-block">
+   markup is discarded by Google's importer, which
+   holds the block as one paragraph in a monospace
+   font (Courier), its lines joined by in-paragraph
+   breaks, the text exact in the document JSON
+   (every space run, every tab, every blank line)
+   and its spaces exact in the HTML export (space
+   runs written as alternating space and non-breaking
+   space), its tabs decayed there to the spaces they
+   render as. A block whose trailing blank lines the
+   import split stands instead as a run of monospace
+   paragraphs, one per line. So: on save, a code
+   block crosses as a plain pre, the one element the
+   importer provably turns into that monospace
+   paragraph with the text intact (a monospace
+   paragraph written directly loses its leading
+   whitespace at import, measured). On open, a run
+   of monospace paragraphs is dressed back into the
+   canonical code block, under the strict rule
+   below, its text taken from the document JSON
+   when the judged structure read lands and from
+   the export when it does not. */
+
+// The monospace families the recognition judges by:
+// the names Google's export spells for the fonts it
+// holds (Courier for imported pre content) and the
+// names a hand can set on a Doc's text.
+const DOC_MONO_FAMILIES = {
+  "courier": 1, "courier new": 1, "consolas": 1,
+  "roboto mono": 1, "pt mono": 1,
+  "source code pro": 1, "menlo": 1,
+  "dejavu sans mono": 1, "liberation mono": 1,
+  "ubuntu mono": 1, "monospace": 1
+};
+
+function docIsMonoFamily(family) {
+  if (!family) { return false; }
+  return !!DOC_MONO_FAMILIES[
+    String(family).trim().toLowerCase()];
+}
+
+// Does this export HTML carry any monospace dressed
+// text at all? The fonts an export spells stand in
+// its style declarations, in the style element and
+// inline alike, so a declaration test on the fetched
+// bytes is the gate, the same shape as the list
+// markup gate beside it.
+function docExportCarriesMonoMarkup(html) {
+  return /font-family:[^;}]*?(Courier|Consolas|Roboto[ ]Mono|PT[ ]Mono|Source[ ]Code[ ]Pro|Menlo|monospace)/i
+    .test(String(html || ""));
+}
+
+// The code runs one document JSON holds, in order:
+// each a maximal run of monospace paragraphs (see
+// docJsonMonoParagraph) that survives the shared
+// trim and line rule (docTrimCodeRun), with its
+// exact text: the paragraphs' texts joined by
+// newlines, in-paragraph breaks already newlines,
+// tabs standing as Google holds them. Any element
+// that is not a monospace paragraph ends a run, the
+// way a table or a list ends one in the export.
+function docCodeRunsFromJson(docJson) {
+  const runs = [];
+  if (!docJson || !docJson.body ||
+      !Array.isArray(docJson.body.content)) {
+    return runs;
+  }
+  let current = [];
+  const settle = function () {
+    if (current.length) {
+      const kept = docTrimCodeRun(current);
+      if (kept) {
+        runs.push({
+          text: kept.map(function (e) {
+            return e.text;
+          }).join("\n"),
+          lines: kept.reduce(function (n, e) {
+            return n + e.lines;
+          }, 0)
+        });
+      }
+    }
+    current = [];
+  };
+  docJson.body.content.forEach(function (el) {
+    const judged = (el && el.paragraph)
+      ? docJsonMonoParagraph(el.paragraph) : null;
+    if (!judged) { settle(); return; }
+    current.push(judged);
+  });
+  settle();
+  return runs;
+}
+
+// One document JSON paragraph judged as a code run
+// member: its text (the paragraph terminator struck,
+// in-paragraph breaks as newlines) and its line
+// count, or null when the paragraph is not wholly
+// monospace text. A list item is never a member (a
+// list is its own structure), a heading never, and
+// a paragraph carrying anything but text runs
+// never: the judgment is the strict one, that every
+// letter of the paragraph stands in a monospace
+// font.
+function docJsonMonoParagraph(par) {
+  if (!par || par.bullet) { return null; }
+  const style = par.paragraphStyle || {};
+  if (style.namedStyleType &&
+      style.namedStyleType !== "NORMAL_TEXT") {
+    return null;
+  }
+  const els = par.elements || [];
+  if (!els.length) { return null; }
+  let text = "";
+  for (let i = 0; i < els.length; i++) {
+    const tr = els[i] && els[i].textRun;
+    if (!tr || typeof tr.content !== "string") {
+      return null;
+    }
+    const fam = tr.textStyle &&
+      tr.textStyle.weightedFontFamily &&
+      tr.textStyle.weightedFontFamily.fontFamily;
+    if (!docIsMonoFamily(fam)) { return null; }
+    text += tr.content;
+  }
+  if (text.charAt(text.length - 1) === "\n") {
+    text = text.slice(0, -1);
+  }
+  text = text.replace(/\u000b/g, "\n");
+  return { text: text,
+    lines: text.split("\n").length };
+}
+
+// The trim and line rule both sides of the boundary
+// share, so a run is judged the same in the export
+// as in the JSON. A trailing empty paragraph is not
+// part of a run that already carries its breaks
+// inside a paragraph: in the real Middlesex Doc the
+// import left exactly such an empty monospace
+// paragraph standing after the block, and it is the
+// note's own following empty paragraph, not a blank
+// line of the block. (A run carrying no in-paragraph
+// break keeps its trailing empties: there they are
+// the block's own blank lines, split by the import
+// into paragraphs of their own.) A run stands as a
+// code block only when it holds two lines or more:
+// a lone one-line monospace paragraph is
+// indistinguishable from a hand-typed monospace
+// paragraph, and it is left a paragraph rather than
+// hijacked.
+function docTrimCodeRun(entries) {
+  const kept = entries.slice();
+  const hasBreak = function (list) {
+    return list.some(function (e) {
+      return e.text.indexOf("\n") >= 0;
+    });
+  };
+  while (kept.length > 1 &&
+      kept[kept.length - 1].text === "" &&
+      hasBreak(kept.slice(0, -1))) {
+    kept.pop();
+  }
+  let lines = 0;
+  kept.forEach(function (e) { lines += e.lines; });
+  if (lines < 2) { return null; }
+  return kept;
+}
+
+// One export paragraph judged as a code run member,
+// the mirror of docJsonMonoParagraph on the export
+// DOM: its text (line breaks as newlines, the
+// export's non-breaking spaces read back as the
+// spaces they encode) and its line count, or null
+// when any letter of it stands in a non-monospace
+// font, or it holds an image: a code block holds
+// text and line breaks only. An empty paragraph is
+// judged on the fonts its empty runs wear, the only
+// evidence an empty paragraph carries.
+function docMonoParagraph(el, ctx) {
+  if (el.querySelector("img")) { return null; }
+  let text = "";
+  let sawText = false;
+  let bad = false;
+  const fonts = [];
+  const walk = function (node, emph) {
+    if (bad) { return; }
+    if (node.nodeType === 3) {
+      const v = node.nodeValue || "";
+      if (v) {
+        sawText = true;
+        if (!docIsMonoFamily(emph.font)) {
+          bad = true;
+          return;
+        }
+        text += v.replace(/\u00a0/g, " ");
+      }
+      return;
+    }
+    if (node.nodeType !== 1) { return; }
+    if (node.tagName === "BR") { text += "\n"; return; }
+    const own = docMergeEmphasis(emph,
+      docElementEmphasis(node, ctx.classStyles));
+    if (own.font) { fonts.push(own.font); }
+    node.childNodes.forEach(function (c) {
+      walk(c, own);
+    });
+  };
+  const base = docElementEmphasis(el, ctx.classStyles);
+  if (base.font) { fonts.push(base.font); }
+  el.childNodes.forEach(function (c) {
+    walk(c, base);
+  });
+  if (bad) { return null; }
+  if (!sawText) {
+    /* An empty paragraph is judged on the fonts its
+       empty runs wear: in a real Google export the
+       paragraph element itself wears the document's
+       default font (Arial) even when every run inside
+       it is monospace, so the base font standing in
+       the fonts list would fail every genuine empty
+       monospace paragraph (the Google Doc test note's
+       trailing block lines wear exactly that shape).
+       The descendant runs are the evidence; the base
+       font judges only when no run carries one. */
+    const judgedFonts = fonts.length > 1
+      ? fonts.slice(1) : fonts;
+    if (!judgedFonts.length || !judgedFonts.every(
+        function (f) { return docIsMonoFamily(f); })) {
+      return null;
+    }
+    return { text: "", lines: 1 };
+  }
+  return { text: text,
+    lines: text.split("\n").length };
+}
+
+// Gather the code run that starts at kids[start],
+// a run of sibling monospace paragraphs (formatting
+// whitespace between them is not content): the kept
+// entries and the index of the last paragraph the
+// run consumes, or null when the run does not stand
+// as a code block under the shared rule.
+function docGatherMonoRun(kids, start, ctx) {
+  const entries = [];
+  let j = start;
+  while (j < kids.length) {
+    const sib = kids[j];
+    if (sib.nodeType === 3 &&
+        !(sib.nodeValue || "").trim()) {
+      j++;
+      continue;
+    }
+    if (sib.nodeType === 1 && sib.tagName === "P") {
+      const judged = docMonoParagraph(sib, ctx);
+      if (!judged) { break; }
+      judged.kid = j;
+      entries.push(judged);
+      j++;
+      continue;
+    }
+    break;
+  }
+  if (!entries.length) { return null; }
+  const kept = docTrimCodeRun(entries);
+  if (!kept) { return null; }
+  return { entries: kept,
+    end: kept[kept.length - 1].kid };
+}
+
+// One gathered run to the canonical code block. The
+// run's text comes from the export unless the
+// document JSON's run at the same position vouches
+// for it (same line count, same letters in the same
+// order: the two surfaces of one block), in which
+// case the JSON's text stands, because the JSON is
+// the surface that holds the tabs. A JSON run whose
+// letters differ at the same line count is spent
+// without being used, so a later run is never
+// offered it again; a run of a different shape
+// leaves the pointer standing.
+function docConvertCodeRun(run, ctx) {
+  let text = run.entries.map(function (e) {
+    return e.text;
+  }).join("\n");
+  if (ctx.codeRuns &&
+      ctx.codeRunIdx < ctx.codeRuns.length) {
+    const exact = ctx.codeRuns[ctx.codeRunIdx];
+    const squash = function (s) {
+      return s.replace(/[ \t]+/g, "");
+    };
+    if (exact.lines === text.split("\n").length &&
+        squash(exact.text) === squash(text)) {
+      text = exact.text;
+      ctx.codeRunIdx += 1;
+    } else if (
+        exact.lines === text.split("\n").length) {
+      ctx.codeRunIdx += 1;
+    }
+  }
+  return "<pre class=\"ss-code-block\"><code>" +
+    escapeHtml(text) + "</code></pre>";
+}
+
+// v2.136: the load path's word on a failed code
+// structure read, the checklist one's sibling: when
+// a Doc whose export carries monospace text could
+// not be read as a document, its code blocks still
+// open (the export's text carries their spaces
+// exactly), but their tabs stand as the spaces the
+// export renders them as, and that decay is named
+// instead of passing in silence. Once per session
+// per distinct failure; the latch is re-armed by
+// the next judged read that lands.
+let docCodeStructureFailureSurfaced = "";
+
+function docSurfaceCodeStructureFailure(failure) {
+  const status = (failure && failure.status) || 0;
+  const message = (failure && failure.message) || "";
+  const sig = status + "|" + message;
+  if (docCodeStructureFailureSurfaced === sig) {
+    return;
+  }
+  docCodeStructureFailureSurfaced = sig;
+  let text = "Google did not provide this note's " +
+    "document structure" +
+    (status ? " (HTTP status " + status + ")" : "") +
+    ", so its code blocks opened with their tabs " +
+    "as spaces.";
+  if (message) { text += " Google said: " + message; }
+  if (status === 403) {
+    text += " That is this sign in's Docs " +
+      "permission: try Refresh connection in " +
+      "Settings.";
+  }
+  toast(text, true);
+}
+
+function docCodeRunsRecovered() {
+  docCodeStructureFailureSurfaced = "";
+}
+
 /* Find the checklist runs a save's upload left in a Doc,
    in the shape the post-pass converts: consecutive
    bullet paragraphs of one list whose text leads with a
@@ -2954,11 +3301,19 @@ async function docFetchDocumentOnce(docId) {
      list in Google still converts with its kinds on
      its next fetch. */
   const carriesLists = docExportCarriesListMarkup(html);
-  const judged = carriesLists
+  /* v2.136: monospace text spends the same judged
+     read, for the code runs it alone can carry
+     exactly (see the code block section): the gate
+     is again the export's own content, so a Doc that
+     gains its first code block in Google still
+     converts with its runs on its next fetch. */
+  const carriesCode = docExportCarriesMonoMarkup(html);
+  const judged = (carriesLists || carriesCode)
     ? await docFetchDocumentJsonJudged(docId)
     : { json: null, failure: null };
-  if (carriesLists && judged.json) {
+  if ((carriesLists || carriesCode) && judged.json) {
     docListKindsRecovered();
+    docCodeRunsRecovered();
   }
   return {
     html: html,
@@ -2966,6 +3321,7 @@ async function docFetchDocumentOnce(docId) {
     token: driveTokenFromMetadata(meta),
     modifiedTime: meta.modifiedTime || null,
     listKinds: docChecklistKindsFromJson(judged.json),
+    codeRuns: docCodeRunsFromJson(judged.json),
     /* v2.135: the checklist structure read's failure,
        when this fetch's export carried lists and the
        judged read could not produce the document: the
@@ -2975,6 +3331,19 @@ async function docFetchDocumentOnce(docId) {
        silence. Null whenever the read landed, and
        whenever no list stood to judge. */
     listKindsFailure: carriesLists && !judged.json
+      ? (judged.failure || { status: 0, message: "" })
+      : null,
+    /* v2.136: the code structure read's failure,
+       when this fetch's export carried monospace
+       text, no list stood to judge (that failure
+       rides the checklist fact above), and the
+       judged read could not produce the document:
+       the load path surfaces it (see
+       docSurfaceCodeStructureFailure) instead of
+       the note's code blocks silently opening with
+       their tabs decayed to spaces. */
+    codeStructureFailure: (!carriesLists &&
+        carriesCode && !judged.json)
       ? (judged.failure || { status: 0, message: "" })
       : null
   };
@@ -3561,6 +3930,7 @@ function docConvertInlineNode(node, emph, ctx) {
    inline content gather into paragraphs and block
    elements convert one by one. */
 function docConvertBlocks(el, emph, ctx) {
+  ctx.blockDepth = (ctx.blockDepth || 0) + 1;
   let html = "";
   let inlineBuf = "";
   const flush = function () {
@@ -3661,6 +4031,21 @@ function docConvertBlocks(el, emph, ctx) {
         continue;
       }
     }
+    if (child.nodeType === 1 && child.tagName === "P" &&
+        ctx.blockDepth === 1) {
+      /* v2.136: a run of monospace paragraphs at the
+         body's top level is a code block that crossed
+         (see the code block section above); gather
+         and dress it whole, or fall through and let
+         its first paragraph convert as it stands. */
+      const codeRun = docGatherMonoRun(kids, i, ctx);
+      if (codeRun) {
+        flush();
+        html += docConvertCodeRun(codeRun, ctx);
+        i = codeRun.end;
+        continue;
+      }
+    }
     if (child.nodeType === 1 &&
         DOC_BLOCK_TAGS[child.tagName]) {
       flush();
@@ -3670,6 +4055,7 @@ function docConvertBlocks(el, emph, ctx) {
     }
   }
   flush();
+  ctx.blockDepth -= 1;
   return html;
 }
 
@@ -3700,8 +4086,14 @@ function docConvertBlock(el, emph, ctx) {
     docElementEmphasis(el, ctx.classStyles));
   if (tag === "HR") { return "<hr>"; }
   if (tag === "PRE") {
-    return "<pre>" +
-      escapeHtml(el.textContent || "") + "</pre>";
+    /* v2.136: an export pre is a code block, and it
+       converts in the editor's canonical form (the
+       classed pre with its code child), the same form
+       the Insert menu makes, so a block that crossed
+       as a pre stands in the note as a code block and
+       not as a bare pre the styling passes over. */
+    return "<pre class=\"ss-code-block\"><code>" +
+      escapeHtml(el.textContent || "") + "</code></pre>";
   }
   if (tag === "UL" || tag === "OL") {
     return docConvertList(el, own, ctx);
@@ -4325,7 +4717,8 @@ function docConvertTableRow(tr, emph, ctx) {
    the adoption pass reads. This function is the fetch
    route's sanitizer: its output is built only from the
    vocabulary above. */
-function docExportHtmlToBody(exportHtml, listKinds) {
+function docExportHtmlToBody(exportHtml, listKinds,
+    codeRuns) {
   const parsed = new DOMParser().parseFromString(
     String(exportHtml || ""), "text/html");
   const ctx = {
@@ -4336,6 +4729,14 @@ function docExportHtmlToBody(exportHtml, listKinds) {
        null when no JSON came with this conversion (the
        export only judgment, exactly as before). */
     listKinds: listKinds || null,
+    /* v2.136: the document JSON's code runs (see
+       the code block section), or null when no JSON
+       came with this conversion, in which case every
+       run's text is the export's own. */
+    codeRuns: (Array.isArray(codeRuns) &&
+      codeRuns.length) ? codeRuns : null,
+    codeRunIdx: 0,
+    blockDepth: 0,
     baseStack: [],
     images: []
   };
@@ -4787,8 +5188,15 @@ async function docLoadNoteBody(note) {
   if (fetched.listKindsFailure) {
     docSurfaceListKindsFailure(fetched.listKindsFailure);
   }
+  /* v2.136: a code structure read that failed on a
+     monospace carrying Doc is named the same way
+     (see docSurfaceCodeStructureFailure). */
+  if (fetched.codeStructureFailure) {
+    docSurfaceCodeStructureFailure(
+      fetched.codeStructureFailure);
+  }
   const converted = docExportHtmlToBody(fetched.html,
-    fetched.listKinds);
+    fetched.listKinds, fetched.codeRuns);
   note.body = await docAdoptImages(note, converted);
   /* v2.128: the tick memory (see the section above).
      A conversion that carried its states in the text
@@ -5772,6 +6180,23 @@ async function docBuildUploadHtml(note) {
         escapeHtml(record.name || "file") + "]";
   }
   docApplyGoogleSpacing(holder);
+  /* v2.136: code blocks cross as a plain pre, the
+     one form Google's importer provably turns into
+     its monospace paragraph with the text exact
+     (see the code block section above): the app's
+     classed pre and its code element are app
+     furniture the importer discards either way, so
+     what leaves is the block's displayed text
+     (codePreText: line breaks as newlines, the
+     caret furniture excluded) standing in a bare
+     pre, and the return path dresses the monospace
+     paragraph it becomes back into the canonical
+     block. */
+  holder.querySelectorAll("pre.ss-code-block")
+    .forEach(function (pre) {
+      pre.outerHTML = "<pre>" +
+        escapeHtml(codePreText(pre)) + "</pre>";
+    });
   /* v2.125: checklist items cross as glyph-led text. In
      the app's own markup a checklist item is an input
      element plus a done class, neither of which a Doc
