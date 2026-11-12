@@ -3273,8 +3273,10 @@ function openMailOnMessage(id) {
 
 /* The Home Email widget: the card the v2.82.0 workshop
    drew and that build's brief left out. The header
-   carries the Inbox unread count and opens the Email
-   view at the Inbox; the body lists the five most
+   carries the Inbox unread count, and its title
+   opens the Email view at the Inbox (v2.137: the
+   title itself is the link, replacing the sidebar
+   entry); the body lists the five most
    recent unread Inbox messages (a click opens the
    message), or the state's own words: the not
    connected line with its Connect button, the
@@ -3286,8 +3288,13 @@ function openMailOnMessage(id) {
 function buildHomeEmailWidget() {
   const parts = homeWidgetShell("email", "Email");
   parts.head.classList.add("home-email-head");
-  parts.head.title = "Open Email";
-  parts.head.addEventListener("click", function () {
+  /* v2.137: the widget's title is the Email door
+     now: the click stands on the title itself, not
+     the whole head, and Home customize mode still
+     swallows it. The unread pill stands beside the
+     title in the head, as it always has. */
+  parts.title.title = "Open Email";
+  parts.title.addEventListener("click", function () {
     if (homeCustomSession) { return; }
     openMailInbox();
   });
@@ -5696,12 +5703,11 @@ function mailRetryLoad() {
    checkboxes, attachment buttons) wires itself at
    render, in the module above. */
 function initMailBindings() {
-  mailEl("navEmail").addEventListener("click",
-    function () {
-      state.view = { kind: "email", value: null };
-      renderAll();
-      setMobileView("list");
-    });
+  /* v2.137: the sidebar's Email entry is gone, so
+     there is no nav binding left to make here: the
+     Email view's doors are the Home widget's title
+     and the icon rail's button, both running
+     openMailInbox. */
   mailEl("settingsMailConnectBtn").addEventListener(
     "click", function () { connectGoogleCalendar(); });
   mailEl("mailPanelConnectBtn").addEventListener(
@@ -6306,6 +6312,18 @@ function buildHomeCalNoteEntryEl(note) {
 
 function buildHomeCalendarWidget() {
   const parts = homeWidgetShell("calendar", "Calendar");
+  /* v2.137: the widget's title is the Calendar door
+     (it replaces the sidebar entry): a click stands
+     in the Tasks view's calendar mode, through the
+     one opener the rail's Calendar button also runs.
+     Home customize mode swallows it, and the month
+     arrows and Today button below keep their own
+     jobs: they are body furniture, not the title. */
+  parts.title.title = "Open the Calendar";
+  parts.title.addEventListener("click", function () {
+    if (homeCustomSession) { return; }
+    openTasksCalendarView();
+  });
   const cursor = homeCalCursorParts();
   const y = cursor.y, m = cursor.m;
   const today = taskTodayParts();

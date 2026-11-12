@@ -301,8 +301,22 @@ body.dark .gate-brand .wordmark{color:#EAF3EC;}
 .nav-section{padding:10px 10px 4px;}
 .nav-label{
   font-size:11px;font-weight:700;letter-spacing:1.6px;text-transform:uppercase;
-  color:#AFCDB7;padding:10px 10px 6px;display:flex;
-  justify-content:space-between;align-items:center;
+  color:#AFCDB7;padding:8px 10px;display:flex;
+  align-items:center;gap:8px;cursor:pointer;
+  border-radius:var(--radius-button);
+  transition:background-color var(--motion),color var(--motion);
+}
+/* v2.137: the section header row is the fold control:
+   a soft wash while the pointer rests on it and a
+   visible ring while it holds keyboard focus, both
+   in the sidebar palette family the rows use. */
+.nav-label:hover{background:rgba(87,167,115,.14);color:#fff;}
+.nav-label:focus-visible{
+  outline:2px solid var(--accent);outline-offset:1px;color:#fff;
+}
+.nav-section-title{flex:none;}
+.nav-label-right{
+  margin-left:auto;display:flex;align-items:center;gap:8px;flex:none;
 }
 .nav-label button{
   background:none;border:none;color:var(--accent);font-size:16px;font-weight:700;
@@ -310,27 +324,17 @@ body.dark .gate-brand .wordmark{color:#EAF3EC;}
   transition:background-color var(--motion),color var(--motion);
 }
 .nav-label button:hover{background:rgba(87,167,115,.18);color:#fff;}
-/* v2.62: collapsible sidebar sections. The label row
-   gains a left group (the fold toggle and the section
-   name) so the row's space-between keeps the Notebooks
-   add button at the right, where it has always sat.
-   The toggle takes the stack and tag chevrons' own
-   treatment: quiet until hovered, the chevron pointing
-   down while the section is open and right once it
-   folds, the standard disclosure cue those rows set.
-   Folding hides exactly the section's body container;
-   the header row is never a fold target, so a folded
-   section leaves its title and actions on screen and
-   no empty region behind. */
-.nav-label-main{display:flex;align-items:center;gap:6px;min-width:0;}
-.nav-label .nav-section-toggle{
-  flex:none;width:22px;height:22px;display:inline-flex;
-  align-items:center;justify-content:center;padding:0;
-  background:none;border:none;color:#AFCDB7;cursor:pointer;
-  font-size:12px;line-height:1;
-  transition:background-color var(--motion),color var(--motion);
-}
-.nav-label .nav-section-toggle:hover{background:rgba(87,167,115,.25);color:#fff;}
+/* v2.62: collapsible sidebar sections; v2.137: the
+   header row itself is the fold control. The title
+   stands at the row's left and the right cluster
+   (the Notebooks add button, then the chevron) at
+   its right; the chevron points down while the
+   section is open and right once it folds, the
+   standard disclosure cue the stack and tag rows
+   set. Folding hides exactly the section's body
+   container; the header row is never hidden, so a
+   folded section leaves its title and actions on
+   screen and no empty region behind. */
 .nav-section-chevron{
   display:inline-flex;transform:rotate(90deg);
   transition:transform var(--motion);
@@ -339,6 +343,19 @@ body.dark .gate-brand .wordmark{color:#EAF3EC;}
 #shortcutSection.folded #shortcutNav{display:none;}
 #notebookSection.folded #notebookNav{display:none;}
 #tagSection.folded #tagNav{display:none;}
+/* v2.137: the labeled sections breathe a little more
+   above their headers, so the headers read as labels
+   over their trees rather than as more rows. */
+#shortcutSection,#notebookSection,#tagSection{padding-top:16px;}
+/* v2.137: one tree indent step (14px) for the whole
+   sidebar. A labeled section's title text stands at
+   the section's 20px line (the section's own 10px
+   padding plus the label's 10px); each body stands
+   one step in from there, so the body containers
+   carry the label's 10px plus the 14px step, and
+   every deeper level adds one more step of its own
+   (stack membership, notebook depth, tag depth). */
+#shortcutNav,#notebookNav,#tagNav{padding-left:24px;}
 .nav-item{
   position:relative;display:flex;align-items:center;gap:8px;width:100%;
   text-align:left;background:none;border:none;color:#EAF3EC;
@@ -360,6 +377,46 @@ body.dark .gate-brand .wordmark{color:#EAF3EC;}
 }
 .nav-item .count-pill:empty{display:none;}
 .nav-item.active .count-pill{background:var(--accent);color:#0B3D2E;}
+/* v2.137: the quick view icon strip under Home. Five
+   equal buttons wearing the icon rail's glyphs; the
+   count each view carried as a pill now stands as a
+   small badge at the icon's top right corner, hidden
+   while empty, in the count pill's own dress. The
+   active view's button takes the nav rows' accent
+   wash, its emphasis carried under the icon. At
+   about 44px tall the buttons stay comfortable
+   click and drop targets: Trash, Archive, and
+   Pinned are destinations, and a drag hovering any
+   of them fills the whole button with the shared
+   drop-hover treatment. */
+.nav-strip{display:flex;gap:4px;padding:2px 0 6px;}
+.nav-strip-btn{
+  position:relative;flex:1;height:44px;display:flex;
+  align-items:center;justify-content:center;
+  background:none;border:none;color:#EAF3EC;cursor:pointer;
+  border-radius:var(--radius-button);
+  transition:background-color var(--motion),color var(--motion),
+    box-shadow var(--motion);
+}
+.nav-strip-btn:hover{background:rgba(87,167,115,.16);}
+.nav-strip-btn.active{
+  background:rgba(87,167,115,.28);color:#fff;
+  box-shadow:inset 0 -3px 0 var(--accent);
+}
+.nav-strip-btn:focus-visible{
+  outline:2px solid var(--accent);outline-offset:1px;
+}
+.nav-strip-btn .count-pill{
+  position:absolute;top:3px;right:4px;min-width:18px;
+  padding:1px 5px;border-radius:var(--radius-pill);
+  background:rgba(220,232,220,.16);color:#DDEEE1;text-align:center;
+  font-size:10px;font-weight:700;line-height:1.35;
+}
+.nav-strip-btn .count-pill:empty{display:none;}
+.nav-strip-btn.active .count-pill{background:var(--accent);color:#0B3D2E;}
+#sidebar .nav-strip-btn.drop-hover{
+  background:var(--secondary);color:#fff;
+}
 /* v2.29: notebook stacks. The header is a row of the same height
    family as a notebook row, in the section label's voice (small,
    bold, letterspaced) rather than a note name's, because it names
@@ -371,7 +428,7 @@ body.dark .gate-brand .wordmark{color:#EAF3EC;}
    section is the positioning context for the stack menu card,
    which borrows #sidebarMenu's card treatment outright. */
 #notebookSection{position:relative;}
-.nav-item.in-stack{margin-left:16px;}
+.nav-item.in-stack{margin-left:14px;}
 .nav-stack-head{
   display:flex;align-items:center;gap:2px;padding-right:2px;
 }
@@ -1676,6 +1733,20 @@ button.home-widget-title{
   background:none;border:none;cursor:pointer;padding:0;
   font:inherit;font-weight:700;text-align:left;
 }
+/* v2.137: two widget titles are links (Calendar and
+   Email): the hover cue is the underline a link
+   earns, and keyboard focus rings the title in the
+   card's own accent, in both themes. */
+button.home-widget-title:hover{
+  text-decoration:underline;text-underline-offset:3px;
+}
+button.home-widget-title:focus-visible{
+  outline:2px solid var(--primary);outline-offset:2px;
+  border-radius:4px;
+}
+body.dark button.home-widget-title:focus-visible{
+  outline-color:var(--accent);
+}
 .home-widget-action{
   margin-left:auto;padding:2px 0;background:none;border:none;cursor:pointer;
   color:var(--primary);font-size:12.5px;font-weight:700;flex:0 0 auto;
@@ -1685,6 +1756,15 @@ body.dark .home-widget-action{color:var(--accent);}
 .home-widget[data-widget-type="tags"] .home-widget-body,
 .home-widget[data-widget-type="notebooks"] .home-widget-body{
   max-height:264px;overflow-y:auto;
+}
+/* v2.137: the Home Notebooks and Tags widgets take
+   the sidebar's base step too: their rows stand one
+   step (14px) in from the widget's edge, and each
+   depth adds one more step in the row builders, so
+   Home and the sidebar read as one tree. */
+.home-widget[data-widget-type="tags"] .home-widget-body,
+.home-widget[data-widget-type="notebooks"] .home-widget-body{
+  padding-left:14px;
 }
 .home-note-row,.home-tag-row,.home-nb-row,.home-shortcut-row{
   display:flex;align-items:center;gap:10px;width:100%;

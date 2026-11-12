@@ -408,8 +408,10 @@ function notebooksInSidebarOrder() {
    and by stack groups so a notebook looks and behaves the same in
    both. inStack only adds the indent class.
    v2.63: depth is the row's tree depth; the indent is the
-   stack class's 16px where it applies plus 14px per level,
-   the tag tree's step. A notebook with sub-notebooks is
+   stack class's step where it applies plus 14px per level,
+   the tag tree's step; v2.137: the stack step is the one
+   tree step itself (14px), so every level of every tree
+   in the sidebar climbs by the same 14px. A notebook with sub-notebooks is
    wrapped in a flex row carrying a fold caret in the tag
    tree's disclosure style; the wrapper takes the whole
    indent and the button's own in-stack class comes off,
@@ -440,9 +442,9 @@ function buildNotebookNavRow(nb, inStack, depth) {
     setMobileView("list");
   });
   const kids = notebookChildrenOf(nb.slug);
-  const indent = (inStack ? 16 : 0) + (depth || 0) * 14;
+  const indent = (inStack ? 14 : 0) + (depth || 0) * 14;
   if (!kids.length) {
-    /* The stack class already supplies the 16px at depth
+    /* The stack class already supplies the 14px at depth
        0 in a stack; an inline indent is set only where
        the class does not already say it. */
     if (indent > 0 && !(inStack && !depth)) {
@@ -586,6 +588,20 @@ function toggleSidebarSection(key) {
   else { state.collapsedSections.push(key); }
   saveSettings();
   renderSidebar();
+}
+
+/* v2.137: the one Calendar door opener. The Tasks
+   view in its calendar mode is where the calendar
+   lives; the icon rail's Calendar button and the
+   Home Calendar widget's title link both run this,
+   and it is the v2.81 sidebar entry's behavior,
+   unchanged: stand in the Tasks view with its
+   calendar segment active. */
+function openTasksCalendarView() {
+  state.view = { kind: "tasks", value: null };
+  state.tasksView.mode = "calendar";
+  renderAll();
+  setMobileView("list");
 }
 
 /* Bring the three section headers in step with the
@@ -824,29 +840,43 @@ function renderSidebar() {
     }).length || "";
   document.getElementById("countTrash").textContent = state.trash.length || "";
   document.getElementById("countArchive").textContent = state.archive.length || "";
+  /* v2.137: the strip buttons name their views to
+     assistive tech with the count riding along, the
+     way the retired text rows said it outright. */
+  [["navAll", "All Notes", "countAll"],
+   ["navPinned", "Pinned", "countPinned"],
+   ["navReminders", "Reminders", "countReminders"],
+   ["navTrash", "Trash", "countTrash"],
+   ["navArchive", "Archive", "countArchive"]].forEach(function (row) {
+    const btn = document.getElementById(row[0]);
+    const pill = document.getElementById(row[2]);
+    if (btn && pill) {
+      btn.setAttribute("aria-label",
+        row[1] + (pill.textContent ? ", " + pill.textContent : ""));
+    }
+  });
 
   /* v2.33: the Home entry sits at the top of the nav,
      where Evernote keeps its own. */
   document.getElementById("navHome").classList.toggle("active",
     state.view.kind === "home");
-  /* v2.82: the Email entry's highlight is its own
-     view's, and every sidebar render also settles the
-     mail badge (the counts move under it). */
-  document.getElementById("navEmail").classList.toggle("active",
-    state.view.kind === "email");
+  /* v2.82: every sidebar render also settles the
+     mail badge (the counts move under it). v2.137:
+     the sidebar's Email entry is gone, so there is
+     no highlight left to keep here; the badge's home
+     is the icon rail's dot now. */
   updateMailBadge();
   document.getElementById("navAll").classList.toggle("active",
     state.view.kind === "all");
-  /* v2.81: the Calendar entry is the Tasks view in its
-     calendar mode wearing its own seat: it carries the
-     highlight there, and Tasks carries it in list
-     mode. */
-  document.getElementById("navCalendar").classList.toggle("active",
-    state.view.kind === "tasks" &&
-      state.tasksView.mode === "calendar");
+  /* v2.81: the Calendar seat was the Tasks view in
+     its calendar mode wearing a highlight of its
+     own. v2.137 retires the sidebar entry; the rail
+     keeps its two button split (renderRailChrome),
+     but here the Tasks row is the only seat the
+     Tasks view has, so it carries the highlight in
+     both modes, calendar included. */
   document.getElementById("navTasks").classList.toggle("active",
-    state.view.kind === "tasks" &&
-      state.tasksView.mode !== "calendar");
+    state.view.kind === "tasks");
   document.getElementById("navPinned").classList.toggle("active",
     state.view.kind === "pinned");
   document.getElementById("navReminders").classList.toggle("active",

@@ -709,18 +709,12 @@ function wireEvents() {
   document.addEventListener("keydown", function (ev) {
     if (ev.key === "Escape") { closeHomeWidgetsPopover(); }
   });
-  /* v2.81: the Calendar entry opens the Tasks view with
-     its calendar mode active, exactly as if the view
-     had been opened and its Calendar segment pressed;
-     the mode is the session state the view already
-     keeps, and the Tasks entry's own behavior below is
-     unchanged. */
-  document.getElementById("navCalendar").addEventListener("click", function () {
-    state.view = { kind: "tasks", value: null };
-    state.tasksView.mode = "calendar";
-    renderAll();
-    setMobileView("list");
-  });
+  /* v2.81: the Calendar entry opened the Tasks view
+     with its calendar mode active; v2.137 retires
+     the entry, and its behavior stands as the one
+     shared opener, openTasksCalendarView (render.js),
+     which the icon rail's Calendar button and the
+     Home Calendar widget's title link both run. */
   /* v2.24: the Tasks entry under All Notes opens the Tasks
      view, the same one line navigation as its neighbours. */
   document.getElementById("navTasks").addEventListener("click", function () {
@@ -761,10 +755,30 @@ function wireEvents() {
   });
 
   /* v2.62: the sidebar section fold toggles, one per
-     section in the table, each folding its own section. */
+     section in the table, each folding its own section.
+     v2.137: the toggle is the section's header row
+     itself. A click anywhere on the row folds it,
+     except a click on the Notebooks add button, which
+     keeps its own job; the chevron is a span inside
+     the row, so a click on it is simply a row click
+     and can never fold twice. Enter or Space while
+     the row itself holds focus folds it too. */
   SIDEBAR_SECTIONS.forEach(function (spec) {
-    document.getElementById(spec.toggleId).addEventListener(
-      "click", function () { toggleSidebarSection(spec.key); });
+    const headEl = document.getElementById(spec.toggleId);
+    if (!headEl) { return; }
+    headEl.addEventListener("click", function (ev) {
+      if (ev.target && ev.target.closest &&
+          ev.target.closest("#addNotebookBtn")) { return; }
+      toggleSidebarSection(spec.key);
+    });
+    headEl.addEventListener("keydown", function (ev) {
+      if (ev.target !== headEl) { return; }
+      if (ev.key === "Enter" || ev.key === " " ||
+          ev.key === "Spacebar") {
+        ev.preventDefault();
+        toggleSidebarSection(spec.key);
+      }
+    });
   });
 
   document.getElementById("newNoteBtn").addEventListener("click", function () {
@@ -2129,8 +2143,7 @@ function wireEvents() {
      runs setSidebarRail directly, the same single toggle the
      new footer collapse button runs. */
   [["railNewNoteBtn", "newNoteBtn"],
-   ["railEmailBtn", "navEmail"], ["railAllBtn", "navAll"],
-   ["railCalendarBtn", "navCalendar"],
+   ["railAllBtn", "navAll"],
    ["railPinnedBtn", "navPinned"], ["railRemindersBtn", "navReminders"], ["railTrashBtn", "navTrash"],
    ["railArchiveBtn", "navArchive"], ["railLockBtn", "sidebarSignOutItem"]
    ].forEach(function (pair) {
@@ -2138,6 +2151,15 @@ function wireEvents() {
       document.getElementById(pair[1]).click();
     });
   });
+  /* v2.137: the rail's Email and Calendar buttons no
+     longer click through to sidebar entries (both
+     entries are gone); they run the views' own
+     openers directly, the same ones the Home widget
+     title links run. */
+  document.getElementById("railEmailBtn").addEventListener(
+    "click", function () { openMailInbox(); });
+  document.getElementById("railCalendarBtn").addEventListener(
+    "click", function () { openTasksCalendarView(); });
   document.getElementById("railExpandBtn").addEventListener("click", function () {
     setSidebarRail(false);
   });

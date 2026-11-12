@@ -1146,7 +1146,16 @@ function homeWidgetShell(type, titleText) {
   widget.setAttribute("data-widget-type", type);
   const head = document.createElement("div");
   head.className = "home-widget-head";
-  const title = document.createElement("h3");
+  /* v2.137: the Calendar and Email widgets' titles
+     are links (Chris's call: they replace the
+     sidebar entries those views lost): a button
+     wearing the title's dress, wired by the widget
+     builders to the views' own openers. Every other
+     widget's title stays a plain heading. */
+  const title = document.createElement(
+    (type === "calendar" || type === "email")
+      ? "button" : "h3");
+  if (title.tagName === "BUTTON") { title.type = "button"; }
   title.className = "home-widget-title";
   title.textContent = titleText;
   head.appendChild(title);
@@ -1154,7 +1163,8 @@ function homeWidgetShell(type, titleText) {
   const body = document.createElement("div");
   body.className = "home-widget-body";
   widget.appendChild(body);
-  return { widget: widget, head: head, body: body };
+  return { widget: widget, head: head, body: body,
+    title: title };
 }
 
 /* A note row, shared by the Recent and Filtered Notes
@@ -2180,7 +2190,8 @@ function buildHomeTagRow(row) {
    instead of reusing the builders; the model, the
    indent math (a stack's 16px plus 14px a level), the
    fold state, the counts, and the click navigation
-   are the sidebar's exactly. */
+   are the sidebar's exactly (v2.137: the stack
+   step is the one 14px tree step, as there). */
 function buildHomeNotebooksWidget() {
   const parts = homeWidgetShell("notebooks", "Notebooks");
   if (!state.notebooks.length) {
@@ -2262,7 +2273,7 @@ function homeAppendNotebookWithSubtree(body, nb, inStack, depth) {
    indent, exactly the sidebar's arrangement; a leaf
    row takes the indent itself. */
 function buildHomeNotebookRow(nb, inStack, depth) {
-  const indent = (inStack ? 16 : 0) + (depth || 0) * 14;
+  const indent = (inStack ? 14 : 0) + (depth || 0) * 14;
   const btn = document.createElement("button");
   btn.type = "button";
   btn.className = "home-nb-row";

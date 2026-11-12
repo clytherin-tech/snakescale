@@ -2587,8 +2587,10 @@ function showNbDropOverlay(dragNote) {
   });
   /* v2.5: Trash and Archive are destinations here too, as rows
      under the notebooks, marked with data-drop-action exactly
-     like the sidebar entries they mirror. */
-  [["trash", "Trash"], ["archive", "Archive"]].forEach(function (pair) {
+     like the sidebar entries they mirror. v2.137: Pin joins
+     them, mirroring the strip's Pinned button. */
+  [["trash", "Trash"], ["archive", "Archive"],
+   ["pin", "Pin"]].forEach(function (pair) {
     const row = document.createElement("button");
     row.type = "button";
     row.className = "nb-drop-row nb-drop-action";
@@ -2639,7 +2641,8 @@ function updateNoteDragTarget(x, y) {
   }
   noteDrag.targetEl = row;
   /* v2.5: a target is either a notebook (data-nb-slug) or one of
-     the two fixed destinations (data-drop-action). */
+     the fixed destinations (data-drop-action); v2.137: Pinned
+     stands among them, carrying data-drop-action pin. */
   noteDrag.targetSlug = row ? row.getAttribute("data-nb-slug") : null;
   noteDrag.targetAction = row ? row.getAttribute("data-drop-action") : null;
   if (row) { row.classList.add("drop-hover"); }
@@ -2857,6 +2860,12 @@ function endNoteDrag(commit) {
     }
     if (action === "trash") { trashSelectedNotes(); return; }
     if (action === "archive") { archiveSelectedNotes(); return; }
+    if (action === "pin") {
+      /* v2.137: a batch drop on Pinned pins through
+         the selection's own bulk path, exactly as
+         batch Trash and Archive hand over to theirs. */
+      pinSelectedNotes(true); return;
+    }
     return;
   }
   if (slug) {
@@ -2880,6 +2889,21 @@ function endNoteDrag(commit) {
         return archiveNote(note);
       }, moveUndoSnapshot("archive", [note]))
       .catch(function (err) { toast(err.message, true); });
+  } else if (action === "pin") {
+    /* v2.137: Pinned is a drop target. A single drop
+       pins the note through the pin toggle's own
+       field and save path: the note is unpinned
+       here, so the toggle's flip lands on true, and
+       the drop ends with the family's confirmation
+       toast. An already pinned note is a quiet
+       no-op, the single notebook drop's own
+       already-there rule: no save, no toast, and
+       never an unpin. */
+    if (!note.pinned) {
+      toggleNotePin(note).then(function () {
+        toast("Note pinned.");
+      }, function () { });
+    }
   }
 }
 
