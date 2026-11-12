@@ -1904,10 +1904,14 @@ body.dark .home-widget-action{color:var(--accent);}
   background:var(--accent-soft);border-color:var(--accent);
 }
 .home-scratch-toolbar button svg{display:block;margin:0 auto;}
-/* v2.72: the Scratch Pad's Create Note row, right aligned
-   under the pad; the button is the app's own small button,
-   so it themes with everything else in both themes. */
-.home-scratch-actions{display:flex;justify-content:flex-end;margin-top:6px;}
+/* v2.140: the spacer that holds the Create Note
+   button at the toolbar row's right end. */
+.home-scratch-spacer{flex:1 1 auto;}
+/* v2.140: the Create Note button stands in the
+   formatting toolbar row now (see .home-scratch-spacer);
+   its old actions row under the pad is retired. The
+   button is the app's own small button, so it themes
+   with everything else in both themes. */
 /* v2.43: the Shortcuts widget's rows (the row shape above
    is shared with the other list widgets). A dead target
    (a note in Trash or the Archive) mutes the way the

@@ -104,7 +104,7 @@
 
 "use strict";
 
-const CACHE_NAME = "snakescale-shell-2026-11-12-SSN-V21390";
+const CACHE_NAME = "snakescale-shell-2026-11-12-SSN-V21400";
 
 /* The shell, as paths relative to this worker's scope (the site
    root). "./" and "./index.html" are both listed: the first is the
@@ -150,18 +150,18 @@ const PAGE_KEY = "./index.html";
    build if this block is stale. Never edit it by hand. */
 // BEGIN GENERATED ASSET HASHES (gen_asset_hashes.py)
 const ASSET_HASHES = {
-  "./index.html": "6a6304668beeab7a87685002db9d710228b43cef5e6020b3f6a1db1913d5d0b2",
-  "./styles.css": "0fb5b104c2d6ab3d8f90a766eeca900574ccbe1a26633165207a6b28d76434b6",
-  "./version.js": "740dff74ec9b2691d16d827c94aa4fc45160c6f62cb05c946c57e8551a40a46e",
+  "./index.html": "b6e6263747bb36ce7b6ac4bdd67f3b8967eb0f6f72debd71cbd89418b383de92",
+  "./styles.css": "db18347a74448d470bbfae8daf42ac4c1a2423c0a6c46aadc1200b6616474fa4",
+  "./version.js": "ba99ce0069aa4a4606fdc6551c2e86b2d90318cf225884d6a31de736d3a302bc",
   "./core.js": "762dd5d5d7d7ad502e9d673542c57775aa6eee12990d359b79ac150252855361",
   "./store.js": "7b823b256c17570015d20a46a4ba53eb2705a1b932a7f95c64791984179173f2",
   "./sync.js": "2fca595bab83e9da96893b311254296b77e982c29a21a5763da9babbb52fc02a",
   "./tasks.js": "56f53630bdf19d31b5b0c57b0177d615a9283a04279c066d1471116dfb5d14a1",
   "./notebooks.js": "eed64ea414be4859d546d5c2d16f1e4218eba8dbffe244c2c92455408ed73f0a",
-  "./home.js": "86343e6ff336cc6a57550eba5fec6671b24923c4e96ade6209b58acc418f1c23",
+  "./home.js": "aca927050babf85001448052037b496cfcef68b5f9f63947373ae7a9cc52f948",
   "./calendar.js": "1d8926b971eecfa2a7cfd0e285272ad26bc8ff95a88138878f3dff1c078c79b4",
   "./mail.js": "cefa4870571d24fb66041e5bc6821f295ee2bf1cdce2219c7702dea7d2af17c1",
-  "./render.js": "84194cf18d1d638ca2f05a422d4b19cdf3f99e5053262fa5655e18d8931ed68c",
+  "./render.js": "f7ffb674e337cdd6cb34bc40efd45311135209ad7431cd3f6e34870850c9bd35",
   "./editor.js": "463274c1199f8055a81dc82d5319ff459d52dd809d3b39fe197e52be8a55f619",
   "./editor-tools.js": "d382ad2beb716c6684d92e78a694ef41ccef863b1fd1c7265122a72ca619161f",
   "./media.js": "6f2f4d4f435c08d9479b870f160102b8bce6694cdc8915d06a8fe00f578f4aa9",

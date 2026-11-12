@@ -1455,6 +1455,11 @@ function captureHomeScratchHeight(source) {
    is nothing to save, and a bank that already equals
    the stored height writes nothing. */
 function settleHomeScratchHeight() {
+  /* v2.140: the persist below carries the pad's
+     stored text with the height; land any coalesced
+     typing persist first, so it never carries a
+     stale pad. */
+  flushScratchPadPersist();
   if (homeScratchSaveTimer !== null) {
     clearTimeout(homeScratchSaveTimer);
     homeScratchSaveTimer = null;
@@ -1552,15 +1557,92 @@ function scratchPadEl() {
    what strips the link faces decoration paints, so
    the store never carries runtime faces), then the
    standing persist, and the Create Note button's
-   word on what stands. Every pad mutation lands
-   here: typing, a toolbar command, a popup pick. */
+   word on what stands.
+   v2.140: this immediate persist is no longer what
+   a keystroke runs. The build's benchmark on the
+   v2.139.0 tree measured the old shape plainly: 102
+   keystrokes at a steady cadence ran 102 full
+   persists (about 7 ms of handler work per key) and
+   211 cache snapshots, two per keystroke, because
+   persistHome calls saveCache and saveIndex calls it
+   again, while canonicalizeAttachmentPlaceholders
+   and scratchPlainTextOf together cost under 0.2 ms
+   per key. Typing now arms the coalesced persist
+   below and updates the Create Note button from the
+   live DOM; this function remains the immediate
+   persist every deliberate pad mutation lands
+   through (a toolbar command, a popup pick, the
+   paste decoration pass), and it is also the flush:
+   it clears any armed idle timer, so a flush and a
+   scheduled persist can never both run for one
+   burst. */
 function persistScratchPadFromDom() {
+  if (scratchPersistTimer !== null) {
+    clearTimeout(scratchPersistTimer);
+    scratchPersistTimer = null;
+  }
+  scratchPersistPending = false;
+  persistScratchPadNow();
+}
+
+/* The one full persist itself, unchanged from what
+   every keystroke used to run: canonicalize the
+   pad's HTML into the store, persist the home field
+   (the index write rides its own 800 ms debounce,
+   as always), and settle the Create Note button. */
+function persistScratchPadNow() {
   const area = document.getElementById("homeScratchText");
   if (!area) { return; }
   state.home.scratch =
     canonicalizeAttachmentPlaceholders(area.innerHTML);
   persistHome();
   syncScratchCreateButton();
+}
+
+/* v2.140: the coalesced typing persist. A keystroke
+   mirrors the pad's HTML into the in-memory home
+   field (so the state every synchronous reader sees
+   is never stale) and (re)arms one idle timer,
+   SCRATCH_PERSIST_IDLE_MS after the last keystroke;
+   when it lands, the flush runs the full persist
+   above, canonicalizing the mirror into the store,
+   so a burst of typing costs one snapshot chain
+   instead of two per key. Until the flush, an
+   unrelated persistHome can carry the mirror as it
+   stands; the flush rewrites it in canonical form
+   moments later, and the stored form once the flush
+   lands is byte-identical to what the old per-key
+   chain stored. The flush also runs at once, ahead
+   of anything that reads the pad: the pad's blur,
+   Create Note, a toolbar command, the height settle
+   (persistHome carries the pad's stored text with
+   it), and leaving Home (syncTasksPane). A flush
+   with nothing pending is a no-op, so no reader can
+   ever see a stale pad and no standing caller
+   changes its behavior. */
+const SCRATCH_PERSIST_IDLE_MS = 400;
+let scratchPersistTimer = null;
+let scratchPersistPending = false;
+
+function scheduleScratchPadPersist() {
+  scratchPersistPending = true;
+  if (scratchPersistTimer !== null) {
+    clearTimeout(scratchPersistTimer);
+  }
+  scratchPersistTimer = setTimeout(function () {
+    scratchPersistTimer = null;
+    flushScratchPadPersist();
+  }, SCRATCH_PERSIST_IDLE_MS);
+}
+
+function flushScratchPadPersist() {
+  if (scratchPersistTimer !== null) {
+    clearTimeout(scratchPersistTimer);
+    scratchPersistTimer = null;
+  }
+  if (!scratchPersistPending) { return; }
+  scratchPersistPending = false;
+  persistScratchPadNow();
 }
 
 /* The pad's selection, saved the note toolbar's way:
@@ -1634,6 +1716,9 @@ function syncScratchToolbar() {
 function runScratchCommand(cmd) {
   const area = document.getElementById("homeScratchText");
   if (!area) { return; }
+  /* v2.140: land any coalesced typing persist
+     before the command reads or changes the pad. */
+  flushScratchPadPersist();
   if (cmd === "link") {
     restoreScratchSelection();
     const sel = window.getSelection();
@@ -1796,8 +1881,20 @@ function buildHomeScratchWidget() {
     area.style.height = state.home.scratchHeight + "px";
     homeScratchBaselineHeight = state.home.scratchHeight;
   }
+  /* v2.140: typing mirrors the pad's HTML into the
+     in-memory home field (a plain read and assign,
+     the cheap part of the old chain), arms the
+     coalesced persist, and settles the Create Note
+     button from the live DOM; the full persist lands
+     on the idle timer or on the flush (see
+     scheduleScratchPadPersist). */
   area.addEventListener("input", function () {
-    persistScratchPadFromDom();
+    state.home.scratch = area.innerHTML;
+    scheduleScratchPadPersist();
+    syncScratchCreateButton();
+  });
+  area.addEventListener("blur", function () {
+    flushScratchPadPersist();
   });
   /* v2.116: a paste into the pad is the browser's own
      (the pad has never intercepted one), and through
@@ -1868,14 +1965,20 @@ function buildHomeScratchWidget() {
      opens, so a stored Mention link shows its face. */
   decorateLinkTooltips(area);
   decorateLinkViews(area);
-  /* v2.72: the Create Note button, under the pad: it
-     files the pad's text as a note
-     (createNoteFromScratchPad), clears the pad, and
-     opens the note. It starts disabled while the pad is
-     empty, so the control itself says when there is
-     nothing to file. */
-  const scratchActions = document.createElement("div");
-  scratchActions.className = "home-scratch-actions";
+  /* v2.72: the Create Note button: it files the pad's
+     text as a note (createNoteFromScratchPad), clears
+     the pad, and opens the note. It starts disabled
+     while the pad is empty, so the control itself
+     says when there is nothing to file.
+     v2.140: the button stands in the formatting
+     toolbar row, at its right end behind a spacer,
+     instead of in its own actions row under the pad
+     (Chris's ask, November 12, 2026); the click lands
+     any coalesced typing persist first, so the note
+     is filed from the pad exactly as it stands. */
+  const scratchSpacer = document.createElement("span");
+  scratchSpacer.className = "home-scratch-spacer";
+  bar.appendChild(scratchSpacer);
   const scratchCreateBtn = document.createElement("button");
   scratchCreateBtn.type = "button";
   scratchCreateBtn.id = "homeScratchCreateBtn";
@@ -1884,12 +1987,12 @@ function buildHomeScratchWidget() {
   scratchCreateBtn.disabled =
     !scratchPlainTextOf(state.home.scratch).trim();
   scratchCreateBtn.addEventListener("click", function () {
+    flushScratchPadPersist();
     createNoteFromScratchPad().catch(function (err) {
       toast("Could not create the note: " + err.message, true);
     });
   });
-  scratchActions.appendChild(scratchCreateBtn);
-  parts.body.appendChild(scratchActions);
+  bar.appendChild(scratchCreateBtn);
   watchHomeScratchSize(area);
   return parts.widget;
 }
@@ -1904,6 +2007,18 @@ function buildHomeScratchWidget() {
 function syncScratchCreateButton() {
   const btn = document.getElementById("homeScratchCreateBtn");
   if (!btn) { return; }
+  /* v2.140: while the pad stands, its emptiness is
+     judged on the live DOM's words, never on a
+     re-parse of serialized HTML, so the per-keystroke
+     sync costs a text read and nothing more. When no
+     pad stands (a create that just cleared it, a
+     caller off Home), the stored text judges, as
+     before. */
+  const area = document.getElementById("homeScratchText");
+  if (area) {
+    btn.disabled = !(area.textContent || "").trim();
+    return;
+  }
   btn.disabled = !scratchPlainTextOf(state.home.scratch).trim();
 }
 
@@ -1940,6 +2055,10 @@ function scratchPadNoteTitle(when) {
    the way the picker's own backlink treats a skipped
    write its note's chip still stands. */
 async function createNoteFromScratchPad() {
+  /* v2.140: the note is filed from the stored pad;
+     land any coalesced typing persist first, so the
+     full typed text is what gets filed. */
+  flushScratchPadPersist();
   if (!scratchPlainTextOf(state.home.scratch).trim()) {
     return null;
   }

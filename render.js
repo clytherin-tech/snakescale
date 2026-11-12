@@ -255,6 +255,11 @@ function syncTasksPane() {
      size). This is the capture's leave feeder; see
      captureHomeScratchHeight. */
   if (homeViewWasActive === true && !homeActive) {
+    /* v2.140: leaving Home lands any coalesced
+       typing persist before the pane trades, the
+       height settle's own flush made explicit here
+       beside it. */
+    flushScratchPadPersist();
     captureHomeScratchHeight("leave");
     settleHomeScratchHeight();
   }
