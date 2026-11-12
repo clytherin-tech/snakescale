@@ -10077,6 +10077,7 @@ async function openVersionHistory() {
   versionHistoryPreviewVersionId = null;
   const preview = document.getElementById("versionHistoryPreview");
   if (preview) { preview.innerHTML = ""; preview.classList.add("hidden"); }
+  setVersionPreviewOpen(false);
   const list = document.getElementById("versionHistoryList");
   if (list) {
     list.innerHTML = "";
@@ -10103,6 +10104,7 @@ function closeVersionHistory() {
   versionHistoryPreviewVersionId = null;
   const preview = document.getElementById("versionHistoryPreview");
   if (preview) { preview.innerHTML = ""; preview.classList.add("hidden"); }
+  setVersionPreviewOpen(false);
 }
 
 function versionHistoryEmpty(list, text) {
@@ -10438,6 +10440,7 @@ function renderVersionGooglePreviewNote(capture, rev,
   body.textContent = text;
   preview.appendChild(body);
   preview.classList.remove("hidden");
+  setVersionPreviewOpen(true);
 }
 
 /* v2.139: the small heading naming what stands under
@@ -10587,6 +10590,19 @@ function buildVersionHistoryRow(note, entry) {
   return row;
 }
 
+/* v2.144: while a version preview is showing, the
+   History modal carries preview-open: the dialog
+   widens and, at desktop widths, the preview stands
+   to the right of the version list instead of under
+   it (see the v2.144 rules in styles.css). Set at the
+   exact points the pane shows and hides, nowhere
+   else, so the dialog's shape always matches whether
+   a preview stands. */
+function setVersionPreviewOpen(open) {
+  const modal = document.getElementById("versionHistoryModal");
+  if (modal) { modal.classList.toggle("preview-open", !!open); }
+}
+
 /* Render one version read only into the preview pane. The body
    is decorated from the VERSION's attachment records, never
    hydrated against the open note: placeholders become labeled
@@ -10615,6 +10631,7 @@ function renderVersionPreview(entry) {
   decorateVersionPreviewBody(body, entry);
   preview.appendChild(body);
   preview.classList.remove("hidden");
+  setVersionPreviewOpen(true);
 }
 
 function decorateVersionPreviewBody(bodyEl, entry) {

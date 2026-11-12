@@ -5387,9 +5387,32 @@ body.dark .version-date{color:var(--accent);}
   font-size:12px;font-weight:800;letter-spacing:1.2px;
   text-transform:uppercase;color:var(--muted);padding:2px 2px 0;
 }
+/* v2.144: the preview pane wears the white page dress,
+   the v2.124 note page's own values restated here: a
+   white ground and the light ink in BOTH themes, the
+   page border and shadow, and the same restated light
+   tokens, so everything inside the pane (the meta
+   line, attachment cards, and the version's own body,
+   which dresses from the tokens like the note body
+   does) reads on white exactly as it reads on the
+   note page. Chris's report: a previewed version
+   rendered as dark text on the dialog's dark surface
+   in the dark theme, hard to read. The pane is the
+   one shared preview (app snapshots and, since
+   v2.141, Google revisions alike), so both wear it. */
 .version-preview{
-  margin-top:16px;border-top:1px solid var(--border);padding-top:14px;
-  max-height:380px;overflow-y:auto;
+  margin-top:16px;max-height:380px;overflow-y:auto;
+  background:#FFFFFF;color:#10231A;caret-color:#10231A;
+  border:1px solid #C9D6C9;border-radius:6px;
+  box-shadow:0 1px 3px rgba(11,61,46,.18),
+    0 14px 34px rgba(11,61,46,.12);
+  padding:20px 24px;
+  --bg:#F7F8F3;--surface:#FFFFFF;
+  --text:#10231A;--text-strong:#10231A;
+  --text-muted:#10231A;--muted:#5A6E5F;
+  --border:#C9D6C9;--soft:#DCE8DC;
+  --accent-soft:#DCE8DC;--selected:#DCE8DC;
+  --shadow:0 4px 18px rgba(11,61,46,.14);
 }
 .version-preview h3{margin:0 0 4px;font-size:17px;}
 .version-preview-meta{font-size:13px;color:var(--muted);margin-bottom:10px;}
@@ -5400,6 +5423,29 @@ body.dark .version-date{color:var(--accent);}
 }
 .version-att-name{font-weight:700;overflow-wrap:anywhere;}
 .version-att-meta{font-size:13px;color:var(--muted);margin-top:2px;}
+/* v2.144: the History dialog's list and preview stand
+   in one container. Stacked (the column below) the two
+   read exactly as they did before this release, the
+   preview under the list. While a preview is showing
+   the modal carries preview-open (render.js): the card
+   widens, and at desktop widths the container turns to
+   a row with the preview standing to the RIGHT of the
+   list, Chris's direction, the list keeping a usable
+   column of its own. On narrow screens nothing here
+   applies and the stack stands. */
+.version-history-main{display:flex;flex-direction:column;}
+#versionHistoryModal.preview-open .version-history-card{max-width:1120px;}
+@media (min-width:900px){
+  #versionHistoryModal.preview-open .version-history-main{
+    flex-direction:row;gap:16px;align-items:flex-start;
+  }
+  #versionHistoryModal.preview-open .version-history-list{
+    flex:0 0 350px;min-width:0;max-height:380px;
+  }
+  #versionHistoryModal.preview-open .version-preview{
+    flex:1 1 auto;min-width:0;margin-top:0;
+  }
+}
 @media (max-width:600px){
   .version-row{flex-direction:column;}
   .version-actions{align-self:flex-end;}

@@ -44,7 +44,7 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-11-12-SSN-V21430
+  BUILD STAMP: 2026-11-12-SSN-V21440
   Version: 2.106.0
 
   Revision history:
@@ -8487,13 +8487,22 @@
      preserved as a new version first). On a locked note (Trash or
      Archive) the rows still preview, and Restore is disabled with
      the reason printed on the row.
+     v2.144: the list and the preview stand together in
+     version-history-main. The preview wears the white page
+     dress of the open note, and while one is showing the
+     modal carries preview-open: the card widens and, at
+     desktop widths, the preview stands to the right of the
+     list instead of under it. On narrow screens the two
+     stack as they always have.
      ========================================================================== -->
 <div id="versionHistoryModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="versionHistoryTitle">
   <div class="modal-card version-history-card">
     <h2 id="versionHistoryTitle">Note history</h2>
     <p class="modal-sub">Earlier saved versions of this note, newest first. Restoring a version preserves the current note as a new version first.</p>
-    <div class="version-history-list" id="versionHistoryList"></div>
-    <div class="version-preview hidden" id="versionHistoryPreview"></div>
+    <div class="version-history-main">
+      <div class="version-history-list" id="versionHistoryList"></div>
+      <div class="version-preview hidden" id="versionHistoryPreview"></div>
+    </div>
     <div class="modal-foot">
       <button class="btn" id="versionHistoryCloseBtn" type="button">Close</button>
     </div>
