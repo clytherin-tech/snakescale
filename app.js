@@ -610,6 +610,32 @@ function wireEvents() {
       document.body.appendChild(el);
     }
   });
+  /* This hotfix: the notebook menu takes the same move.
+     In the markup it sits inside the list toolbar,
+     and syncTasksPane parks the hidden class on the
+     list pane whenever Home, Tasks, or Email is the
+     view; hidden is display none with important, so
+     in those views a right click on a sidebar
+     notebook fired the opener, unhid the menu, and
+     stood it at the pointer inside a subtree that
+     could never paint, and the native menu
+     suppression ate the browser's own menu on the
+     same press: nothing showed at all. The menu is
+     position fixed in its away stands, and in its
+     toolbar stand since this build (see
+     placeNbMenuAtButton in render.js), so living
+     directly under the body changes nothing about
+     where it paints in the views where it works
+     today. Its two submenu panels ride inside its
+     own markup, so the one move carries all three,
+     and appendChild moves the element with its
+     listeners intact; every reference to the menu
+     is by id in any case. */
+  const nbMenuHome = document.getElementById("nbActionMenu");
+  if (nbMenuHome &&
+      nbMenuHome.parentElement !== document.body) {
+    document.body.appendChild(nbMenuHome);
+  }
 
   /* Setup form (v2.0): there is nothing to fill in. Submitting
      creates this device's local encryption key, saves the (Google
@@ -1384,9 +1410,21 @@ function wireEvents() {
   /* List panel closers, mirroring the editor toolbar menus: a click
      anywhere outside the list toolbar closes the open panel, and so
      does Escape. Clicks inside the toolbar (its buttons, its panels,
-     the filter checkboxes and date inputs) are left alone. */
+     the filter checkboxes and date inputs) are left alone.
+     this hotfix: the notebook menu lives under the body
+     now (see the top of this function), outside the
+     toolbar, so clicks inside it are carved out here
+     too, the editor context menu's contains test in
+     closest form: without the carve out, a click on
+     a submenu parent item (Move to, Add to Stack)
+     would read as an outside click and close the
+     menu the item's own toggle just opened its
+     submenu in. */
   document.addEventListener("click", function (ev) {
-    if (!ev.target.closest("#listToolbar")) { closeListPanels(); }
+    if (!ev.target.closest("#listToolbar") &&
+        !ev.target.closest("#nbActionMenu")) {
+      closeListPanels();
+    }
   });
   document.addEventListener("keydown", function (ev) {
     if (ev.key === "Escape") { closeListPanels(); }

@@ -1108,6 +1108,22 @@ function renderRailFlyoutList() {
       renderAll();
       setMobileView("list");
     });
+    /* This hotfix (scope addition, Chris's approval):
+       a right click on the row opens the one
+       notebook menu at the pointer, targeted at
+       this notebook: the sidebar rows' door,
+       carried into the flyout, whose rows carried
+       no such listener before. The flyout closes
+       as the menu takes over, the flyout's own
+       convention (a row's click closes it before
+       navigating, and a drag closes the flyout its
+       gesture opened); the menu then stands under
+       its own closers. */
+    btn.addEventListener("contextmenu", function (ev) {
+      ev.preventDefault();
+      closeRailFlyout();
+      openNbMenuAt(nb.slug, ev.clientX, ev.clientY);
+    });
     list.appendChild(btn);
   });
 }
@@ -1251,9 +1267,15 @@ function anyOverlayOpen() {
     const el = document.getElementById(ids[i]);
     if (el && !el.classList.contains("hidden")) { return true; }
   }
+  /* This hotfix: the notebook menu lives under the
+     body now (see wireEvents in app.js), outside the
+     list toolbar the second leg reads, so it is
+     counted in its own right, exactly as it was
+     counted while it stood inside the toolbar. */
   return document.querySelectorAll(
     "#toolbar .tb-menu:not(.hidden), " +
-    "#listToolbar .list-panel:not(.hidden)").length > 0;
+    "#listToolbar .list-panel:not(.hidden), " +
+    "#nbActionMenu:not(.hidden)").length > 0;
 }
 
 
@@ -1399,6 +1421,7 @@ function closeListPanels() {
   const nbMenu = document.getElementById("nbActionMenu");
   if (nbMenu) {
     nbMenu.classList.remove("nb-context");
+    nbMenu.classList.remove("nb-anchored");
     nbMenu.classList.remove("nb-header-mode");
     nbMenu.style.left = "";
     nbMenu.style.top = "";
@@ -1573,8 +1596,19 @@ function toggleListPanel(panelId) {
       nbMenuTarget = state.view.kind === "notebook"
         ? state.view.value : null;
       renderListToolbar();
+      /* This hotfix: the menu lives under the body now
+         (see wireEvents in app.js), away from the
+         wrap whose panel CSS used to anchor this
+         stand; the anchored dress stands it fixed,
+         and placeNbMenuAtButton below stands it on
+         the three dot button's own rectangle, the
+         same pixels the wrap anchor gave. */
+      panel.classList.add("nb-anchored");
     }
     panel.classList.remove("hidden");
+    if (panelId === "nbActionMenu") {
+      placeNbMenuAtButton(panel);
+    }
   }
 }
 
@@ -2622,6 +2656,31 @@ function placeNoteContextMenu(menu, x, y) {
   if (top < 8) { top = 8; }
   menu.style.left = left + "px";
   menu.style.top = top + "px";
+}
+
+/* This hotfix: stand the notebook menu on its toolbar
+   anchor. Through v2.148.0 the menu lived in the
+   three dot button's wrap and its panel CSS stood
+   it there: its top just under the wrap (the calc
+   offset on .list-panel) and its right edge on the
+   wrap's right edge. The menu lives under the body
+   now (see wireEvents in app.js), so the button's
+   own rectangle carries the anchor instead: the
+   menu's top 6px under the button's bottom and its
+   right edge on the button's right edge, placed
+   through the shared placer so the viewport
+   clamping is the context stands' own. The wrap
+   shrink wraps the button (it is an inline flex
+   box around the button and the panel, and the
+   panel was out of flow), so the two anchors are
+   the same pixels. */
+function placeNbMenuAtButton(menu) {
+  const btn = document.getElementById("listNbMenuBtn");
+  if (!btn) { return; }
+  const anchor = btn.getBoundingClientRect();
+  const rect = menu.getBoundingClientRect();
+  placeNoteContextMenu(menu,
+    anchor.right - rect.width, anchor.bottom + 6);
 }
 
 function closeNoteContextMenu(returnFocus) {

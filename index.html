@@ -44,7 +44,7 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-11-12-SSN-V21480
+  BUILD STAMP: 2026-11-12-SSN-V21481
   Version: 2.106.0
 
   Revision history:
@@ -6347,7 +6347,12 @@
            items change in Trash and in the Archive), and the button
            tooltip follows it. v2.1.0 adds the Import button: a
            plain button with no panel; the hidden file input it opens
-           sits right beside it inside this toolbar. -->
+           sits right beside it inside this toolbar. This hotfix: the
+           notebook menu's markup still starts here, but wireEvents
+           moves the element itself under the document body before
+           anything can open it: the list pane is parked hidden in
+           the Home, Tasks, and Email views, and a menu standing
+           inside it could never paint there. -->
       <div class="list-toolbar" id="listToolbar">
         <button type="button" class="list-tb-btn" id="listNewNoteBtn" title="New note" aria-label="New note"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false"><path d="M8 2.8v10.4M2.8 8h10.4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" fill="none"/></svg></button>
         <button type="button" class="list-tb-btn" id="listImportBtn" title="Import notes (.txt, .docx, .pdf)" aria-label="Import notes"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false"><path d="M8 2.2v7.6M5.6 7.4L8 9.8l2.4-2.4M2.8 12.2v1.6h10.4v-1.6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg></button>

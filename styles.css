@@ -1243,6 +1243,18 @@ body.dark .list-tb-btn.has-filters{color:var(--accent);}
   position:fixed;right:auto;z-index:400;
   max-height:70vh;overflow-y:auto;
 }
+/* This hotfix: the menu's toolbar stand, now that the
+   element lives under the body (see wireEvents in
+   app.js): fixed like the context stand, but
+   placed on the three dot button's rectangle by
+   placeNbMenuAtButton and carrying none of the
+   context stand's scroll dress, so in a list view
+   it stands exactly where the wrap anchor stood
+   it. closeListPanels takes the class off with
+   the context dress. */
+#nbActionMenu.nb-anchored{
+  position:fixed;right:auto;z-index:400;
+}
 #nbActionMenu.nb-header-mode .list-menu-item:not(#nbNewNotebookItem),
 #nbActionMenu.nb-header-mode .list-menu-divider,
 #nbActionMenu.nb-header-mode .nb-submenu-wrap{display:none;}
