@@ -392,7 +392,15 @@ function compareSidebarNames(a, b) {
    top level row group, {stack: null, nb} for an unstacked
    notebook and {stack: name, members} for a stack, the
    entries sorted by their display name (the stack's name or
-   the notebook's) and each stack's members sorted by name. */
+   the notebook's) and each stack's members sorted by name.
+   v2.156: the entries' order is Chris's sort choice
+   (state.notebookSort, a device setting): "alpha" is the
+   order above, stack names and unstacked names sorted
+   together; "stacks" stands every stack entry first and
+   the unstacked notebooks after, each part keeping the
+   same name order and the members and subtrees inside
+   untouched. Only the plan's order changes; the stored
+   notebook list is never sorted. */
 function sidebarNotebookPlan() {
   const entries = [];
   const seenStacks = {};
@@ -420,6 +428,14 @@ function sidebarNotebookPlan() {
   entries.sort(function (x, y) {
     return compareSidebarNames(x.key, y.key);
   });
+  /* v2.156: the By stacks order is a stable partition of
+     the alphabetical plan: the stack entries, in their
+     name order, then the unstacked notebooks, in theirs. */
+  if (state.notebookSort === "stacks") {
+    const stacked = entries.filter(function (e) { return !!e.stack; });
+    const loose = entries.filter(function (e) { return !e.stack; });
+    return stacked.concat(loose);
+  }
   return entries;
 }
 
@@ -796,6 +812,174 @@ function onStackCtxScroll(ev) {
   }
   closeStackCtxMenu();
 }
+/* --------------------------------------------------------------------------
+   v2.156: the notebook sort menu. Chris's ask
+   (November 13, 2026): the sidebar sorts stack names
+   and unstacked notebook names together alphabetically,
+   and he wants a By stacks order too, every stack at
+   the top and the notebooks in no stack underneath.
+   The choice is a device setting (state.notebookSort,
+   in settings beside the folds, on the list sort's
+   precedent): "alpha" is the standing order and the
+   default; "stacks" is the new one. The order itself
+   is judged in sidebarNotebookPlan, so every surface
+   that walks the plan (the sidebar, the Home Notebooks
+   widget, and the flat order behind the rail flyout
+   and the pickers) shows the same arrangement, as
+   their standing contracts already promise.
+
+   The control is a small button in the Notebooks
+   section header's right cluster, beside the add
+   button, wearing the list toolbar sort button's own
+   icon. Its menu is the stack context menu's shape:
+   one shared element (#nbSortMenu) standing directly
+   under the document body from birth, placed on the
+   button's rectangle (the notebook menu's anchored
+   placement), dismissed by the context stands' closer
+   set (an outside pointer down, Escape, a resize, or
+   a scroll outside the menu), with the button itself
+   excepted from the outside press so its own click
+   can toggle the menu shut. The items are the sort
+   menu's own dress: a check span and the active class
+   on the standing choice (renderNbSortMenu), so the
+   choice in effect is visible at a glance, and the
+   button names it in its title and wears an active
+   dress under By stacks (syncNbSortControl, run by
+   renderSidebar). Choosing saves the setting, closes
+   the menu, and re-renders the sidebar (and Home,
+   whose widget walks the same plan, while it stands).
+   -------------------------------------------------------------------------- */
+let nbSortArmed = false;
+
+function toggleNbSortMenu() {
+  const menu = document.getElementById("nbSortMenu");
+  if (!menu) { return; }
+  if (!menu.classList.contains("hidden")) {
+    closeNbSortMenu();
+    return;
+  }
+  closeListPanels();
+  renderNbSortMenu();
+  menu.classList.remove("hidden");
+  placeNbSortMenu(menu);
+  armNbSortMenu();
+  const active = menu.querySelector(".list-menu-item.active") ||
+    menu.querySelector(".list-menu-item");
+  if (active) { active.focus(); }
+}
+
+function closeNbSortMenu() {
+  const menu = document.getElementById("nbSortMenu");
+  if (menu) { menu.classList.add("hidden"); }
+  if (nbSortArmed) {
+    nbSortArmed = false;
+    document.removeEventListener("pointerdown",
+      onNbSortPointerDown, true);
+    document.removeEventListener("keydown",
+      onNbSortKeydown, true);
+    window.removeEventListener("resize", onNbSortClose);
+    window.removeEventListener("scroll", onNbSortScroll, true);
+  }
+}
+
+/* Stand the sort menu on its button: the top 6px under
+   the button's bottom and its right edge on the
+   button's right edge, through the shared placer, the
+   notebook menu's anchored placement exactly. */
+function placeNbSortMenu(menu) {
+  const btn = document.getElementById("nbSortBtn");
+  if (!btn) { return; }
+  const anchor = btn.getBoundingClientRect();
+  const rect = menu.getBoundingClientRect();
+  placeNoteContextMenu(menu,
+    anchor.right - rect.width, anchor.bottom + 6);
+}
+
+/* Arm the context stands' closers, the stack menu's
+   set. The button itself is excepted from the outside
+   press: its click is the toggle, and a press that
+   closed the menu first would reopen it on the click. */
+function armNbSortMenu() {
+  if (nbSortArmed) { return; }
+  nbSortArmed = true;
+  document.addEventListener("pointerdown",
+    onNbSortPointerDown, true);
+  document.addEventListener("keydown",
+    onNbSortKeydown, true);
+  window.addEventListener("resize", onNbSortClose);
+  window.addEventListener("scroll", onNbSortScroll, true);
+}
+
+function onNbSortPointerDown(ev) {
+  const menu = document.getElementById("nbSortMenu");
+  if (menu && ev.target && menu.contains(ev.target)) { return; }
+  const btn = document.getElementById("nbSortBtn");
+  if (btn && ev.target && btn.contains(ev.target)) { return; }
+  closeNbSortMenu();
+}
+
+function onNbSortKeydown(ev) {
+  if (ev.key === "Escape") {
+    ev.preventDefault();
+    closeNbSortMenu();
+  }
+}
+
+function onNbSortClose() { closeNbSortMenu(); }
+
+function onNbSortScroll(ev) {
+  const menu = document.getElementById("nbSortMenu");
+  const t = ev.target;
+  if (menu && t && t.nodeType === 1 && menu.contains(t)) {
+    return;
+  }
+  closeNbSortMenu();
+}
+
+/* The menu's check and active dress follow the standing
+   choice, the sort menu's own pattern (renderSortMenu):
+   the menu always shows what is in effect. */
+function renderNbSortMenu() {
+  document.querySelectorAll("#nbSortMenu [data-nb-sort]")
+    .forEach(function (btn) {
+      const isActive =
+        btn.getAttribute("data-nb-sort") === state.notebookSort;
+      btn.querySelector(".sort-check").textContent =
+        isActive ? "✓" : "";
+      btn.classList.toggle("active", isActive);
+    });
+}
+
+/* The header button names the standing choice and wears
+   its active dress under By stacks, so the choice is
+   visible without opening the menu. renderSidebar runs
+   this on every pass. */
+function syncNbSortControl() {
+  const btn = document.getElementById("nbSortBtn");
+  if (!btn) { return; }
+  const label = state.notebookSort === "stacks"
+    ? "By stacks" : "Alphabetical";
+  btn.title = "Notebook sort: " + label;
+  btn.setAttribute("aria-label", "Notebook sort: " + label);
+  btn.classList.toggle("nb-sort-active",
+    state.notebookSort === "stacks");
+}
+
+/* One sort menu click: the choice is saved to settings,
+   the menu closes, and the sidebar re-renders in the
+   new order (Home with it, while Home stands: its
+   Notebooks widget walks the same plan). Nothing but
+   the device setting is written; no notebook, stack,
+   or note data changes. */
+function chooseNotebookSort(mode) {
+  if (mode !== "alpha" && mode !== "stacks") { return; }
+  state.notebookSort = mode;
+  saveSettings();
+  closeNbSortMenu();
+  renderSidebar();
+  if (state.view.kind === "home") { renderHome(); }
+}
+
 
 /* One nested tag row in the sidebar Tags list: the row wrapper
    carries the tag name and its depth for styling (and for any
@@ -1038,8 +1222,14 @@ function renderSidebar() {
      Evernote order now (see sidebarNotebookPlan): stack names and
      unstacked notebook names sort together alphabetically, members
      sort inside their stack, and only the render order changed;
-     the stored notebook list keeps its order underneath. */
+     the stored notebook list keeps its order underneath.
+     v2.156: the arrangement follows the notebook sort
+     choice (sidebarNotebookPlan judges it): alphabetical
+     as above, or every stack first under By stacks. */
   closeStackCtxMenu();
+  /* v2.156: a re-render closes the sort menu too,
+     like the other sidebar menus. */
+  closeNbSortMenu();
   closeTagMenu();
   closeTagParentPanel();
   closeShortcutMenu();
@@ -1128,6 +1318,10 @@ function renderSidebar() {
      in the markup. (v2.0's rule stands behind the item: it is Sign
      out for everyone; there is no lock screen and no app
      password anymore.) */
+  /* v2.156: the Notebooks header's sort button names
+     the standing choice and wears its active dress
+     under By stacks, in step with the sidebar. */
+  syncNbSortControl();
   /* v2.62: the section folds render in step with the
      sidebar, like the rail chrome below. */
   applySidebarSectionFolds();
@@ -1548,6 +1742,11 @@ function closeListPanels() {
      closes the panels closes it, so one menu
      stands at a time. */
   closeStackCtxMenu();
+  /* v2.156: the notebook sort menu is a panel for
+     closing purposes too, on the v2.149 precedent:
+     whatever closes the panels closes it, so one
+     menu stands at a time. */
+  closeNbSortMenu();
   /* v2.147: closing the panels also settles the
      notebook menu's away stands: the context,
      header, and notebook only (v2.155) modes come

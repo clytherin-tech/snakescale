@@ -1288,6 +1288,15 @@ body.dark .list-tb-btn.has-filters{color:var(--accent);}
 #nbActionMenu.nb-notebook-only #nbTocNoteBtn,
 #nbActionMenu.nb-notebook-only #nbMenuDivider1,
 #nbActionMenu.nb-notebook-only #nbMenuDivider2{display:none;}
+/* v2.156: the notebook sort menu's standing choice
+   wears the soft wash behind its check mark, and the
+   header sort button wears the section header's own
+   hover wash while By stacks stands, so the choice
+   in effect is visible without opening the menu. */
+#nbSortMenu .list-menu-item.active{background:var(--soft);}
+#nbSortBtn.nb-sort-active{
+  background:rgba(87,167,115,.18);color:#fff;
+}
 /* The notebook name and delete dialogs are small cards. */
 .nb-name-card{max-width:420px;}
 /* The filter panel is a small form, not a menu: wider, with grouped

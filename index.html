@@ -44,7 +44,7 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-11-13-SSN-V21550
+  BUILD STAMP: 2026-11-13-SSN-V21560
   Version: 2.106.0
 
   Revision history:
@@ -6197,7 +6197,7 @@
     </div>
 
     <div class="nav-section" id="notebookSection">
-      <div class="nav-label nav-section-toggle" id="notebookSectionToggle" role="button" tabindex="0" aria-expanded="true" aria-controls="notebookNav" aria-label="Collapse Notebooks section" title="Collapse section"><span class="nav-section-title">Notebooks</span><span class="nav-label-right"><button id="addNotebookBtn" type="button" title="Add notebook" aria-label="Add notebook">+</button><span class="nav-section-chevron" aria-hidden="true"><svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M6 3l5 5-5 5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg></span></span></div>
+      <div class="nav-label nav-section-toggle" id="notebookSectionToggle" role="button" tabindex="0" aria-expanded="true" aria-controls="notebookNav" aria-label="Collapse Notebooks section" title="Collapse section"><span class="nav-section-title">Notebooks</span><span class="nav-label-right"><button id="nbSortBtn" type="button" title="Notebook sort: Alphabetical" aria-label="Notebook sort: Alphabetical" aria-haspopup="true"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false"><path d="M4.5 2v11.4M2.2 10.8l2.3 2.6 2.3-2.6M11.5 14V2.6M9.2 5.2l2.3-2.6 2.3 2.6" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg></button><button id="addNotebookBtn" type="button" title="Add notebook" aria-label="Add notebook">+</button><span class="nav-section-chevron" aria-hidden="true"><svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M6 3l5 5-5 5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg></span></span></div>
       <div id="notebookNav"></div>
     </div>
 
@@ -8696,6 +8696,18 @@
   <button type="button" class="list-menu-item" id="stackCtxNewBtn" role="menuitem">New Notebook</button>
   <button type="button" class="list-menu-item" id="stackCtxRenameBtn" role="menuitem">Rename Stack</button>
   <button type="button" class="list-menu-item" id="stackCtxDeleteBtn" role="menuitem">Delete Stack</button>
+</div>
+<!-- v2.156: the notebook sort menu
+     (toggleNbSortMenu in render.js): the
+     Notebooks header sort button's two
+     choices, Alphabetical and By stacks,
+     the standing choice check marked. It
+     stands at body level from birth like
+     the stack menu above it, placed on its
+     button's rectangle. -->
+<div id="nbSortMenu" class="note-ctx-menu hidden" role="menu" aria-label="Notebook sort">
+  <button type="button" class="list-menu-item" data-nb-sort="alpha" role="menuitem"><span class="sort-check"></span><span class="sort-label">Alphabetical</span></button>
+  <button type="button" class="list-menu-item" data-nb-sort="stacks" role="menuitem"><span class="sort-check"></span><span class="sort-label">By stacks</span></button>
 </div>
 <!-- v2.147: the notebook name modal: the one in-app
      naming surface for creating a notebook, creating a

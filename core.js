@@ -300,6 +300,15 @@ const state = {
     field: "updated",         // title | created | updated
     dir: "desc"               // asc | desc; default matches the pre-v1.8 order
   },
+  notebookSort: "alpha",    // v2.156: the sidebar notebook
+                            // order: "alpha" (stack names
+                            // and unstacked notebook names
+                            // sorted together, the order
+                            // through v2.155) or "stacks"
+                            // (every stack first, then the
+                            // notebooks in no stack).
+                            // Remembered in settings like
+                            // the list sort beside it.
   sidebarRail: false,       // v2.5: the sidebar's icon rail mode,
                             // remembered in settings, default full.
                             // Applied as body.rail; at widths of
@@ -1395,6 +1404,13 @@ function loadSettings() {
       state.listSort.dir = s.listSort.dir;
     }
   }
+  /* v2.156: the remembered notebook sort. Only the two
+     values its menu can produce are honored; anything
+     else (an absent field from an older build, a damaged
+     value) leaves the alphabetical default in place. */
+  if (s.notebookSort === "alpha" || s.notebookSort === "stacks") {
+    state.notebookSort = s.notebookSort;
+  }
   /* v2.5: the remembered sidebar form. Only a stored true turns
      the rail on; anything else leaves the full sidebar default.
      The body class is the whole application of the setting: the
@@ -1545,6 +1561,7 @@ function saveSettings() {
     dark: document.body.classList.contains("dark"),
     attach: state.attach,
     listSort: state.listSort,   // v1.8: the remembered notes list sort
+    notebookSort: state.notebookSort,   // v2.156: the notebook sort choice
     sidebarRail: state.sidebarRail,   // v2.5: the icon rail choice
     collapsedStacks: state.collapsedStacks,   // v2.29: stack folds
     collapsedTags: state.collapsedTags,   // v2.30: tag folds

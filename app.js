@@ -807,7 +807,9 @@ function wireEvents() {
      v2.137: the toggle is the section's header row
      itself. A click anywhere on the row folds it,
      except a click on the Notebooks add button, which
-     keeps its own job; the chevron is a span inside
+     keeps its own job (v2.156: the sort button beside
+     it stands in the same exception; its click opens
+     its menu); the chevron is a span inside
      the row, so a click on it is simply a row click
      and can never fold twice. Enter or Space while
      the row itself holds focus folds it too. */
@@ -816,7 +818,7 @@ function wireEvents() {
     if (!headEl) { return; }
     headEl.addEventListener("click", function (ev) {
       if (ev.target && ev.target.closest &&
-          ev.target.closest("#addNotebookBtn")) { return; }
+          ev.target.closest("#addNotebookBtn, #nbSortBtn")) { return; }
       toggleSidebarSection(spec.key);
     });
     headEl.addEventListener("keydown", function (ev) {
@@ -880,6 +882,18 @@ function wireEvents() {
   document.querySelectorAll("#sortMenu [data-sort]").forEach(function (btn) {
     btn.addEventListener("click", function () {
       chooseListSort(btn.getAttribute("data-sort"));
+    });
+  });
+  /* v2.156: the Notebooks header's sort button and its
+     menu's two choices. The button's click is excepted
+     from the section fold in the header wiring above,
+     like the add button's. */
+  document.getElementById("nbSortBtn").addEventListener("click", function () {
+    toggleNbSortMenu();
+  });
+  document.querySelectorAll("#nbSortMenu [data-nb-sort]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      chooseNotebookSort(btn.getAttribute("data-nb-sort"));
     });
   });
   /* Notebook menu items act on the one menu's target
@@ -1450,10 +1464,19 @@ function wireEvents() {
      a submenu parent item (Move to, Add to Stack)
      would read as an outside click and close the
      menu the item's own toggle just opened its
-     submenu in. */
+     submenu in.
+     v2.156: the notebook sort menu and its header
+     button are carved out the same way: the menu
+     stands under the body and its button in the
+     sidebar header, both outside the toolbar, and
+     the button's click is the menu's toggle, so
+     without the carve out the click that opened
+     the menu would close it again on its way up. */
   document.addEventListener("click", function (ev) {
     if (!ev.target.closest("#listToolbar") &&
-        !ev.target.closest("#nbActionMenu")) {
+        !ev.target.closest("#nbActionMenu") &&
+        !ev.target.closest("#nbSortMenu") &&
+        !ev.target.closest("#nbSortBtn")) {
       closeListPanels();
     }
   });
