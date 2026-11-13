@@ -531,18 +531,21 @@ const state = {
                             // writes a note file (and never
                             // re-stamps a note's updated time
                             // or enters its conflict paths).
-  tasksView: {              // v2.24: the Tasks view's controls,
-    grouping: "due",        // session only: "due", "notebook",
-    filter: "all",          // or "priority"; and "all", "open",
-    query: "",              // "flagged", or "completed". v2.24.1:
-    collapsed: {},          // the Find tasks text and the set of
-    mode: "list",           // collapsed group keys join them,
-    calCursor: null,        // still session only, never saved.
-    calSelected: null,      // v2.34: the mode ("list" or
-    calExpanded: null       // "calendar"; the list stays the
-  },                        // default) and the calendar's month
-                            // cursor, selected day, and expanded
-                            // day join them, session only as well.
+  tasksView: {              // v2.24: the Tasks view's controls:
+    grouping: "due",        // "due", "notebook", or "priority";
+    filter: "all",          // "all", "open", "flagged", or
+    query: "",              // "completed"; the Find tasks text.
+    collapsed: {},          // v2.148: the collapsed group keys
+    mode: "list",           // are remembered in this device's
+    calCursor: null,        // settings (collapsedTaskGroups in
+    calSelected: null,      // loadSettings and saveSettings,
+    calExpanded: null       // beside the other folds). The rest
+  },                        // of the view's state is session
+                            // only, never saved: the mode
+                            // ("list" or "calendar"; the list
+                            // stays the default) and the
+                            // calendar's month cursor, selected
+                            // day, and expanded day.
   thingsNotebook: null,     // v2.24.3: the slug of the notebook
                             // whose Things to do page is open in
                             // the editor pane, or null. Session
@@ -1445,6 +1448,21 @@ function loadSettings() {
         return typeof x === "string" && x.length > 0;
       });
   }
+  /* v2.148: the Tasks view's collapsed group keys,
+     honored the same way as the folds above: only an
+     array of non-empty strings is read, each naming a
+     group key in the view's collapsed set, so a damaged
+     record can never hide a group behind a fold nobody
+     set. With no stored value the set stays empty and
+     every group starts expanded, the pre v2.148
+     behavior Chris gets until his first toggle. */
+  if (Array.isArray(s.collapsedTaskGroups)) {
+    s.collapsedTaskGroups.forEach(function (x) {
+      if (typeof x === "string" && x.length > 0) {
+        state.tasksView.collapsed[x] = true;
+      }
+    });
+  }
   /* v2.8: the versions per note limit. Only a finite stored number
      is honored, truncated to a whole number and clamped into the
      0 to 100 range the Settings input offers; anything else (an
@@ -1532,6 +1550,7 @@ function saveSettings() {
     collapsedTags: state.collapsedTags,   // v2.30: tag folds
     collapsedSections: state.collapsedSections,   // v2.62: sidebar section folds
     collapsedNotebooks: state.collapsedNotebooks,   // v2.63: notebook subtree folds
+    collapsedTaskGroups: Object.keys(state.tasksView.collapsed),   // v2.148: the Tasks view's group folds
     versionsLimit: state.versionsLimit,   // v2.8: versions kept per note
     onboardingSeen: state.onboardingSeen,   // v2.13: the walkthrough record
     autoSync: state.autoSync,   // v2.16: the idle auto-sync choice

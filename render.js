@@ -5464,8 +5464,12 @@ function buildTaskGroupHeadEl(title, count, opts) {
   /* v2.24.1: in the Tasks view the head is collapsible: a
      chevron button at its left toggles the group's rows
      (the caller owns the collapsed state and the re-render).
-     A caller with no head to collapse passes no opts and
-     gets the plain head. */
+     v2.148: the whole head is the toggle (the listener
+     below), so a press on the title or the count folds
+     the group too; the chevron keeps no listener of its
+     own and a press on it bubbles here, toggling exactly
+     once. A caller with no head to collapse passes no
+     opts and gets the plain head. */
   if (opts.collapsible) {
     const chev = document.createElement("button");
     chev.type = "button";
@@ -5476,10 +5480,18 @@ function buildTaskGroupHeadEl(title, count, opts) {
       opts.collapsed ? "false" : "true");
     chev.setAttribute("aria-label",
       (opts.collapsed ? "Expand " : "Collapse ") + title + " group");
-    chev.addEventListener("click", function () {
+    head.appendChild(chev);
+    /* v2.148: the head itself carries the toggle. The
+       chevron stays the state indicator (its turned
+       glyph and its aria-expanded) and the keyboard's
+       control: it is still a real button taking focus,
+       and its Enter and Space presses fire the click
+       that bubbles to this listener, exactly as its
+       own listener answered them before. */
+    head.classList.add("collapsible");
+    head.addEventListener("click", function () {
       if (opts.onToggle) { opts.onToggle(); }
     });
-    head.appendChild(chev);
   }
   const titleEl = document.createElement("span");
   titleEl.className = "task-group-title";
@@ -5578,8 +5590,9 @@ function buildTaskRowEl(task, opts) {
   picker.appendChild(box);
 
   /* v2.116: a right press on the row opens the task
-     row's own menu (Open task, Copy link; see
-     openTaskRowMenu in tasks.js), in the calendar
+     row's own menu (Open task, Copy link, and Delete
+     task since v2.148; see openTaskRowMenu in
+     tasks.js), in the calendar
      entries' discipline: the element listener runs
      ahead of the document menu guard, which only ever
      suppressed the browser's menu on these rows, and
@@ -6053,9 +6066,11 @@ function buildTasksColHeadEl() {
 }
 
 /* The Tasks view's body: the column header row and the
-   groups, each with its collapsible head (the chevron
-   toggles the group's key in the session's collapsed set
-   and the view re-renders). Split from renderTasksView so
+   groups, each with its collapsible head (a click
+   anywhere on the head toggles the group's key in the
+   collapsed set, the fold is persisted to the device
+   settings, and the view re-renders). Split from
+   renderTasksView so
    the Find tasks search can rebuild just this part on
    every keystroke. */
 function fillTasksBody() {
@@ -6107,6 +6122,13 @@ function fillTasksBody() {
           } else {
             state.tasksView.collapsed[g.key] = true;
           }
+          /* v2.148: the fold is a device preference now
+             (collapsedTaskGroups in the settings, see
+             core.js): persist it with the toggle, so
+             the group stands as Chris left it the next
+             time the app opens, Completed above all,
+             which he keeps folded. */
+          saveSettings();
           renderTasksView();
         }
       }));

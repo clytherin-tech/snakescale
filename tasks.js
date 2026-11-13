@@ -85,6 +85,21 @@ let tasksWritable = false;       /* a real mutation has armed overwriting */
 let tasksLoadApplied = false;    /* v2.53: this load's tasks read has landed */
 let tasksLoadGeneration = 0;     /* v2.53: per load stamp; a stale read's
                                     landing is refused (see applyLoadedTasks) */
+/* v2.148: the tombstone list: the ids of tasks deleted in
+   the app, carried in tasks.json beside the task list
+   (see buildTasksObject). A deletion removes the record
+   and leaves its id here in the very same write, so the
+   Project Manager mirror sync, which recreates a linked
+   Notes task that has simply vanished, can tell a
+   deletion from a disappearance: its tombstone branch
+   completes the PM task instead and never brings the
+   task back. Runtime state only: loaded from the store
+   on every load (readTasksForLoad, applyLoadedTasks),
+   written back on every tasks write, and dropped at
+   sign out with the rest of the tasks session state.
+   The app never prunes it: an id is a few dozen bytes,
+   and only the sync can know when one is spent. */
+let deletedTaskIds = [];
 
 /* One stored task, cleaned into the shape above. Entries with
    no usable id are dropped; every other field falls back to
@@ -169,11 +184,19 @@ function serializeTask(task) {
 }
 
 function buildTasksObject() {
-  return {
+  const out = {
     version: TASKS_SHAPE_VERSION,
     updated: new Date().toISOString(),
     tasks: state.tasks.map(serializeTask)
   };
+  /* v2.148: the tombstone list rides only when it holds
+     an id, the noteId rule at the store's scale: a store
+     with no deletions keeps the pre v2.148 shape byte
+     for byte. */
+  if (deletedTaskIds.length) {
+    out.deletedTaskIds = deletedTaskIds.slice();
+  }
+  return out;
 }
 
 /* ----- v2.28.0: rich task descriptions -------------------
@@ -476,7 +499,24 @@ async function readTasksForLoad() {
       const task = sanitizeTask(raw);
       if (task) { tasks.push(task); }
     });
-    return { tasks: tasks, token: file.token, broken: false };
+    /* v2.148: the tombstone list, judged as strictly as
+       a task id: only non empty strings, each once. A
+       damaged value degrades to no tombstones rather
+       than failing the file: the deletions it named
+       are already absent from the tasks above, and
+       the writer below never overwrites a damaged
+       file until a real mutation arms it. */
+    const tombstones = [];
+    if (Array.isArray(parsed.deletedTaskIds)) {
+      parsed.deletedTaskIds.forEach(function (x) {
+        if (typeof x === "string" && x &&
+            tombstones.indexOf(x) < 0) {
+          tombstones.push(x);
+        }
+      });
+    }
+    return { tasks: tasks, token: file.token,
+      broken: false, deletedTaskIds: tombstones };
   } catch (err) {
     return { tasks: [], token: file.token, broken: true };
   }
@@ -551,6 +591,10 @@ function applyLoadedTasks(tasksLoad, generation) {
     prevTaskUpdatedById[t.id] = t.updated;
   });
   state.tasks = tasksLoad.tasks;
+  /* v2.148: the load's tombstone list lands with the
+     tasks it belongs to (an older store, or a broken
+     file read, carries none). */
+  deletedTaskIds = tasksLoad.deletedTaskIds || [];
   lastTasksToken = tasksLoad.token;
   tasksFileBroken = tasksLoad.broken;
   tasksArmed = true;
@@ -580,6 +624,9 @@ function resetTasksRuntimeState() {
   tasksWritable = false;
   tasksFileBroken = false;
   lastTasksToken = null;
+  /* v2.148: the tombstone memory is session state too;
+     the store keeps its own copy for the next sign in. */
+  deletedTaskIds = [];
   taskReminderFiredKeys.clear();
   taskEditorState = null;
 }
@@ -882,6 +929,13 @@ function deleteTask(id) {
   const at = state.tasks.findIndex(function (t) { return t.id === id; });
   if (at < 0) { return; }
   state.tasks.splice(at, 1);
+  /* v2.148: the id stays behind as a tombstone in the
+     same write (see deletedTaskIds above), so a
+     mirrored task's deletion is final rather than a
+     disappearance the PM mirror sync would repair. */
+  if (deletedTaskIds.indexOf(id) < 0) {
+    deletedTaskIds.push(id);
+  }
   afterTasksChanged();
 }
 
@@ -898,7 +952,14 @@ function deleteTask(id) {
    on open, with exactly two items: Open task (the row
    click's own door, the task editor) and Copy link
    (copyLinkForTask, in editor.js beside the task chip
-   builder it copies). Rows inside the note body are
+   builder it copies). v2.148: a third item joins them,
+   Delete task (taskRowMenuDelete below), standing for
+   every task the menu can open on: the task model has
+   no trash (the task editor's own delete has said so
+   since it landed), so there is no trashed task to
+   except, and the item removes the task outright
+   through deleteTask, leaving its tombstone behind.
+   Rows inside the note body are
    excluded by the caller in buildTaskRowEl: the rows of
    a note's tasks block keep their standing no menu rule
    there, and the editor's own menu owns that surface. */
@@ -956,6 +1017,28 @@ function taskRowMenuCopyLink() {
   const ctx = taskRowMenuCtx;
   closeTaskRowMenu();
   if (ctx) { copyLinkForTask(findTaskById(ctx.taskId)); }
+}
+
+/* v2.148: the menu's Delete task. The confirmation is
+   the task editor's own (deleteTaskFromEditor in
+   render.js): the same native confirm and the same
+   words, because the act is the same act, the outright
+   removal deleteTask has always run (tasks have no
+   trash), now leaving its tombstone for the PM mirror
+   sync. The menu closes first, like its siblings, so
+   the confirm never stands over a live menu, and a
+   declined confirm changes nothing at all: no record
+   moves and no tombstone is written. */
+function taskRowMenuDelete() {
+  const ctx = taskRowMenuCtx;
+  closeTaskRowMenu();
+  if (!ctx) { return; }
+  const task = findTaskById(ctx.taskId);
+  if (!task) { return; }
+  const ok = confirm("Delete the task \"" + task.title +
+    "\"? This cannot be undone; tasks have no trash.");
+  if (!ok) { return; }
+  deleteTask(ctx.taskId);
 }
 
 /* v2.49.0: clear the note link from every task that

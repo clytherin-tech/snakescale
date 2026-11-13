@@ -44,7 +44,7 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-11-12-SSN-V21470
+  BUILD STAMP: 2026-11-12-SSN-V21480
   Version: 2.106.0
 
   Revision history:
@@ -8670,6 +8670,11 @@
 <div id="taskRowMenu" class="note-ctx-menu hidden" role="menu" aria-label="Task actions">
   <button type="button" class="list-menu-item" id="taskRowMenuOpenBtn" role="menuitem">Open task</button>
   <button type="button" class="list-menu-item" id="taskRowMenuCopyBtn" role="menuitem">Copy link</button>
+  <!-- v2.148: Delete task, the task editor's own delete
+       carried on the row's menu (see taskRowMenuDelete
+       in tasks.js). It stands for every task: tasks have
+       no trash, so there is no trashed task to except. -->
+  <button type="button" class="list-menu-item" id="taskRowMenuDeleteBtn" role="menuitem">Delete task</button>
 </div>
 <!-- v2.147: the notebook name modal: the one in-app
      naming surface for creating a notebook, creating a

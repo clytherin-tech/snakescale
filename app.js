@@ -1784,6 +1784,10 @@ function wireEvents() {
   document.getElementById("taskRowMenuCopyBtn").addEventListener("click", function () {
     taskRowMenuCopyLink();
   });
+  /* v2.148: the task row menu's Delete task item. */
+  document.getElementById("taskRowMenuDeleteBtn").addEventListener("click", function () {
+    taskRowMenuDelete();
+  });
   document.getElementById("gcalViewModal").addEventListener("click", function (ev) {
     if (ev.target === ev.currentTarget) { closeGcalEventView(); }
   });

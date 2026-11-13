@@ -4252,6 +4252,9 @@ body.dark{color-scheme:dark;}
 .task-group-head{
   display:flex;align-items:center;gap:8px;padding:4px 4px 7px;
 }
+/* v2.148: a collapsible group head answers the pointer
+   anywhere on the head, not only on its chevron. */
+.task-group-head.collapsible{cursor:pointer;}
 .task-group-title{
   font-weight:700;font-size:13px;letter-spacing:.04em;
   text-transform:uppercase;color:var(--primary);
