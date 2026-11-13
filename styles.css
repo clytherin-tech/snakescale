@@ -3452,6 +3452,22 @@ body.dark #nbActionMenu.nb-context:hover::-webkit-scrollbar-thumb{
   padding:10px 16px;font-size:14px;font-weight:600;
 }
 body.dark #conflictBanner{background:#3A2F10;color:#FFE1A8;}
+/* v2.154: the note loading bar (see noteLoadBarBegin
+   in render.js). A 3px strip at the top of the editor
+   pane: the fill sweeps while a clicked note's body
+   is on its way (the run class), fills out when the
+   note lands (the done class), and fades (the fading
+   class) before the hidden class takes it away. The
+   fill's ground is the theme's own accent variable,
+   so the bar is the app's green in both themes.
+   Indeterminate by design: no width anywhere claims
+   a measured share of the load. */
+#noteLoadBar{flex:none;height:3px;overflow:hidden;opacity:1;transition:opacity .22s ease;}
+#noteLoadBar.fading{opacity:0;}
+#noteLoadBarFill{height:100%;width:40%;background:var(--accent);border-radius:0 2px 2px 0;transform:translateX(-100%);}
+#noteLoadBar.run #noteLoadBarFill{animation:ssNoteLoadSweep 1.15s ease-in-out infinite;}
+#noteLoadBar.done #noteLoadBarFill{animation:none;width:100%;transform:translateX(0);transition:width .18s ease,transform .18s ease;border-radius:0;}
+@keyframes ssNoteLoadSweep{0%{transform:translateX(-100%);}100%{transform:translateX(250%);}}
 /* v2.17.1: the banner's Reload note button (diverged notes). */
 #conflictReloadBtn{
   margin-left:10px;font:inherit;font-weight:700;padding:2px 10px;

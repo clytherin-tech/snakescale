@@ -44,7 +44,7 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-11-13-SSN-V21530
+  BUILD STAMP: 2026-11-13-SSN-V21540
   Version: 2.106.0
 
   Revision history:
@@ -6551,6 +6551,16 @@
 
   <!-- RIGHT PANE: editor -->
   <main id="editorpane">
+    <!-- v2.154: the note loading bar, a slim strip
+         at the very top of the editor pane, standing
+         while a clicked note's body is on its way
+         (noteLoadBarBegin and its kin in render.js).
+         Indeterminate, because a body load is one
+         Drive fetch whose progress cannot be
+         measured. Editor furniture in the conflict
+         banner's family: never part of a note, and
+         nothing serializes it. -->
+    <div id="noteLoadBar" class="hidden" role="progressbar" aria-label="Loading note"><div id="noteLoadBarFill"></div></div>
     <div id="conflictBanner" class="hidden"><span class="conflict-text"></span> <button id="conflictReloadBtn" type="button" class="hidden">Reload note</button></div>
 
     <!-- Shown when no note is selected. The could not

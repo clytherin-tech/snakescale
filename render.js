@@ -8646,6 +8646,238 @@ function onTasksLoaded(prevTaskUpdatedById) {
   maybeOpenPendingTask();
 }
 
+/* ---------------- v2.154: the note loading bar
+   ---------
+
+   Chris's ask (November 13, 2026): when he clicks a
+   note to open it, show a loading progress bar,
+   because sometimes they can take a little while to
+   open. The bar is the slim strip at the very top of
+   the editor pane (#noteLoadBar in the shell,
+   dressed in styles.css with the theme's accent in
+   both themes). It is indeterminate on purpose: a
+   body load is one Drive fetch (a Doc export, or a
+   note file read through storeGetFile) whose
+   progress the app cannot measure, so the fill
+   sweeps while the load runs and completes (fills
+   out and fades) the moment the note lands in the
+   editor. No percentage is ever shown, because none
+   is known.
+
+   One record holds the state: the note id the bar
+   stands for (its target), whether it is on screen,
+   when it appeared, and its timers. The wiring
+   stands against the standing machinery, point by
+   point:
+
+   - Begin. openNote, the one funnel every open runs
+     through, begins the bar for its note before its
+     settle gate, so a switch deferred behind a dirty
+     outgoing editor is inside the bar's span, not
+     before it (see the hooks in openNote and at
+     renderEditor's tail). renderEditor's shell
+     branch begins it too, through the judge below,
+     for the opens that reach the editor without the
+     funnel: the boot restore of the selected note,
+     and the could not load face's Retry.
+   - Settle. The bar settles at the editor landing:
+     renderEditor's tail, the one point every landing
+     of a loaded note passes (a switch fill, a sync
+     refill and with it a pending refill's landing,
+     and the no fill render of the note already
+     open), plus the auto-sync guard's early return,
+     where the note already stands in the editor. A
+     load that fails settles through the judge when
+     no attempt stands anymore and the could not load
+     face is the pane's state; the face itself is
+     untouched. An open abandoned at the settle gate
+     settles where openNote drops the switch. A
+     render with no note, or the Things page, settles
+     whatever stood: no open is pending there.
+   - Retarget. A second open while the bar stands
+     moves the target to the newest note: a visible
+     bar stays visible, a scheduled showing keeps
+     its schedule, a completion already fading is
+     called back, and the minimum stand keeps the
+     first showing's clock, because the wait is
+     continuous. Every settle and completion step is
+     judged by id, so a superseded load's late
+     arrival can never settle, complete, or clear
+     the newer open's bar.
+   - Flicker discipline. The bar appears only if
+     the load is still standing NOTE_LOAD_BAR_SHOW_MS
+     after the begin (150 ms: a cached open, or a
+     fetch faster than that, never shows it), and
+     once on screen it stands at least
+     NOTE_LOAD_BAR_MIN_MS (450 ms) before its
+     completion runs, so it never strobes.
+
+   Display only: the element is editor chrome beside
+   the conflict banner, outside the editor's fields;
+   nothing reads it, nothing serializes it, and no
+   load, save, or refill path changes for it. Email
+   opens, view switches, and syncs never begin it:
+   the poll's and sync's adoptions of an open note
+   land through the same renderEditor tail, whose
+   settle only ever completes a bar an open began. */
+const NOTE_LOAD_BAR_SHOW_MS = 150;
+const NOTE_LOAD_BAR_MIN_MS = 450;
+const noteLoadBarState = {
+  target: null, visible: false, shownAt: 0,
+  showTimer: 0, doneTimer: 0, fadeTimer: 0,
+  hideTimer: 0
+};
+
+function noteLoadBarEl() {
+  return document.getElementById("noteLoadBar");
+}
+
+/* Cancel the completion chain (the minimum stand
+   wait, the fill out, the fade, the hide) without
+   touching the bar's standing state. */
+function noteLoadBarCancelCompletion() {
+  const s = noteLoadBarState;
+  if (s.doneTimer) { clearTimeout(s.doneTimer); s.doneTimer = 0; }
+  if (s.fadeTimer) { clearTimeout(s.fadeTimer); s.fadeTimer = 0; }
+  if (s.hideTimer) { clearTimeout(s.hideTimer); s.hideTimer = 0; }
+}
+
+/* Begin the bar for a note's open, or retarget a
+   standing bar to the newest open. */
+function noteLoadBarBegin(id) {
+  if (!id) { return; }
+  const s = noteLoadBarState;
+  const el = noteLoadBarEl();
+  if (!el) { return; }
+  if (s.target === id) {
+    /* Already this note's bar: a completion in
+       flight is called back, because the open is
+       standing again; anything else is already as
+       it should be. */
+    if (s.doneTimer || s.fadeTimer || s.hideTimer) {
+      noteLoadBarCancelCompletion();
+      el.classList.remove("done", "fading");
+    }
+    return;
+  }
+  noteLoadBarCancelCompletion();
+  if (s.showTimer) { clearTimeout(s.showTimer); s.showTimer = 0; }
+  s.target = id;
+  if (s.visible) {
+    /* The wait is continuous across the retarget:
+       the bar stays up, its completion dress comes
+       off, and the minimum stand keeps the first
+       showing's clock. */
+    el.classList.remove("done", "fading");
+    return;
+  }
+  s.showTimer = setTimeout(function () {
+    s.showTimer = 0;
+    if (s.target !== id) { return; }
+    /* Show only while the target's body is genuinely
+       still on its way: if the note has already
+       landed in the editor, this open was a fast
+       one that a settle somehow outran, and a bar
+       that never stood needs no completion. */
+    const n = findNoteById(id);
+    const landed = !!n && state.selectedId === id &&
+      n.bodyLoaded !== false && renderEditor._forId === id;
+    if (landed) { return; }
+    el.classList.remove("hidden", "done", "fading");
+    /* The sweep restarts from its first frame. */
+    el.classList.remove("run");
+    void el.offsetWidth;
+    el.classList.add("run");
+    s.visible = true;
+    s.shownAt = Date.now();
+  }, NOTE_LOAD_BAR_SHOW_MS);
+}
+
+/* The completion itself: the fill goes out to the
+   whole strip, the strip fades, then the hidden
+   class takes it away and the target is forgotten.
+   Every step is judged by id, so a retarget during
+   the chain leaves the newer open's bar alone. */
+function noteLoadBarComplete(id) {
+  const s = noteLoadBarState;
+  const el = noteLoadBarEl();
+  if (!el || s.target !== id) { return; }
+  el.classList.add("done");
+  s.fadeTimer = setTimeout(function () {
+    s.fadeTimer = 0;
+    if (s.target !== id) { return; }
+    el.classList.add("fading");
+    s.hideTimer = setTimeout(function () {
+      s.hideTimer = 0;
+      if (s.target !== id) { return; }
+      el.classList.add("hidden");
+      el.classList.remove("run", "done", "fading");
+      s.visible = false;
+      s.shownAt = 0;
+      s.target = null;
+    }, 240);
+  }, 190);
+}
+
+/* Settle the bar for one note: its open has landed,
+   failed into its face, or been abandoned. A settle
+   naming any other note is a superseded load's late
+   word and is ignored. */
+function noteLoadBarSettle(id) {
+  const s = noteLoadBarState;
+  if (!id || s.target !== id) { return; }
+  if (s.showTimer) { clearTimeout(s.showTimer); s.showTimer = 0; }
+  if (!s.visible) {
+    /* A fast open: the bar never appeared, and no
+       completion is owed. */
+    s.target = null;
+    return;
+  }
+  if (s.doneTimer || s.fadeTimer || s.hideTimer) { return; }
+  const wait = NOTE_LOAD_BAR_MIN_MS - (Date.now() - s.shownAt);
+  if (wait > 0) {
+    s.doneTimer = setTimeout(function () {
+      s.doneTimer = 0;
+      noteLoadBarComplete(id);
+    }, wait);
+  } else {
+    noteLoadBarComplete(id);
+  }
+}
+
+/* Settle whatever open the bar stands for, for the
+   renders where no open is pending at all (no note
+   in the pane, the Things page). */
+function noteLoadBarSettleAny() {
+  if (noteLoadBarState.target) {
+    noteLoadBarSettle(noteLoadBarState.target);
+  }
+}
+
+/* The shell branch's judge: while a body load for
+   the selected shell stands in flight, the bar
+   stands for it (begin, and judge again when that
+   attempt resolves, because the could not load
+   face's own render spends one more attempt);
+   when no attempt stands, the open has landed (the
+   tail's settle beat this judge to it) or failed
+   into its face, and the bar settles. A shell no
+   longer selected is not this judge's business:
+   the newer open owns the bar. */
+function noteLoadBarJudge(note) {
+  if (!note) { return; }
+  if (typeof state === "undefined" ||
+      state.selectedId !== note.id) { return; }
+  const p = (typeof noteBodyLoads !== "undefined")
+    ? noteBodyLoads[note.id] : null;
+  if (note.bodyLoaded === false && p) {
+    noteLoadBarBegin(note.id);
+    p.then(function () { noteLoadBarJudge(note); });
+    return;
+  }
+  noteLoadBarSettle(note.id);
+}
+
 /* v2.51: the navigation epoch. Every openNote call bumps
    it, and a switch deferred behind a settle (below)
    compares its captured value before completing: a newer
@@ -8675,11 +8907,26 @@ let openNoteEpoch = 0;
    exist nowhere else (see settleOpenNoteEdits). */
 function openNote(id) {
   const epoch = ++openNoteEpoch;
+  /* v2.154: the loading bar stands for this
+     open from the click itself (see the bar
+     section above), so a switch deferred
+     behind the settle below is inside its
+     span, and an instant switch settles it
+     again at the landing render before it can
+     ever appear. */
+  noteLoadBarBegin(id);
   const outgoing = currentNote();
   if (outgoing && outgoing.id !== id && !outgoing.trashed &&
       !outgoing.archived && swEditorUnsettled()) {
     settleOpenNoteEdits().then(function (ok) {
       if (!ok) {
+        /* v2.154: the open is abandoned here
+           (the outgoing note stays open), so
+           its loading bar settles; a newer
+           open's bar is not this call's to
+           settle, and the id judge inside
+           noteLoadBarSettle leaves it alone. */
+        noteLoadBarSettle(id);
         toast("Your last edit could not be saved, so the " +
           "note was left open.", true);
         return;
@@ -8785,6 +9032,11 @@ function renderEditor() {
      Note popups close like they do on the no note path. */
   const thingsWrap = document.getElementById("thingsWrap");
   if (state.thingsNotebook) {
+    /* v2.154: the Things page owns the pane and
+       no note open is pending here, so the
+       loading bar settles whatever it stood
+       for. */
+    noteLoadBarSettleAny();
     updateShareButton();
     noNote.classList.add("hidden");
     wrap.classList.add("hidden");
@@ -8802,6 +9054,10 @@ function renderEditor() {
   }
   if (thingsWrap) { thingsWrap.classList.add("hidden"); }
   if (!note) {
+    /* v2.154: no note stands in the pane, so no
+       open is pending: the loading bar settles
+       whatever it stood for. */
+    noteLoadBarSettleAny();
     updateShareButton();
     /* v2.133: no note on screen means the standing
        pane, never a could not load face left standing
@@ -8902,6 +9158,12 @@ function renderEditor() {
     } else {
       loadErrorFaceKey = "";
     }
+    /* v2.154: the loading bar judges this shell
+       (see noteLoadBarJudge): it stands while
+       the load this branch just spent is in
+       flight, and settles when the open lands
+       or fails into the face above. */
+    noteLoadBarJudge(note);
     updateShareButton();
     noNote.classList.remove("hidden");
     wrap.classList.add("hidden");
@@ -8939,6 +9201,10 @@ function renderEditor() {
      runs. Manual syncs never arm the guard. */
   if (autoSyncEditorGuard && autoSyncEditorGuard.id === note.id &&
       note.sha && autoSyncEditorGuard.sha === note.sha) {
+    /* v2.154: the note already stands in the
+       editor exactly as the sync left it, so
+       any loading bar for it has landed. */
+    noteLoadBarSettle(note.id);
     return;
   }
 
@@ -9147,6 +9413,17 @@ function renderEditor() {
      the standing session and drains the history
      observer's records of it. */
   paintSearchHitEditor(note);
+  /* v2.154: the loading bar settles at the
+     landing. This tail is the one point every
+     landing of a loaded note passes: a switch
+     fill, a sync refill (and with it a pending
+     refill's landing, which arrives through
+     the same refill render), and the no fill
+     render of the note already open. A bar
+     standing for any other note is a different
+     open's, and the id judge inside the settle
+     leaves it standing. */
+  noteLoadBarSettle(note.id);
 
   /* v2.5: the notebook link follows the note. A trashed or
      archived note shows the notebook it came from, since that is
