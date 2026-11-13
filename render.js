@@ -1515,9 +1515,19 @@ const LIST_PANEL_IDS = ["filterPanel", "sortMenu", "nbActionMenu", "nbStackPanel
    context stands' own document closers (the note
    context menu's pattern), which closeListPanels
    takes down with everything else.
+   v2.155: nbMenuNotebookOnly marks a targeted
+   stand (a sidebar row's or a rail flyout row's
+   right click, both through openNbMenuAt): while
+   it stands, the menu presents its notebook group
+   only, the note group and the bulk group folded
+   away, so a stand with no note to act on never
+   presents those items dead. The three dot and
+   header stands never set it, and closeListPanels
+   clears it with the other modes.
    -------------------------------------------------------------------------- */
 let nbMenuTarget = undefined;
 let nbMenuHeaderMode = false;
+let nbMenuNotebookOnly = false;
 let nbMenuCtxArmed = false;
 
 /* The notebook the menu acts on: the standing menu's
@@ -1539,8 +1549,9 @@ function closeListPanels() {
      stands at a time. */
   closeStackCtxMenu();
   /* v2.147: closing the panels also settles the
-     notebook menu's away stands: the context and
-     header modes come off, the pointer placement is
+     notebook menu's away stands: the context,
+     header, and notebook only (v2.155) modes come
+     off, the pointer placement is
      cleared, the header's New Notebook item folds
      away, the context closers come down, and the
      menu's target is released. */
@@ -1549,6 +1560,7 @@ function closeListPanels() {
     nbMenu.classList.remove("nb-context");
     nbMenu.classList.remove("nb-anchored");
     nbMenu.classList.remove("nb-header-mode");
+    nbMenu.classList.remove("nb-notebook-only");
     nbMenu.style.left = "";
     nbMenu.style.top = "";
     const headItem = document.getElementById("nbNewNotebookItem");
@@ -1556,6 +1568,7 @@ function closeListPanels() {
   }
   nbMenuTarget = undefined;
   nbMenuHeaderMode = false;
+  nbMenuNotebookOnly = false;
   if (nbMenuCtxArmed) {
     nbMenuCtxArmed = false;
     document.removeEventListener("pointerdown",
@@ -1606,16 +1619,23 @@ function onNbMenuCtxScroll(ev) {
 }
 
 /* Open the one notebook menu at the pointer for a
-   sidebar row's notebook: same menu, same items, the
-   notebook items targeted at the clicked notebook,
-   wherever the list itself happens to stand. */
+   sidebar row's notebook: same menu, the notebook
+   items targeted at the clicked notebook, wherever
+   the list itself happens to stand. v2.155: this
+   targeted stand (and the rail flyout's, which
+   comes through here too) presents the notebook
+   group only; the note and bulk groups fold away
+   (nbMenuNotebookOnly), so nothing this stand
+   cannot act on is presented dead. */
 function openNbMenuAt(slug, x, y) {
   closeListPanels();
   const menu = document.getElementById("nbActionMenu");
   if (!menu) { return; }
   nbMenuTarget = slug;
+  nbMenuNotebookOnly = true;
   renderListToolbar();
   menu.classList.add("nb-context");
+  menu.classList.add("nb-notebook-only");
   menu.classList.remove("hidden");
   placeNoteContextMenu(menu, x, y);
   armNbMenuContext();
@@ -1990,6 +2010,17 @@ function renderListToolbar() {
   const inNotebook = menuSlug !== null;
   const nbItemsHidden = !inNotebook &&
     (kind === "trash" || kind === "archive");
+  /* v2.155: while a targeted notebook only
+     stand is up (nbMenuNotebookOnly), the note
+     group and the bulk group fold away with
+     both rules, so the menu presents its
+     notebook group alone. The flag stands only
+     while such a menu stands: openNbMenuAt
+     sets it, closeListPanels clears it, and
+     the three dot and header stands never set
+     it, so their presentations, and every
+     disabled rule below, are untouched. */
+  const nbOnly = nbMenuNotebookOnly === true;
   const renameBtn = document.getElementById("nbRenameBtn");
   const deleteBtn = document.getElementById("nbDeleteBtn");
   if (renameBtn) {
@@ -2076,7 +2107,8 @@ function renderListToolbar() {
      (present in state.notes, so never a trashed or archived one). */
   const pinBtn = document.getElementById("nbPinBtn");
   if (pinBtn) {
-    pinBtn.classList.toggle("hidden", kind === "trash" || kind === "archive");
+    pinBtn.classList.toggle("hidden",
+      kind === "trash" || kind === "archive" || nbOnly);
     const selected = currentNote();
     const liveSelected = selected &&
       state.notes.indexOf(selected) >= 0 ? selected : null;
@@ -2092,7 +2124,7 @@ function renderListToolbar() {
   const noteShortcutBtn = document.getElementById("nbShortcutNoteBtn");
   if (noteShortcutBtn) {
     noteShortcutBtn.classList.toggle("hidden",
-      kind === "trash" || kind === "archive");
+      kind === "trash" || kind === "archive" || nbOnly);
     const selected = currentNote();
     const liveSelected = selected &&
       state.notes.indexOf(selected) >= 0 ? selected : null;
@@ -2111,7 +2143,7 @@ function renderListToolbar() {
   const reminderBtn = document.getElementById("nbReminderBtn");
   if (reminderBtn) {
     reminderBtn.classList.toggle("hidden",
-      kind === "trash" || kind === "archive");
+      kind === "trash" || kind === "archive" || nbOnly);
     const selected = currentNote();
     const liveSelected = selected &&
       state.notes.indexOf(selected) >= 0 ? selected : null;
@@ -2127,7 +2159,7 @@ function renderListToolbar() {
   const saveTemplateBtn = document.getElementById("nbSaveTemplateBtn");
   if (saveTemplateBtn) {
     saveTemplateBtn.classList.toggle("hidden",
-      kind === "trash" || kind === "archive");
+      kind === "trash" || kind === "archive" || nbOnly);
     const selected = currentNote();
     const liveSelected = selected &&
       state.notes.indexOf(selected) >= 0 ? selected : null;
@@ -2140,7 +2172,7 @@ function renderListToolbar() {
   const duplicateBtn = document.getElementById("nbDuplicateBtn");
   if (duplicateBtn) {
     duplicateBtn.classList.toggle("hidden",
-      kind === "trash" || kind === "archive");
+      kind === "trash" || kind === "archive" || nbOnly);
     const selected = currentNote();
     const liveSelected = selected &&
       state.notes.indexOf(selected) >= 0 ? selected : null;
@@ -2154,7 +2186,7 @@ function renderListToolbar() {
   const mergeSelectedBtn = document.getElementById("nbMergeSelectedBtn");
   if (mergeSelectedBtn) {
     mergeSelectedBtn.classList.toggle("hidden",
-      kind === "trash" || kind === "archive");
+      kind === "trash" || kind === "archive" || nbOnly);
     const count = state.listSelection.length;
     mergeSelectedBtn.disabled = count < 2;
     mergeSelectedBtn.textContent = count >= 2
@@ -2169,17 +2201,17 @@ function renderListToolbar() {
   const tocNoteBtn = document.getElementById("nbTocNoteBtn");
   if (tocNoteBtn) {
     tocNoteBtn.classList.toggle("hidden",
-      kind === "trash" || kind === "archive");
+      kind === "trash" || kind === "archive" || nbOnly);
     tocNoteBtn.disabled = state.listSelection.length < 2;
   }
   const emptyTrashBtn = document.getElementById("nbEmptyTrashBtn");
   if (emptyTrashBtn) {
-    emptyTrashBtn.classList.toggle("hidden", kind !== "trash");
+    emptyTrashBtn.classList.toggle("hidden", kind !== "trash" || nbOnly);
     emptyTrashBtn.disabled = state.trash.length === 0;
   }
   const deleteSelectedBtn = document.getElementById("nbDeleteSelectedBtn");
   if (deleteSelectedBtn) {
-    deleteSelectedBtn.classList.toggle("hidden", kind !== "trash");
+    deleteSelectedBtn.classList.toggle("hidden", kind !== "trash" || nbOnly);
     const count = state.trashSelection.length;
     deleteSelectedBtn.disabled = count === 0;
     deleteSelectedBtn.textContent = count
@@ -2188,7 +2220,7 @@ function renderListToolbar() {
   }
   const restoreSelectedBtn = document.getElementById("nbRestoreSelectedBtn");
   if (restoreSelectedBtn) {
-    restoreSelectedBtn.classList.toggle("hidden", kind !== "archive");
+    restoreSelectedBtn.classList.toggle("hidden", kind !== "archive" || nbOnly);
     const count = state.archiveSelection.length;
     restoreSelectedBtn.disabled = count === 0;
     restoreSelectedBtn.textContent = count
@@ -2206,15 +2238,17 @@ function renderListToolbar() {
      two groups that both have something to show: the
      first falls with the notebook group, the second
      with the note group (gone in Trash and Archive,
-     whose bulk items then stand alone). */
+     whose bulk items then stand alone), and both
+     fall in a notebook only stand (v2.155), where
+     the notebook group stands alone. */
   const nbDivider1 = document.getElementById("nbMenuDivider1");
   if (nbDivider1) {
-    nbDivider1.classList.toggle("hidden", nbItemsHidden);
+    nbDivider1.classList.toggle("hidden", nbItemsHidden || nbOnly);
   }
   const nbDivider2 = document.getElementById("nbMenuDivider2");
   if (nbDivider2) {
     nbDivider2.classList.toggle("hidden",
-      kind === "trash" || kind === "archive");
+      kind === "trash" || kind === "archive" || nbOnly);
   }
   renderSortMenu();
 }
