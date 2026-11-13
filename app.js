@@ -636,6 +636,18 @@ function wireEvents() {
       nbMenuHome.parentElement !== document.body) {
     document.body.appendChild(nbMenuHome);
   }
+  /* v2.149: the stack header's right click menu is
+     born under the body in the shell; this stands
+     guard over the same fact, the v2.148.1 lesson
+     applied to the newer menu: if its element ever
+     stands anywhere else, it is re-parked here at
+     wiring time, listeners intact, before any open
+     can bury it in a parked pane. */
+  const stackCtxHome = document.getElementById("stackCtxMenu");
+  if (stackCtxHome &&
+      stackCtxHome.parentElement !== document.body) {
+    document.body.appendChild(stackCtxHome);
+  }
 
   /* Setup form (v2.0): there is nothing to fill in. Submitting
      creates this device's local encryption key, saves the (Google
@@ -932,31 +944,30 @@ function wireEvents() {
     if (!nbMenuTargetSlug()) { return; }
     toggleNbSubmenu("nbParentPanel");
   });
-  /* v2.29: the stack header menu's items act on the stack the
-     menu was opened for (stackMenuFor), captured before the menu
-     closes so the flow functions read a settled name. */
-  document.getElementById("stackRenameBtn").addEventListener("click", function () {
-    const name = stackMenuFor;
-    closeStackMenu();
-    if (name) { promptRenameStack(name); }
+  /* v2.149: the stack header's right click menu items
+     act on the stack the menu was opened for
+     (stackCtxFor), captured before the menu closes so
+     the flows read a settled name. New Notebook and
+     Rename Stack take their names through the notebook
+     name modal; Delete Stack asks in the themed
+     warning. The menu's own dismissal (outside pointer
+     down, Escape, resize, scroll) rides with its
+     opener in render.js (armStackCtx); the old button
+     menu's wiring and closers retire with it. */
+  document.getElementById("stackCtxNewBtn").addEventListener("click", function () {
+    const name = stackCtxFor;
+    closeStackCtxMenu();
+    if (name) { promptCreateNotebookInStack(name); }
   });
-  document.getElementById("stackDeleteBtn").addEventListener("click", function () {
-    const name = stackMenuFor;
-    closeStackMenu();
-    if (name) { confirmDeleteStack(name); }
+  document.getElementById("stackCtxRenameBtn").addEventListener("click", function () {
+    const name = stackCtxFor;
+    closeStackCtxMenu();
+    if (name) { promptRenameStackModal(name); }
   });
-  /* The stack menu's closers: a click outside the notebooks
-     section (and not on a stack's menu button, whose own handler
-     toggles) closes it, and so does Escape. */
-  document.addEventListener("click", function (ev) {
-    if (stackMenuFor === null) { return; }
-    if (ev.target.closest("#stackMenu")) { return; }
-    if (ev.target.closest(".nav-stack-menu-btn")) { return; }
-    if (ev.target.closest("#notebookNav")) { return; }
-    closeStackMenu();
-  });
-  document.addEventListener("keydown", function (ev) {
-    if (ev.key === "Escape") { closeStackMenu(); }
+  document.getElementById("stackCtxDeleteBtn").addEventListener("click", function () {
+    const name = stackCtxFor;
+    closeStackCtxMenu();
+    if (name) { openStackDeleteConfirm(name); }
   });
   /* v2.30: the tag row menu's items act on the tag the menu
      was opened for (tagMenuFor), captured before the menu
@@ -1156,6 +1167,26 @@ function wireEvents() {
     const modal = document.getElementById("nbDeleteModal");
     if (modal && !modal.classList.contains("hidden")) {
       closeNbDeleteConfirm();
+    }
+  });
+  /* v2.149: the delete stack warning's wiring, the
+     notebook delete warning's own gestures: Yes runs
+     the unstack, and No, a backdrop click, and Escape
+     all change nothing at all. */
+  document.getElementById("stackDeleteYesBtn").addEventListener("click", function () {
+    runStackDelete();
+  });
+  document.getElementById("stackDeleteNoBtn").addEventListener("click", function () {
+    closeStackDeleteConfirm();
+  });
+  document.getElementById("stackDeleteModal").addEventListener("click", function (ev) {
+    if (ev.target === ev.currentTarget) { closeStackDeleteConfirm(); }
+  });
+  document.addEventListener("keydown", function (ev) {
+    if (ev.key !== "Escape") { return; }
+    const modal = document.getElementById("stackDeleteModal");
+    if (modal && !modal.classList.contains("hidden")) {
+      closeStackDeleteConfirm();
     }
   });
   /* v2.38: the sidebar's Templates button opens the one

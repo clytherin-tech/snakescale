@@ -91,6 +91,18 @@ async function createSubNotebook(parentSlug, name) {
   return nb;
 }
 
+/* v2.149: create a notebook straight into a stack,
+   from the stack header's right click menu. The
+   record is createNotebook's own; the stack joins
+   through setNotebookStack, the one assignment
+   path, which also expands the stack, so the new
+   notebook is visible where it lands. */
+async function createNotebookInStack(name, stackName) {
+  const nb = await createNotebook(name);
+  if (nb) { await setNotebookStack(nb.slug, stackName); }
+  return nb;
+}
+
 async function renameNotebook(slug, newName) {
   const nb = state.notebooks.find(function (n) { return n.slug === slug; });
   if (!nb) { return; }
@@ -351,7 +363,7 @@ async function setNotebookStack(slug, stackName) {
 /* Rename a stack: the field on every member notebook changes,
    nothing else about any notebook does. The fold record follows
    the name. Callers validate the new name first (see
-   promptRenameStack). */
+   promptRenameStackModal). */
 async function renameStack(oldName, newName) {
   if (oldName === newName) { return; }
   state.notebooks.forEach(function (nb) {

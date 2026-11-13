@@ -44,7 +44,7 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-11-12-SSN-V21481
+  BUILD STAMP: 2026-11-12-SSN-V21490
   Version: 2.106.0
 
   Revision history:
@@ -6199,15 +6199,6 @@
     <div class="nav-section" id="notebookSection">
       <div class="nav-label nav-section-toggle" id="notebookSectionToggle" role="button" tabindex="0" aria-expanded="true" aria-controls="notebookNav" aria-label="Collapse Notebooks section" title="Collapse section"><span class="nav-section-title">Notebooks</span><span class="nav-label-right"><button id="addNotebookBtn" type="button" title="Add notebook" aria-label="Add notebook">+</button><span class="nav-section-chevron" aria-hidden="true"><svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M6 3l5 5-5 5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg></span></span></div>
       <div id="notebookNav"></div>
-      <!-- v2.29: the stack header menu, one shared element the
-           sidebar positions under the header it was opened from
-           (openStackMenu). Rename and Delete act on the stack
-           named by stackMenuFor; Delete never deletes the
-           notebooks in the stack. -->
-      <div id="stackMenu" class="hidden" role="menu" aria-label="Stack actions">
-        <button type="button" class="att-menu-item" id="stackRenameBtn" role="menuitem">Rename Stack</button>
-        <button type="button" class="att-menu-item danger" id="stackDeleteBtn" role="menuitem">Delete Stack</button>
-      </div>
     </div>
 
     <div class="nav-section" id="tagSection">
@@ -8681,6 +8672,21 @@
        no trash, so there is no trashed task to except. -->
   <button type="button" class="list-menu-item" id="taskRowMenuDeleteBtn" role="menuitem">Delete task</button>
 </div>
+<!-- v2.149: the stack header's right click menu
+     (openStackCtxMenu in render.js): one small menu
+     at the pointer with the stack's three actions,
+     New Notebook, Rename Stack, and Delete Stack.
+     It stands at body level from birth, like the
+     note context menu above it: a menu parked inside
+     a view switched pane paints nowhere in the views
+     that park the pane (the v2.148.1 lesson). The
+     stack header's three dot button and the section
+     parked menu it used to open are gone. -->
+<div id="stackCtxMenu" class="note-ctx-menu hidden" role="menu" aria-label="Stack actions">
+  <button type="button" class="list-menu-item" id="stackCtxNewBtn" role="menuitem">New Notebook</button>
+  <button type="button" class="list-menu-item" id="stackCtxRenameBtn" role="menuitem">Rename Stack</button>
+  <button type="button" class="list-menu-item" id="stackCtxDeleteBtn" role="menuitem">Delete Stack</button>
+</div>
 <!-- v2.147: the notebook name modal: the one in-app
      naming surface for creating a notebook, creating a
      sub notebook, and renaming a notebook (the flows
@@ -8714,6 +8720,24 @@
     <div class="modal-foot">
       <button class="btn" id="nbDeleteNoBtn" type="button">No</button>
       <button class="btn danger" id="nbDeleteYesBtn" type="button">Yes</button>
+    </div>
+  </div>
+</div>
+<!-- v2.149: the delete stack warning, in the
+     notebook delete dialog's family: deleting a
+     stack deletes nothing, so the text says so
+     plainly (the stack is removed and every
+     notebook inside it stays, just no longer in a
+     stack) and the choice is made here, never in a
+     native confirm. The text is set per opening by
+     openStackDeleteConfirm in render.js. -->
+<div id="stackDeleteModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="stackDeleteTitle">
+  <div class="modal-card nb-name-card">
+    <h2 id="stackDeleteTitle">Delete stack</h2>
+    <p class="modal-sub" id="stackDeleteText"></p>
+    <div class="modal-foot">
+      <button class="btn" id="stackDeleteNoBtn" type="button">No</button>
+      <button class="btn danger" id="stackDeleteYesBtn" type="button">Yes</button>
     </div>
   </div>
 </div>

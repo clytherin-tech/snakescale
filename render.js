@@ -514,9 +514,11 @@ const STACK_CHEVRON_ICON =
   "<path d=\"M6 3l5 5-5 5\" stroke=\"currentColor\" stroke-width=\"1.8\" " +
   "stroke-linecap=\"round\" stroke-linejoin=\"round\" fill=\"none\"/></svg>";
 
-/* One stack header row: the fold toggle (chevron and name) and
-   the stack's own menu button. The header carries the stack name
-   in a data attribute; the menu machinery below reads it back. */
+/* One stack header row: the fold toggle (chevron and name).
+   The header carries the stack name in a data attribute;
+   the right click menu machinery below reads it back.
+   v2.149: the header's three dot menu button is gone;
+   a right click on the header is the stack's menu door. */
 function buildStackNavHead(name) {
   const collapsed = state.collapsedStacks.indexOf(name) >= 0;
   const head = document.createElement("div");
@@ -545,17 +547,15 @@ function buildStackNavHead(name) {
     toggleStackCollapsed(name);
   });
   head.appendChild(toggle);
-  const menuBtn = document.createElement("button");
-  menuBtn.type = "button";
-  menuBtn.className = "nav-stack-menu-btn";
-  menuBtn.setAttribute("aria-haspopup", "true");
-  menuBtn.setAttribute("aria-label", "Stack actions");
-  menuBtn.title = "Stack actions";
-  menuBtn.innerHTML = "&#8943;";
-  menuBtn.addEventListener("click", function () {
-    openStackMenu(name, head);
+  /* v2.149: a right click on the header opens the
+     stack's own context menu at the pointer for this
+     stack. The press is a contextmenu, never the
+     click the toggle folds on, so opening the menu
+     cannot fold or unfold the stack. */
+  head.addEventListener("contextmenu", function (ev) {
+    ev.preventDefault();
+    openStackCtxMenu(name, ev.clientX, ev.clientY);
   });
-  head.appendChild(menuBtn);
   return head;
 }
 
@@ -652,28 +652,98 @@ function applySidebarSectionFolds() {
   });
 }
 
-/* The stack header menu (Rename Stack, Delete Stack). One shared
-   element parked in the notebooks section; stackMenuFor names the
-   stack it was opened for. Positioned under its header at open
-   time from the header's own offsets inside the section. */
-let stackMenuFor = null;
-function openStackMenu(name, headEl) {
-  const menu = document.getElementById("stackMenu");
+/* --------------------------------------------------------------------------
+   v2.149: the stack header's right click menu. One
+   shared element (#stackCtxMenu) standing directly
+   under the document body from birth: its markup
+   lives at body level in the shell, beside the note
+   context menu, and wireEvents re-parks it there if
+   it ever stands anywhere else. A menu inside a view
+   switched pane paints nowhere in the views that
+   park the pane; that is the v2.148.1 lesson, and
+   this menu is born clear of it. Its three items
+   (New Notebook, Rename Stack, Delete Stack) are the
+   stack header's only menu doors now: the header's
+   three dot button and the section parked menu it
+   opened are gone. Placement is the note context
+   menu's own (placeNoteContextMenu, at the pointer,
+   flipped and clamped), and dismissal is the
+   notebook menu's context set: an outside pointer
+   down, Escape, a resize, or a scroll outside the
+   menu closes it, and an item click closes it first
+   and then acts, like every menu in the app.
+   stackCtxFor names the stack the standing menu
+   acts on; the item handlers read it before they
+   close the menu, so a flow always names the stack
+   the menu was opened for.
+   -------------------------------------------------------------------------- */
+let stackCtxFor = null;
+let stackCtxArmed = false;
+
+function openStackCtxMenu(name, x, y) {
+  closeListPanels();
+  closeStackCtxMenu();
+  const menu = document.getElementById("stackCtxMenu");
   if (!menu) { return; }
-  if (stackMenuFor === name && !menu.classList.contains("hidden")) {
-    closeStackMenu();
+  stackCtxFor = name;
+  menu.classList.remove("hidden");
+  placeNoteContextMenu(menu, x, y);
+  armStackCtx();
+  const first = menu.querySelector(".list-menu-item");
+  if (first) { first.focus(); }
+}
+
+function closeStackCtxMenu() {
+  const menu = document.getElementById("stackCtxMenu");
+  if (menu) { menu.classList.add("hidden"); }
+  stackCtxFor = null;
+  if (stackCtxArmed) {
+    stackCtxArmed = false;
+    document.removeEventListener("pointerdown",
+      onStackCtxPointerDown, true);
+    document.removeEventListener("keydown",
+      onStackCtxKeydown, true);
+    window.removeEventListener("resize", onStackCtxClose);
+    window.removeEventListener("scroll", onStackCtxScroll, true);
+  }
+}
+
+/* Arm the context stands' closers, the notebook
+   menu's set: an outside pointerdown, Escape, a
+   resize, or a scroll outside the menu closes it. */
+function armStackCtx() {
+  if (stackCtxArmed) { return; }
+  stackCtxArmed = true;
+  document.addEventListener("pointerdown",
+    onStackCtxPointerDown, true);
+  document.addEventListener("keydown",
+    onStackCtxKeydown, true);
+  window.addEventListener("resize", onStackCtxClose);
+  window.addEventListener("scroll", onStackCtxScroll, true);
+}
+
+function onStackCtxPointerDown(ev) {
+  const menu = document.getElementById("stackCtxMenu");
+  if (menu && ev.target && menu.contains(ev.target)) { return; }
+  closeStackCtxMenu();
+}
+
+function onStackCtxKeydown(ev) {
+  if (ev.key === "Escape") {
+    ev.preventDefault();
+    closeStackCtxMenu();
+  }
+}
+
+function onStackCtxClose() { closeStackCtxMenu(); }
+
+function onStackCtxScroll(ev) {
+  const menu = document.getElementById("stackCtxMenu");
+  const t = ev.target;
+  if (menu && t && t.nodeType === 1 && menu.contains(t)) {
     return;
   }
-  stackMenuFor = name;
-  if (headEl) {
-    menu.style.top = (headEl.offsetTop + headEl.offsetHeight + 2) + "px";
-  }
-  menu.classList.remove("hidden");
-}
-function closeStackMenu() {
-  const menu = document.getElementById("stackMenu");
-  if (menu) { menu.classList.add("hidden"); }
-  stackMenuFor = null;
+  closeStackCtxMenu();
 }
 
 /* One nested tag row in the sidebar Tags list: the row wrapper
@@ -918,7 +988,7 @@ function renderSidebar() {
      unstacked notebook names sort together alphabetically, members
      sort inside their stack, and only the render order changed;
      the stored notebook list keeps its order underneath. */
-  closeStackMenu();
+  closeStackCtxMenu();
   closeTagMenu();
   closeTagParentPanel();
   closeShortcutMenu();
@@ -1412,6 +1482,11 @@ function closeListPanels() {
     const panel = document.getElementById(id);
     if (panel) { panel.classList.add("hidden"); }
   });
+  /* v2.149: the stack header's right click menu is
+     a panel for closing purposes too: whatever
+     closes the panels closes it, so one menu
+     stands at a time. */
+  closeStackCtxMenu();
   /* v2.147: closing the panels also settles the
      notebook menu's away stands: the context and
      header modes come off, the pointer placement is
@@ -2275,29 +2350,87 @@ function promptAddNotebookToNewStack(slug) {
     toast("Add to stack failed: " + err.message, true);
   });
 }
-function promptRenameStack(oldName) {
-  const name = prompt("Rename stack", oldName);
-  if (name === null) { return; }
-  const trimmed = name.trim();
-  if (!trimmed || trimmed === oldName) { return; }
-  if (stackNameTaken(trimmed, oldName)) {
-    toast("A stack named \"" + trimmed + "\" already exists.", true);
-    return;
-  }
-  renameStack(oldName, trimmed).catch(function (err) {
-    toast("Rename failed: " + err.message, true);
+/* v2.149: the stack context menu's flows, in the
+   notebook flows' own dress: names through the
+   notebook name modal, and the delete through a
+   themed warning in the delete dialog family. No
+   native prompt or confirm remains in a stack flow;
+   the v2.29 versions retire with the header button
+   whose menu opened them. An empty name, and a
+   rename's standing name, are quiet no-ops in the
+   modal's submit, exactly as they were at the
+   prompt. */
+
+function promptCreateNotebookInStack(stackName) {
+  openNbNameModal({
+    title: "New Notebook",
+    submitLabel: "Create",
+    initial: "",
+    onSubmit: function (name) {
+      createNotebookInStack(name, stackName).catch(function (err) {
+        toast("Could not create notebook: " + err.message, true);
+      });
+    }
   });
 }
-function confirmDeleteStack(name) {
+
+function promptRenameStackModal(oldName) {
+  openNbNameModal({
+    title: "Rename Stack",
+    submitLabel: "Save",
+    initial: oldName,
+    onSubmit: function (name) {
+      if (stackNameTaken(name, oldName)) {
+        toast("A stack named \"" + name +
+          "\" already exists.", true);
+        return;
+      }
+      renameStack(oldName, name).catch(function (err) {
+        toast("Rename failed: " + err.message, true);
+      });
+    }
+  });
+}
+
+/* The delete stack warning's standing target, or
+   null. The text says plainly what the operation
+   is: the grouping goes away, every notebook in it
+   stays with all its notes, just no longer in a
+   stack, and nothing is deleted. Yes runs
+   deleteStack, the grouping only operation; No,
+   the backdrop, and Escape change nothing at all. */
+let stackDeleteCtx = null;
+
+function openStackDeleteConfirm(name) {
+  stackDeleteCtx = { name: name };
   const count = stackMembers(name).length;
-  const ok = confirm("Delete the stack \"" + name + "\"? The " +
-    count + " notebook(s) in it will NOT be deleted; they will " +
-    "return to the ungrouped notebook list, with all their notes.");
-  if (ok) {
-    deleteStack(name).catch(function (err) {
-      toast("Delete failed: " + err.message, true);
-    });
+  const text = document.getElementById("stackDeleteText");
+  if (text) {
+    text.textContent = "This removes the stack \"" + name +
+      "\" only. The " + count +
+      (count === 1 ? " notebook" : " notebooks") +
+      " inside it stay, with all their notes; they will " +
+      "just no longer be in a stack. Nothing is deleted.";
   }
+  const modal = document.getElementById("stackDeleteModal");
+  if (modal) { modal.classList.remove("hidden"); }
+  const noBtn = document.getElementById("stackDeleteNoBtn");
+  if (noBtn) { noBtn.focus(); }
+}
+
+function closeStackDeleteConfirm() {
+  stackDeleteCtx = null;
+  const modal = document.getElementById("stackDeleteModal");
+  if (modal) { modal.classList.add("hidden"); }
+}
+
+function runStackDelete() {
+  const ctx = stackDeleteCtx;
+  closeStackDeleteConfirm();
+  if (!ctx) { return; }
+  deleteStack(ctx.name).catch(function (err) {
+    toast("Delete failed: " + err.message, true);
+  });
 }
 
 /* v2.2: toggle the selected note's pinned flag, from the Pin note /
