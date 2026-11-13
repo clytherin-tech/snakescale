@@ -294,6 +294,57 @@ function syncTasksPane() {
   }
 }
 
+/* v2.152: the view a committed search interrupted
+   (the Tasks view, in either of its modes, or the
+   Email view), or null while no search stands
+   between the user and where they were. Those
+   views park the list pane (syncTasksPane above),
+   so a search committed there rendered its
+   results into a pane nobody could see; the
+   search now lands on its results the way a
+   search from Home has since v2.33, and clearing
+   the search resumes the interrupted view. The
+   resume fires only while the results landing
+   (All Notes) still stands, so a user who
+   navigated away on purpose mid search is never
+   yanked back. Home keeps its standing one way
+   landing and never stands here. */
+let searchReturnView = null;
+
+/* Land on the standing search's results from a
+   full main area view, remembering it. Returns
+   true when it landed (the caller then stops);
+   from a notes list the results already stand,
+   and it returns false. */
+function presentSearchFromCurrentView() {
+  if (!state.search) { return false; }
+  if (state.view.kind !== "tasks" &&
+      state.view.kind !== "email") {
+    return false;
+  }
+  if (!searchReturnView) {
+    searchReturnView = { kind: state.view.kind,
+      value: state.view.value || null };
+  }
+  state.view = { kind: "all", value: null };
+  renderAll();
+  setMobileView("list");
+  return true;
+}
+
+/* Resume the view a search interrupted, on the
+   search's clearing. Returns true when it
+   resumed. */
+function resumeSearchReturnView() {
+  if (!searchReturnView) { return false; }
+  if (state.view.kind !== "all") { return false; }
+  state.view = searchReturnView;
+  searchReturnView = null;
+  renderAll();
+  setMobileView("list");
+  return true;
+}
+
 /* Count helpers for the sidebar badges. */
 function notebookCount(slug) {
   return state.notes.filter(function (n) { return n.notebook === slug; }).length;
@@ -4937,6 +4988,10 @@ function renderNoteList() {
       empty.innerHTML = "<div class=\"big\">No notes here yet</div>Press New Note to write your first one.";
     }
     listEl.appendChild(empty);
+    /* v2.152: the sidebar search's Email section
+       stands under the results even when no note
+       matches. */
+    renderMailSearchSection(listEl);
     return;
   }
   /* v1.8.1: the multi select set this view's rows draw from:
@@ -5123,6 +5178,9 @@ function renderNoteList() {
   /* v2.58: the selection bar (the touch selection mode's
      chrome) repaints with the list it belongs to. */
   renderListSelectBar();
+  /* v2.152: the sidebar search's Email section
+     stands at the foot of the results. */
+  renderMailSearchSection(listEl);
 }
 
 /* --------------------------------------------------------------------------

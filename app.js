@@ -1475,6 +1475,16 @@ function wireEvents() {
         setMobileView("list");
         return;
       }
+      /* v2.152: from the Tasks (Calendar) or Email
+         view the same landing, through the shared
+         presentation, and a cleared search
+         resumes the view the search interrupted. */
+      if (state.search && presentSearchFromCurrentView()) {
+        return;
+      }
+      if (!state.search && resumeSearchReturnView()) {
+        return;
+      }
       renderNoteList();
     }, 150));
   /* v2.32: clicking into the search box surfaces the saved

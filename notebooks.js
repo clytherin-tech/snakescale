@@ -2693,11 +2693,16 @@ function runSavedSearch(entry) {
      title, or a search shortcut clicked while Home is
      showing), the results are the destination: land on
      All Notes with them, the way Evernote leaves Home
-     for a search. From any other view nothing changes. */
+     for a search. v2.152: run from the Tasks
+     (Calendar) or Email view, the results land the
+     same way, through the typed search's own
+     presentation, and the interrupted view resumes
+     when the search clears; from a notes list,
+     nothing changes. */
   if (state.view.kind === "home") {
     state.view = { kind: "all", value: null };
     renderAll();
-  } else {
+  } else if (!presentSearchFromCurrentView()) {
     renderNoteList();
   }
   setMobileView("list");

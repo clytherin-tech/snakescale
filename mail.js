@@ -3490,6 +3490,18 @@ let mailUnreadFetchInFlight = false;
 let mailOwnAddress = "";
 let mailFolder = { kind: "folder", id: "inbox" };
 let mailLists = {};
+/* v2.152: the sidebar search's Email section:
+   the Gmail query it last settled on, the phase
+   its first page stands in (idle, loading, or
+   ready), and whether its last ask failed (the
+   section shows a failure line rather than
+   standing silent). The sequence guards a
+   settled answer against a query the user has
+   already moved past. */
+let mailSidebarSearch = { q: "", phase: "idle",
+  failed: false };
+let mailSidebarSearchTimer = null;
+let mailSidebarSearchSeq = 0;
 let mailOpenId = null;
 let mailOpenFull = null;
 let mailShowImages = false;
@@ -3817,6 +3829,15 @@ function resetMailState() {
   mailShowImages = false;
   mailLabelsLoading = false;
   mailListLoadingKey = "";
+  /* v2.152: the sidebar Email section's standing
+     query belongs to the account too. */
+  mailSidebarSearch = { q: "", phase: "idle",
+    failed: false };
+  mailSidebarSearchSeq += 1;
+  if (mailSidebarSearchTimer) {
+    clearTimeout(mailSidebarSearchTimer);
+    mailSidebarSearchTimer = null;
+  }
   /* v2.100: the snooze registry's working copy
      belongs to the account too; a landing forgets
      it, and the next read asks Drive again. */
@@ -3965,6 +3986,251 @@ async function loadMailList(key, append) {
     renderHome();
   }
   updateMailBadge();
+}
+
+/* v2.152: the words the sidebar search asks
+   Gmail with: the query's plain words. A plain
+   query goes whole (state.search already stands
+   trimmed); a query carrying the note grammar's
+   syntax sends only its positive plain text
+   terms, because the operators (tag:, notebook:,
+   created:, and the rest), the scopes, and the
+   negations are the notes' own business and
+   never reach Gmail. No plain words, no Email
+   section. */
+function mailSidebarSearchQuery() {
+  const raw = state.search || "";
+  if (!raw) { return ""; }
+  const parsed = parseSearchQuery(raw);
+  if (!parsed) { return raw; }
+  const words = [];
+  parsed.positives.forEach(function (p) {
+    if (p.kind === "text" && p.value) {
+      words.push(p.value);
+    }
+  });
+  return words.join(" ").trim();
+}
+
+/* v2.152: settle a changed query into a fetch.
+   The note search refilters locally on its
+   150ms debounce per keystroke; Gmail cannot be
+   asked per keystroke, so the Email fetch fires
+   once the query has stood unchanged for 600ms
+   (the commit this section commits on), and a
+   query the user has moved past never has its
+   answer painted (the sequence), though the
+   answer still lands in the shared list cache.
+   A failed first page stands as a failure line
+   until the query changes; it is not re-asked
+   on every render. */
+function mailSidebarSearchKick(q) {
+  const st = mailSidebarSearch;
+  if (st.q === q && st.phase !== "idle") { return; }
+  if (st.q === q && st.failed) { return; }
+  mailSidebarSearch = { q: q, phase: "loading",
+    failed: false };
+  mailSidebarSearchSeq += 1;
+  const seq = mailSidebarSearchSeq;
+  if (mailSidebarSearchTimer) {
+    clearTimeout(mailSidebarSearchTimer);
+  }
+  mailSidebarSearchTimer = setTimeout(function () {
+    mailSidebarSearchTimer = null;
+    if (seq !== mailSidebarSearchSeq) { return; }
+    mailSidebarSearchFetch(q, false, seq);
+  }, 600);
+}
+
+/* v2.152: one page of the section's search,
+   asked through the standing request builder
+   (the Email view search's own ask: bare q,
+   every box, the wide first page) and settled
+   into the standing list cache under the search
+   key, the list loader's own merge, so the
+   Email view standing in this search later
+   finds the pages already home. The module's
+   one in flight key is honored, so a section
+   ask and a list load of the same search never
+   overlap. */
+async function mailSidebarSearchFetch(q, append, seq) {
+  const sel = { kind: "search", q: q };
+  const key = mailListKey(sel);
+  if (mailListLoadingKey === key) { return; }
+  mailListLoadingKey = key;
+  let list = mailLists[key];
+  if (!list) {
+    list = mailLists[key] = {
+      rows: [], nextPageToken: null, loaded: false,
+      sel: sel
+    };
+  }
+  list.sel = sel;
+  const out = await mailFetchListPage(sel,
+    append ? list.nextPageToken : null);
+  if (mailListLoadingKey === key) {
+    mailListLoadingKey = "";
+  }
+  if (!out) {
+    if (seq === mailSidebarSearchSeq &&
+        mailSidebarSearch.q === q) {
+      if (!append) { mailSidebarSearch.phase = "idle"; }
+      mailSidebarSearch.failed = true;
+      renderNoteList();
+    }
+    return;
+  }
+  if (!append) { list.rows = []; }
+  out.rows.forEach(function (rec) {
+    const at = list.rows.findIndex(function (r) {
+      return r.id === rec.id;
+    });
+    if (at === -1) { list.rows.push(rec); }
+    else { list.rows[at] = rec; }
+  });
+  list.nextPageToken = out.nextPageToken;
+  list.loaded = true;
+  if (seq === mailSidebarSearchSeq &&
+      mailSidebarSearch.q === q) {
+    mailSidebarSearch.phase = "ready";
+    mailSidebarSearch.failed = false;
+    renderNoteList();
+  }
+}
+
+/* v2.152: one Email result row in the sidebar
+   search: the mail row's own column (the unread
+   dot, the sender and the time, the subject,
+   the snippet, and the shared chips line with
+   the location chip and the Snoozed tag
+   standing), without the mail list's own
+   furniture (no drag, no multi select, no
+   quick actions, no row menu): a plain click
+   follows the result into the Email view. */
+function buildMailSearchRowEl(rec) {
+  const el = document.createElement("div");
+  el.className = "mail-row mail-search-hit" +
+    (rec.unread ? " unread" : "");
+  el.setAttribute("data-mail-id", rec.id);
+  const dot = document.createElement("span");
+  dot.className = "mail-dot" +
+    (rec.unread ? "" : " off");
+  dot.setAttribute("aria-hidden", "true");
+  el.appendChild(dot);
+  const main = document.createElement("div");
+  main.className = "mail-row-main";
+  const top = document.createElement("div");
+  top.className = "mail-row-top";
+  const from = document.createElement("span");
+  from.className = "mail-row-from";
+  from.textContent = rec.fromName || rec.fromAddress;
+  top.appendChild(from);
+  const time = document.createElement("span");
+  time.className = "mail-row-time";
+  time.textContent = mailRowTimeLabel(rec);
+  top.appendChild(time);
+  main.appendChild(top);
+  const subject = document.createElement("div");
+  subject.className = "mail-row-subject";
+  subject.textContent = rec.subject || "(No subject)";
+  main.appendChild(subject);
+  const snippet = document.createElement("div");
+  snippet.className = "mail-row-snippet";
+  snippet.textContent = rec.snippet;
+  main.appendChild(snippet);
+  const chips = mailRowChipsEl(rec, {
+    location: true, snoozeTag: true });
+  if (chips) { main.appendChild(chips); }
+  el.appendChild(main);
+  el.addEventListener("click", function () {
+    mailOpenSearchResult(rec);
+  });
+  return el;
+}
+
+/* v2.152: follow a sidebar Email result: the
+   Email view opens standing in the search the
+   result came from (the sidebar now drives the
+   search selection the Email view's own box
+   used to), with the message open in the
+   reading pane, on the email chip follow's own
+   order. */
+function mailOpenSearchResult(rec) {
+  const q = mailSidebarSearchQuery() ||
+    mailSidebarSearch.q;
+  state.view = { kind: "email", value: null };
+  renderAll();
+  setMobileView("list");
+  mailChooseSelection({ kind: "search", q: q });
+  openMailMessage(rec.id);
+}
+
+/* v2.152: the Email section at the foot of the
+   sidebar search's results, called from the
+   note list's render. It stands only while a
+   search with plain words stands, mail is
+   signed in, and the list is a live one (never
+   in Trash or the Archive, whose searches are
+   the notes' own). Its states are honest: a
+   settling or loading query reads as searching,
+   a failed ask names the failure, an empty
+   answer says so, and a standing page token
+   offers Show more into the same section. */
+function renderMailSearchSection(listEl) {
+  const q = mailSidebarSearchQuery();
+  if (!q || !mailSignedInAble()) { return; }
+  if (state.view.kind === "trash" ||
+      state.view.kind === "archive") { return; }
+  mailSidebarSearchKick(q);
+  const st = mailSidebarSearch;
+  const key = mailListKey({ kind: "search", q: q });
+  const list = mailLists[key];
+  const section = document.createElement("div");
+  section.className = "mail-search-section";
+  section.id = "mailSearchSection";
+  const head = document.createElement("div");
+  head.className = "mail-search-section-head";
+  head.textContent = "Email";
+  section.appendChild(head);
+  const line = function (text, failed) {
+    const el = document.createElement("div");
+    el.className = "mail-search-line" +
+      (failed ? " failed" : "");
+    el.textContent = text;
+    section.appendChild(el);
+  };
+  if (st.q === q && st.phase === "ready" &&
+      list && list.loaded) {
+    list.rows.forEach(function (rec) {
+      section.appendChild(buildMailSearchRowEl(rec));
+    });
+    if (!list.rows.length && !st.failed) {
+      line("No emails match that search.");
+    }
+    if (st.failed) {
+      line("Could not load mail. Check the " +
+        "connection and try the search again.", true);
+    }
+    if (list.nextPageToken) {
+      const more = document.createElement("button");
+      more.type = "button";
+      more.className = "btn small mail-search-more";
+      more.id = "mailSearchMoreBtn";
+      more.textContent = "Show more";
+      more.disabled = mailListLoadingKey === key;
+      more.addEventListener("click", function () {
+        mailSidebarSearchFetch(q, true,
+          mailSidebarSearchSeq);
+      });
+      section.appendChild(more);
+    }
+  } else if (st.q === q && st.failed) {
+    line("Could not search mail. Check the " +
+      "connection and try the search again.", true);
+  } else {
+    line("Searching mail...");
+  }
+  listEl.appendChild(section);
 }
 
 /* The API half of one list page, or null when the
@@ -4161,6 +4427,31 @@ function mailRowLabelNames(rec) {
     }
   });
   return names;
+}
+
+/* v2.152: the Snoozed label's id as the label
+   list now stands, or null when the list has
+   not loaded or carries no such label: the row
+   tag's only source, resolved synchronously
+   through the standing label machinery, so a
+   row built before the labels land renders as
+   it always has. */
+function mailSnoozedLabelId() {
+  const users = mailUserLabels();
+  for (let i = 0; i < users.length; i++) {
+    if (users[i].name === MAIL_SNOOZE_LABEL_NAME) {
+      return users[i].id;
+    }
+  }
+  return null;
+}
+
+/* v2.152: whether a row's record is snoozed:
+   it carries the Snoozed label. */
+function mailRecordSnoozed(rec) {
+  const id = mailSnoozedLabelId();
+  return !!id && !!rec && !!rec.labelIds &&
+    rec.labelIds.indexOf(id) !== -1;
 }
 
 /* The sidebar badge and the rail dot: the Inbox
@@ -4387,9 +4678,10 @@ function mailChooseSelection(sel) {
 
 /* The list pane: the standing selection's rows, its
    loading and empty words, and the Load more button
-   while a further page stands. The search field is
-   static furniture above it and is not touched here,
-   so a render never eats what is being typed. */
+   while a further page stands. (Through v2.151 a
+   search field stood above the list; v2.152 moved
+   mail search to the sidebar's one search, and a
+   search selection now arrives from there.) */
 function renderMailList() {
   const listEl = mailEl("mailList");
   if (!listEl) { return; }
@@ -4398,11 +4690,6 @@ function renderMailList() {
      of it leaves the set, and the bar follows. */
   mailPruneSelection();
   renderMailSelBar();
-  const clearBtn = mailEl("mailSearchClearBtn");
-  if (clearBtn) {
-    clearBtn.classList.toggle("hidden",
-      mailFolder.kind !== "search");
-  }
   const key = mailListKey();
   const list = mailLists[key];
   listEl.innerHTML = "";
@@ -4430,6 +4717,69 @@ function renderMailList() {
   }
 }
 
+/* v2.152: one row's chips line, shared by the
+   mail list's rows and the sidebar search's
+   Email rows so the two never drift: the
+   Snoozed tag first when the record is snoozed
+   (standing in place of the Snoozed label's
+   plain chip, which never renders: the tag is
+   the indication), then the location chip when
+   the caller asks for it (a search's rows),
+   then the user label chips, then the
+   paperclip. Returns null when nothing stands,
+   so a bare row stays bare. opts: { location,
+   snoozeTag }, each read as a boolean. */
+function mailRowChipsEl(rec, opts) {
+  const snoozed = mailRecordSnoozed(rec);
+  let names = mailRowLabelNames(rec);
+  if (snoozed) {
+    names = names.filter(function (n) {
+      return n !== MAIL_SNOOZE_LABEL_NAME;
+    });
+  }
+  const showTag = !!opts.snoozeTag && snoozed;
+  if (!opts.location && !showTag && !names.length &&
+      !rec.hasAttachment) {
+    return null;
+  }
+  const chips = document.createElement("div");
+  chips.className = "mail-row-chips";
+  if (showTag) {
+    const tag = document.createElement("span");
+    tag.className = "mail-snooze-tag";
+    tag.textContent = "Snoozed";
+    chips.appendChild(tag);
+  }
+  if (opts.location) {
+    const loc = document.createElement("span");
+    loc.className = "mail-loc-chip";
+    loc.textContent = mailRowLocationName(rec);
+    chips.appendChild(loc);
+  }
+  names.forEach(function (n) {
+    const chip = document.createElement("span");
+    chip.className = "mail-chip";
+    chip.textContent = n;
+    chips.appendChild(chip);
+  });
+  if (rec.hasAttachment) {
+    const clip = document.createElement("span");
+    clip.className = "mail-clip";
+    clip.title = "Has attachments";
+    clip.setAttribute("aria-label", "Has attachments");
+    clip.innerHTML = "<svg viewBox=\"0 0 24 24\" " +
+      "width=\"13\" height=\"13\" fill=\"none\" " +
+      "stroke=\"currentColor\" stroke-width=\"2\" " +
+      "stroke-linecap=\"round\" stroke-linejoin=\"round\" " +
+      "aria-hidden=\"true\"><path d=\"M21 12.5l-8.5 8.5" +
+      "a5.5 5.5 0 0 1-7.8-7.8L13 5a3.7 3.7 0 0 1 5.2 " +
+      "5.2l-8.2 8.2a1.85 1.85 0 0 1-2.6-2.6L15.5 7\"/>" +
+      "</svg>";
+    chips.appendChild(clip);
+  }
+  return chips;
+}
+
 /* One message row: the unread dot and bold words, the
    sender, the subject (its fallback is the display's,
    like the calendar's), the snippet, the time, the
@@ -4438,7 +4788,10 @@ function renderMailList() {
    row also names the box the message lives in, in
    the reading pane's location chip dress, since a
    search reaches every box and a result's home is
-   part of what it is. On desktop the hover
+   part of what it is. v2.152: a snoozed message
+   wears the Snoozed tag in place of the label's
+   plain chip, on every list but the Snoozed
+   label's own. On desktop the hover
    quick actions stand at the row's right: archive,
    trash, and mark read or unread. A click opens the
    message (in Drafts, the draft). */
@@ -4538,45 +4891,21 @@ function buildMailRowEl(rec) {
   snippet.className = "mail-row-snippet";
   snippet.textContent = rec.snippet;
   main.appendChild(snippet);
-  const names = mailRowLabelNames(rec);
-  /* v2.151: the location chip stands only on a
-     search list's rows (the standing selection is
+  /* v2.152: the chips line is the shared
+     builder's (mailRowChipsEl): the location
+     chip on a search list's rows only, as
+     v2.151 stood it (the standing selection is
      the list being rendered, as the row's drag
-     state above already reads it); every other
-     list's rows are unchanged. */
-  const inSearch = mailFolder.kind === "search";
-  if (inSearch || names.length || rec.hasAttachment) {
-    const chips = document.createElement("div");
-    chips.className = "mail-row-chips";
-    if (inSearch) {
-      const loc = document.createElement("span");
-      loc.className = "mail-loc-chip";
-      loc.textContent = mailRowLocationName(rec);
-      chips.appendChild(loc);
-    }
-    names.forEach(function (n) {
-      const chip = document.createElement("span");
-      chip.className = "mail-chip";
-      chip.textContent = n;
-      chips.appendChild(chip);
-    });
-    if (rec.hasAttachment) {
-      const clip = document.createElement("span");
-      clip.className = "mail-clip";
-      clip.title = "Has attachments";
-      clip.setAttribute("aria-label", "Has attachments");
-      clip.innerHTML = "<svg viewBox=\"0 0 24 24\" " +
-        "width=\"13\" height=\"13\" fill=\"none\" " +
-        "stroke=\"currentColor\" stroke-width=\"2\" " +
-        "stroke-linecap=\"round\" stroke-linejoin=\"round\" " +
-        "aria-hidden=\"true\"><path d=\"M21 12.5l-8.5 8.5" +
-        "a5.5 5.5 0 0 1-7.8-7.8L13 5a3.7 3.7 0 0 1 5.2 " +
-        "5.2l-8.2 8.2a1.85 1.85 0 0 1-2.6-2.6L15.5 7\"/>" +
-        "</svg>";
-      chips.appendChild(clip);
-    }
-    main.appendChild(chips);
-  }
+     state above already reads it), and the
+     Snoozed tag on every list but the Snoozed
+     label's own, where the view itself is the
+     indication. */
+  const chips = mailRowChipsEl(rec, {
+    location: mailFolder.kind === "search",
+    snoozeTag: !(mailFolder.kind === "label" &&
+      mailFolder.id === mailSnoozedLabelId())
+  });
+  if (chips) { main.appendChild(chips); }
   el.appendChild(main);
   const actions = document.createElement("span");
   actions.className = "mail-row-actions";
@@ -5786,20 +6115,10 @@ function initMailBindings() {
           name: found ? found.name : "Label" });
       }
     });
-  const searchInput = mailEl("mailSearchInput");
-  searchInput.addEventListener("keydown", function (ev) {
-    if (ev.key !== "Enter") { return; }
-    ev.preventDefault();
-    const q = searchInput.value.trim();
-    if (q) {
-      mailChooseSelection({ kind: "search", q: q });
-    }
-  });
-  mailEl("mailSearchClearBtn").addEventListener(
-    "click", function () {
-      searchInput.value = "";
-      mailChooseSelection({ kind: "folder", id: "inbox" });
-    });
+  /* v2.152: the Email view's own search box is
+     gone; the sidebar's one search drives a
+     search selection from its Email section
+     instead (see mailOpenSearchResult). */
   mailEl("mailLoadMoreBtn").addEventListener("click",
     function () { loadMailList(mailListKey(), true); });
   /* v2.107: the selection bar's three actions run

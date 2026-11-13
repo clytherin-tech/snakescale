@@ -4881,8 +4881,6 @@ body.dark .task-cal-more{color:var(--accent);}
 .mail-folder.active{background:var(--accent-soft);font-weight:700;box-shadow:inset 3px 0 0 var(--accent);}
 .mail-folder-divider{border-top:1px solid var(--border);margin:8px 2px;}
 .mail-listpane{width:370px;flex:0 0 370px;border-right:1px solid var(--border);background:var(--surface);display:flex;flex-direction:column;min-height:0;}
-.mail-search-row{display:flex;gap:8px;align-items:center;padding:10px 12px;border-bottom:1px solid var(--border);}
-.mail-search-row input{flex:1;min-width:0;}
 .mail-folder-picker-row{display:none;padding:10px 12px 0;}
 .mail-folder-picker-row select{width:100%;}
 .mail-status-line{display:flex;align-items:center;gap:10px;padding:8px 12px;color:var(--muted);font-size:13.5px;border-bottom:1px solid var(--border);}
@@ -5065,6 +5063,21 @@ body.dark .task-cal-more{color:var(--accent);}
 .mail-actions{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;}
 .mail-location{display:inline-flex;flex-wrap:wrap;gap:6px;align-items:center;}
 .mail-loc-chip{font-size:11px;line-height:1;padding:4px 8px;border-radius:999px;background:var(--accent-soft);color:var(--text);white-space:nowrap;}
+/* v2.152: the Snoozed tag on a mail row: a solid
+   accent pill in the accent button's own dress,
+   set apart from the outline label chips and the
+   soft location chip, so a sleeping message reads
+   at a glance in either theme. */
+.mail-snooze-tag{font-size:11px;line-height:1;padding:4px 8px;border-radius:999px;background:var(--accent);color:#0B3D2E;font-weight:700;white-space:nowrap;}
+/* v2.152: the Email section at the foot of the
+   sidebar search's results: a ruled off block in
+   the note list, its head in the list's small
+   caps dress, its rows the mail rows' own. */
+.mail-search-section{border-top:1px solid var(--border);margin-top:6px;padding:6px 0 4px;}
+.mail-search-section-head{font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:6px 14px;}
+.mail-search-line{padding:2px 14px 10px;color:var(--muted);font-size:13.5px;}
+.mail-search-line.failed{color:var(--danger);font-weight:600;}
+.mail-search-more{margin:2px 12px 10px;}
 /* v2.104.0: the Labels picker is a dropdown, not
    a panel in the pane's flow. It hangs from the
    Labels button's wrap exactly as the More menu
