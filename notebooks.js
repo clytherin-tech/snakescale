@@ -2688,6 +2688,10 @@ function runSavedSearch(entry) {
   const input = document.getElementById("searchInput");
   if (input) { input.value = entry.query; }
   state.search = normalizeSearchText(entry.query);
+  /* v2.153: the same search change hook the
+     typed search carries (app.js): a standing
+     hit paint whose words moved clears. */
+  searchHitsOnSearchChange();
   closeSavedSearchPanel();
   /* v2.33: run from Home (the Filtered Notes widget's
      title, or a search shortcut clicked while Home is

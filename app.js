@@ -1465,6 +1465,11 @@ function wireEvents() {
   document.getElementById("searchInput").addEventListener("input",
     debounce(function (ev) {
       state.search = ev.target.value.trim().toLowerCase();
+      /* v2.153: a changed or cleared search takes
+         any standing hit paint with it (the open
+         note's and the reading pane's; the lists
+         repaint from the standing render). */
+      searchHitsOnSearchChange();
       /* v2.33: a search typed while Home is showing lands
          on its results, the way Evernote leaves Home for
          a search; from any other view only the list

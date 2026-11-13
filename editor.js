@@ -189,6 +189,21 @@ function canonicalizeAttachmentPlaceholders(html) {
       }
       el.remove();
     });
+  /* v2.153: the search hit paint (mark.ss-hit) is
+     display only, and it unwraps here, in the one
+     funnel every saved body passes through, the
+     same way the done wrap above does: no write
+     path can carry it into a Doc or a note file,
+     and the history snapshots and the refill
+     judgments, which read through this funnel,
+     never see it either. */
+  holder.querySelectorAll("mark.ss-hit")
+    .forEach(function (el) {
+      while (el.firstChild) {
+        el.parentNode.insertBefore(el.firstChild, el);
+      }
+      el.remove();
+    });
   /* v2.37.0: a table of contents block canonicalizes the
      same way an attachment does: the stored element is
      rebuilt from scratch (class and contenteditable only)
@@ -765,7 +780,28 @@ function editorHistorySettle() {
    batch the observer is still holding for the same
    change stands down when its deferred turn comes
    (see the observer in editorHistoryReset). */
+/* Drain the history observer's pending records
+   without classifying them. The restore path
+   does this inline for its own fills; the
+   search hit paint (v2.153) stands on the same
+   discipline: its wraps are not a change, and
+   the records they queue must never be read as
+   one. */
+function editorHistoryDrainRecords() {
+  if (editorHistoryObserver) {
+    editorHistoryObserver.takeRecords();
+  }
+}
+
 function editorHistoryInputSignal(kind) {
+  /* v2.153: the first classified body edit clears
+     the search hit paint (clearSearchHitEditorPaint
+     in render.js): the paint is a landing aid, not
+     an editing mode, and the unwrap lands before
+     the change settles, so no snapshot can carry
+     it. Title typing is not a body edit and
+     leaves the paint standing. */
+  if (kind !== "title") { clearSearchHitEditorPaint(); }
   const h = editorHistory;
   if (h) { h.inputStamp++; h.justRestored = false; }
   editorHistorySignal(kind);

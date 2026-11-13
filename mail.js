@@ -4156,6 +4156,9 @@ function buildMailSearchRowEl(rec) {
    reading pane, on the email chip follow's own
    order. */
 function mailOpenSearchResult(rec) {
+  /* v2.153: opening the result arms the reading
+     pane's hit paint for this message. */
+  armSearchHitMail(rec.id);
   const q = mailSidebarSearchQuery() ||
     mailSidebarSearch.q;
   state.view = { kind: "email", value: null };
@@ -5301,6 +5304,12 @@ function mailTextToHtml(text) {
    state (consent, unavailable) leaves the list as it
    stood. */
 async function openMailMessage(id) {
+  /* v2.153: the reading pane's hit session is
+     decided at the open: an arm naming this
+     message becomes the session; any other
+     open clears it, so another message never
+     wears the previous one's paint. */
+  searchHitMailOpened(id);
   const out = await gmailRead("/users/me/messages/" +
     encodeURIComponent(id) + "?format=full");
   if (!mailSettleLoadOutcome(out)) { return; }
@@ -5470,6 +5479,11 @@ function renderMailRead() {
       !(full.hasRemoteImages && !mailShowImages));
   }
   mailEl("mailBody").innerHTML = bodyHtml;
+  /* v2.153: a message opened from the search's
+     Email section wears its hits in the pane
+     (subject and body), for as long as it stands
+     open under the same search. */
+  paintSearchHitMailRead(full);
 }
 
 /* Download one attachment: the API hands its bytes

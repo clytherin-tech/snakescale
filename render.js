@@ -2716,6 +2716,11 @@ function handleNoteCardClick(ev, note) {
     set.push(note.id);
   }
   listSelectionAnchor = note.id;
+  /* v2.153: a plain click on a result card arms
+     the in-note hit paint for this open (see
+     armSearchHitEditor); the open switch
+     consumes the arm. */
+  armSearchHitEditor(note.id);
   openNote(note.id);
 }
 
@@ -4546,6 +4551,370 @@ function parseSearchQuery(rawQuery) {
     positives: positives, negatives: negatives };
 }
 
+/* ---------------- v2.153: search hit highlighting
+   ---------
+
+   The paint layer for the search's own words, in the
+   results and inside the opened item (Chris's ask,
+   November 13, 2026: highlight the search terms
+   where they are found in notes, tasks, etc., so he
+   can easily see them; he chose results AND the
+   opened item). One rule governs everything below:
+   the paint is display only. It wraps standing text
+   in mark.ss-hit elements; it never mutates the
+   underlying note, task, or email data, it is
+   stripped by the save funnel before any
+   serialization, and it disappears when the search
+   changes or clears. */
+
+/* The two standing sessions and their one shot arms.
+   An arm is set by a result click and consumed by
+   the one open switch for its surface; a session
+   stands while its item stands open under the
+   search that armed it. */
+let searchHitEditorArm = null;
+let searchHitEditorSession = null;
+let searchHitMailArm = null;
+let searchHitMailSession = null;
+
+/* The standing search's lit words (see the design
+   note in apply_edits21530.py): the parse's positive
+   plain text terms for an operator query, the
+   whitespace split for a plain one, lowercased and
+   deduped either way. Operators and their values
+   are never among them. */
+function searchHitTokenList(values) {
+  const seen = {};
+  const out = [];
+  values.forEach(function (v) {
+    const word = String(v || "").toLowerCase().trim();
+    if (word && !seen[word]) { seen[word] = true; out.push(word); }
+  });
+  return out;
+}
+function searchHitTokens() {
+  const raw = state.search || "";
+  if (!raw) { return []; }
+  const parsed = parseSearchQuery(raw);
+  if (parsed) {
+    return searchHitTokenList(parsed.positives
+      .filter(function (p) { return p.kind === "text"; })
+      .map(function (p) { return p.value; }));
+  }
+  return searchHitTokenList(raw.split(/\s+/));
+}
+function taskSearchHitTokens() {
+  const raw = state.tasksView
+    ? String(state.tasksView.query || "") : "";
+  if (!raw.trim()) { return []; }
+  return searchHitTokenList(raw.split(/\s+/));
+}
+function searchHitTokensEqual(a, b) {
+  if (!a || !b || a.length !== b.length) { return false; }
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) { return false; }
+  }
+  return true;
+}
+
+/* Whether a text node stands somewhere the paint
+   must not reach (the skip set and its reasons are
+   in the design note): code everywhere, an existing
+   wrap anywhere, and in the editor the unit
+   elements (anything contenteditable false, link
+   faces and their hidden originals, tag pills,
+   attachment shells, the tasks marker, and a table
+   of contents block). */
+function searchHitSkipped(node, rootEl, editorProfile) {
+  let el = node.parentNode;
+  while (el && el !== rootEl) {
+    if (el.nodeType === 1) {
+      if (el.tagName === "SCRIPT" ||
+          el.tagName === "STYLE") { return true; }
+      if (el.classList &&
+          el.classList.contains("ss-hit")) { return true; }
+      if (editorProfile) {
+        if (el.getAttribute &&
+            el.getAttribute("contenteditable") === "false") {
+          return true;
+        }
+        if (el.classList &&
+            (el.classList.contains("ss-link-face") ||
+             el.classList.contains("ss-link-original") ||
+             el.classList.contains("ss-tag-pill") ||
+             el.classList.contains("ss-attachment") ||
+             el.classList.contains("ss-note-tasks") ||
+             el.classList.contains("ss-toc"))) { return true; }
+      }
+    }
+    el = el.parentNode;
+  }
+  return false;
+}
+
+/* One text node: wrap every match of the tokens
+   (longest first at any position; a match is
+   consumed before the scan moves on, so wraps
+   never nest and a token inside a wrapped region
+   is never re-wrapped). The node's text is
+   unchanged by the rewrite, only split. */
+function searchHitPaintNode(node, tokens) {
+  const text = node.nodeValue;
+  const lower = text.toLowerCase();
+  let frag = null;
+  let last = 0;
+  let i = 0;
+  let count = 0;
+  while (i < text.length) {
+    let bestAt = -1;
+    let bestTok = null;
+    for (let k = 0; k < tokens.length; k++) {
+      const at = lower.indexOf(tokens[k], i);
+      if (at !== -1 && (bestAt === -1 || at < bestAt ||
+          (at === bestAt && tokens[k].length > bestTok.length))) {
+        bestAt = at;
+        bestTok = tokens[k];
+      }
+    }
+    if (bestAt === -1) { break; }
+    if (!frag) {
+      frag = node.ownerDocument.createDocumentFragment();
+    }
+    if (bestAt > last) {
+      frag.appendChild(node.ownerDocument.createTextNode(
+        text.slice(last, bestAt)));
+    }
+    const mark = node.ownerDocument.createElement("mark");
+    mark.className = "ss-hit";
+    mark.textContent = text.slice(bestAt, bestAt + bestTok.length);
+    frag.appendChild(mark);
+    count++;
+    last = bestAt + bestTok.length;
+    i = last;
+  }
+  if (!frag) { return 0; }
+  if (last < text.length) {
+    frag.appendChild(node.ownerDocument.createTextNode(
+      text.slice(last)));
+  }
+  node.parentNode.replaceChild(frag, node);
+  return count;
+}
+
+/* Paint a root's standing text. The text nodes are
+   collected before any painting, because painting
+   mutates the tree under the walker. */
+function searchHitPaint(rootEl, tokens, editorProfile) {
+  if (!rootEl || !tokens || !tokens.length) { return 0; }
+  const sorted = tokens.slice().sort(function (a, b) {
+    return b.length - a.length;
+  });
+  const walker = rootEl.ownerDocument.createTreeWalker(
+    rootEl, 4 /* NodeFilter.SHOW_TEXT */, {
+      acceptNode: function (node) {
+        if (!node.nodeValue || !node.nodeValue.trim()) {
+          return 2 /* FILTER_REJECT */;
+        }
+        return searchHitSkipped(node, rootEl, editorProfile)
+          ? 2 /* FILTER_REJECT */ : 1 /* FILTER_ACCEPT */;
+      }
+    });
+  const nodes = [];
+  let n = walker.nextNode();
+  while (n) { nodes.push(n); n = walker.nextNode(); }
+  let painted = 0;
+  nodes.forEach(function (node) {
+    painted += searchHitPaintNode(node, sorted);
+  });
+  return painted;
+}
+
+/* Take the paint back off a root: every mark.ss-hit
+   unwraps (its text stays), and the touched parents
+   normalize, so the text nodes merge back into the
+   shape they had before the paint. */
+function searchHitUnpaint(rootEl) {
+  if (!rootEl || !rootEl.querySelectorAll) { return 0; }
+  const marks = rootEl.querySelectorAll("mark.ss-hit");
+  const parents = [];
+  marks.forEach(function (m) {
+    const p = m.parentNode;
+    if (!p) { return; }
+    while (m.firstChild) { p.insertBefore(m.firstChild, m); }
+    p.removeChild(m);
+    if (parents.indexOf(p) === -1) { parents.push(p); }
+  });
+  parents.forEach(function (p) {
+    if (p.normalize) { p.normalize(); }
+  });
+  return marks.length;
+}
+
+/* The results paint, at the note list's own tail so
+   any re-render re-derives it from the standing
+   render: the note cards' title and snippet, and
+   the Email section's rows (sender, subject,
+   snippet). Chips and furniture are not painted. */
+function searchHitPaintResultsIn(listEl) {
+  const tokens = searchHitTokens();
+  if (!tokens.length || !listEl) { return; }
+  listEl.querySelectorAll(".note-card").forEach(function (card) {
+    const title = card.querySelector(".card-title-text");
+    if (title) { searchHitPaint(title, tokens, false); }
+    const snip = card.querySelector(".card-snippet");
+    if (snip) { searchHitPaint(snip, tokens, false); }
+  });
+  const section = listEl.querySelector("#mailSearchSection");
+  if (section) {
+    section.querySelectorAll(".mail-row").forEach(function (row) {
+      [".mail-row-from", ".mail-row-subject", ".mail-row-snippet"]
+        .forEach(function (sel) {
+          const el = row.querySelector(sel);
+          if (el) { searchHitPaint(el, tokens, false); }
+        });
+    });
+  }
+}
+
+/* The Tasks view's paint, at fillTasksBody's tails:
+   the rows' title, description preview, notebook
+   cell, and card meta, and the calendar entries'
+   titles, lit by the Find tasks words. The paint is
+   scoped to the tasks body: buildTaskRowEl is
+   shared with surfaces that are not search results
+   (note body task blocks, the Things page) and is
+   never painted itself. */
+function searchHitPaintTasks(body) {
+  const tokens = taskSearchHitTokens();
+  if (!tokens.length || !body) { return; }
+  body.querySelectorAll(".task-row").forEach(function (row) {
+    [".task-row-title", ".task-row-desc", ".task-cell-nb",
+     ".task-row-meta"].forEach(function (sel) {
+      const el = row.querySelector(sel);
+      if (el) { searchHitPaint(el, tokens, false); }
+    });
+  });
+  body.querySelectorAll(".task-cal-entry-title")
+    .forEach(function (el) {
+      searchHitPaint(el, tokens, false);
+    });
+}
+
+/* The editor session. The card click arms; the open
+   switch consumes; the fill paints. */
+function armSearchHitEditor(noteId) {
+  const tokens = searchHitTokens();
+  searchHitEditorArm = tokens.length
+    ? { noteId: noteId, tokens: tokens } : null;
+}
+function searchHitEditorOpened(id) {
+  searchHitEditorSession =
+    (searchHitEditorArm && searchHitEditorArm.noteId === id)
+      ? searchHitEditorArm : null;
+  searchHitEditorArm = null;
+}
+function paintSearchHitEditor(note) {
+  const s = searchHitEditorSession;
+  if (!s || !note || s.noteId !== note.id) { return; }
+  /* Only the note the editor actually filled wears
+     the paint: a shell whose body has not landed
+     leaves the pane showing another state, and its
+     landing render paints then. */
+  if (renderEditor._forId !== note.id) { return; }
+  if (!searchHitTokensEqual(s.tokens, searchHitTokens())) {
+    return;
+  }
+  const body = document.getElementById("noteBody");
+  if (!body) { return; }
+  searchHitPaint(body, s.tokens, true);
+  /* The paint's mutation records are drained, the
+     editorHistoryRestore discipline, so the history
+     observer never classifies the paint as a change;
+     the baseline the reset just stood is canonical
+     (paint free) regardless. */
+  editorHistoryDrainRecords();
+}
+
+/* Take the editor's paint off and end its session.
+   The caret is read before the unwrap and restored
+   after it, by text offsets, which a wrap never
+   changes (a wrap splits nodes, never text). Called
+   by the first classified body edit (from
+   editorHistoryInputSignal) and by a search change. */
+function clearSearchHitEditorPaint() {
+  searchHitEditorSession = null;
+  searchHitEditorArm = null;
+  const body = document.getElementById("noteBody");
+  if (!body || !body.querySelector("mark.ss-hit")) { return; }
+  const caret = editorHistoryCaret();
+  searchHitUnpaint(body);
+  editorHistoryDrainRecords();
+  if (caret && caret.a >= 0) {
+    editorHistoryRestoreCaret(caret);
+  }
+}
+
+/* The mail session. mailOpenSearchResult arms; the
+   message open consumes; the pane render paints. */
+function armSearchHitMail(id) {
+  const tokens = searchHitTokens();
+  searchHitMailArm = tokens.length
+    ? { id: id, tokens: tokens } : null;
+}
+function searchHitMailOpened(id) {
+  searchHitMailSession =
+    (searchHitMailArm && searchHitMailArm.id === id)
+      ? searchHitMailArm : null;
+  searchHitMailArm = null;
+}
+function paintSearchHitMailRead(full) {
+  const s = searchHitMailSession;
+  if (!s || !full || s.id !== full.id) { return; }
+  if (!searchHitTokensEqual(s.tokens, searchHitTokens())) {
+    return;
+  }
+  const subj = document.getElementById("mailReadSubject");
+  if (subj) { searchHitPaint(subj, s.tokens, false); }
+  const bodyEl = document.getElementById("mailBody");
+  if (bodyEl) { searchHitPaint(bodyEl, s.tokens, false); }
+}
+
+/* A search change or clear, called from both
+   writers of state.search: a standing session whose
+   words no longer match the standing search loses
+   its paint on the spot, in the open note and in
+   the reading pane. The result lists need no
+   clearing; they repaint from the standing render. */
+function searchHitsOnSearchChange() {
+  const tokens = searchHitTokens();
+  if (searchHitEditorSession &&
+      !searchHitTokensEqual(searchHitEditorSession.tokens,
+        tokens)) {
+    clearSearchHitEditorPaint();
+  } else if (!searchHitEditorSession) {
+    /* Paint can outlive its session in one corner:
+       the painted note re-opened through a path that
+       is not a fresh fill (the same note, already
+       open). It is stale the moment the search
+       moves; the caret is in the search box, so a
+       plain unwrap is the whole job. */
+    const body = document.getElementById("noteBody");
+    if (body && body.querySelector("mark.ss-hit")) {
+      searchHitUnpaint(body);
+      editorHistoryDrainRecords();
+    }
+  }
+  if (searchHitMailSession &&
+      !searchHitTokensEqual(searchHitMailSession.tokens,
+        tokens)) {
+    searchHitMailSession = null;
+    const subj = document.getElementById("mailReadSubject");
+    if (subj) { searchHitUnpaint(subj); }
+    const bodyEl = document.getElementById("mailBody");
+    if (bodyEl) { searchHitUnpaint(bodyEl); }
+  }
+}
+
 /* One parsed predicate against one note. */
 function searchTermMatches(note, pred) {
   if (pred.kind === "text") {
@@ -4992,6 +5361,9 @@ function renderNoteList() {
        stands under the results even when no note
        matches. */
     renderMailSearchSection(listEl);
+    /* v2.153: the search's words light up in
+       what the results show. */
+    searchHitPaintResultsIn(listEl);
     return;
   }
   /* v1.8.1: the multi select set this view's rows draw from:
@@ -5181,6 +5553,10 @@ function renderNoteList() {
   /* v2.152: the sidebar search's Email section
      stands at the foot of the results. */
   renderMailSearchSection(listEl);
+  /* v2.153: the search's words light up in what
+     the results show (cards and the Email
+     section alike). */
+  searchHitPaintResultsIn(listEl);
 }
 
 /* --------------------------------------------------------------------------
@@ -6628,6 +7004,9 @@ function fillTasksBody() {
      as the list does. */
   if (state.tasksView.mode === "calendar") {
     fillTasksCalendar(body);
+    /* v2.153: the Find tasks words light up in
+       the entries the filter kept. */
+    searchHitPaintTasks(body);
     return;
   }
   const groups = taskGroupsForView();
@@ -6683,6 +7062,9 @@ function fillTasksBody() {
     }
     body.appendChild(group);
   });
+  /* v2.153: the Find tasks words light up in the
+     rows the filter kept. */
+  searchHitPaintTasks(body);
 }
 
 /* ---------------- v2.34: the calendar view of tasks -----
@@ -8317,6 +8699,12 @@ function openNote(id) {
    v2.50. Kept separate so the settle gate above can defer
    it without duplicating it. */
 function openNoteNow(id) {
+  /* v2.153: the search hit session for this open
+     is decided here, at the one switch every
+     open passes through: an arm naming this
+     note becomes the session; any other open
+     starts none. */
+  searchHitEditorOpened(id);
   /* v2.72: leaving a note banks its editor place first
      (see the view memory section); the capture reads
      the outgoing note's standing editor, so it runs
@@ -8749,6 +9137,16 @@ function renderEditor() {
     const scroller = document.querySelector(".editor-scroll");
     if (scroller) { scroller.scrollTop = 0; }
   }
+  /* v2.153: a note opened from the search results
+     wears its hits. The call stands here, past the
+     fill and the place restores, so it covers a
+     switch fill, a sync refill, a shell landing,
+     and the no fill render of the note already open
+     (a result click on the open note); the paint is
+     idempotent, and paintSearchHitEditor checks
+     the standing session and drains the history
+     observer's records of it. */
+  paintSearchHitEditor(note);
 
   /* v2.5: the notebook link follows the note. A trashed or
      archived note shows the notebook it came from, since that is

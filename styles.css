@@ -29,6 +29,13 @@
   --accent:#57A773;
   --soft:#DCE8DC;
   --selected:#DCE8DC;
+  /* v2.153: the search hit mark's ground: a warm
+     highlighter tone, with its own ink, since
+     the mark lands on the dark lists, the light
+     lists, and the note page (white in both
+     themes) alike. */
+  --hit-bg:#FFDF80;
+  --hit-text:#10231A;
   --bg:#F7F8F3;
   --text:#10231A;
   /* v2.59: the strong text tone a family of menu and
@@ -104,6 +111,11 @@ body.dark{
   --muted:#B7CFC0;
   --soft:#1D4A38;
   --selected:#1D4A38;
+  /* v2.153: the dark theme's hit ground, a deeper
+     amber that holds the same ink on the dark
+     surfaces and on the white note page. */
+  --hit-bg:#E8A33D;
+  --hit-text:#10231A;
   --shadow:0 4px 18px rgba(0,0,0,.42);
 }
 *{box-sizing:border-box;}
@@ -129,6 +141,11 @@ input,select,textarea{font:inherit;color:var(--text);}
    light in both; it applies app wide, editor, fields, and all. */
 ::selection{background:#BFDECA;color:#10231A;}
 ::-moz-selection{background:#BFDECA;color:#10231A;}
+
+/* v2.153: the search hit mark, the one dress for
+   every surface the paint touches (result rows,
+   task rows, the reading pane, the note page). */
+mark.ss-hit{background:var(--hit-bg);color:var(--hit-text);border-radius:2px;}
 
 /* ---------- generic buttons and fields ---------- */
 .btn{
