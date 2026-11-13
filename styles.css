@@ -1202,6 +1202,52 @@ body.dark .list-tb-btn.has-filters{color:var(--accent);}
 .list-menu-item .sort-dir{
   width:12px;text-align:center;color:var(--muted);font-size:12px;
 }
+/* v2.147: the notebook menu's group rules, submenus,
+   and away-from-the-toolbar stands. A rule is a
+   hairline in the border color; renderListToolbar
+   hides a rule whenever either group it separates
+   has nothing to show. */
+.list-menu-divider{
+  height:1px;background:var(--border);margin:4px 2px;flex:0 0 auto;
+}
+/* A submenu item carries its caret at the row's
+   right edge (a pseudo element, so the item's label
+   text is exactly what it always was). */
+.list-menu-item.has-submenu::after{
+  content:"\25B8";margin-left:auto;color:var(--muted);font-size:11px;
+}
+/* The wrap is a plain column member of the menu, so
+   the item inside it lays out like every other item;
+   the flyout it carries is positioned fixed by the
+   opener's own placement, clear of every clipping
+   ancestor. */
+.nb-submenu-wrap{display:flex;flex-direction:column;}
+/* The flyout: the list panel's dress, placed by
+   placeNbSubmenu at the item's right edge or flipped
+   to its left, whichever stays in the viewport. */
+.nb-submenu{
+  position:fixed;z-index:410;min-width:200px;max-width:86vw;
+  max-height:60vh;overflow-y:auto;
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius-card);box-shadow:var(--shadow);
+  padding:6px;display:flex;flex-direction:column;gap:2px;
+}
+.nb-submenu.hidden{display:none;}
+/* The notebook menu away from its toolbar anchor:
+   opened at the pointer from a sidebar right click,
+   it stands fixed like the note context menu and
+   scrolls when tall. In header mode (the Notebooks
+   header's right click) only its New Notebook item
+   stands. */
+#nbActionMenu.nb-context{
+  position:fixed;right:auto;z-index:400;
+  max-height:70vh;overflow-y:auto;
+}
+#nbActionMenu.nb-header-mode .list-menu-item:not(#nbNewNotebookItem),
+#nbActionMenu.nb-header-mode .list-menu-divider,
+#nbActionMenu.nb-header-mode .nb-submenu-wrap{display:none;}
+/* The notebook name and delete dialogs are small cards. */
+.nb-name-card{max-width:420px;}
 /* The filter panel is a small form, not a menu: wider, with grouped
    controls. It stays open while its checkboxes and date inputs are
    being set. */
@@ -2032,6 +2078,7 @@ body.dark .home-cal-note-time{color:var(--accent);}
 #noteList, .editor-scroll, .tasks-scroll, #sidebar, #sidebarRail, #railFlyout,
 #tagPicker, .mention-list, .note-link-list, .filter-tag-list,
 .version-history-list, .version-preview, .tb-menu, .modal,
+.nb-submenu, #nbActionMenu.nb-context,
 .share-people-list, .share-suggestions{
   scrollbar-width: thin;
   scrollbar-color: transparent transparent;
@@ -2041,7 +2088,8 @@ body.dark .home-cal-note-time{color:var(--accent);}
 .mention-list:hover, .note-link-list:hover,
 .share-people-list:hover, .share-suggestions:hover,
 .filter-tag-list:hover, .version-history-list:hover,
-.version-preview:hover, .tb-menu:hover, .modal:hover{
+.version-preview:hover, .tb-menu:hover, .modal:hover,
+.nb-submenu:hover, #nbActionMenu.nb-context:hover{
   scrollbar-color: rgba(87,167,115,.55) transparent;
 }
 #sidebar:hover, #sidebarRail:hover, #railFlyout:hover{
@@ -2054,7 +2102,8 @@ body.dark .share-people-list:hover,
 body.dark .share-suggestions:hover,
 body.dark .version-history-list:hover,
 body.dark .version-preview:hover, body.dark .tb-menu:hover,
-body.dark .modal:hover{
+body.dark .modal:hover, body.dark .nb-submenu:hover,
+body.dark #nbActionMenu.nb-context:hover{
   scrollbar-color: rgba(87,167,115,.65) transparent;
 }
 #noteList::-webkit-scrollbar, .editor-scroll::-webkit-scrollbar, .tasks-scroll::-webkit-scrollbar,
@@ -2065,7 +2114,8 @@ body.dark .modal:hover{
 .filter-tag-list::-webkit-scrollbar,
 .version-history-list::-webkit-scrollbar,
 .version-preview::-webkit-scrollbar, .tb-menu::-webkit-scrollbar,
-.modal::-webkit-scrollbar{
+.modal::-webkit-scrollbar, .nb-submenu::-webkit-scrollbar,
+#nbActionMenu.nb-context::-webkit-scrollbar{
   width:10px;height:10px;
 }
 #noteList::-webkit-scrollbar-track,
@@ -2080,7 +2130,9 @@ body.dark .modal:hover{
 .version-history-list::-webkit-scrollbar-track,
 .version-preview::-webkit-scrollbar-track,
 .tb-menu::-webkit-scrollbar-track,
-.modal::-webkit-scrollbar-track{
+.modal::-webkit-scrollbar-track,
+.nb-submenu::-webkit-scrollbar-track,
+#nbActionMenu.nb-context::-webkit-scrollbar-track{
   background:transparent;
 }
 #noteList::-webkit-scrollbar-thumb,
@@ -2095,7 +2147,9 @@ body.dark .modal:hover{
 .version-history-list::-webkit-scrollbar-thumb,
 .version-preview::-webkit-scrollbar-thumb,
 .tb-menu::-webkit-scrollbar-thumb,
-.modal::-webkit-scrollbar-thumb{
+.modal::-webkit-scrollbar-thumb,
+.nb-submenu::-webkit-scrollbar-thumb,
+#nbActionMenu.nb-context::-webkit-scrollbar-thumb{
   background-color:transparent;border-radius:8px;
   border:2px solid transparent;background-clip:padding-box;
   transition:background-color 250ms ease;
@@ -2109,7 +2163,9 @@ body.dark .modal:hover{
 .version-history-list:hover::-webkit-scrollbar-thumb,
 .version-preview:hover::-webkit-scrollbar-thumb,
 .tb-menu:hover::-webkit-scrollbar-thumb,
-.modal:hover::-webkit-scrollbar-thumb{
+.modal:hover::-webkit-scrollbar-thumb,
+.nb-submenu:hover::-webkit-scrollbar-thumb,
+#nbActionMenu.nb-context:hover::-webkit-scrollbar-thumb{
   background-color:rgba(87,167,115,.45);
 }
 #sidebar:hover::-webkit-scrollbar-thumb,
@@ -2126,7 +2182,9 @@ body.dark .filter-tag-list:hover::-webkit-scrollbar-thumb,
 body.dark .version-history-list:hover::-webkit-scrollbar-thumb,
 body.dark .version-preview:hover::-webkit-scrollbar-thumb,
 body.dark .tb-menu:hover::-webkit-scrollbar-thumb,
-body.dark .modal:hover::-webkit-scrollbar-thumb{
+body.dark .modal:hover::-webkit-scrollbar-thumb,
+body.dark .nb-submenu:hover::-webkit-scrollbar-thumb,
+body.dark #nbActionMenu.nb-context:hover::-webkit-scrollbar-thumb{
   background-color:rgba(87,167,115,.6);
 }
 #noteList::-webkit-scrollbar-thumb:hover,
@@ -2141,7 +2199,9 @@ body.dark .modal:hover::-webkit-scrollbar-thumb{
 .version-history-list::-webkit-scrollbar-thumb:hover,
 .version-preview::-webkit-scrollbar-thumb:hover,
 .tb-menu::-webkit-scrollbar-thumb:hover,
-.modal::-webkit-scrollbar-thumb:hover{
+.modal::-webkit-scrollbar-thumb:hover,
+.nb-submenu::-webkit-scrollbar-thumb:hover,
+#nbActionMenu.nb-context::-webkit-scrollbar-thumb:hover{
   background-color:rgba(46,125,79,.85);
 }
 /* v2.18 themed scrollbars: end */

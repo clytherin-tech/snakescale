@@ -745,13 +745,23 @@ function wireEvents() {
     setMobileView("list");
   });
 
+  /* v2.147: the name comes through the notebook name
+     modal (promptCreateNotebook), like every notebook
+     naming now; the native prompt is gone from the
+     flow. */
   document.getElementById("addNotebookBtn").addEventListener("click", function () {
-    const name = prompt("New notebook name");
-    if (name && name.trim()) {
-      createNotebook(name.trim()).catch(function (err) {
-        toast("Could not create notebook: " + err.message, true);
-      });
-    }
+    promptCreateNotebook();
+  });
+
+  /* v2.147: a right click on the Notebooks section
+     header opens the one notebook menu in header mode
+     at the pointer (its New Notebook item stands
+     there). The row's own click keeps folding the
+     section and the add button's click keeps its job;
+     only the context menu is new here. */
+  document.getElementById("notebookSectionToggle").addEventListener("contextmenu", function (ev) {
+    ev.preventDefault();
+    openNbHeaderMenuAt(ev.clientX, ev.clientY);
   });
 
   /* v2.62: the sidebar section fold toggles, one per
@@ -834,33 +844,53 @@ function wireEvents() {
       chooseListSort(btn.getAttribute("data-sort"));
     });
   });
-  /* Notebook menu items act on the notebook of the current view.
-     renderListToolbar keeps them disabled outside a notebook view,
-     so these handlers can trust the view; the guard stays as a
-     second line of defense. */
+  /* Notebook menu items act on the one menu's target
+     (nbMenuTargetSlug), captured before the menu
+     closes so the flows read a settled slug: the
+     notebook in view from the toolbar button, or the
+     sidebar row's notebook from a right click.
+     renderListToolbar keeps the items disabled when
+     there is no target, and the null guard here stays
+     as a second line of defense. */
   document.getElementById("nbRenameBtn").addEventListener("click", function () {
-    if (state.view.kind !== "notebook") { return; }
+    const slug = nbMenuTargetSlug();
+    if (!slug) { return; }
     closeListPanels();
-    promptRenameNotebook(state.view.value);
+    promptRenameNotebook(slug);
+  });
+  document.getElementById("nbCreateSubBtn").addEventListener("click", function () {
+    const slug = nbMenuTargetSlug();
+    if (!slug) { return; }
+    closeListPanels();
+    promptCreateSubNotebook(slug);
   });
   document.getElementById("nbDeleteBtn").addEventListener("click", function () {
-    if (state.view.kind !== "notebook") { return; }
+    const slug = nbMenuTargetSlug();
+    if (!slug) { return; }
     closeListPanels();
-    confirmDeleteNotebook(state.view.value);
+    confirmDeleteNotebook(slug);
   });
-  /* v2.29: the stack items on the same menu. Add opens the stack
-     panel (the shared toggle closes the action menu as it opens
-     the panel); Remove acts at once, like Evernote's, with no
-     confirm, because nothing is deleted and re-adding is one
-     menu away. */
+  /* v2.147: the header mode's New Notebook item runs
+     the create flow, through the name modal. */
+  document.getElementById("nbNewNotebookItem").addEventListener("click", function () {
+    closeListPanels();
+    promptCreateNotebook();
+  });
+  /* v2.29: the stack items on the same menu. Remove acts at
+     once, like Evernote's, with no confirm, because nothing
+     is deleted and re-adding is one menu away.
+     v2.147: Add opens the stack picker as the menu's own
+     submenu (toggleNbSubmenu), and both items judge and
+     act on the menu's target. */
   document.getElementById("nbAddToStackBtn").addEventListener("click", function () {
-    if (state.view.kind !== "notebook") { return; }
-    toggleListPanel("nbStackPanel");
+    if (!nbMenuTargetSlug()) { return; }
+    toggleNbSubmenu("nbStackPanel");
   });
   document.getElementById("nbRemoveFromStackBtn").addEventListener("click", function () {
-    if (state.view.kind !== "notebook") { return; }
+    const slug = nbMenuTargetSlug();
+    if (!slug) { return; }
     closeListPanels();
-    setNotebookStack(state.view.value, null).catch(function (err) {
+    setNotebookStack(slug, null).catch(function (err) {
       toast("Remove from stack failed: " + err.message, true);
     });
   });
@@ -868,12 +898,13 @@ function wireEvents() {
      item is gone with the switch itself, every
      notebook storing new notes as Google Docs now
      (see notebooks.js). */
-  /* v2.63: Move to... opens the parent panel (the shared
-     toggle closes the action menu as it opens the panel,
-     exactly like Add to Stack). */
+  /* v2.63: Move to... opens the parent panel.
+     v2.147: the panel is the menu's submenu now, like
+     Add to Stack's picker, and it serves the menu's
+     target. */
   document.getElementById("nbMoveBtn").addEventListener("click", function () {
-    if (state.view.kind !== "notebook") { return; }
-    toggleListPanel("nbParentPanel");
+    if (!nbMenuTargetSlug()) { return; }
+    toggleNbSubmenu("nbParentPanel");
   });
   /* v2.29: the stack header menu's items act on the stack the
      menu was opened for (stackMenuFor), captured before the menu
@@ -990,9 +1021,10 @@ function wireEvents() {
      belongs to the selected note, like the pin item, and
      re-checks that the selection is a live note. */
   document.getElementById("nbShortcutNbBtn").addEventListener("click", function () {
-    if (state.view.kind !== "notebook") { return; }
+    const slug = nbMenuTargetSlug();
+    if (!slug) { return; }
     closeListPanels();
-    toggleShortcut("notebook", state.view.value);
+    toggleShortcut("notebook", slug);
   });
   document.getElementById("nbShortcutNoteBtn").addEventListener("click", function () {
     closeListPanels();
@@ -1054,6 +1086,51 @@ function wireEvents() {
     createTableOfContentsNote().catch(function (err) {
       toast(err.message, true);
     });
+  });
+  /* v2.147: the notebook name modal's wiring: Save
+     submits, Cancel dismisses, Enter in the field
+     submits, and a backdrop click and Escape dismiss,
+     the modal family's established gestures. */
+  document.getElementById("nbNameSaveBtn").addEventListener("click", function () {
+    submitNbNameModal();
+  });
+  document.getElementById("nbNameCancelBtn").addEventListener("click", function () {
+    closeNbNameModal();
+  });
+  document.getElementById("nbNameModal").addEventListener("click", function (ev) {
+    if (ev.target === ev.currentTarget) { closeNbNameModal(); }
+  });
+  document.getElementById("nbNameInput").addEventListener("keydown", function (ev) {
+    if (ev.key === "Enter") {
+      ev.preventDefault();
+      submitNbNameModal();
+    }
+  });
+  document.addEventListener("keydown", function (ev) {
+    if (ev.key !== "Escape") { return; }
+    const modal = document.getElementById("nbNameModal");
+    if (modal && !modal.classList.contains("hidden")) {
+      closeNbNameModal();
+    }
+  });
+  /* v2.147: the notebook delete warning's wiring: Yes
+     runs the cascade, and No, a backdrop click, and
+     Escape all change nothing at all. */
+  document.getElementById("nbDeleteYesBtn").addEventListener("click", function () {
+    runNbDelete();
+  });
+  document.getElementById("nbDeleteNoBtn").addEventListener("click", function () {
+    closeNbDeleteConfirm();
+  });
+  document.getElementById("nbDeleteModal").addEventListener("click", function (ev) {
+    if (ev.target === ev.currentTarget) { closeNbDeleteConfirm(); }
+  });
+  document.addEventListener("keydown", function (ev) {
+    if (ev.key !== "Escape") { return; }
+    const modal = document.getElementById("nbDeleteModal");
+    if (modal && !modal.classList.contains("hidden")) {
+      closeNbDeleteConfirm();
+    }
   });
   /* v2.38: the sidebar's Templates button opens the one
      gallery; the gallery's own Close button and a

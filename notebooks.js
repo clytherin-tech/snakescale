@@ -51,6 +51,46 @@ async function createNotebook(name) {
   return nb;
 }
 
+/* v2.147: create a sub notebook under an existing
+   notebook, from the notebook menu's Create
+   Sub-notebook item. The record is createNotebook's
+   shape plus the parent field the tree reads, and the
+   persistence is createNotebook's shape too: the state
+   change and the render land at once, and the folder
+   marker and index writes run behind them. The parent
+   is expanded first, so the new sub notebook is
+   visible where it lands (the stack assignment's
+   standing rule for a filed notebook). */
+async function createSubNotebook(parentSlug, name) {
+  const parent = state.notebooks.find(function (n) {
+    return n.slug === parentSlug;
+  });
+  if (!parent) { return null; }
+  const slug = uniqueSlug(slugify(name), null);
+  const nb = { slug: slug, name: String(name).trim(),
+    created: new Date().toISOString(), parent: parentSlug };
+  state.notebooks.push(nb);
+  const ci = state.collapsedNotebooks.indexOf(parentSlug);
+  if (ci >= 0) {
+    state.collapsedNotebooks.splice(ci, 1);
+    saveSettings();
+  }
+  saveCache();
+  renderAll();
+  if (state.online && state.repoExists) {
+    storePutFile("notebooks/" + slug + "/.gitkeep", "", null,
+      "Create notebook " + slug, { fresh: true })
+      .then(function () { saveIndex(); })
+      .catch(function (err) {
+        toast("Notebook saved locally; " + storageDisplayName() +
+          " write failed: " + err.message, true);
+      });
+  } else {
+    queueOp({ kind: "put", path: "notebooks/" + slug + "/.gitkeep", content: "", noteId: null });
+  }
+  return nb;
+}
+
 async function renameNotebook(slug, newName) {
   const nb = state.notebooks.find(function (n) { return n.slug === slug; });
   if (!nb) { return; }
@@ -139,43 +179,49 @@ async function renameNotebook(slug, newName) {
   renderAll();
 }
 
+/* v2.147: Chris's delete rule replaces the v2.63
+   promotion. Deleting a notebook deletes everything
+   inside it: every note in the notebook and in its
+   whole subtree moves to Trash through the standard
+   note deletion path (moveNoteToTrash, the same path
+   deleting a note by hand takes, so the notes land
+   where that path lands them), every sub notebook is
+   removed with it, and then the notebook itself is
+   removed. The UI layer's warning (render.js) states
+   the rule and the counts before this runs.
+   Persistence keeps the standing shape, widened to
+   the subtree: every removed notebook's shortcut
+   drops (its notes' shortcuts stay: those notes are
+   in Trash now, where a shortcut renders as
+   unavailable), the fold records prune, each removed
+   notebook's folder marker is deleted, and the index
+   save carries the new tree. A failed cleanup step
+   is named in a toast, never silent, and the local
+   removal stands either way (the v2.143 honesty
+   rule); a load that later rebuilds the index from
+   folders settles any marker a failed step left. */
 async function deleteNotebook(slug) {
-  const doomed = state.notes.filter(function (n) { return n.notebook === slug; });
+  const subtree = [slug].concat(notebookDescendantsOf(slug));
+  const doomed = state.notes.filter(function (n) {
+    return subtree.indexOf(n.notebook) >= 0;
+  });
   for (const note of doomed) {
     await moveNoteToTrash(note, true);
   }
-  /* v2.63: the sub-notebooks are NOT deleted: each is
-     promoted to the deleted notebook's own level (its
-     parent, or top level), alphabetical there as
-     everywhere. Only the notebook's own notes trash,
-     exactly as they always have. */
-  const doomedNb = state.notebooks.find(function (n) {
-    return n.slug === slug; });
-  const promoteTo = doomedNb ? notebookParentOf(doomedNb) : null;
-  state.notebooks.forEach(function (kid) {
-    if (notebookParentOf(kid) === slug) {
-      if (promoteTo) { kid.parent = promoteTo; }
-      else { delete kid.parent; }
-    }
+  subtree.forEach(function (s) { shortcutsDrop("notebook", s); });
+  state.notebooks = state.notebooks.filter(function (n) {
+    return subtree.indexOf(n.slug) < 0;
   });
-  state.notebooks = state.notebooks.filter(function (n) { return n.slug !== slug; });
-  /* v2.63: the deleted notebook's own fold record goes
-     with it, and so do folds for notebooks that lost
-     their last child in the promotion (the prune's
-     standing rule). */
   pruneCollapsedNotebooks();
   saveSettings();
-  /* v2.31: the deleted notebook's shortcut goes with it
-     (its notes' shortcuts stay: those notes are in Trash
-     now, where a shortcut renders as unavailable). The
-     drop rides this flow's own index save below. */
-  shortcutsDrop("notebook", slug);
   if (state.online && state.repoExists) {
     try {
-      const keep = await storeGetFile("notebooks/" + slug + "/.gitkeep");
-      if (keep) {
-        await storeDeleteFile("notebooks/" + slug + "/.gitkeep", keep.token,
-          "Delete notebook " + slug);
+      for (const s of subtree) {
+        const keep = await storeGetFile("notebooks/" + s + "/.gitkeep");
+        if (keep) {
+          await storeDeleteFile("notebooks/" + s + "/.gitkeep", keep.token,
+            "Delete notebook " + s);
+        }
       }
       await saveIndex();
     } catch (err) {
@@ -183,7 +229,8 @@ async function deleteNotebook(slug) {
         " cleanup step failed: " + err.message, true);
     }
   }
-  if (state.view.kind === "notebook" && state.view.value === slug) {
+  if (state.view.kind === "notebook" &&
+      subtree.indexOf(state.view.value) >= 0) {
     state.view = { kind: "all", value: null };
   }
   saveCache();
@@ -388,7 +435,9 @@ async function deleteStack(name) {
    the same drag, v2.67) and unnest by dragging onto
    the Notebooks section header; the notebook menu's
    Move to panel offers the same moves without a drag. Deleting a notebook
-   promotes its sub-notebooks to its own level.
+   deletes the notes inside it and removes its
+   sub-notebooks with it (v2.147, Chris's rule, stated
+   by the menu's warning before it runs).
    -------------------------------------------------------------------------- */
 
 /* The normalized parent slug of a notebook record: the

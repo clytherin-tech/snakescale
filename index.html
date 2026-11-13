@@ -44,7 +44,7 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-11-12-SSN-V21460
+  BUILD STAMP: 2026-11-12-SSN-V21470
   Version: 2.106.0
 
   Revision history:
@@ -6395,22 +6395,46 @@
         <div class="list-tb-wrap">
           <button type="button" class="list-tb-btn" id="listNbMenuBtn" title="Notebook options" aria-label="Notebook options" aria-haspopup="true"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false"><circle cx="8" cy="3" r="1.5" fill="currentColor" stroke="none"/><circle cx="8" cy="8" r="1.5" fill="currentColor" stroke="none"/><circle cx="8" cy="13" r="1.5" fill="currentColor" stroke="none"/></svg></button>
           <div id="nbActionMenu" class="list-panel hidden" role="menu" aria-label="Notebook options">
+            <!-- v2.147: the one notebook menu. The list
+                 toolbar's three dot button opens it for the
+                 notebook in view; a right click on a sidebar
+                 notebook row opens this same menu at the
+                 pointer, targeted at the clicked notebook;
+                 a right click on the Notebooks section
+                 header opens it in header mode, where only
+                 the New Notebook item below stands. Its
+                 items stand in three groups divided by
+                 rules: the notebook group, the note group,
+                 and the view's bulk group. -->
+            <button type="button" class="list-menu-item hidden" id="nbNewNotebookItem" role="menuitem">New Notebook...</button>
             <button type="button" class="list-menu-item" id="nbRenameBtn" role="menuitem">Rename Notebook</button>
+            <!-- v2.147: create a sub notebook under the
+                 menu's notebook, named through the notebook
+                 name modal like every notebook naming. -->
+            <button type="button" class="list-menu-item" id="nbCreateSubBtn" role="menuitem">Create Sub-notebook...</button>
             <!-- v2.29: stack assignment, Evernote's notebook menu
                  choices surfaced on this app's notebook surface.
-                 Add opens the stack panel below; Remove shows
-                 only while the open notebook is in a stack (its
-                 hidden state is set in renderListToolbar). -->
-            <button type="button" class="list-menu-item" id="nbAddToStackBtn" role="menuitem">Add to Stack...</button>
+                 v2.147: Add opens its picker as a submenu of
+                 this menu (a sibling panel through v2.146);
+                 Remove shows only while the menu's notebook
+                 is in a stack (its hidden state is set in
+                 renderListToolbar). -->
+            <div class="nb-submenu-wrap" id="nbStackWrap">
+              <button type="button" class="list-menu-item has-submenu" id="nbAddToStackBtn" role="menuitem" aria-haspopup="true">Add to Stack...</button>
+              <div id="nbStackPanel" class="nb-submenu hidden" role="menu" aria-label="Add to stack"></div>
+            </div>
             <button type="button" class="list-menu-item hidden" id="nbRemoveFromStackBtn" role="menuitem">Remove from Stack</button>
-            <!-- v2.63: Move to... opens the parent panel
-                 below, the nesting counterpart of the stack
-                 items: it lists Top level and every eligible
-                 parent (never the notebook itself or one of
-                 its own sub-notebooks), the current one
-                 marked. renderListToolbar sets its hidden
-                 and disabled state like Rename's. -->
-            <button type="button" class="list-menu-item" id="nbMoveBtn" role="menuitem">Move to...</button>
+            <!-- v2.63: Move to..., the nesting counterpart
+                 of the stack items: it lists Top level and
+                 every eligible parent (never the notebook
+                 itself or one of its own sub-notebooks), the
+                 current one marked. renderListToolbar sets
+                 its hidden and disabled state like Rename's.
+                 v2.147: the picker is this menu's submenu. -->
+            <div class="nb-submenu-wrap" id="nbMoveWrap">
+              <button type="button" class="list-menu-item has-submenu" id="nbMoveBtn" role="menuitem" aria-haspopup="true">Move to...</button>
+              <div id="nbParentPanel" class="nb-submenu hidden" role="menu" aria-label="Move notebook to"></div>
+            </div>
             <!-- v2.31: the open notebook's shortcut toggle.
                  It sits with the notebook items and is labelled
                  for its target, because this menu mixes
@@ -6434,6 +6458,11 @@
                  Unpin note) from the selected note, enables it only
                  when a live note is selected, and hides it entirely
                  in Trash and Archive views. -->
+            <!-- v2.147: the rule between the notebook
+                 group and the note group; renderListToolbar
+                 hides it when either side has nothing
+                 to show. -->
+            <div class="list-menu-divider" id="nbMenuDivider1" role="separator"></div>
             <button type="button" class="list-menu-item" id="nbPinBtn" role="menuitem">Pin note</button>
             <!-- v2.31: the selected note's shortcut toggle,
                  beside Pin note, this menu's other note item.
@@ -6476,6 +6505,11 @@
                  belong to Trash and the Archive; renderListToolbar
                  shows and enables the ones for the current view and
                  keeps the rest hidden. -->
+            <!-- v2.147: the rule between the note group
+                 and the view's bulk group; renderListToolbar
+                 hides it when either side has nothing
+                 to show. -->
+            <div class="list-menu-divider" id="nbMenuDivider2" role="separator"></div>
             <button type="button" class="list-menu-item danger hidden" id="nbEmptyTrashBtn" role="menuitem">Empty Trash</button>
             <button type="button" class="list-menu-item danger hidden" id="nbDeleteSelectedBtn" role="menuitem">Delete Selected</button>
             <button type="button" class="list-menu-item hidden" id="nbRestoreSelectedBtn" role="menuitem">Restore Selected</button>
@@ -6498,19 +6532,12 @@
                  an internal link to each selected note. -->
             <button type="button" class="list-menu-item hidden" id="nbTocNoteBtn" role="menuitem">Create Table of Contents Note</button>
           </div>
-          <!-- v2.29: the stack picker panel, built at open time
-               by buildStackPanel: New stack... first, then one
-               item per existing stack with the current one
-               marked. It belongs to the shared list panel family
-               (LIST_PANEL_IDS), so it opens, closes, and
-               dismisses with the rest. -->
-          <div id="nbStackPanel" class="list-panel hidden" role="menu" aria-label="Add to stack"></div>
-          <!-- v2.63: the parent picker panel, built at open
-               time by buildParentPanel: Top level first,
-               then the eligible parents in tree order with
-               the current one marked. It belongs to the
-               shared list panel family (LIST_PANEL_IDS). -->
-          <div id="nbParentPanel" class="list-panel hidden" role="menu" aria-label="Move notebook to"></div>
+          <!-- v2.147: the stack and parent pickers live
+               inside the action menu above as its submenus
+               (nbStackPanel and nbParentPanel, built at open
+               time by buildStackPanel and buildParentPanel
+               as always); through v2.146 they stood here as
+               sibling panels of the shared list panel family. -->
         </div>
       </div>
     </div>
@@ -8643,6 +8670,42 @@
 <div id="taskRowMenu" class="note-ctx-menu hidden" role="menu" aria-label="Task actions">
   <button type="button" class="list-menu-item" id="taskRowMenuOpenBtn" role="menuitem">Open task</button>
   <button type="button" class="list-menu-item" id="taskRowMenuCopyBtn" role="menuitem">Copy link</button>
+</div>
+<!-- v2.147: the notebook name modal: the one in-app
+     naming surface for creating a notebook, creating a
+     sub notebook, and renaming a notebook (the flows
+     that used the native prompt through v2.146). The
+     title and the primary button's label are set per
+     opening by openNbNameModal. -->
+<div id="nbNameModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="nbNameTitle">
+  <div class="modal-card nb-name-card">
+    <h2 id="nbNameTitle">New notebook</h2>
+    <div class="field">
+      <label for="nbNameInput">Notebook name</label>
+      <input id="nbNameInput" type="text" autocomplete="off">
+    </div>
+    <div class="modal-foot">
+      <button class="btn" id="nbNameCancelBtn" type="button">Cancel</button>
+      <button class="btn primary" id="nbNameSaveBtn" type="button">Create</button>
+    </div>
+  </div>
+</div>
+<!-- v2.147: the notebook delete warning (Chris's
+     rule): deleting a notebook deletes all the notes
+     inside it, sub notebooks included, so the choice
+     is made here, in a themed dialog with explicit
+     Yes and No buttons, never a native confirm. The
+     text is set per opening by openNbDeleteConfirm
+     and names the notebook and its counts. -->
+<div id="nbDeleteModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="nbDeleteTitle">
+  <div class="modal-card nb-name-card">
+    <h2 id="nbDeleteTitle">Delete notebook</h2>
+    <p class="modal-sub" id="nbDeleteText"></p>
+    <div class="modal-foot">
+      <button class="btn" id="nbDeleteNoBtn" type="button">No</button>
+      <button class="btn danger" id="nbDeleteYesBtn" type="button">Yes</button>
+    </div>
+  </div>
 </div>
 <div id="nbDropOverlay" class="hidden" role="dialog" aria-label="Move note">
   <div class="nb-drop-head">Move to</div>

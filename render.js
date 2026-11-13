@@ -455,6 +455,17 @@ function buildNotebookNavRow(nb, inStack, depth) {
     if (indent > 0 && !(inStack && !depth)) {
       btn.style.marginLeft = indent + "px";
     }
+    /* v2.147: a right click on the row opens the one
+       notebook menu at the pointer, targeted at this
+       notebook; the browser's own menu never stands
+       on a notebook row. A parent row's wrapper
+       carries the listener instead (below), so the
+       caret's strip opens the same menu and the
+       event is handled once. */
+    btn.addEventListener("contextmenu", function (ev) {
+      ev.preventDefault();
+      openNbMenuAt(nb.slug, ev.clientX, ev.clientY);
+    });
     return btn;
   }
   btn.classList.remove("in-stack");
@@ -475,6 +486,12 @@ function buildNotebookNavRow(nb, inStack, depth) {
   });
   wrap.appendChild(chev);
   wrap.appendChild(btn);
+  /* v2.147: the wrapper carries the row's right click
+     menu listener (see the childless row above). */
+  wrap.addEventListener("contextmenu", function (ev) {
+    ev.preventDefault();
+    openNbMenuAt(nb.slug, ev.clientX, ev.clientY);
+  });
   return wrap;
 }
 
@@ -1204,6 +1221,9 @@ function anyOverlayOpen() {
     /* v2.24: the task editor modal joins the set for the same
        reasons as every other dialog. */
     "taskModal",
+    /* v2.147: the notebook name and delete dialogs
+       join the set for the same reason. */
+    "nbNameModal", "nbDeleteModal",
     "nbDropOverlay", "notebookMenu",
     "railFlyout", "linkBar", "linkViewMenu", "noteLinkCard",
     "tableMenu", "cellMenu", "attMenu",
@@ -1334,11 +1354,196 @@ function compareNotesByListSort(a, b) {
    document level outside click and Escape closers are wired with the
    rest of the toolbar events. */
 const LIST_PANEL_IDS = ["filterPanel", "sortMenu", "nbActionMenu", "nbStackPanel", "nbParentPanel"];
+
+/* --------------------------------------------------------------------------
+   v2.147: the one notebook menu. #nbActionMenu is the
+   only notebook menu in the app: the list toolbar's
+   three dot button opens it for the notebook in view,
+   a right click on a sidebar notebook row opens it at
+   the pointer for that row's notebook, and a right
+   click on the Notebooks section header opens it in
+   header mode (only its New Notebook item standing).
+   nbMenuTarget is the slug the standing menu acts on:
+   a slug for a targeted menu, null for a menu opened
+   with no notebook to act on, and undefined while no
+   menu stands, in which state renderListToolbar
+   judges the notebook items by the view, exactly as
+   it did before v2.147. nbMenuCtxArmed tracks the
+   context stands' own document closers (the note
+   context menu's pattern), which closeListPanels
+   takes down with everything else.
+   -------------------------------------------------------------------------- */
+let nbMenuTarget = undefined;
+let nbMenuHeaderMode = false;
+let nbMenuCtxArmed = false;
+
+/* The notebook the menu acts on: the standing menu's
+   target while one is set, else the notebook in view,
+   else null. */
+function nbMenuTargetSlug() {
+  if (nbMenuTarget !== undefined) { return nbMenuTarget; }
+  return state.view.kind === "notebook" ? state.view.value : null;
+}
+
 function closeListPanels() {
   LIST_PANEL_IDS.forEach(function (id) {
     const panel = document.getElementById(id);
     if (panel) { panel.classList.add("hidden"); }
   });
+  /* v2.147: closing the panels also settles the
+     notebook menu's away stands: the context and
+     header modes come off, the pointer placement is
+     cleared, the header's New Notebook item folds
+     away, the context closers come down, and the
+     menu's target is released. */
+  const nbMenu = document.getElementById("nbActionMenu");
+  if (nbMenu) {
+    nbMenu.classList.remove("nb-context");
+    nbMenu.classList.remove("nb-header-mode");
+    nbMenu.style.left = "";
+    nbMenu.style.top = "";
+    const headItem = document.getElementById("nbNewNotebookItem");
+    if (headItem) { headItem.classList.add("hidden"); }
+  }
+  nbMenuTarget = undefined;
+  nbMenuHeaderMode = false;
+  if (nbMenuCtxArmed) {
+    nbMenuCtxArmed = false;
+    document.removeEventListener("pointerdown",
+      onNbMenuCtxPointerDown, true);
+    document.removeEventListener("keydown",
+      onNbMenuCtxKeydown, true);
+    window.removeEventListener("resize", onNbMenuCtxClose);
+    window.removeEventListener("scroll", onNbMenuCtxScroll, true);
+  }
+}
+
+/* Arm the context stands' closers (the note context
+   menu's set): an outside pointerdown, Escape, a
+   resize, or a scroll outside the menu closes it. */
+function armNbMenuContext() {
+  if (nbMenuCtxArmed) { return; }
+  nbMenuCtxArmed = true;
+  document.addEventListener("pointerdown",
+    onNbMenuCtxPointerDown, true);
+  document.addEventListener("keydown",
+    onNbMenuCtxKeydown, true);
+  window.addEventListener("resize", onNbMenuCtxClose);
+  window.addEventListener("scroll", onNbMenuCtxScroll, true);
+}
+
+function onNbMenuCtxPointerDown(ev) {
+  const menu = document.getElementById("nbActionMenu");
+  if (menu && ev.target && menu.contains(ev.target)) { return; }
+  closeListPanels();
+}
+
+function onNbMenuCtxKeydown(ev) {
+  if (ev.key === "Escape") {
+    ev.preventDefault();
+    closeListPanels();
+  }
+}
+
+function onNbMenuCtxClose() { closeListPanels(); }
+
+function onNbMenuCtxScroll(ev) {
+  const menu = document.getElementById("nbActionMenu");
+  const t = ev.target;
+  if (menu && t && t.nodeType === 1 && menu.contains(t)) {
+    return;
+  }
+  closeListPanels();
+}
+
+/* Open the one notebook menu at the pointer for a
+   sidebar row's notebook: same menu, same items, the
+   notebook items targeted at the clicked notebook,
+   wherever the list itself happens to stand. */
+function openNbMenuAt(slug, x, y) {
+  closeListPanels();
+  const menu = document.getElementById("nbActionMenu");
+  if (!menu) { return; }
+  nbMenuTarget = slug;
+  renderListToolbar();
+  menu.classList.add("nb-context");
+  menu.classList.remove("hidden");
+  placeNoteContextMenu(menu, x, y);
+  armNbMenuContext();
+  const first = menu.querySelector(
+    ".list-menu-item:not(.hidden):not(:disabled)");
+  if (first) { first.focus(); }
+}
+
+/* Open the one notebook menu at the pointer from the
+   Notebooks section header: header mode, where only
+   the New Notebook item stands. */
+function openNbHeaderMenuAt(x, y) {
+  closeListPanels();
+  const menu = document.getElementById("nbActionMenu");
+  if (!menu) { return; }
+  nbMenuTarget = null;
+  nbMenuHeaderMode = true;
+  const headItem = document.getElementById("nbNewNotebookItem");
+  if (headItem) { headItem.classList.remove("hidden"); }
+  menu.classList.add("nb-context");
+  menu.classList.add("nb-header-mode");
+  menu.classList.remove("hidden");
+  placeNoteContextMenu(menu, x, y);
+  armNbMenuContext();
+  if (headItem) { headItem.focus(); }
+}
+
+/* v2.147: open or close one of the notebook menu's
+   submenus (the stack picker, the parent picker).
+   The picker is rebuilt at every open against the
+   menu's target, as the sibling panels were, and
+   only one submenu stands at a time. */
+function toggleNbSubmenu(panelId) {
+  const panel = document.getElementById(panelId);
+  if (!panel) { return; }
+  const opening = panel.classList.contains("hidden");
+  closeNbSubmenus();
+  if (!opening) { return; }
+  if (panelId === "nbStackPanel") { buildStackPanel(); }
+  if (panelId === "nbParentPanel") { buildParentPanel(); }
+  panel.classList.remove("hidden");
+  const wrap = panel.parentElement;
+  if (wrap) { placeNbSubmenu(panel, wrap); }
+}
+
+function closeNbSubmenus() {
+  ["nbStackPanel", "nbParentPanel"].forEach(function (id) {
+    const panel = document.getElementById(id);
+    if (panel) { panel.classList.add("hidden"); }
+  });
+}
+
+/* Place a submenu flyout at its item's right edge,
+   flipped to the item's left when the right side
+   would leave the viewport, and clamped inside the
+   viewport with the note context menu's margin. */
+function placeNbSubmenu(panel, wrap) {
+  const item = wrap.querySelector(".list-menu-item");
+  const anchor = item ? item.getBoundingClientRect()
+    : wrap.getBoundingClientRect();
+  panel.style.left = "0px";
+  panel.style.top = "0px";
+  const rect = panel.getBoundingClientRect();
+  const vw = window.innerWidth || 0;
+  const vh = window.innerHeight || 0;
+  let left = anchor.right + 4;
+  if (left + rect.width > vw - 8) {
+    left = anchor.left - rect.width - 4;
+  }
+  let top = anchor.top - 6;
+  if (top + rect.height > vh - 8) {
+    top = Math.max(8, vh - rect.height - 8);
+  }
+  if (left < 8) { left = 8; }
+  if (top < 8) { top = 8; }
+  panel.style.left = left + "px";
+  panel.style.top = top + "px";
 }
 function toggleListPanel(panelId) {
   const panel = document.getElementById(panelId);
@@ -1356,18 +1561,19 @@ function toggleListPanel(panelId) {
     if (panelId === "sortMenu") { renderSortMenu(); }
     /* v1.8.1: the action menu's items, labels, and disabled states
        follow the view and the current multi select sets, so refresh
-       them at open time as well as on every list render. */
-    if (panelId === "nbActionMenu") { renderListToolbar(); }
-    /* v2.29: the stack panel's items depend on which stacks
-       exist right now and which one the open notebook is in, so
-       the panel is rebuilt at every open, like the filter tag
-       list above. */
-    if (panelId === "nbStackPanel") { buildStackPanel(); }
-    /* v2.63: the parent panel's items depend on the tree
-       right now (the eligible parents, the current one),
-       so it is rebuilt at every open, like the stack
-       panel above. */
-    if (panelId === "nbParentPanel") { buildParentPanel(); }
+       them at open time as well as on every list render.
+       v2.147: the toolbar opening targets the menu at
+       the notebook in view (or at no notebook in the
+       combined and bulk views); the sidebar right
+       click sets its own target in openNbMenuAt. The
+       stack and parent pickers are the menu's
+       submenus now (toggleNbSubmenu), no longer
+       panels this toggle opens. */
+    if (panelId === "nbActionMenu") {
+      nbMenuTarget = state.view.kind === "notebook"
+        ? state.view.value : null;
+      renderListToolbar();
+    }
     panel.classList.remove("hidden");
   }
 }
@@ -1383,8 +1589,11 @@ function buildStackPanel() {
   const panel = document.getElementById("nbStackPanel");
   if (!panel) { return; }
   panel.innerHTML = "";
-  if (state.view.kind !== "notebook") { return; }
-  const slug = state.view.value;
+  /* v2.147: the picker serves the one menu's target
+     notebook (the clicked sidebar row's, or the one
+     in view from the toolbar button). */
+  const slug = nbMenuTargetSlug();
+  if (!slug) { return; }
   const nb = state.notebooks.find(function (n) { return n.slug === slug; });
   if (!nb) { return; }
   const current = notebookStackOf(nb);
@@ -1433,8 +1642,10 @@ function buildParentPanel() {
   const panel = document.getElementById("nbParentPanel");
   if (!panel) { return; }
   panel.innerHTML = "";
-  if (state.view.kind !== "notebook") { return; }
-  const slug = state.view.value;
+  /* v2.147: the picker serves the one menu's target
+     notebook, like the stack picker above. */
+  const slug = nbMenuTargetSlug();
+  if (!slug) { return; }
   const nb = notebookForSlug(slug);
   if (!nb) { return; }
   const current = notebookParentOf(nb);
@@ -1607,15 +1818,33 @@ function renderListToolbar() {
   if (filterBtn) {
     filterBtn.classList.toggle("has-filters", listFiltersActive());
   }
-  const inNotebook = kind === "notebook";
+  /* v2.147: the notebook items judge against the one
+     menu's target (nbMenuTargetSlug): the notebook in
+     view, or the sidebar row's notebook the menu was
+     right clicked open for. They hide in the Trash
+     and Archive views only when the menu stands for
+     the view itself; a targeted menu keeps them,
+     because the menu is about its notebook wherever
+     the list happens to stand. */
+  const menuSlug = nbMenuTargetSlug();
+  const inNotebook = menuSlug !== null;
+  const nbItemsHidden = !inNotebook &&
+    (kind === "trash" || kind === "archive");
   const renameBtn = document.getElementById("nbRenameBtn");
   const deleteBtn = document.getElementById("nbDeleteBtn");
   if (renameBtn) {
-    renameBtn.classList.toggle("hidden", kind === "trash" || kind === "archive");
+    renameBtn.classList.toggle("hidden", nbItemsHidden);
     renameBtn.disabled = !inNotebook;
   }
+  /* v2.147: Create Sub-notebook follows Rename's rules
+     exactly. */
+  const createSubBtn = document.getElementById("nbCreateSubBtn");
+  if (createSubBtn) {
+    createSubBtn.classList.toggle("hidden", nbItemsHidden);
+    createSubBtn.disabled = !inNotebook;
+  }
   if (deleteBtn) {
-    deleteBtn.classList.toggle("hidden", kind === "trash" || kind === "archive");
+    deleteBtn.classList.toggle("hidden", nbItemsHidden);
     deleteBtn.disabled = !inNotebook;
   }
   /* v2.29: the stack items follow the notebook items' rules.
@@ -1626,13 +1855,20 @@ function renderListToolbar() {
      clarity about what the click does. */
   const addStackBtn = document.getElementById("nbAddToStackBtn");
   if (addStackBtn) {
-    addStackBtn.classList.toggle("hidden", kind === "trash" || kind === "archive");
+    addStackBtn.classList.toggle("hidden", nbItemsHidden);
     addStackBtn.disabled = !inNotebook;
+  }
+  /* v2.147: the submenu wraps are the menu's layout
+     members now, so they follow their items' hidden
+     state. */
+  const stackWrap = document.getElementById("nbStackWrap");
+  if (stackWrap) {
+    stackWrap.classList.toggle("hidden", nbItemsHidden);
   }
   const removeStackBtn = document.getElementById("nbRemoveFromStackBtn");
   if (removeStackBtn) {
     const openNb = inNotebook ? state.notebooks.find(function (n) {
-      return n.slug === state.view.value;
+      return n.slug === menuSlug;
     }) : null;
     const openStack = openNb ? notebookStackOf(openNb) : null;
     removeStackBtn.classList.toggle("hidden", !openStack);
@@ -1646,9 +1882,12 @@ function renderListToolbar() {
      notebook view); it opens the parent panel below. */
   const moveBtn = document.getElementById("nbMoveBtn");
   if (moveBtn) {
-    moveBtn.classList.toggle("hidden",
-      kind === "trash" || kind === "archive");
+    moveBtn.classList.toggle("hidden", nbItemsHidden);
     moveBtn.disabled = !inNotebook;
+  }
+  const moveWrap = document.getElementById("nbMoveWrap");
+  if (moveWrap) {
+    moveWrap.classList.toggle("hidden", nbItemsHidden);
   }
   /* v2.130: the notebook menu's Doc switch item is
      gone: every notebook stores new notes as Google
@@ -1662,11 +1901,10 @@ function renderListToolbar() {
      list. */
   const nbShortcutBtn = document.getElementById("nbShortcutNbBtn");
   if (nbShortcutBtn) {
-    nbShortcutBtn.classList.toggle("hidden",
-      kind === "trash" || kind === "archive");
+    nbShortcutBtn.classList.toggle("hidden", nbItemsHidden);
     nbShortcutBtn.disabled = !inNotebook;
     nbShortcutBtn.textContent = inNotebook &&
-      hasShortcut("notebook", state.view.value)
+      hasShortcut("notebook", menuSlug)
       ? "Remove Notebook from Shortcuts"
       : "Add Notebook to Shortcuts";
   }
@@ -1804,48 +2042,180 @@ function renderListToolbar() {
     menuBtn.title = label;
     menuBtn.setAttribute("aria-label", label);
   }
+  /* v2.147: the menu's group rules stand only between
+     two groups that both have something to show: the
+     first falls with the notebook group, the second
+     with the note group (gone in Trash and Archive,
+     whose bulk items then stand alone). */
+  const nbDivider1 = document.getElementById("nbMenuDivider1");
+  if (nbDivider1) {
+    nbDivider1.classList.toggle("hidden", nbItemsHidden);
+  }
+  const nbDivider2 = document.getElementById("nbMenuDivider2");
+  if (nbDivider2) {
+    nbDivider2.classList.toggle("hidden",
+      kind === "trash" || kind === "archive");
+  }
   renderSortMenu();
 }
 
-/* The rename and delete notebook flows, prompt and confirm included.
+/* The notebook naming and delete flows.
    Through v1.7.2 these lived on hover links in the sidebar notebook
    rows; v1.8 keeps exactly one home for them, the list toolbar's
-   notebook menu, with the wording unchanged. */
+   notebook menu, with the wording unchanged.
+   v2.147: the menu is the sidebar rows' right click menu too, and
+   the flows' own surfaces are in-app: every notebook naming
+   (create, create sub notebook, rename) goes through the notebook
+   name modal below, and Delete notebook goes through the delete
+   warning with its Yes and No buttons. No native prompt or
+   confirm remains in these flows. */
+
+/* The name modal's standing opening, or null: the
+   dialog's title, its primary button's label, the
+   name it opened with, and the action a submitted
+   name runs. */
+let nbNameCtx = null;
+
+function openNbNameModal(opts) {
+  nbNameCtx = opts;
+  const title = document.getElementById("nbNameTitle");
+  if (title) { title.textContent = opts.title; }
+  const saveBtn = document.getElementById("nbNameSaveBtn");
+  if (saveBtn) { saveBtn.textContent = opts.submitLabel; }
+  const input = document.getElementById("nbNameInput");
+  if (input) { input.value = opts.initial || ""; }
+  const modal = document.getElementById("nbNameModal");
+  if (modal) { modal.classList.remove("hidden"); }
+  if (input) {
+    input.focus();
+    input.select();
+  }
+}
+
+function closeNbNameModal() {
+  nbNameCtx = null;
+  const modal = document.getElementById("nbNameModal");
+  if (modal) { modal.classList.add("hidden"); }
+}
+
+/* A submitted name, trimmed. An empty name, and a
+   rename's standing name, are quiet no-ops (the
+   native prompt's own outcomes for an empty or
+   unchanged answer); the dialog closes either way,
+   so an action's failure toast never fights it. */
+function submitNbNameModal() {
+  const ctx = nbNameCtx;
+  if (!ctx) { return; }
+  const input = document.getElementById("nbNameInput");
+  const name = input ? input.value.trim() : "";
+  closeNbNameModal();
+  if (!name || name === (ctx.initial || "")) { return; }
+  ctx.onSubmit(name);
+}
+
+function promptCreateNotebook() {
+  openNbNameModal({
+    title: "New notebook",
+    submitLabel: "Create",
+    initial: "",
+    onSubmit: function (name) {
+      createNotebook(name).catch(function (err) {
+        toast("Could not create notebook: " + err.message, true);
+      });
+    }
+  });
+}
+
+function promptCreateSubNotebook(parentSlug) {
+  const parent = state.notebooks.find(function (n) {
+    return n.slug === parentSlug;
+  });
+  if (!parent) { return; }
+  openNbNameModal({
+    title: "New sub-notebook",
+    submitLabel: "Create",
+    initial: "",
+    onSubmit: function (name) {
+      createSubNotebook(parentSlug, name).catch(function (err) {
+        toast("Could not create notebook: " + err.message, true);
+      });
+    }
+  });
+}
+
 function promptRenameNotebook(slug) {
   const nb = state.notebooks.find(function (n) { return n.slug === slug; });
   if (!nb) { return; }
-  const next = prompt("Rename notebook", nb.name);
-  if (next && next.trim() && next.trim() !== nb.name) {
-    renameNotebook(nb.slug, next.trim()).catch(function (err) {
-      toast("Rename failed: " + err.message, true);
-    });
-  }
+  openNbNameModal({
+    title: "Rename notebook",
+    submitLabel: "Save",
+    initial: nb.name,
+    onSubmit: function (name) {
+      renameNotebook(nb.slug, name).catch(function (err) {
+        toast("Rename failed: " + err.message, true);
+      });
+    }
+  });
 }
+
+/* The delete warning's standing target, or null. */
+let nbDeleteCtx = null;
+
+/* Chris's rule, stated before anything is deleted:
+   the notebook and all the notes inside it will be
+   deleted, sub notebooks and their notes included.
+   The text names the notebook and, when it has them,
+   the counts of its notes and its sub notebooks
+   (every notebook below it, since the cascade takes
+   the whole subtree), and asks whether to continue.
+   Yes runs the cascade (deleteNotebook); No, the
+   backdrop, and Escape change nothing at all. */
 function confirmDeleteNotebook(slug) {
   const nb = state.notebooks.find(function (n) { return n.slug === slug; });
   if (!nb) { return; }
-  const count = notebookCount(nb.slug);
-  /* v2.63: with sub-notebooks present, the copy says what
-     happens to them: they move up a level (to this
-     notebook's own parent, or top level) and are NOT
-     deleted. Only this notebook's own notes trash. */
-  const kids = notebookChildrenOf(nb.slug);
-  let msg = "Delete the notebook \"" + nb.name + "\"? Its " +
-    count + " note(s) will be moved to Trash, not deleted.";
-  if (kids.length) {
-    const parentSlug = notebookParentOf(nb);
-    const parentNb = parentSlug ? notebookForSlug(parentSlug) : null;
-    msg += " Its " + kids.length + " sub-notebook(s) will NOT" +
-      " be deleted; they will move up to " +
-      (parentNb ? "\"" + parentNb.name + "\"" : "the top level") +
-      ".";
+  nbDeleteCtx = { slug: slug };
+  const own = notebookCount(nb.slug);
+  const subs = notebookDescendantsOf(nb.slug);
+  let subNotes = 0;
+  subs.forEach(function (s) { subNotes += notebookCount(s); });
+  let msg = "This will delete the notebook \"" + nb.name +
+    "\" and all the notes inside it.";
+  const counts = [];
+  if (own > 0) {
+    counts.push(own + (own === 1 ? " note" : " notes") +
+      " in this notebook");
   }
-  const ok = confirm(msg);
-  if (ok) {
-    deleteNotebook(nb.slug).catch(function (err) {
-      toast("Delete failed: " + err.message, true);
-    });
+  if (subs.length > 0) {
+    counts.push(subs.length +
+      (subs.length === 1 ? " sub-notebook" : " sub-notebooks") +
+      " holding " + subNotes +
+      (subNotes === 1 ? " note" : " notes"));
   }
+  if (counts.length) {
+    msg += " It holds " + counts.join(" and ") + ".";
+  }
+  msg += " Continue?";
+  const text = document.getElementById("nbDeleteText");
+  if (text) { text.textContent = msg; }
+  const modal = document.getElementById("nbDeleteModal");
+  if (modal) { modal.classList.remove("hidden"); }
+  const noBtn = document.getElementById("nbDeleteNoBtn");
+  if (noBtn) { noBtn.focus(); }
+}
+
+function closeNbDeleteConfirm() {
+  nbDeleteCtx = null;
+  const modal = document.getElementById("nbDeleteModal");
+  if (modal) { modal.classList.add("hidden"); }
+}
+
+function runNbDelete() {
+  const ctx = nbDeleteCtx;
+  closeNbDeleteConfirm();
+  if (!ctx) { return; }
+  deleteNotebook(ctx.slug).catch(function (err) {
+    toast("Delete failed: " + err.message, true);
+  });
 }
 
 /* v2.29: the stack flows, in the same prompt and confirm shapes
