@@ -3133,6 +3133,27 @@ function mailLocationNames(full) {
   return names;
 }
 
+/* v2.151: the one box a row record lives in, for
+   the location chip a search result row wears.
+   The reading pane's derivation above orders the
+   box first whenever a system folder stands on
+   the record, so the box is its first name; when
+   no system folder stands, its names are the
+   message's user labels alone, and the box is
+   All Mail. The user labels are not repeated
+   here: they already stand on the row as their
+   own chips (mailRowLabelNames). */
+function mailRowLocationName(rec) {
+  const ids = rec && rec.labelIds ? rec.labelIds : [];
+  const boxes = ["INBOX", "SENT", "DRAFT", "SPAM",
+    "TRASH"];
+  const stands = boxes.some(function (x) {
+    return ids.indexOf(x) !== -1;
+  });
+  if (!stands) { return "All Mail"; }
+  return mailLocationNames(rec)[0];
+}
+
 /* v2.86 (Part E): the selection an email chip's
    message opens under: the message's first user
    label (in the label list's own order) when it
@@ -3978,10 +3999,21 @@ async function mailFetchListPage(sel, pageToken) {
     nextPageToken = out.data && out.data.nextPageToken
       ? String(out.data.nextPageToken) : null;
   } else {
-    let path = "/users/me/messages?maxResults=50";
+    /* v2.151: a search asks for the API's widest
+       page (100 in place of the standing 50) and
+       for every box, Trash and Spam included
+       (Chris's call, November 13, 2026: search
+       everywhere), so a hit is not left standing
+       past a narrow first page or outside the
+       boxes Gmail searches by default. A folder
+       or label selection keeps the page of 50
+       and Gmail's own reach, exactly as before. */
+    let path = "/users/me/messages?maxResults=" +
+      (sel.kind === "search" ? "100" : "50");
     const label = mailSelectionLabel(sel);
     if (sel.kind === "search") {
-      path += "&q=" + encodeURIComponent(sel.q);
+      path += "&q=" + encodeURIComponent(sel.q) +
+        "&includeSpamTrash=true";
     } else if (label) {
       path += "&labelIds=" + encodeURIComponent(label);
     }
@@ -4402,7 +4434,11 @@ function renderMailList() {
    sender, the subject (its fallback is the display's,
    like the calendar's), the snippet, the time, the
    paperclip when a part carries a filename, and the
-   message's user label chips. On desktop the hover
+   message's user label chips; on a search list the
+   row also names the box the message lives in, in
+   the reading pane's location chip dress, since a
+   search reaches every box and a result's home is
+   part of what it is. On desktop the hover
    quick actions stand at the row's right: archive,
    trash, and mark read or unread. A click opens the
    message (in Drafts, the draft). */
@@ -4503,9 +4539,21 @@ function buildMailRowEl(rec) {
   snippet.textContent = rec.snippet;
   main.appendChild(snippet);
   const names = mailRowLabelNames(rec);
-  if (names.length || rec.hasAttachment) {
+  /* v2.151: the location chip stands only on a
+     search list's rows (the standing selection is
+     the list being rendered, as the row's drag
+     state above already reads it); every other
+     list's rows are unchanged. */
+  const inSearch = mailFolder.kind === "search";
+  if (inSearch || names.length || rec.hasAttachment) {
     const chips = document.createElement("div");
     chips.className = "mail-row-chips";
+    if (inSearch) {
+      const loc = document.createElement("span");
+      loc.className = "mail-loc-chip";
+      loc.textContent = mailRowLocationName(rec);
+      chips.appendChild(loc);
+    }
     names.forEach(function (n) {
       const chip = document.createElement("span");
       chip.className = "mail-chip";
@@ -4665,7 +4713,13 @@ function mailRowQuickAction(rec, act, anchorEl) {
    longer belong to (a search's rows stand as
    fetched, per mailRowInSelection, except when the
    change was a trash or an untrash, which visibly
-   moves the message out of wherever it stood). */
+   moves the message out of wherever it stood).
+   v2.151 examined this carve-out when search grew
+   to cover Trash and Spam, and it stands: the drop
+   is the triage feedback every list in the app
+   gives, the search's rows stand as fetched rather
+   than re-judged, and a fresh search finds the
+   message again wearing its new home on its row. */
 function mailApplyLabelChange(id, add, remove, dropFromSearch) {
   /* The Inbox unread count moves once per change,
      however many cached lists carry a copy of the
