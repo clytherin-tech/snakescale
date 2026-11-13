@@ -3056,8 +3056,12 @@ function buildSingleNoteContextItems(menu, note, kind, pointerType) {
        the share and make group (Copy link, new in
        this release, Duplicate note, Save as
        Template), then Select in its own group, then
-       the filing group (Archive, Move to Trash) at
-       the foot. No item renamed or removed. */
+       the filing group (Archive, Move to Trash).
+       v2.150: Refresh Note stands in its own group
+       at the very foot, below the filing group and
+       under a separator (Chris's ask: a manual
+       refresh of this one note, at the bottom of
+       the menu). No item renamed or removed. */
     noteCtxItem(menu, note.pinned ? "Unpin note" : "Pin note",
       function () { return toggleNotePin(note); });
     noteCtxItem(menu,
@@ -3095,6 +3099,13 @@ function buildSingleNoteContextItems(menu, note, kind, pointerType) {
           return moveNoteToTrash(note, false);
         }, moveUndoSnapshot("trash", [note]));
     });
+    /* v2.150: Refresh Note, alone in its group at
+       the very foot of the menu (see the refresh
+       section below). */
+    noteCtxSep(menu);
+    noteCtxItem(menu, "Refresh Note", function () {
+      return refreshNoteFromSource(note);
+    });
     return;
   }
   noteCtxItem(menu, "Select", function () {
@@ -3115,6 +3126,289 @@ function selectNoteFromContextMenu(note, pointerType) {
   if (set.indexOf(note.id) < 0) { set.push(note.id); }
   listSelectionAnchor = note.id;
   refreshSelectionUI();
+}
+
+/* ----- v2.150: Refresh Note, the context menu's
+   manual single note refresh -----------------------
+   Chris's ask (November 13, 2026): a Refresh Note item
+   at the very bottom of the single note context menu,
+   under a separator, that force updates that one note
+   to the latest version in Drive without a full sync.
+
+   The refresh is a read-only adoption of one note,
+   built from the app's standing single note paths, one
+   per backend, and judged before anything is spent:
+
+   - A Doc-backed note is judged by the near-live
+     poll's own pair proof (docLivePollTick in
+     media.js): one metadata read (the revision token
+     and the modified time) against the markers the
+     held body was fetched or saved at. A proven pair
+     costs that one read and changes nothing. A moved
+     or unproven pair fetches the Doc through
+     docLoadNoteBody, the open path's own fetch and
+     conversion.
+   - A file-backed note is judged by its file token:
+     one storeGetFile re-read of its note file, parsed
+     through parseNoteFile; a token that stands is the
+     up to date verdict, and a moved token adopts the
+     parsed fields, the field set ensureNoteBodyLoaded
+     adopts when it completes a shell. A shell whose
+     token stands is completed from its file the same
+     way, since it holds no body to judge.
+
+   An adoption lands the way the sync's pull-ins land:
+   the open note's sync context is captured BEFORE the
+   fetch, the fresh content is remembered as the note's
+   saved baseline, and renderAll runs with the context
+   armed, so a clean open editor refills in place and
+   an editor holding unsaved work is never overwritten
+   (the refill stashes and lands when the edits settle,
+   and the toast says so). The note's updated stamp
+   follows the v2.146 rule: it becomes the SOURCE's
+   modified time, never the local clock (a Doc's
+   docModifiedTime; a file's own updated line, the
+   stamp its last save wrote), and when the refill is
+   deferred the raise defers with it through the
+   pending refill bump registry, exactly as the poll's
+   adoption defers. saveCache persists the one entry's
+   new bookkeeping through the standing catalog writer;
+   no other note is read, judged, or written, and
+   nothing about the note is saved back to Drive: the
+   refresh's only write is that catalog bookkeeping.
+
+   Honesty rules: a proven pair leaves state, catalog,
+   and editor untouched (unlike the poll, no baseline
+   marker is quietly adopted: up to date means
+   untouched). A fetch that fails names itself in a
+   toast and leaves the note exactly as it was (the
+   Doc half restores the fields its fetch may have
+   half adopted). A note in the middle of a save or a
+   body load (the per note op chain, the body load
+   map: the poll's own busy facts) is not raced; the
+   item asks for a moment and a retry instead. One
+   refresh runs at a time, because the refill context
+   it arms is a single shared stand. */
+let noteRefreshBusy = false;
+
+async function refreshNoteFromSource(note) {
+  if (!note) { return; }
+  if (noteRefreshBusy) { return; }
+  if ((typeof noteOpChains !== "undefined" &&
+       noteOpChains[note.id]) ||
+      (typeof noteBodyLoads !== "undefined" &&
+       noteBodyLoads[note.id])) {
+    toast("The note is saving right now; refresh " +
+      "again in a moment.", true);
+    return;
+  }
+  noteRefreshBusy = true;
+  try {
+    if (isDocBackedNote(note)) {
+      await refreshDocNoteFromSource(note);
+    } else {
+      await refreshFileNoteFromSource(note);
+    }
+  } catch (err) {
+    toast("Could not refresh the note: " +
+      (err && err.message ? err.message : err), true);
+  } finally {
+    noteRefreshBusy = false;
+  }
+}
+
+/* The open note's sync context for a manual refresh,
+   or null when the note is not the open one: the
+   refill judgment (syncShouldRefillOpenNote) is the
+   open editor's alone, judged under the same snapshot
+   a sync takes. */
+function captureRefreshContext(note) {
+  if (typeof currentNote !== "function" ||
+      typeof captureOpenNoteSyncContext !== "function") {
+    return null;
+  }
+  const open = currentNote();
+  if (!open || open.id !== note.id) { return null; }
+  return captureOpenNoteSyncContext();
+}
+
+/* Land an adopted refresh: remember the fresh content
+   as the note's saved baseline, render under the open
+   note's context when there is one (a clean editor
+   refills in place; a dirty one stashes its refill
+   inside the render's own judgment), then settle the
+   recency stamp and say the outcome. sourceStamp is
+   the source's own modified time (never the local
+   clock); heldUpdated is the stamp the note carried
+   before the adoption, restored when the raise must
+   wait with a refused refill. */
+function landRefreshedNote(note, ctx, sourceStamp, heldUpdated) {
+  rememberLastSavedContent(note);
+  if (ctx && ctx.id === note.id) {
+    syncOpenNoteRefresh = ctx;
+    try {
+      renderAll();
+    } finally {
+      syncOpenNoteRefresh = null;
+    }
+  } else {
+    renderAll();
+  }
+  const stash = (typeof pendingNoteRefills !== "undefined")
+    ? pendingNoteRefills[note.id] : null;
+  const stashLive = !!stash &&
+    (stash.sha || null) === (note.sha || null) &&
+    (stash.docModifiedTime || null) ===
+      (note.docModifiedTime || null);
+  if (stashLive && sourceStamp) {
+    /* The refill was refused for this very adoption:
+       the change has not landed for the reader, so
+       the raise waits with the stash (the v2.146
+       rule, the poll's and syncNow's own judgment). */
+    if (note.updated !== heldUpdated) {
+      note.updated = heldUpdated;
+    }
+    deferPendingRefillBump(note, sourceStamp);
+    saveCache();
+    toast("Note refreshed; the open editor will " +
+      "update when your edits settle.");
+    return;
+  }
+  if (sourceStamp && note.updated !== sourceStamp) {
+    note.updated = sourceStamp;
+  }
+  saveCache();
+  toast("Note refreshed.");
+}
+
+/* The Doc-backed half: the poll's judgment, spent on
+   one user named note, with the poll's fail soft
+   replaced by a named toast and a restored note. */
+async function refreshDocNoteFromSource(note) {
+  const docId = sanitizeDocId(note.docId);
+  if (!docId) {
+    toast("Could not refresh the note: this note's " +
+      "Google Doc link is missing or damaged.", true);
+    return;
+  }
+  let meta = null;
+  try {
+    meta = await docApiJson(
+      "https://www.googleapis.com/drive/v3/files/" +
+      encodeURIComponent(docId) +
+      "?fields=" + encodeURIComponent(
+        "id,headRevisionId,modifiedTime"));
+  } catch (err) {
+    toast("Could not refresh the note: " +
+      err.message, true);
+    return;
+  }
+  const liveToken = driveTokenFromMetadata(meta);
+  const liveModified = (meta &&
+    typeof meta.modifiedTime === "string" &&
+    meta.modifiedTime) ? meta.modifiedTime : null;
+  /* The pair proof, the poll's own (see
+     docLivePollTick in media.js): both markers
+     judged against the pair the held body was
+     fetched or saved at; a missing modified time
+     on either side proves nothing unless the token
+     is mtime based, where token equality IS
+     modified time equality. */
+  const revMoved = !!liveToken &&
+    liveToken !== note.sha;
+  const mtimeMoved = !!liveModified &&
+    !!note.docModifiedTime &&
+    liveModified !== note.docModifiedTime;
+  const mtimeMissing = !liveModified ||
+    !note.docModifiedTime;
+  const tokenIsMtime = !!liveToken &&
+    liveToken.indexOf("mtime:") === 0;
+  const pairProven = !revMoved && !mtimeMoved &&
+    (!mtimeMissing || tokenIsMtime);
+  if (pairProven) {
+    toast("Note is already up to date.");
+    return;
+  }
+  /* The Doc moved (or the pair cannot prove it
+     stood). The fields docLoadNoteBody may touch
+     are held first, so a fetch that fails partway
+     leaves the note exactly as it was. */
+  const held = {
+    body: note.body, bodyLoaded: note.bodyLoaded,
+    bodyLoadError: note.bodyLoadError,
+    sha: note.sha,
+    docModifiedTime: note.docModifiedTime,
+    docName: note.docName, docTicks: note.docTicks,
+    attachments: note.attachments,
+    thumbnail: note.thumbnail,
+    previewText: note.previewText,
+    updated: note.updated
+  };
+  const ctx = captureRefreshContext(note);
+  try {
+    await docLoadNoteBody(note);
+  } catch (err) {
+    Object.keys(held).forEach(function (k) {
+      note[k] = held[k];
+    });
+    toast("Could not refresh the note: " +
+      err.message, true);
+    return;
+  }
+  note.bodyLoadError = null;
+  note.bodyLoaded = true;
+  landRefreshedNote(note, ctx, note.docModifiedTime,
+    held.updated);
+}
+
+/* The file-backed half: one re-read of the note's own
+   file, judged by its token, adopted through
+   ensureNoteBodyLoaded's field set. The parse runs
+   on a detached object, so nothing on the note moves
+   until the whole adoption is in hand. */
+async function refreshFileNoteFromSource(note) {
+  let file = null;
+  try {
+    file = await storeGetFile(notePath(note));
+  } catch (err) {
+    toast("Could not refresh the note: " +
+      err.message, true);
+    return;
+  }
+  if (!file) {
+    toast("Could not refresh the note: its file " +
+      "could not be found in Drive.", true);
+    return;
+  }
+  if (note.bodyLoaded !== false &&
+      file.token && note.sha &&
+      file.token === note.sha) {
+    toast("Note is already up to date.");
+    return;
+  }
+  const parsed = parseNoteFile(file.text, file.token,
+    note.id, note.trashed, note.archived);
+  const ctx = captureRefreshContext(note);
+  const heldUpdated = note.updated;
+  note.title = parsed.title;
+  note.notebook = parsed.notebook;
+  note.tags = parsed.tags;
+  note.created = parsed.created;
+  note.updated = parsed.updated;
+  note.pinned = parsed.pinned;
+  note.body = parsed.body;
+  note.attachments = parsed.attachments;
+  note.thumbnail = parsed.thumbnail;
+  note.reminderAt = parsed.reminderAt;
+  note.reminderDoneAt = parsed.reminderDoneAt;
+  note.trashedFrom = parsed.trashedFrom;
+  note.archivedFrom = parsed.archivedFrom;
+  note.sha = file.token;
+  note.previewText = htmlToText(parsed.body).slice(0, 140);
+  note.bodyLoadError = null;
+  note.bodyLoaded = true;
+  landRefreshedNote(note, ctx, parsed.updated,
+    heldUpdated);
 }
 
 /* The selected notes of the current view, in selection
