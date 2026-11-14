@@ -813,6 +813,54 @@ function onStackCtxScroll(ev) {
   closeStackCtxMenu();
 }
 /* --------------------------------------------------------------------------
+   v2.165: the Trash entry's right click menu.
+   Chris's ask (November 14, 2026): "add a R/C menu
+   to the Trash icon in the side bar to Empty Trash".
+   One more of the standing body level context menus,
+   on the v2.159 Shortcuts menu's pattern exactly:
+   born under document.body in the shell, guarded at
+   wiring time against ever standing anywhere else,
+   placed at the pointer by placeNoteContextMenu, and
+   closed by an outside click or Escape (the closers
+   stand in app.js beside the wiring). The one item
+   runs the standing emptyTrash() flow itself, the
+   same confirmation and deletion the Empty Trash
+   button inside the Trash view runs; nothing about
+   the flow is forked here. The item carries no view
+   guard (the in-view button's own wiring has one,
+   because that button lives in a panel that is only
+   dressed in its view): the sidebar menu's whole
+   point is acting from any view, and emptyTrash
+   guards itself on content, returning silently when
+   there is nothing to empty. At open time the item
+   is disabled while the Trash stands empty, matching
+   the in-view control's own disabled state, so the
+   menu's dress tells the same truth the panel's
+   does. Left click keeps its standing meaning (the
+   Trash view); only the right click is claimed, and
+   only on this entry and its icon rail twin.
+   -------------------------------------------------------------------------- */
+let trashMenuOpen = false;
+function openTrashMenu(x, y) {
+  closeListPanels();
+  closeStackCtxMenu();
+  closeTrashMenu();
+  const menu = document.getElementById("trashMenu");
+  if (!menu) { return; }
+  const btn = document.getElementById("trashEmptyBtn");
+  if (btn) { btn.disabled = state.trash.length === 0; }
+  trashMenuOpen = true;
+  menu.classList.remove("hidden");
+  placeNoteContextMenu(menu, x, y);
+  if (btn && !btn.disabled) { btn.focus(); }
+}
+function closeTrashMenu() {
+  const menu = document.getElementById("trashMenu");
+  if (menu) { menu.classList.add("hidden"); }
+  trashMenuOpen = false;
+}
+
+/* --------------------------------------------------------------------------
    v2.156: the notebook sort menu. Chris's ask
    (November 13, 2026): the sidebar sorts stack names
    and unstacked notebook names together alphabetically,
@@ -5200,6 +5248,46 @@ function searchHitsOnSearchChange() {
     if (body && body.querySelector("mark.ss-hit")) {
       searchHitUnpaint(body);
       editorHistoryDrainRecords();
+    }
+  }
+  /* v2.165: the open note joins the paint in the
+     same turn as the search. Through v2.164 a session
+     was born only on a result click (the arm, consumed
+     by the open switch), so a search typed while a
+     note stood open painted nothing until the note
+     was closed and re-opened; Chris, November 14,
+     2026: "I have to click off the note and back on
+     again to see the search terms highlighted. They
+     need to highlight right when I do the search in
+     real time." Both writers of state.search already
+     call this hook in the same turn as the input, so
+     the hook now adopts the open note: with tokens
+     standing and the editor filled with a note, the
+     session is created (or refreshed onto the open
+     note) and the standing painter runs at once.
+     Changing the words clears above and repaints here
+     with the new words; clearing the search takes the
+     stale branch above and paints nothing, the tokens
+     being empty. The paint keeps every discipline of
+     the open path's paint: it is display furniture
+     the funnel strips, the painter drains the history
+     observer so it never counts as an edit, the caret
+     never moves, and the first classified body edit
+     still ends the session. A note not yet filled
+     (its open still landing) is not adopted here; its
+     fill's own tail paints from any standing session,
+     and the next search change adopts it. */
+  if (tokens.length) {
+    const open = currentNote();
+    if (open && renderEditor._forId === open.id) {
+      if (!searchHitEditorSession ||
+          searchHitEditorSession.noteId !== open.id ||
+          !searchHitTokensEqual(
+            searchHitEditorSession.tokens, tokens)) {
+        searchHitEditorSession =
+          { noteId: open.id, tokens: tokens };
+      }
+      paintSearchHitEditor(open);
     }
   }
   if (searchHitMailSession &&

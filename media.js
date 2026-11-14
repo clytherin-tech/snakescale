@@ -8266,6 +8266,107 @@ function deselectAttachment() {
   selectedAttachmentEl = null;
 }
 
+/* ----- v2.165: Delete removes the selected image -------------------
+   Chris's ask (November 14, 2026): "I want to be able to click on
+   an image and press the Delete button to delete it, I can't do
+   that currently." The v1.7 promise (the README's own words:
+   removing an attachment works from "the Delete and Backspace
+   keys") rode on the browser's native Delete removing the block,
+   with the body watch above reconciling the vanished block into
+   the undoable engine. But clicking an image selects it only in
+   the app's own state (selectedAttachmentEl, the ss-selected
+   dress, the grips): the browser's caret does not stand on the
+   contenteditable=false figure, it stands in the text beside it,
+   so the keypress forward deleted a character and the image
+   stayed. This handler closes that gap by running, on the
+   keypress, the image menu's own remove steps verbatim, so the
+   removal is the menu's removal in every observable way: the
+   same undo window and toast, the same record fate, the same
+   Drive trash at the firing, the same dirty and save behavior.
+
+   The claim is narrow on purpose. It takes only a bare Delete
+   (no Ctrl, Meta, or Alt), only a keypress no earlier handler
+   claimed (the empty line guard beside an image has first say),
+   only while an image stands selected in the open, editable,
+   live note, and only when the caret does not stand in text:
+   a caret in a text node is text editing's (a figure's caption
+   included), and an element caret that neither hugs nor
+   brackets the figure stands in the text flow too. No caret at
+   all, a caret hugging the figure in its parent, a selection
+   bracketing exactly the figure, or a caret on the figure's own
+   furniture are the image's own postures, and Delete is the
+   image's there. Backspace is not claimed: with the caret
+   standing before the figure, native Backspace already removes
+   it and the body watch reconciles that exactly as v1.7 built;
+   only forward Delete was stranded. */
+
+/* Whether the native caret stands in editable text rather than
+   on the figure itself: the judge described above. */
+function imageDeleteCaretInText(bodyEl, fig) {
+  const sel = window.getSelection();
+  if (!sel || !sel.rangeCount) { return false; }
+  const range = sel.getRangeAt(0);
+  const node = sel.focusNode;
+  if (!node || !bodyEl.contains(node)) { return false; }
+  const caption = fig.querySelector("figcaption");
+  if (caption && caption.contains(node)) { return true; }
+  if (node.nodeType === 3) { return true; }
+  if (fig.contains(node)) { return false; }
+  const parent = fig.parentNode;
+  if (parent && range.startContainer === parent &&
+      range.endContainer === parent) {
+    const idx = Array.prototype.indexOf.call(
+      parent.childNodes, fig);
+    if (range.startOffset === idx &&
+        range.endOffset === idx + 1) { return false; }
+    if (range.collapsed &&
+        (range.startOffset === idx ||
+         range.startOffset === idx + 1)) { return false; }
+  }
+  return true;
+}
+
+/* The note body's Delete keypress, judged for the selected
+   image. Returns true only when it took the keypress, so the
+   wiring can prevent the browser's own forward delete, which
+   would otherwise also eat the character after the figure. */
+function selectedImageDeleteKey(ev) {
+  if (!ev || ev.key !== "Delete" ||
+      ev.ctrlKey || ev.metaKey || ev.altKey) { return false; }
+  if (ev.defaultPrevented) { return false; }
+  const fig = selectedAttachmentEl;
+  if (!fig) { return false; }
+  const bodyEl = document.getElementById("noteBody");
+  if (!bodyEl || !bodyEl.contains(fig)) { return false; }
+  if (bodyEl.contentEditable === "false") { return false; }
+  const note = currentNote();
+  if (!note || note.trashed || note.archived) { return false; }
+  if (imageDeleteCaretInText(bodyEl, fig)) { return false; }
+  if (isExternalImageFigure(fig)) {
+    /* The external menu's Remove, verbatim (its handler
+       in the external image section). */
+    deselectAttachment();
+    fig.remove();
+    if (typeof editorHistorySignal === "function") {
+      editorHistorySignal("op");
+    }
+    markDirty();
+    return true;
+  }
+  const attId = fig.getAttribute("data-attachment-id");
+  const att = (note.attachments || []).find(function (a) {
+    return a.id === attId;
+  });
+  if (!att) { return false; }
+  /* The image menu's Delete file, verbatim (its remove
+     branch in runAttMenuAction): deselect first, so the
+     captured block HTML carries no grips, then the
+     undoable engine. */
+  deselectAttachment();
+  scheduleAttachmentDelete(note, att);
+  return true;
+}
+
 /* Show the shared image menu under its button, clamped into the
    viewport the way the link popup is. The caller unhides it first
    only through here, so the size measured is the size on screen. */

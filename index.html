@@ -44,7 +44,7 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-11-14-SSN-V21640
+  BUILD STAMP: 2026-11-14-SSN-V21650
   Version: 2.106.0
 
   Revision history:
@@ -8670,6 +8670,18 @@
      The rows' three dot buttons are gone. -->
 <div id="shortcutMenu" class="note-ctx-menu hidden" role="menu" aria-label="Shortcut actions">
   <button type="button" class="list-menu-item" id="shortcutRemoveBtn" role="menuitem">Remove from Shortcuts</button>
+</div>
+<!-- v2.165: the Trash entry's right click menu
+     (openTrashMenu in render.js): one small menu
+     at the pointer with the one item, Empty Trash,
+     wearing the same danger dress the in-view
+     Empty Trash button wears. It stands at body
+     level from birth, like the shortcut menu above
+     it, for the same reason: a menu parked inside a
+     view switched or folded pane paints nowhere
+     (the v2.148.1 lesson). -->
+<div id="trashMenu" class="note-ctx-menu hidden" role="menu" aria-label="Trash actions">
+  <button type="button" class="list-menu-item danger" id="trashEmptyBtn" role="menuitem">Empty Trash</button>
 </div>
 <div id="stackCtxMenu" class="note-ctx-menu hidden" role="menu" aria-label="Stack actions">
   <button type="button" class="list-menu-item" id="stackCtxNewBtn" role="menuitem">New Notebook</button>

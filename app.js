@@ -657,6 +657,14 @@ function wireEvents() {
       shortcutMenuHome.parentElement !== document.body) {
     document.body.appendChild(shortcutMenuHome);
   }
+  /* v2.165: the Trash entry's right click menu is
+     born under the body in the shell too; the same
+     guard stands over it. */
+  const trashMenuHome = document.getElementById("trashMenu");
+  if (trashMenuHome &&
+      trashMenuHome.parentElement !== document.body) {
+    document.body.appendChild(trashMenuHome);
+  }
 
   /* Setup form (v2.0): there is nothing to fill in. Submitting
      creates this device's local encryption key, saves the (Google
@@ -785,6 +793,22 @@ function wireEvents() {
     state.view = { kind: "trash", value: null };
     renderAll();
     setMobileView("list");
+  });
+  /* v2.165: a right click on the Trash entry
+     suppresses the browser menu and opens the
+     app menu (openTrashMenu in the render
+     section) with its one item, Empty Trash.
+     The icon rail twin is the same entry in its
+     collapsed dress (its left click forwards
+     here), so the right click is claimed there
+     too. No other entry's right click changes. */
+  document.getElementById("navTrash").addEventListener("contextmenu", function (ev) {
+    ev.preventDefault();
+    openTrashMenu(ev.clientX, ev.clientY);
+  });
+  document.getElementById("railTrashBtn").addEventListener("contextmenu", function (ev) {
+    ev.preventDefault();
+    openTrashMenu(ev.clientX, ev.clientY);
   });
   document.getElementById("navArchive").addEventListener("click", function () {
     state.view = { kind: "archive", value: null };
@@ -1047,6 +1071,29 @@ function wireEvents() {
   });
   document.addEventListener("keydown", function (ev) {
     if (ev.key === "Escape") { closeShortcutMenu(); }
+  });
+  /* v2.165: the Trash menu's one item closes the
+     menu and runs the standing Empty Trash flow
+     itself (emptyTrash in the render section):
+     its confirmation, its deletion, its toast.
+     No view guard here, unlike the in-view
+     button's wiring below: the sidebar menu acts
+     from any view, and emptyTrash guards itself
+     on content. */
+  document.getElementById("trashEmptyBtn").addEventListener("click", function () {
+    closeTrashMenu();
+    emptyTrash().catch(function (err) { toast(err.message, true); });
+  });
+  /* The Trash menu's closers, mirroring the
+     shortcut menu's beside them: a click outside
+     the menu closes it, and so does Escape. */
+  document.addEventListener("click", function (ev) {
+    if (!trashMenuOpen) { return; }
+    if (ev.target.closest("#trashMenu")) { return; }
+    closeTrashMenu();
+  });
+  document.addEventListener("keydown", function (ev) {
+    if (ev.key === "Escape") { closeTrashMenu(); }
   });
   /* The tag menu and parent panel closers, mirroring the
      stack menu's: a click outside the menu, the panel, and a
@@ -3828,6 +3875,17 @@ function wireEvents() {
      handler runs only when the guard takes the keypress. */
   noteBodyEl.addEventListener("keydown", function (ev) {
     if (emptyLineDeleteGuard(ev)) { ev.preventDefault(); }
+  });
+  /* v2.165: Delete with an image selected removes
+     the image (selectedImageDeleteKey in the
+     attachments section runs the image menu's own
+     remove steps). It runs after the guard above:
+     a keypress the guard claimed is already
+     prevented, and the judge never takes a claimed
+     keypress. Delete anywhere else in the body
+     keeps its exact native behavior. */
+  noteBodyEl.addEventListener("keydown", function (ev) {
+    if (selectedImageDeleteKey(ev)) { ev.preventDefault(); }
   });
 
   /* v2.4: Tab and Shift+Tab belong to the note while the caret is
