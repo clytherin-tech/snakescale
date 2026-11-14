@@ -564,6 +564,17 @@ body.dark .gate-brand .wordmark{color:#EAF3EC;}
 #railFlyout .rail-fly-head.nb-top-drop-hover{
   background:var(--secondary);color:#fff;
 }
+/* v2.160: a stack header lit as a notebook drag's
+   drop target wears the shared drop fill on its
+   toggle, the same treatment the top level zones
+   take, in both themes (the sidebar dress is one
+   dress; the fill and ink are theme variables). */
+.nav-stack-head.nb-stack-drop-hover .nav-stack-toggle{
+  background:var(--secondary);color:#fff;
+}
+.nav-stack-head.nb-stack-drop-hover .nav-stack-chevron{
+  color:#fff;
+}
 .rail-fly-row.nb-nest-source{opacity:.55;}
 .nav-item.nb-nest-source{opacity:.55;}
 body.nb-nest-dragging{cursor:grabbing;user-select:none;}

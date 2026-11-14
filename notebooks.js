@@ -702,7 +702,10 @@ let nbNestDrag = null;       /* {slug, pointerId, pointerType,
                                 engaged, target, rowEl,
                                 holdTimer} or null; target is
                                 {kind:"row", slug},
-                                {kind:"top"}, or null */
+                                {kind:"top"}, or null;
+                                v2.160 adds
+                                {kind:"stack", name}, the
+                                stack header drop below */
 let nbNestDragClickBlock = false;
 
 function nbNestTargetOk(dragSlug, targetSlug) {
@@ -712,6 +715,28 @@ function nbNestTargetOk(dragSlug, targetSlug) {
   if (!dragNb || !target) { return false; }
   if (notebookParentOf(dragNb) === targetSlug) { return false; }
   return notebookDescendantsOf(dragSlug).indexOf(targetSlug) < 0;
+}
+
+/* v2.160: the stack header drop target (Chris: drag
+   a notebook to a stack, as well as using the Add to
+   Stack menu). The sidebar stack headers standing
+   in the notebook nav, in document order. */
+function nbNestStackHeads() {
+  return document.querySelectorAll(
+    "#notebookNav .nav-stack-head");
+}
+
+/* Whether the dragged notebook may be filed into
+   the named stack: any notebook may join any stack
+   it does not already belong to (joining lifts a
+   nested notebook to top level, setNotebookStack's
+   standing rule). A drop on its own stack is never
+   offered, so it can never write for nothing. */
+function nbNestStackOk(dragSlug, stackName) {
+  if (!stackName) { return false; }
+  const dragNb = notebookForSlug(dragSlug);
+  if (!dragNb) { return false; }
+  return notebookStackOf(dragNb) !== stackName;
 }
 
 /* v2.67: the two top level drop zones, the Notebooks
@@ -734,6 +759,17 @@ function nbNestTopLabels() {
 
 function nbNestTargetAt(x, y) {
   if (!nbNestDrag) { return null; }
+  const heads = nbNestStackHeads();
+  for (let i = 0; i < heads.length; i++) {
+    const hr = heads[i].getBoundingClientRect();
+    if (hr.width > 0 && hr.height > 0 &&
+        x >= hr.left && x <= hr.right &&
+        y >= hr.top && y <= hr.bottom) {
+      const name = heads[i].getAttribute("data-stack");
+      return nbNestStackOk(nbNestDrag.slug, name)
+        ? { kind: "stack", name: name } : null;
+    }
+  }
   const rows = document.querySelectorAll(
     "#notebookNav [data-nb-slug], " +
     "#railFlyoutList [data-nb-slug]");
@@ -769,6 +805,9 @@ function clearNbNestTarget() {
   nbNestTopLabels().forEach(function (el) {
     el.classList.remove("nb-top-drop-hover");
   });
+  nbNestStackHeads().forEach(function (el) {
+    el.classList.remove("nb-stack-drop-hover");
+  });
 }
 
 function updateNbNestTarget(x, y) {
@@ -776,7 +815,8 @@ function updateNbNestTarget(x, y) {
   const prev = nbNestDrag.target;
   const same = (!next && !prev) ||
     (!!next && !!prev && next.kind === prev.kind &&
-      next.slug === prev.slug);
+      next.slug === prev.slug &&
+      next.name === prev.name);
   if (same) { return; }
   clearNbNestTarget();
   nbNestDrag.target = next;
@@ -790,6 +830,12 @@ function updateNbNestTarget(x, y) {
         rows[i].classList.add("drop-hover");
       }
     }
+  } else if (next.kind === "stack") {
+    nbNestStackHeads().forEach(function (el) {
+      if (el.getAttribute("data-stack") === next.name) {
+        el.classList.add("nb-stack-drop-hover");
+      }
+    });
   } else {
     nbNestTopLabels().forEach(function (el) {
       const lr = el.getBoundingClientRect();
@@ -962,11 +1008,23 @@ function endNbNestDrag(commit) {
      the early return above and blocks nothing. */
   nbNestDragClickBlock = true;
   if (commit && drag.target) {
-    setNotebookParent(drag.slug,
-      drag.target.kind === "top" ? null : drag.target.slug)
-      .catch(function (err) {
-        toast("Move failed: " + err.message, true);
-      });
+    if (drag.target.kind === "stack") {
+      /* v2.160: a drop on a stack header files the
+         notebook through setNotebookStack, the one
+         assignment path the Add to Stack menu uses;
+         its failure naming is the index write's own,
+         exactly as a menu move is reported. */
+      setNotebookStack(drag.slug, drag.target.name)
+        .catch(function (err) {
+          toast("Move failed: " + err.message, true);
+        });
+    } else {
+      setNotebookParent(drag.slug,
+        drag.target.kind === "top" ? null : drag.target.slug)
+        .catch(function (err) {
+          toast("Move failed: " + err.message, true);
+        });
+    }
   }
 }
 
