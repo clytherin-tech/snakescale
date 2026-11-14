@@ -2220,7 +2220,17 @@ function persistShortcuts() {
 /* Add a shortcut, appended at the end of the list, the
    place Evernote puts a new one. Adding what is already
    there is refused with a quiet message and changes
-   nothing. Returns true when the entry was added. */
+   nothing. Returns true when the entry was added.
+   v2.158: a successful add says so, naming the item,
+   and scrolls the new row into view (see
+   scrollShortcutRowIntoView). Before this build the
+   add was silent and the row landed at the foot of
+   the list out of sight, so success read as nothing
+   happening, and the natural second click quietly
+   removed what the first had added: the whole of
+   Chris's November 13 report that adding the Sarah
+   notebook seemed to act on his open note instead.
+   The write was never wrong; the silence was. */
 function addShortcut(kind, id) {
   if (SHORTCUT_KINDS.indexOf(kind) < 0 ||
       typeof id !== "string" || !id) {
@@ -2233,25 +2243,65 @@ function addShortcut(kind, id) {
   state.shortcuts.push({ kind: kind, id: id });
   persistShortcuts();
   renderAll();
+  const addedLabel =
+    shortcutTarget({ kind: kind, id: id }).label;
+  toast(addedLabel
+    ? "Added " + addedLabel + " to Shortcuts."
+    : "Added to Shortcuts.");
+  scrollShortcutRowIntoView(kind, id);
   return true;
 }
 
 /* Remove a shortcut. Only the entry goes; the target is
    never touched, which is the whole of the operation.
-   Returns true when an entry was removed. */
+   Returns true when an entry was removed.
+   v2.158: the removal says so too, naming the item,
+   the mirror of the add's new toast; the label is
+   read before the entry goes, while the entry still
+   names its target. A removal never scrolls. */
 function removeShortcut(kind, id) {
   if (!hasShortcut(kind, id)) { return false; }
+  const removedLabel =
+    shortcutTarget({ kind: kind, id: id }).label;
   state.shortcuts = state.shortcuts.filter(function (sc) {
     return !(sc.kind === kind && sc.id === id);
   });
   persistShortcuts();
   renderAll();
+  toast(removedLabel
+    ? "Removed " + removedLabel + " from Shortcuts."
+    : "Removed from Shortcuts.");
   return true;
 }
 
 function toggleShortcut(kind, id) {
   if (hasShortcut(kind, id)) { return removeShortcut(kind, id); }
   return addShortcut(kind, id);
+}
+
+/* v2.158: bring one shortcut's row into view inside
+   the sidebar. The list keeps add order, so a new
+   shortcut lands at the foot, below the fold of a
+   long list, and an unseen success reads as a failure
+   (the add half of Chris's November 13 report). The
+   row is found by the identity its data attributes
+   carry, and the scroll is guarded the way the app
+   guards its other scrollIntoView calls, so a host
+   without the method simply skips it. Only adds call
+   this; a removal never scrolls. */
+function scrollShortcutRowIntoView(kind, id) {
+  const nav = document.getElementById("shortcutNav");
+  if (!nav) { return; }
+  const rows = nav.querySelectorAll(".nav-shortcut-row");
+  for (let i = 0; i < rows.length; i++) {
+    if (rows[i].getAttribute("data-kind") === kind &&
+        rows[i].getAttribute("data-target") === id) {
+      if (typeof rows[i].scrollIntoView === "function") {
+        rows[i].scrollIntoView({ block: "nearest" });
+      }
+      return;
+    }
+  }
 }
 
 /* Where one entry's target stands: "live" (present and
@@ -2356,6 +2406,63 @@ const SHORTCUT_ICONS = {
   search: "<svg viewBox=\"0 0 20 20\" width=\"15\" height=\"15\" aria-hidden=\"true\" focusable=\"false\"><circle cx=\"9\" cy=\"9\" r=\"5.5\" stroke=\"currentColor\" stroke-width=\"1.5\" fill=\"none\"/><path d=\"M13.5 13.5L17 17\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" fill=\"none\"/></svg>"
 };
 
+/* v2.158: the one winner. At most one Shortcuts row
+   wears the active dress: the row for the thing Chris
+   is on, judged in this order.
+   1. The open note's row, when the open note has a
+      shortcut and stands live. A note is open almost
+      always, and it is the most specific thing he is
+      on, so it outranks the view below it: a note open
+      inside a shortcut notebook lights its own row,
+      not the notebook's.
+   2. The running search's row, when a saved search's
+      stored query is the standing search (read the
+      way the search box normalizes, as the row judged
+      it before this build): while a search runs, its
+      results are what the list shows.
+   3. The standing view's row: the notebook view's
+      notebook or the tag view's tag, when that target
+      has a shortcut.
+   Otherwise no row lights. Through v2.157 each row
+   judged itself from its own state (the note row from
+   the open note, the notebook row from the view), so
+   both wore the dress at once whenever a note stood
+   open in a shortcut notebook, and Chris read it as
+   all of them selecting at once. A stack row never
+   wins, as before: a stack has no view of its own to
+   stand in. Returns the winning entry from
+   state.shortcuts, or null. */
+function shortcutActiveEntry() {
+  if (state.selectedId) {
+    const noteHit = state.shortcuts.find(function (sc) {
+      return sc.kind === "note" &&
+        sc.id === state.selectedId;
+    });
+    if (noteHit &&
+        shortcutTarget(noteHit).state === "live") {
+      return noteHit;
+    }
+  }
+  if (state.search) {
+    const searchHit = state.shortcuts.find(function (sc) {
+      if (sc.kind !== "search") { return false; }
+      const se = savedSearchById(sc.id);
+      return !!se && state.search ===
+        String(se.query || "").trim().toLowerCase();
+    });
+    if (searchHit) { return searchHit; }
+  }
+  if (state.view.kind === "notebook" ||
+      state.view.kind === "tag") {
+    const viewHit = state.shortcuts.find(function (sc) {
+      return sc.kind === state.view.kind &&
+        sc.id === state.view.value;
+    });
+    if (viewHit) { return viewHit; }
+  }
+  return null;
+}
+
 /* One shortcut row in the sidebar Shortcuts section: the
    main button (kind icon plus the target's current label)
    and the three dot button that opens the row's menu,
@@ -2363,8 +2470,8 @@ const SHORTCUT_ICONS = {
    and target in data attributes. A missing target builds
    no row (null); a Trash or Archive note builds a muted
    row whose label names the place. The active treatment
-   follows the same facts the real rows use: the open
-   note, the open notebook view, the active tag filter. */
+   is the one winner's, judged by shortcutActiveEntry
+   above (v2.158). */
 function buildShortcutRow(entry) {
   const target = shortcutTarget(entry);
   if (target.state === "missing") { return null; }
@@ -2375,23 +2482,15 @@ function buildShortcutRow(entry) {
   wrap.setAttribute("data-target", entry.id);
   const btn = document.createElement("button");
   btn.type = "button";
-  let active = false;
-  if (entry.kind === "note") {
-    active = target.state === "live" && state.selectedId === entry.id;
-  } else if (entry.kind === "notebook") {
-    active = state.view.kind === "notebook" &&
-      state.view.value === entry.id;
-  } else if (entry.kind === "tag") {
-    active = state.view.kind === "tag" &&
-      state.view.value === entry.id;
-  } else if (entry.kind === "search") {
-    /* v2.32: active while the running search is this
-       entry's stored query, both sides read the way the
-       search box normalizes (trimmed, lowercased). */
-    const se = savedSearchById(entry.id);
-    active = !!se && state.search ===
-      String(se.query || "").trim().toLowerCase();
-  }
+  /* v2.158: the dress is the one winner's (see
+     shortcutActiveEntry): this row wears it only when
+     it IS the winner, so two rows can never wear it at
+     once. Before this build each kind judged itself
+     here from its own state, and the note row and the
+     notebook row lit together. */
+  const winner = shortcutActiveEntry();
+  const active = !!winner && winner.kind === entry.kind &&
+    winner.id === entry.id;
   btn.className = "nav-item nav-shortcut-main" + (active ? " active" : "");
   const icon = document.createElement("span");
   icon.className = "nav-shortcut-icon";

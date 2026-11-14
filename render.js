@@ -9218,6 +9218,17 @@ function openNoteNow(id) {
   state.thingsNotebook = null;
   /* v2.24.5: a note switch closes the phone toolbar panel. */
   closeTbPanel();
+  /* v2.158: a note opening repaints the sidebar too,
+     on the same footing as the navigation paths that
+     run renderAll. Through v2.157 this switch rendered
+     the list and the editor only, so the sidebar's
+     paint sat stale after an open: the Shortcuts row
+     for the note just opened never lit, and the row
+     lit before the open kept its dress, which Chris
+     read as the Shortcuts selecting all or none. The
+     selection has already moved above, so the sidebar
+     rendered here judges the new standing facts. */
+  renderSidebar();
   renderNoteList();
   renderEditor();
   setMobileView("editor");
