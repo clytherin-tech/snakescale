@@ -2464,9 +2464,11 @@ function shortcutActiveEntry() {
 }
 
 /* One shortcut row in the sidebar Shortcuts section: the
-   main button (kind icon plus the target's current label)
-   and the three dot button that opens the row's menu,
-   the tag row's shape. The row carries the entry's kind
+   main button (kind icon plus the target's current label),
+   the tag row's shape. A right click on the row opens
+   its menu (see openShortcutMenu below); the row has no
+   menu button of its own (v2.159). The row carries the
+   entry's kind
    and target in data attributes. A missing target builds
    no row (null); a Trash or Archive note builds a muted
    row whose label names the place. The active treatment
@@ -2536,17 +2538,17 @@ function buildShortcutRow(entry) {
     onCommit: function (keys) { reorderShortcutsTo(keys); }
   });
   wrap.appendChild(btn);
-  const menuBtn = document.createElement("button");
-  menuBtn.type = "button";
-  menuBtn.className = "nav-shortcut-menu-btn";
-  menuBtn.setAttribute("aria-haspopup", "true");
-  menuBtn.setAttribute("aria-label", "Shortcut actions");
-  menuBtn.title = "Shortcut actions";
-  menuBtn.innerHTML = "&#8943;";
-  menuBtn.addEventListener("click", function () {
-    openShortcutMenu(entry, wrap);
+  /* v2.159: the row's menu door is a right click
+     on the row itself (Chris's ask: no three dot
+     button for a one item menu). The browser's
+     own menu is suppressed on shortcut rows only;
+     the press is a contextmenu, never the click
+     the main button follows the shortcut on, so
+     opening the menu cannot follow it. */
+  wrap.addEventListener("contextmenu", function (ev) {
+    ev.preventDefault();
+    openShortcutMenu(entry, ev.clientX, ev.clientY);
   });
-  wrap.appendChild(menuBtn);
   return wrap;
 }
 
@@ -2612,26 +2614,26 @@ function followShortcut(entry) {
 }
 
 /* The shortcut row menu (Remove from Shortcuts). One
-   shared element parked in the Shortcuts section;
-   shortcutMenuFor holds the entry it was opened for (a
-   copy, so a render cannot change what it names).
-   Positioned under its row at open time from the row's
-   own offsets inside the section, like the tag menu. */
+   shared element standing directly under the document
+   body from birth in the shell (the v2.148.1 lesson,
+   the stack context menu's shape): a menu parked
+   inside the Shortcuts section paints nowhere when
+   a view parks or folds its pane. shortcutMenuFor
+   holds the entry it was opened for (a copy, so a
+   render cannot change what it names). Placement is
+   the note context menu's own (placeNoteContextMenu,
+   at the pointer, flipped and clamped), and the item
+   removes through removeShortcut, so the standing
+   naming toast fires and the target is never touched. */
 let shortcutMenuFor = null;
-function openShortcutMenu(entry, rowEl) {
+function openShortcutMenu(entry, x, y) {
   const menu = document.getElementById("shortcutMenu");
   if (!menu) { return; }
-  if (shortcutMenuFor && shortcutMenuFor.kind === entry.kind &&
-      shortcutMenuFor.id === entry.id &&
-      !menu.classList.contains("hidden")) {
-    closeShortcutMenu();
-    return;
-  }
   shortcutMenuFor = { kind: entry.kind, id: entry.id };
-  if (rowEl) {
-    menu.style.top = (rowEl.offsetTop + rowEl.offsetHeight + 2) + "px";
-  }
   menu.classList.remove("hidden");
+  placeNoteContextMenu(menu, x, y);
+  const first = menu.querySelector(".list-menu-item");
+  if (first) { first.focus(); }
 }
 function closeShortcutMenu() {
   const menu = document.getElementById("shortcutMenu");

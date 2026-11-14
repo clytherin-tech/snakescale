@@ -648,6 +648,15 @@ function wireEvents() {
       stackCtxHome.parentElement !== document.body) {
     document.body.appendChild(stackCtxHome);
   }
+  /* v2.159: the shortcut row's right click menu is
+     born under the body in the shell too; this stands
+     the same guard over it, so it can never be buried
+     in a parked pane either. */
+  const shortcutMenuHome = document.getElementById("shortcutMenu");
+  if (shortcutMenuHome &&
+      shortcutMenuHome.parentElement !== document.body) {
+    document.body.appendChild(shortcutMenuHome);
+  }
 
   /* Setup form (v2.0): there is nothing to fill in. Submitting
      creates this device's local encryption key, saves the (Google
@@ -1027,12 +1036,13 @@ function wireEvents() {
     if (entry) { removeShortcut(entry.kind, entry.id); }
   });
   /* The shortcut menu's closers, mirroring the tag menu's:
-     a click outside the menu and its rows' menu buttons
-     closes it, and so does Escape. */
+     a click outside the menu closes it, and so does
+     Escape. (Through v2.158 the closer also carved out
+     the rows' three dot menu buttons; v2.159 removed
+     those buttons, so the carve out goes with them.) */
   document.addEventListener("click", function (ev) {
     if (shortcutMenuFor === null) { return; }
     if (ev.target.closest("#shortcutMenu")) { return; }
-    if (ev.target.closest(".nav-shortcut-menu-btn")) { return; }
     closeShortcutMenu();
   });
   document.addEventListener("keydown", function (ev) {

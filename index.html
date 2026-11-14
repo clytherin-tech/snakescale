@@ -44,7 +44,7 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-11-13-SSN-V21580
+  BUILD STAMP: 2026-11-13-SSN-V21590
   Version: 2.106.0
 
   Revision history:
@@ -6191,9 +6191,6 @@
     <div class="nav-section" id="shortcutSection">
       <div class="nav-label nav-section-toggle" id="shortcutSectionToggle" role="button" tabindex="0" aria-expanded="true" aria-controls="shortcutNav" aria-label="Collapse Shortcuts section" title="Collapse section"><span class="nav-section-title">Shortcuts</span><span class="nav-label-right"><span class="nav-section-chevron" aria-hidden="true"><svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M6 3l5 5-5 5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg></span></span></div>
       <div id="shortcutNav"></div>
-      <div id="shortcutMenu" class="hidden" role="menu" aria-label="Shortcut actions">
-        <button type="button" id="shortcutRemoveBtn" role="menuitem">Remove from Shortcuts</button>
-      </div>
     </div>
 
     <div class="nav-section" id="notebookSection">
@@ -8692,6 +8689,19 @@
      that park the pane (the v2.148.1 lesson). The
      stack header's three dot button and the section
      parked menu it used to open are gone. -->
+<!-- v2.159: the shortcut row's right click menu
+     (openShortcutMenu in notebooks.js): one small
+     menu at the pointer with the one item, Remove
+     from Shortcuts. It stands at body level from
+     birth, like the stack menu below it: through
+     v2.158 it parked inside the Shortcuts section
+     under a three dot button on every row, and a
+     menu parked inside a view switched or folded
+     pane paints nowhere (the v2.148.1 lesson).
+     The rows' three dot buttons are gone. -->
+<div id="shortcutMenu" class="note-ctx-menu hidden" role="menu" aria-label="Shortcut actions">
+  <button type="button" class="list-menu-item" id="shortcutRemoveBtn" role="menuitem">Remove from Shortcuts</button>
+</div>
 <div id="stackCtxMenu" class="note-ctx-menu hidden" role="menu" aria-label="Stack actions">
   <button type="button" class="list-menu-item" id="stackCtxNewBtn" role="menuitem">New Notebook</button>
   <button type="button" class="list-menu-item" id="stackCtxRenameBtn" role="menuitem">Rename Stack</button>

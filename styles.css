@@ -618,38 +618,40 @@ body>.nest-drag-ghost{
 .nav-tag-row.tag-nest-source{opacity:.55;}
 body.tag-nest-dragging{cursor:grabbing;user-select:none;}
 .nav-tag-chevron-spacer{flex:none;width:20px;}
-.nav-tag-menu-btn,.nav-shortcut-menu-btn{
+.nav-tag-menu-btn{
   flex:none;width:24px;height:24px;display:inline-flex;
   align-items:center;justify-content:center;background:none;
   border:none;border-radius:var(--radius-button);color:#AFCDB7;
   font-size:15px;line-height:1;cursor:pointer;
   transition:background-color var(--motion),color var(--motion);
 }
-.nav-tag-menu-btn:hover,.nav-shortcut-menu-btn:hover{background:rgba(87,167,115,.25);color:#fff;}
-#tagMenu,#tagParentPanel,#shortcutMenu{
+.nav-tag-menu-btn:hover{background:rgba(87,167,115,.25);color:#fff;}
+#tagMenu,#tagParentPanel{
   position:absolute;left:10px;right:10px;z-index:60;min-width:180px;
   padding:6px;background:var(--surface);border:1px solid var(--border);
   border-radius:var(--radius-card);box-shadow:0 10px 28px rgba(0,0,0,.32);
   display:flex;flex-direction:column;gap:2px;
 }
-#tagMenu.hidden,#tagParentPanel.hidden,#shortcutMenu.hidden{display:none;}
-#tagMenu button,#tagParentPanel button,#shortcutMenu button{
+#tagMenu.hidden,#tagParentPanel.hidden{display:none;}
+#tagMenu button,#tagParentPanel button{
   display:flex;align-items:center;gap:8px;width:100%;text-align:left;
   background:none;border:none;color:var(--text-strong);cursor:pointer;
   padding:8px 10px;border-radius:var(--radius-button);font-size:13.5px;
   transition:background-color var(--motion);
 }
-#tagMenu button:hover,#tagParentPanel button:hover,#shortcutMenu button:hover{
+#tagMenu button:hover,#tagParentPanel button:hover{
   background:var(--accent-soft);
 }
 /* v2.31 (Evernote parity, phase 1 release 3): shortcuts.
    A shortcut row is the tag row's flex shape: the main
    button is a .nav-item carrying a kind icon and the
    target's current label (read from the target at render
-   time, never stored), and the three dot button opens the
-   shared shortcut menu above. The section is the menu's
-   positioning context, like the tag section is for its
-   menu. A dead row (its note sits in Trash or Archive)
+   time, never stored). Through v2.158 a three dot button
+   on the row opened the shared shortcut menu, which
+   parked in this section; v2.159 took the button off
+   and the menu to body level, opened by a right click
+   on the row in the context menus' own dress
+   (.note-ctx-menu). A dead row (its note sits in Trash or Archive)
    renders muted; its label gains a quiet "(in Trash)" or
    "(in Archive)" suffix so the state is readable before
    the click that answers with the note links' message. */
