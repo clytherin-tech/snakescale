@@ -5251,6 +5251,87 @@ function applyCellBackground(value) {
   finishCellFormat();
 }
 
+/* ----- v2.161: the cell background palette's Custom flow -------
+   The cell counterpart of the toolbar palettes' Custom flow
+   (v2.24.2, in the colors code), under the same contract:
+   clicking Custom paints the target at once with the current
+   custom color and opens the native picker; the picker's
+   input ticks repaint live; its change commits the final
+   color and remembers it; a dismissal with no picker events
+   leaves the at-click color standing. The target needs no
+   bookmark of the kind the text flow keeps: the menu acts on
+   the cells captured when it opened (cellActionCells), which
+   nothing the picker does can move. The live applications
+   deliberately skip finishCellFormat: the menu stands open
+   under its own picker, and only the commit closes it, the
+   way a preset pick ends. */
+let cellCustomSession = null;
+
+function applyCellBackgroundLive(value) {
+  cellActionCells.forEach(function (cell) {
+    cell.style.backgroundColor = value;
+  });
+  markDirty();
+}
+
+/* The Custom click: paint with the input's current value.
+   The paint is deferred one tick, like the toolbar flow, so
+   the click's own activation (opening the native picker) is
+   never preceded by the DOM changes an application
+   performs. */
+function beginCellCustomColor(input) {
+  if (!cellActionCells.length) { return; }
+  cellCustomSession = { input: input, appliedValue: null };
+  const session = cellCustomSession;
+  setTimeout(function () {
+    if (cellCustomSession === session) {
+      applyCellBackgroundLive(input.value);
+      session.appliedValue = input.value;
+    }
+  }, 0);
+}
+
+/* The picker's input ticks repaint the captured cells live.
+   A tick with no live session is ignored rather than
+   painting whatever cells happen to be captured. */
+function cellCustomColorInput(input) {
+  const session = cellCustomSession;
+  if (!session || session.input !== input) { return; }
+  applyCellBackgroundLive(input.value);
+  session.appliedValue = input.value;
+}
+
+/* Remember a committed cell pick: the state value
+   loadSettings restores and the cell menu wiring seeds into
+   the input, so the next Custom click, in this session or
+   after a reload, starts from it. */
+function rememberCellCustomColor(value) {
+  if (!/^#[0-9a-fA-F]{6}$/.test(value || "")) { return; }
+  state.customCellBgColor = value.toLowerCase();
+  saveSettings();
+}
+
+/* The picker's change event: the picker has closed with a
+   committed value. With a live session, apply the value
+   unless the live ticks already painted exactly it,
+   remember it either way, and close the menu through the
+   standing finish. A change with no session applies and
+   remembers plainly, the toolbar flow's own fallback. */
+function commitCellCustomColor(input) {
+  const session = cellCustomSession;
+  if (!session || session.input !== input) {
+    applyCellBackground(input.value);
+    rememberCellCustomColor(input.value);
+    return;
+  }
+  cellCustomSession = null;
+  if (session.appliedValue !== input.value) {
+    applyCellBackgroundLive(input.value);
+  }
+  rememberCellCustomColor(input.value);
+  finishCellFormat();
+}
+
 function applyCellBorderStyle(value) {
   if (!cellActionCells.length) { closeCellMenu(); return; }
   cellActionCells.forEach(function (cell) {
@@ -5487,6 +5568,22 @@ function wireCellMenu() {
   });
   document.getElementById("cellBgNone").addEventListener("click",
     function () { applyCellBackground(""); });
+
+  /* v2.161: the cell palette's Custom row: the native color
+     input in the background sub panel, seeded from the
+     remembered pick and bound to the cell Custom flow
+     above, mirroring the toolbar palettes' wiring. */
+  const cellCustomInput = document.getElementById("cellBgCustom");
+  cellCustomInput.value = state.customCellBgColor;
+  cellCustomInput.addEventListener("click", function () {
+    beginCellCustomColor(cellCustomInput);
+  });
+  cellCustomInput.addEventListener("input", function () {
+    cellCustomColorInput(cellCustomInput);
+  });
+  cellCustomInput.addEventListener("change", function () {
+    commitCellCustomColor(cellCustomInput);
+  });
 
   /* Hover tracking plus the furniture watchers. */
   document.addEventListener("mouseover", function (ev) {

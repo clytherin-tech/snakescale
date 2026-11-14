@@ -4744,7 +4744,7 @@ const TB_COLORS = [
   { name: "Deep forest", value: "#0B3D2E" },
   { name: "Forest green", value: "#14532D" },
   { name: "Leaf green", value: "#2E7D4F" },
-  { name: "Accent green", value: "#57A773" },
+  { name: "Seen green", value: "#D9EAD3" },
   { name: "Red", value: "#C0392B" },
   { name: "Orange", value: "#E67E22" },
   { name: "Blue", value: "#2471A3" },

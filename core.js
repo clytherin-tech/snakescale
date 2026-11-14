@@ -516,6 +516,13 @@ const state = {
   customTextColor: "#14532d", // v2.24.2: the text palette's
                             // remembered Custom color, with
                             // the same treatment as above.
+  customCellBgColor: "#d9ead3", // v2.161: the cell
+                            // background palette's
+                            // remembered Custom color,
+                            // with the same treatment
+                            // as above; seeded into the
+                            // cell menu's picker when
+                            // the cell menu is wired.
   tasks: [],                // v2.24: the task objects from
                             // tasks.json (see the tasks block for
                             // the shape). Loaded with the library
@@ -1518,6 +1525,11 @@ function loadSettings() {
   if (/^#[0-9a-fA-F]{6}$/.test(s.customTextColor || "")) {
     state.customTextColor = s.customTextColor.toLowerCase();
   }
+  /* v2.161: the cell background palette's remembered
+     Custom color, honored with the same shape rule. */
+  if (/^#[0-9a-fA-F]{6}$/.test(s.customCellBgColor || "")) {
+    state.customCellBgColor = s.customCellBgColor.toLowerCase();
+  }
   /* v2.24: task reminder notifications. The default is on, so
      only an explicitly stored false turns them off, exactly
      like autoSync above. */
@@ -1574,6 +1586,7 @@ function saveSettings() {
     defaultPasteMode: state.defaultPasteMode,   // v2.23: the paste default
     customHighlightColor: state.customHighlightColor,   // v2.24.2: palette memory
     customTextColor: state.customTextColor,   // v2.24.2: palette memory
+    customCellBgColor: state.customCellBgColor,   // v2.161: cell palette memory
     taskReminders: state.taskReminders,   // v2.24: reminder notifications
     noteReminders: state.noteReminders,   // v2.35: note reminder notifications
     noteReminderFired: state.noteReminderFired,   // v2.35: the fired stamps
