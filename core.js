@@ -1904,8 +1904,6 @@ const VERSION_COALESCE_MS = 10 * 60 * 1000;
 const versionHistoryCache = Object.create(null);
 const lastSavedContentByNoteId = Object.create(null);
 const versionHistoryPruneNeeded = new Set();
-let versionHistoryOpenNoteId = null;
-let versionHistoryPreviewVersionId = null;
 
 /* The configured versions per note limit, normalized: a whole
    number from 0 to 100, with the default 10 for anything that is
@@ -2015,8 +2013,6 @@ function clearVersionRuntimeState() {
     delete lastSavedContentByNoteId[id];
   });
   versionHistoryPruneNeeded.clear();
-  versionHistoryOpenNoteId = null;
-  versionHistoryPreviewVersionId = null;
 }
 
 /* Full snapshot equality (title, body, tags, and the attachment

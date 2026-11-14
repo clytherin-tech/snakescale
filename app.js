@@ -2145,13 +2145,14 @@ function wireEvents() {
     if (ev.key === "Escape") { finishOnboarding(); }
   });
 
-  /* v2.8: the editor footer's History button and its modal, with
-     the same close pattern as Settings. The list's Preview and
-     Restore controls are wired per row in buildVersionHistoryRow. */
+  /* v2.164: the editor footer's History button is a door
+     to the note's history in Google Docs (see
+     openGoogleDocHistory in render.js); the in-app
+     history dialog it opened through v2.163 is gone,
+     with its close button and modal wiring. */
   document.getElementById("versionHistoryBtn").addEventListener("click", function () {
-    openVersionHistory().catch(function (err) { toast(err.message, true); });
+    openGoogleDocHistory();
   });
-  document.getElementById("versionHistoryCloseBtn").addEventListener("click", closeVersionHistory);
 
   /* v2.138: the editor footer's Share button and its
      dialog. The button stands between Export and History
@@ -2196,12 +2197,6 @@ function wireEvents() {
   });
   document.getElementById("shareRetryBtn").addEventListener("click", function () {
     loadShareDialogState();
-  });
-  document.getElementById("versionHistoryModal").addEventListener("click", function (ev) {
-    if (ev.target === ev.currentTarget) { closeVersionHistory(); }
-  });
-  document.getElementById("versionHistoryModal").addEventListener("keydown", function (ev) {
-    if (ev.key === "Escape") { closeVersionHistory(); }
   });
 
   /* v2.4: drag and drop notes between notebooks: the delegated

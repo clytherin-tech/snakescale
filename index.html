@@ -44,7 +44,7 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-11-14-SSN-V21630
+  BUILD STAMP: 2026-11-14-SSN-V21640
   Version: 2.106.0
 
   Revision history:
@@ -7319,12 +7319,13 @@
                beside the History modal it stands next to
                in the footer. -->
           <button class="btn small hidden" id="shareBtn" type="button" title="Share this note through Google Docs">Share</button>
-          <!-- v2.8: History opens the open note's version list
-               (versionHistoryModal, below), with preview and
-               restore. It stays available on locked notes too:
-               their versions can be viewed and previewed, and
-               only Restore is disabled there. -->
-          <button class="btn small" id="versionHistoryBtn" type="button" title="See earlier versions of this note">History</button>
+          <!-- v2.164: History opens the open note's history
+               in Google Docs, in a new tab. renderEditor
+               shows it only for a live Doc-backed note
+               (updateHistoryButton), the notes whose
+               history lives there; the in-app history
+               list it opened through v2.163 is gone. -->
+          <button class="btn small hidden" id="versionHistoryBtn" type="button" title="Open this note's history in Google Docs">History</button>
           <!-- v2.5: Maximize fills the window with the note (the
                sidebar and the notes list hide, the writing column
                uncaps). Its icon and label flip to Restore while
@@ -8503,39 +8504,6 @@
     <div class="modal-foot">
       <button class="btn" id="sketchCancelBtn" type="button">Cancel</button>
       <button class="btn primary" id="sketchSaveBtn" type="button">Save sketch</button>
-    </div>
-  </div>
-</div>
-
-<!-- ==========================================================================
-     v2.8: Note history
-     Opened from the editor footer's History button. The script
-     renders one row per stored version of the open note (newest
-     first) into versionHistoryList; Preview fills
-     versionHistoryPreview with a read only rendering of that
-     version, built from the version's own attachment records, and
-     Restore runs the serialized restore flow (the current note is
-     preserved as a new version first). On a locked note (Trash or
-     Archive) the rows still preview, and Restore is disabled with
-     the reason printed on the row.
-     v2.144: the list and the preview stand together in
-     version-history-main. The preview wears the white page
-     dress of the open note, and while one is showing the
-     modal carries preview-open: the card widens and, at
-     desktop widths, the preview stands to the right of the
-     list instead of under it. On narrow screens the two
-     stack as they always have.
-     ========================================================================== -->
-<div id="versionHistoryModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="versionHistoryTitle">
-  <div class="modal-card version-history-card">
-    <h2 id="versionHistoryTitle">Note history</h2>
-    <p class="modal-sub">Earlier saved versions of this note, newest first. Restoring a version preserves the current note as a new version first.</p>
-    <div class="version-history-main">
-      <div class="version-history-list" id="versionHistoryList"></div>
-      <div class="version-preview hidden" id="versionHistoryPreview"></div>
-    </div>
-    <div class="modal-foot">
-      <button class="btn" id="versionHistoryCloseBtn" type="button">Close</button>
     </div>
   </div>
 </div>
