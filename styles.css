@@ -36,6 +36,16 @@
      themes) alike. */
   --hit-bg:#FFDF80;
   --hit-text:#10231A;
+  /* v2.157: the hit mark's frame color: the
+     brand primary, the Deep Forest palette's
+     own dark green. It must read as a frame
+     against the amber ground in either theme
+     and against every surface the mark lands
+     on (the light lists, the dark lists, and
+     the white note page in both themes), so
+     it is held constant across themes, like
+     the hit ink beside it. */
+  --hit-border:#14532D;
   --bg:#F7F8F3;
   --text:#10231A;
   /* v2.59: the strong text tone a family of menu and
@@ -116,6 +126,11 @@ body.dark{
      surfaces and on the white note page. */
   --hit-bg:#E8A33D;
   --hit-text:#10231A;
+  /* v2.157: the dark theme's hit frame, the
+     same brand primary as the light theme's
+     (see :root): one dark green frame against
+     the deeper amber and the dark surfaces. */
+  --hit-border:#14532D;
   --shadow:0 4px 18px rgba(0,0,0,.42);
 }
 *{box-sizing:border-box;}
@@ -144,8 +159,17 @@ input,select,textarea{font:inherit;color:var(--text);}
 
 /* v2.153: the search hit mark, the one dress for
    every surface the paint touches (result rows,
-   task rows, the reading pane, the note page). */
-mark.ss-hit{background:var(--hit-bg);color:var(--hit-text);border-radius:2px;}
+   task rows, the reading pane, the note page).
+   v2.157: the mark wears a frame, a 1px solid
+   border in the themed dark green (--hit-border)
+   with slightly rounded corners (3px), Chris's
+   ask, so a highlighted word reads as something
+   the search put there and never as part of the
+   note itself. The frame is dress only: the save
+   funnel still unwraps the whole mark before
+   anything is written, so no byte of it can
+   reach a saved note. */
+mark.ss-hit{background:var(--hit-bg);color:var(--hit-text);border:1px solid var(--hit-border);border-radius:3px;}
 
 /* ---------- generic buttons and fields ---------- */
 .btn{
