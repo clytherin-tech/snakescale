@@ -10392,6 +10392,39 @@ function closeSettingsModal() {
    -------------------------------------------------------------------------- */
 let orphanScanRunning = false;
 let orphanDeleteAllRunning = false;
+/* v2.163: Delete All's pacing table, in one
+   mutable object so the harness can shrink the
+   waits and prove the structure without waiting
+   out the real ones. The values are the shipped
+   behavior (see deleteAllOrphans): paceMs is the
+   floor between one trash call's start and the
+   next; breatherEvery and breatherMs pause the
+   run between batches; backoffStepsMs and
+   backoffCapMs are the quota waits, and
+   maxQuotaWaits bounds consecutive quota waits
+   with no progress before the run stops and
+   says so. */
+const ORPHAN_DELETE_ALL_TIMING = {
+  paceMs: 400,
+  breatherEvery: 100,
+  breatherMs: 10000,
+  backoffStepsMs: [15000, 30000, 60000],
+  backoffCapMs: 60000,
+  maxQuotaWaits: 6
+};
+/* v2.163: the running Delete All run's shared
+   state: the Stop button's flag, the progress
+   record the progress line reads ({total,
+   deleted, failed, phase, waitSeconds}), the
+   finished run's summary record ({total,
+   deleted, failed, remaining, stoppedReason}),
+   and the progress line's text node, which the
+   run updates in place. All session memory
+   only, like the scan's own state. */
+let orphanDeleteAllCancelRequested = false;
+let orphanDeleteAllProgress = null;
+let orphanDeleteAllSummary = null;
+let orphanDeleteAllProgressEl = null;
 /* The last scan's shape: {filesChecked, references,
    foundCount, orphans: [{fileId, name, mime, size,
    modifiedTime, error, deleting}]}. Memory only, and
@@ -10413,6 +10446,9 @@ const orphanThumbUrls = {};   /* fileId -> preview object URL */
 function clearOrphanScanResults() {
   orphanScanState = null;
   orphanScanError = null;
+  orphanDeleteAllProgress = null;
+  orphanDeleteAllSummary = null;
+  orphanDeleteAllCancelRequested = false;
   dismissOrphanScanDoneToast();
   Object.keys(orphanThumbUrls).forEach(function (id) {
     try { URL.revokeObjectURL(orphanThumbUrls[id]); } catch (e) {}
@@ -10722,6 +10758,7 @@ function renderOrphanScanResults() {
         " from your notes and their saved versions.";
     summary.appendChild(msg);
     host.appendChild(summary);
+    renderOrphanDeleteAllStatus(host);
     return;
   }
   const total = scan.orphans.reduce(function (sum, o) {
@@ -10743,6 +10780,7 @@ function renderOrphanScanResults() {
   });
   summary.appendChild(delAll);
   host.appendChild(summary);
+  renderOrphanDeleteAllStatus(host);
   const list = document.createElement("div");
   list.className = "orphan-list";
   scan.orphans.forEach(function (orphan) {
@@ -10893,13 +10931,203 @@ async function deleteOrphan(fileId) {
   renderOrphanScanResults();
 }
 
-/* Delete All: ONE confirmation naming the count and the
-   total size, then the same provider trash per file in
-   turn (v2.66: Drive trash, recoverable, like every
-   attachment removal). Successes drop as they land;
-   each failure keeps
-   its row and its reason, so the list that remains is
-   exactly the work that is left. */
+/* v2.163: is this failure Google's quota answering?
+   Judged by the facts first (the trash error carries
+   the HTTP status and the error body's reasons since
+   this build: a 429, or a reason of rateLimitExceeded,
+   userRateLimitExceeded, or quotaExceeded), then by
+   the message itself, which is all an error that came
+   through the plain message path carries (the field
+   failure's own words were "Quota exceeded for quota
+   metric 'Total Query Cost'..."). A refusal whose
+   reasons are present and none of them quota is a
+   permission refusal, not a limit, whatever its
+   message says. */
+function orphanDeleteIsQuotaError(err) {
+  if (!err) { return false; }
+  const status = err.driveHttpStatus || err.docHttpStatus ||
+    err.httpStatus || err.status || 0;
+  if (status === 429) { return true; }
+  const reasons = err.driveErrorReasons || err.reasons || [];
+  let sawReason = false;
+  for (const reason of reasons) {
+    sawReason = true;
+    if (reason === "rateLimitExceeded" ||
+        reason === "userRateLimitExceeded" ||
+        reason === "quotaExceeded") {
+      return true;
+    }
+  }
+  if (sawReason) { return false; }
+  const msg = String(err.message || err).toLowerCase();
+  return msg.indexOf("quota") >= 0 ||
+    msg.indexOf("rate limit") >= 0 ||
+    msg.indexOf("ratelimitexceeded") >= 0 ||
+    msg.indexOf("userratelimitexceeded") >= 0;
+}
+
+/* v2.163: a Delete All wait that a Stop request can
+   cut short: it sleeps in 100 ms slices and answers
+   false when the run was asked to stop, so a cancel
+   lands promptly even in the middle of a long quota
+   backoff, and never leaves the run sleeping on
+   after it was told to halt. */
+async function orphanDeleteAllSleep(ms) {
+  let left = ms;
+  while (left > 0) {
+    if (orphanDeleteAllCancelRequested) { return false; }
+    const slice = Math.min(100, left);
+    await new Promise(function (resolve) {
+      setTimeout(resolve, slice);
+    });
+    left -= slice;
+  }
+  return !orphanDeleteAllCancelRequested;
+}
+
+/* v2.163: the progress line's words for the run's
+   current state, from the progress record alone, so
+   the rendered line and every in place update read
+   the same text. */
+function orphanDeleteAllProgressText() {
+  const p = orphanDeleteAllProgress;
+  if (!p) { return ""; }
+  const soFar = p.deleted + " of " + p.total + " deleted so far";
+  if (orphanDeleteAllCancelRequested) {
+    return "Stopping: " + soFar + ".";
+  }
+  if (p.phase === "backing-off") {
+    return "Google Drive rate limit reached. Paused, waiting " +
+      p.waitSeconds + "s before continuing: " + soFar + ".";
+  }
+  if (p.phase === "breather") {
+    return "Pausing between batches: " + soFar + ".";
+  }
+  return "Deleting orphaned attachments: " + p.deleted + " of " +
+    p.total + " deleted" +
+    (p.failed.length ? ", " + p.failed.length + " failed" : "") + ".";
+}
+
+/* v2.163: repaint only the progress line, in place.
+   The run does not re-render the results per file
+   (a list of thousands would rebuild on every
+   delete, and every rebuilt image row would spend
+   another Drive download on the same API the run is
+   pacing itself to protect); the one text node
+   changes. */
+function updateOrphanDeleteAllProgress() {
+  const el = orphanDeleteAllProgressEl;
+  if (el && el.parentNode) {
+    el.textContent = orphanDeleteAllProgressText();
+  }
+}
+
+/* v2.163: the finished run's summary words: how
+   many were deleted, how many failed (each named,
+   with its reason; the same names and reasons stand
+   on their rows in the list), and how many remain. */
+function orphanDeleteAllSummaryText() {
+  const s = orphanDeleteAllSummary;
+  if (!s) { return ""; }
+  let head = "Delete all finished: ";
+  if (s.stoppedReason === "cancelled") {
+    head = "Delete all stopped: ";
+  } else if (s.stoppedReason === "quota") {
+    head = "Delete all stopped (Google Drive kept answering " +
+      "with a rate limit after repeated waits): ";
+  }
+  let text = head + s.deleted + " deleted, " + s.failed.length +
+    " failed, " + s.remaining + " remaining of " + s.total + ".";
+  if (s.failed.length) {
+    text += " Failed: " + s.failed.map(function (f) {
+      return f.name + " (" + f.error + ")";
+    }).join("; ") + ".";
+  }
+  return text;
+}
+
+/* v2.163: the Delete All status block inside the
+   results: while a run stands, its progress line
+   and its Stop button; after a run, its end
+   summary. Rendered by renderOrphanScanResults like
+   the rest of the section; the run's own updates
+   touch only the progress line's text (above). */
+function renderOrphanDeleteAllStatus(host) {
+  if (orphanDeleteAllProgress) {
+    const box = document.createElement("div");
+    box.className = "orphan-delete-progress";
+    const text = document.createElement("span");
+    text.className = "orphan-delete-progress-text";
+    text.textContent = orphanDeleteAllProgressText();
+    box.appendChild(text);
+    orphanDeleteAllProgressEl = text;
+    if (orphanDeleteAllRunning) {
+      const stop = document.createElement("button");
+      stop.className = "btn small";
+      stop.type = "button";
+      stop.textContent = "Stop";
+      stop.addEventListener("click", function () {
+        orphanDeleteAllCancelRequested = true;
+        updateOrphanDeleteAllProgress();
+      });
+      box.appendChild(stop);
+    }
+    host.appendChild(box);
+  } else if (orphanDeleteAllSummary) {
+    const line = document.createElement("div");
+    line.className = "orphan-delete-summary";
+    line.textContent = orphanDeleteAllSummaryText();
+    host.appendChild(line);
+  }
+}
+
+/* Delete All: ONE confirmation naming the count and
+   the total size, then the provider trash per file
+   (v2.66: Drive trash, recoverable, like every
+   attachment removal).
+
+   v2.163: the run is PACED, after the field failure
+   of November 14, 2026: Chris ran Delete All over
+   about 2,900 orphaned poster files and the loop
+   fired one trash call per file as fast as each
+   returned, on the same Drive API the scan, the
+   thumbnails, sync, and note images all ride.
+   Google answered "Quota exceeded for quota metric
+   'Total Query Cost'", sync failed, and the note
+   images stopped loading; almost no deletion
+   landed before the quota cut in. So now: one call
+   at a time (as before), a 400 ms floor between
+   the start of one trash call and the next (at
+   most 150 calls a minute even if Drive answered
+   instantly; a real round trip makes it closer to
+   one a second), and a 10 second breather after
+   every 100 files worked, which hands the API
+   budget back to sync and the image loads between
+   batches. At that pace the full 2,900 take
+   roughly 25 minutes; the run is a background
+   cleanup, it shows its count as it goes, and it
+   can be stopped at any point.
+
+   A quota answer (a 429, or a 403 carrying a rate
+   limit reason: see orphanDeleteIsQuotaError)
+   pauses the run instead of failing the file: it
+   waits 15 s, then 30 s, then 60 s (capped at
+   60 s), and retries the SAME file, so the queue
+   resumes exactly where it left off and no count
+   is lost and nothing already trashed is trashed
+   again. Six consecutive quota waits with no
+   successful delete between them end the run with
+   the reason stated, rather than waiting forever.
+   A failure that is not quota keeps the standing
+   behavior: the file keeps its row and its reason,
+   is named in the end summary, and the run moves
+   on. The Stop button sets the cancel flag; the
+   loop honors it after the current call and inside
+   any wait, leaving what is trashed trashed
+   (recoverable from Drive trash) and the rest
+   untouched. Successes drop from the scan as they
+   land, exactly as before; the end summary names
+   the deleted, failed, and remaining counts. */
 async function deleteAllOrphans() {
   const scan = orphanScanState;
   if (!scan || !scan.orphans.length || orphanDeleteAllRunning) {
@@ -10918,26 +11146,122 @@ async function deleteAllOrphans() {
     toast("Google Drive is not available.", true);
     return;
   }
-  orphanDeleteAllRunning = true;
-  renderOrphanScanResults();
+  const timing = ORPHAN_DELETE_ALL_TIMING;
   const snapshot = scan.orphans.slice();
-  for (const orphan of snapshot) {
-    try {
-      await driver.trash(orphan.fileId);
-      scan.orphans = scan.orphans.filter(function (o) {
-        return o.fileId !== orphan.fileId;
-      });
-      if (orphanThumbUrls[orphan.fileId]) {
-        try { URL.revokeObjectURL(orphanThumbUrls[orphan.fileId]); }
-        catch (e) {}
-        delete orphanThumbUrls[orphan.fileId];
+  const progress = {
+    total: snapshot.length,
+    deleted: 0,
+    failed: [],
+    phase: "deleting",
+    waitSeconds: 0
+  };
+  orphanDeleteAllRunning = true;
+  orphanDeleteAllCancelRequested = false;
+  orphanDeleteAllSummary = null;
+  orphanDeleteAllProgress = progress;
+  renderOrphanScanResults();
+  let stopReason = "";
+  let lastStart = 0;
+  let workedSinceBreather = 0;
+  let consecutiveQuotaWaits = 0;
+  for (let i = 0; i < snapshot.length; i++) {
+    const orphan = snapshot[i];
+    if (orphanDeleteAllCancelRequested) {
+      stopReason = "cancelled";
+      break;
+    }
+    if (lastStart > 0) {
+      const waitMs = timing.paceMs - (Date.now() - lastStart);
+      if (waitMs > 0 &&
+          !(await orphanDeleteAllSleep(waitMs))) {
+        stopReason = "cancelled";
+        break;
       }
-    } catch (err) {
-      orphan.error = "Delete failed: " +
-        (err && err.message ? err.message : String(err));
+    }
+    let fileDone = false;
+    while (!fileDone) {
+      if (orphanDeleteAllCancelRequested) {
+        stopReason = "cancelled";
+        break;
+      }
+      lastStart = Date.now();
+      try {
+        await driver.trash(orphan.fileId);
+        scan.orphans = scan.orphans.filter(function (o) {
+          return o.fileId !== orphan.fileId;
+        });
+        if (orphanThumbUrls[orphan.fileId]) {
+          try { URL.revokeObjectURL(orphanThumbUrls[orphan.fileId]); }
+          catch (e) {}
+          delete orphanThumbUrls[orphan.fileId];
+        }
+        progress.deleted += 1;
+        consecutiveQuotaWaits = 0;
+        fileDone = true;
+      } catch (err) {
+        if (orphanDeleteIsQuotaError(err)) {
+          consecutiveQuotaWaits += 1;
+          if (consecutiveQuotaWaits > timing.maxQuotaWaits) {
+            orphan.error = "Not deleted: Google Drive rate " +
+              "limit. Run Delete all again to pick up where " +
+              "this run stopped.";
+            stopReason = "quota";
+            fileDone = true;
+          } else {
+            const step = timing.backoffStepsMs[Math.min(
+              consecutiveQuotaWaits - 1,
+              timing.backoffStepsMs.length - 1)];
+            const backoffMs = Math.min(step, timing.backoffCapMs);
+            progress.phase = "backing-off";
+            progress.waitSeconds = Math.ceil(backoffMs / 1000);
+            updateOrphanDeleteAllProgress();
+            const slept = await orphanDeleteAllSleep(backoffMs);
+            progress.phase = "deleting";
+            progress.waitSeconds = 0;
+            updateOrphanDeleteAllProgress();
+            if (!slept || orphanDeleteAllCancelRequested) {
+              stopReason = "cancelled";
+              fileDone = true;
+            }
+          }
+        } else {
+          const message = err && err.message
+            ? err.message : String(err);
+          orphan.error = "Delete failed: " + message;
+          progress.failed.push({
+            name: orphan.name, error: message
+          });
+          fileDone = true;
+        }
+      }
+    }
+    if (stopReason) { break; }
+    workedSinceBreather += 1;
+    updateOrphanDeleteAllProgress();
+    if (workedSinceBreather >= timing.breatherEvery &&
+        i < snapshot.length - 1) {
+      workedSinceBreather = 0;
+      progress.phase = "breather";
+      updateOrphanDeleteAllProgress();
+      const slept = await orphanDeleteAllSleep(timing.breatherMs);
+      progress.phase = "deleting";
+      updateOrphanDeleteAllProgress();
+      if (!slept || orphanDeleteAllCancelRequested) {
+        stopReason = "cancelled";
+        break;
+      }
     }
   }
   orphanDeleteAllRunning = false;
+  orphanDeleteAllSummary = {
+    total: snapshot.length,
+    deleted: progress.deleted,
+    failed: progress.failed.slice(),
+    remaining: scan.orphans.length,
+    stoppedReason: stopReason
+  };
+  orphanDeleteAllProgress = null;
+  orphanDeleteAllProgressEl = null;
   renderOrphanScanResults();
 }
 

@@ -4285,6 +4285,14 @@ body.dark .settings-section h3{color:var(--accent);}
   font-size:13.5px;color:var(--text);
 }
 .orphan-summary .btn{margin-left:auto;flex:none;}
+.orphan-delete-progress{
+  display:flex;align-items:center;gap:10px;margin:8px 0 4px;
+  font-size:13.5px;color:var(--text);
+}
+.orphan-delete-progress .btn{margin-left:auto;flex:none;}
+.orphan-delete-summary{
+  margin:8px 0 4px;font-size:13.5px;color:var(--text);
+}
 .orphan-list{margin-top:8px;}
 .orphan-row{
   display:flex;align-items:center;gap:10px;padding:8px 10px;

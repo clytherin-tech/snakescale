@@ -2305,6 +2305,48 @@ async function googleDelete(fileId) {
   }
 }
 
+/* v2.163: the error a failed trash call throws.
+   It carries the same message
+   gdriveErrorMessage has always produced for
+   this call (Google's own message when the
+   body carries one, the status fallback
+   otherwise), and it also carries the facts
+   the message alone loses: the HTTP status
+   and the reason string of every entry in
+   the error body's errors list, read from
+   the same single body read (a response body
+   can be read exactly once). Callers that
+   only read the message see no change; a
+   caller that must tell a quota refusal (a
+   429, or a 403 whose reasons are rate limit
+   reasons) from any other failure can judge
+   by the facts, the way the Doc layer judges
+   its 403s (v2.133). */
+async function gdriveTrashError(res) {
+  const fallback = "Google Drive trash failed " +
+    "with status " + res.status;
+  let message = fallback;
+  const reasons = [];
+  try {
+    const j = await res.json();
+    if (j && j.error) {
+      if (j.error.message) { message = j.error.message; }
+      if (Array.isArray(j.error.errors)) {
+        j.error.errors.forEach(function (entry) {
+          if (entry && typeof entry.reason === "string" &&
+              entry.reason) {
+            reasons.push(entry.reason);
+          }
+        });
+      }
+    }
+  } catch (e) { /* keep the fallback message */ }
+  const err = new Error(message);
+  err.driveHttpStatus = res.status;
+  err.driveErrorReasons = reasons;
+  return err;
+}
+
 /* v2.66: move one Drive file into the owner's Drive
    trash instead of deleting it outright: a metadata
    update that sets trashed, the Drive API's own
@@ -2330,8 +2372,7 @@ async function googleTrash(fileId) {
     });
   if (res.status === 404) { return; }
   if (!res.ok) {
-    throw new Error(await gdriveErrorMessage(res,
-      "Google Drive trash failed with status " + res.status));
+    throw await gdriveTrashError(res);
   }
 }
 
