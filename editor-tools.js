@@ -6835,6 +6835,12 @@ function toggleToolbarMenu(id) {
    edge once the toolbar wraps. If a freshly opened menu would spill
    past the viewport, shift it back inside with a negative margin. */
 function keepMenuInViewport(menu) {
+  /* v2.170: at phone widths the menu stands fixed
+     and is placed against the visible area instead
+     (see placeTbMenu in the docked toolbar section);
+     the desktop judgment below stands exactly as
+     it was. */
+  if (tbPhoneMode) { placeTbMenu(menu); return; }
   menu.style.marginLeft = "0px";
   const rect = menu.getBoundingClientRect();
   const vw = window.innerWidth;
@@ -6953,6 +6959,11 @@ function tbRestore() {
     tbPanelRows.color.remove();
     tbPanelRows.more.remove();
   }
+  /* v2.170: leaving phone width retires the phone
+     placement the dock and the popouts wrote
+     inline, so the desktop rules govern the panel
+     and the menus exactly as before. */
+  tbClearPhonePlacement();
 }
 
 function tbPanelIsOpen() {
@@ -6963,7 +6974,12 @@ function tbPanelIsOpen() {
 function openTbPanel() {
   closeToolbarMenus();
   const panel = document.getElementById("tbPanel");
-  if (panel) { panel.classList.remove("hidden"); }
+  if (panel) {
+    panel.classList.remove("hidden");
+    /* v2.170: the panel stands placed against the
+       visible area from its first frame. */
+    placeTbPanel();
+  }
 }
 
 function closeTbPanel() {
@@ -6989,6 +7005,319 @@ function applyTbPhoneMode() {
     toolbar.classList.remove("tb-phone");
     tbRestore();
   }
+}
+
+/* ----- v2.170: the docked phone toolbar ----------------------------------
+   Chris's field report, November 15, 2026: "The formatting
+   toolbar on mobile needs to be made better. It is off the
+   screen while I am trying to edit." The bar is sticky at
+   the top of the editor's scroll flow, and sticky judges
+   against the layout viewport. On a phone the on-screen
+   keyboard does not shrink the layout viewport; it shrinks
+   and shifts the VISUAL viewport, so while Chris types the
+   visible area is a window the bar never hears about, and
+   the bar stands scrolled or panned out of it. The app had
+   no visualViewport usage at all. Now, at phone widths
+   (the same 900px regime as the one line bar), the editor
+   tracks window.visualViewport while a note is being
+   edited:
+
+   - The keyboard reads as up when the visible height
+     falls at least TB_DOCK_MIN_GAP (120px) below the
+     layout height while an editable surface inside the
+     editor holds focus. A real keyboard is never shorter
+     than that; browser chrome collapsing is, so the gap
+     alone never docks the bar mid-scroll.
+   - While the keyboard is up the bar DOCKS: it stands
+     fixed at the bottom edge of the visible area, just
+     above the keyboard, placed from the visual viewport
+     itself (top = offsetTop + height - the bar's own
+     height, left = offsetLeft, width = the visible
+     width), so it stays fully on screen and thumb
+     reachable while typing. When the keyboard closes,
+     the bar returns to its standing sticky place.
+   - Docking is placement and dress only. Nothing here
+     touches focus, the caret, the selection, or the
+     scroll position. The bar's vacated flow space is
+     handed to the note body as a top margin of the same
+     size, so the text does not jump when the bar leaves
+     or re-enters the flow, and the editor's scroll area
+     gains the bar's height as extra bottom padding
+     (the --tb-dock-pad property the phone stylesheet
+     adds to its standing 28px), so the last lines of a
+     note can always scroll clear of the docked bar.
+     Undocking takes both back.
+   - The bar itself can no longer overflow sideways: in
+     the phone stylesheet it is a horizontal scroller
+     (themed, both themes), so on a narrow phone every
+     button stays reachable by swiping the bar. The More
+     group's standing margin-left auto is what pinning
+     means inside a scroller: while the line fits, the
+     auto margin pins More to the right end; when the
+     line overflows, the margin collapses and More rides
+     at the end of the scroll, still reachable, never
+     stranded past the edge.
+   - Everything that pops out of the bar at phone widths
+     stands fixed and is placed against the visible
+     area, so the bar's own scrolling can never clip it
+     and the keyboard can never cover it: the More panel
+     (placeTbPanel: under the bar while undocked,
+     clamped to the visible area and the standing 520px
+     cap; opening UPWARD while docked, its height capped
+     from the visible height) and the bar's menus and
+     palettes (placeTbMenu, reached by extending
+     keepMenuInViewport: below their button when that
+     fits the visible area, above it when it does not,
+     clamped inside on both axes, and capped to the
+     visible height while the keyboard is up).
+   - Rotation and resize re-judge everything: the
+     visual viewport listeners and the window resize
+     listener all land in updateTbDock, which re-docks
+     or un-docks and re-places whatever popout stands
+     open.
+   - An engine without visualViewport gets no docking
+     and keeps today's behavior exactly; the popout
+     placement then judges against the window, which is
+     the visible area such an engine reports. */
+
+const TB_DOCK_MIN_GAP = 120;
+let tbDocked = false;
+let tbVvBound = false;
+let tbPhonePlaced = false;
+
+/* The visible area, in the layout coordinates a fixed
+   element's style reads: the visual viewport's own
+   numbers when the engine offers them, the window's
+   otherwise. */
+function tbVisibleRect() {
+  const vv = window.visualViewport;
+  if (vv) {
+    return {
+      left: vv.offsetLeft, top: vv.offsetTop,
+      width: vv.width, height: vv.height,
+      right: vv.offsetLeft + vv.width,
+      bottom: vv.offsetTop + vv.height
+    };
+  }
+  return {
+    left: 0, top: 0,
+    width: window.innerWidth, height: window.innerHeight,
+    right: window.innerWidth, bottom: window.innerHeight
+  };
+}
+
+/* An editable surface holds focus when the document's
+   active element stands inside the open editor: the
+   note body, the title, a footer field, or a toolbar
+   control the user is working (the selection backstops
+   keep the edit alive across all of them). */
+function tbEditorHasFocus() {
+  const wrap = document.getElementById("editorWrap");
+  if (!wrap || wrap.classList.contains("hidden")) {
+    return false;
+  }
+  const ae = document.activeElement;
+  return !!ae && ae !== document.body && wrap.contains(ae);
+}
+
+function tbKeyboardUp() {
+  const vv = window.visualViewport;
+  if (!vv) { return false; }
+  return window.innerHeight - vv.height >= TB_DOCK_MIN_GAP &&
+    tbEditorHasFocus();
+}
+
+function tbBindVisualViewport() {
+  if (tbVvBound || !window.visualViewport) { return; }
+  tbVvBound = true;
+  window.visualViewport.addEventListener("resize", updateTbDock);
+  window.visualViewport.addEventListener("scroll", updateTbDock);
+}
+
+function tbDockBar() {
+  const toolbar = document.getElementById("toolbar");
+  if (!toolbar) { return; }
+  const vis = tbVisibleRect();
+  const h = toolbar.offsetHeight;
+  toolbar.classList.add("tb-docked");
+  toolbar.style.left = Math.round(vis.left) + "px";
+  toolbar.style.width = Math.round(vis.width) + "px";
+  toolbar.style.top = Math.round(vis.bottom - h) + "px";
+  const scroller = document.querySelector(".editor-scroll");
+  if (scroller) {
+    scroller.style.setProperty("--tb-dock-pad", h + "px");
+  }
+  const bodyEl = document.getElementById("noteBody");
+  if (bodyEl) {
+    /* The bar's vacated flow space: its own height plus
+       its standing 14px bottom margin (.toolbar's rule),
+       so the text below it does not jump. */
+    bodyEl.style.marginTop = (h + 14) + "px";
+  }
+  tbDocked = true;
+}
+
+function tbUndockBar() {
+  const toolbar = document.getElementById("toolbar");
+  if (toolbar) {
+    toolbar.classList.remove("tb-docked");
+    toolbar.style.left = "";
+    toolbar.style.width = "";
+    toolbar.style.top = "";
+  }
+  const scroller = document.querySelector(".editor-scroll");
+  if (scroller) {
+    scroller.style.removeProperty("--tb-dock-pad");
+  }
+  const bodyEl = document.getElementById("noteBody");
+  if (bodyEl) { bodyEl.style.marginTop = ""; }
+  tbDocked = false;
+}
+
+/* Place the More panel against the visible area. The
+   panel stands fixed at phone widths (the phone
+   stylesheet), so the numbers below are the layout
+   coordinates its style reads. Undocked it keeps its
+   under-bar place, clamped so its foot stays inside
+   the visible area, flipping above the bar when the
+   bar itself stands too low to hold it; docked it
+   opens upward off the docked bar, its height capped
+   from the visible height rather than any vh unit.
+   The standing 520px design cap holds in both
+   postures. */
+function placeTbPanel() {
+  const panel = document.getElementById("tbPanel");
+  const toolbar = document.getElementById("toolbar");
+  if (!panel || !toolbar || !tbPhoneMode) { return; }
+  const vis = tbVisibleRect();
+  const gap = 6, edge = 8;
+  const barH = toolbar.offsetHeight;
+  panel.style.left = Math.round(vis.left + edge) + "px";
+  panel.style.width =
+    Math.round(Math.max(0, vis.width - edge * 2)) + "px";
+  if (tbDocked) {
+    const cap = Math.min(520,
+      Math.max(80, vis.height - barH - gap - edge));
+    panel.style.maxHeight = Math.round(cap) + "px";
+    panel.style.top = "";
+    panel.style.bottom = Math.round(
+      window.innerHeight - (vis.bottom - barH) + gap) + "px";
+  } else {
+    const barRect = toolbar.getBoundingClientRect();
+    const belowTop = barRect.bottom + vis.top + gap;
+    const belowCap = vis.bottom - edge - belowTop;
+    if (belowCap >= 120) {
+      panel.style.top = Math.round(belowTop) + "px";
+      panel.style.bottom = "";
+      panel.style.maxHeight =
+        Math.round(Math.min(520, belowCap)) + "px";
+    } else {
+      const barTopLayout = barRect.top + vis.top;
+      panel.style.top = "";
+      panel.style.bottom = Math.round(
+        window.innerHeight - barTopLayout + gap) + "px";
+      panel.style.maxHeight = Math.round(Math.min(520,
+        Math.max(80, barRect.top - gap - edge))) + "px";
+    }
+  }
+  tbPhonePlaced = true;
+}
+
+/* Place one of the bar's menus (the Insert and More
+   menus, the two color palettes) against the visible
+   area: fixed at phone widths, aligned to its button's
+   wrap, below the wrap when the menu fits there inside
+   the visible area and above it when it does not,
+   clamped inside on the horizontal axis, and capped to
+   the visible height while the keyboard is up (the
+   stylesheet's 70vh cap reads the layout height, which
+   the keyboard does not shrink). */
+function placeTbMenu(menu) {
+  const wrap = menu.parentElement;
+  if (!wrap) { return; }
+  const vis = tbVisibleRect();
+  const gap = 6, edge = 8;
+  const r = wrap.getBoundingClientRect();
+  const mw = menu.offsetWidth;
+  const mh = menu.offsetHeight;
+  menu.style.marginLeft = "0px";
+  let left = r.left + vis.left;
+  left = Math.max(vis.left + edge,
+    Math.min(left, vis.right - edge - mw));
+  menu.style.left = Math.round(left) + "px";
+  const belowTop = r.bottom + vis.top + gap;
+  let top;
+  if (belowTop + mh <= vis.bottom - edge) {
+    top = belowTop;
+  } else {
+    top = Math.max(vis.top + edge, r.top + vis.top - gap - mh);
+  }
+  menu.style.top = Math.round(top) + "px";
+  if (tbKeyboardUp()) {
+    menu.style.maxHeight =
+      Math.round(Math.max(80, vis.height - edge * 2)) + "px";
+  } else {
+    menu.style.maxHeight = "";
+  }
+  tbPhonePlaced = true;
+}
+
+/* Re-place whatever popout stands open: the panel, or
+   one of the bar's menus. Called whenever the visible
+   area moves under them. */
+function tbPlaceOpenPopouts() {
+  if (!tbPhoneMode) { return; }
+  if (tbPanelIsOpen()) { placeTbPanel(); }
+  TB_MENU_IDS.forEach(function (id) {
+    const m = document.getElementById(id);
+    if (m && !m.classList.contains("hidden")) { placeTbMenu(m); }
+  });
+}
+
+/* Retire every inline placement the phone popouts and
+   the dock wrote, so leaving phone width hands the
+   panel, the menus, and the bar back to the standing
+   stylesheet exactly as they were. */
+function tbClearPhonePlacement() {
+  if (tbDocked) { tbUndockBar(); }
+  const panel = document.getElementById("tbPanel");
+  if (panel) {
+    panel.style.left = "";
+    panel.style.top = "";
+    panel.style.bottom = "";
+    panel.style.width = "";
+    panel.style.maxHeight = "";
+  }
+  TB_MENU_IDS.forEach(function (id) {
+    const m = document.getElementById(id);
+    if (m) {
+      m.style.left = "";
+      m.style.top = "";
+      m.style.maxHeight = "";
+    }
+  });
+  tbPhonePlaced = false;
+}
+
+/* The one judge. Every signal lands here: the visual
+   viewport's resize and scroll, the window's resize
+   (rotation crosses both), focus entering or leaving
+   the editor, and the phone mode's own crossings.
+   Docking follows the keyboard's real state; popouts
+   standing open are re-placed against the new visible
+   area either way. Desktop widths and engines without
+   the visual viewport API keep today's behavior: the
+   judge stands down, and a bar caught docked by a
+   crossing is put back first. */
+function updateTbDock() {
+  tbBindVisualViewport();
+  if (!tbPhoneMode || !window.visualViewport) {
+    if (tbDocked) { tbUndockBar(); }
+    return;
+  }
+  if (tbKeyboardUp()) { tbDockBar(); }
+  else if (tbDocked) { tbUndockBar(); }
+  tbPlaceOpenPopouts();
 }
 
 /* ----- Insert and More actions ------------------------------------------- */
@@ -7313,5 +7642,19 @@ function wireToolbar() {
      switch all cross through the same apply. */
   applyTbPhoneMode();
   window.addEventListener("resize", applyTbPhoneMode);
+
+  /* v2.170: the docked phone toolbar's own wiring.
+     The visual viewport listeners bind here and
+     lazily inside updateTbDock (an engine that
+     grows the API late still gets them); the resize
+     and focus listeners carry the judgment the rest
+     of the time. Focusout re-judges on a tick, once
+     the tap's landing focus has settled. */
+  tbBindVisualViewport();
+  window.addEventListener("resize", updateTbDock);
+  document.addEventListener("focusin", updateTbDock);
+  document.addEventListener("focusout", function () {
+    setTimeout(updateTbDock, 0);
+  });
 }
 

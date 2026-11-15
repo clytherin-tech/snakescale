@@ -6076,6 +6076,64 @@ body.dark .share-suggestions:hover::-webkit-scrollbar-thumb{
   #tbPanel select{flex:1 1 128px;max-width:100%;}
   #tbPanel .tb-menu{max-width:calc(100vw - 32px);}
 }
+/* ---------- v2.170: the docked phone toolbar ----------
+   The phone stylesheet's second half, for the build
+   that keeps the bar on screen while Chris edits.
+   The bar becomes a horizontal scroller (themed the
+   way the panel's own scroll area is themed, in both
+   themes), so its one line can never push a button
+   past the screen's edge: swipe the bar and every
+   control arrives. The More group's standing auto
+   margin is the pin inside a scroller: while the
+   line fits it holds More at the right end, and
+   when the line overflows the margin collapses and
+   More rides at the end of the scroll. While the
+   keyboard is up the script docks the bar (the
+   tb-docked class): fixed, placed by the script
+   from the visual viewport, its shadow reading
+   upward. The editor's scroll area gains the docked
+   bar's height through --tb-dock-pad, which the
+   script sets only while docked, over the standing
+   28px phone padding. And the popouts (the panel,
+   the bar's menus) stand fixed at phone widths, so
+   the bar's own scrolling can never clip them; the
+   script places them against the visible area.
+   Above 900px none of this applies. */
+@media (max-width:900px){
+  #toolbar{overflow-x:auto;overflow-y:hidden;
+    scrollbar-width:thin;scrollbar-color:transparent transparent;
+    transition:scrollbar-color 250ms ease;
+  }
+  #toolbar:hover{scrollbar-color:rgba(139,94,52,.55) transparent;}
+  body.dark #toolbar:hover{
+    scrollbar-color:rgba(139,94,52,.65) transparent;
+  }
+  #toolbar::-webkit-scrollbar{width:10px;height:10px;}
+  #toolbar::-webkit-scrollbar-track{background:transparent;}
+  #toolbar::-webkit-scrollbar-thumb{
+    background-color:transparent;border-radius:8px;
+    border:2px solid transparent;background-clip:padding-box;
+    transition:background-color 250ms ease;
+  }
+  #toolbar:hover::-webkit-scrollbar-thumb{
+    background-color:rgba(139,94,52,.55);
+  }
+  body.dark #toolbar:hover::-webkit-scrollbar-thumb{
+    background-color:rgba(139,94,52,.65);
+  }
+  #toolbar::-webkit-scrollbar-thumb:hover{
+    background-color:rgba(139,94,52,.8);
+  }
+  #toolbar.tb-docked{
+    position:fixed;z-index:45;margin-bottom:0;
+    border-radius:0;border-left:none;border-right:none;
+    border-bottom:none;
+    box-shadow:0 -2px 10px rgba(11,61,46,.16);
+  }
+  .editor-scroll{padding-bottom:calc(28px + var(--tb-dock-pad,0px));}
+  #tbPanel{position:fixed;}
+  #toolbar .tb-menu{position:fixed;}
+}
 @media (max-width:600px){
   .modal-card{padding:18px 16px;}
   .task-form-row{flex-direction:column;}
