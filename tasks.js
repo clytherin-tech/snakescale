@@ -3824,6 +3824,30 @@ async function saveNoteToRepoNow(note, options) {
     setSyncPill("bad", "Conflict saved");
     return { paused: true, diverged: true };
   }
+  /* v2.169: a Doc-backed catalog shell whose save
+     reaches here can only be carrying catalog facts
+     (a title, tags, a pin, a notebook move): a shell
+     holds no body on this device, so no body edit
+     can stand behind its save, and every path that
+     changes a body loads it first. Such a save takes
+     the catalog-only path (see
+     saveDocBackedNoteCatalogOnly below) ahead of the
+     shell completion: completing the shell would
+     fetch the whole Doc and adopt every image in it
+     just to persist facts that live in the catalog.
+     The completion's own guard is not weakened (the
+     light save writes no body at all, so an unloaded
+     body can never be written over the stored one),
+     and the divergence pause above still stands
+     ahead of it. Offline the interception does not
+     fire, so the standing flow below keeps its exact
+     behavior and its errors. */
+  if (note.bodyLoaded === false && isDocBackedNote(note) &&
+      sanitizeDocId(note.docId) &&
+      !(typeof state !== "undefined" &&
+        state.online === false)) {
+    return saveDocBackedNoteCatalogOnly(note);
+  }
   /* v2.20: a save serializes the note's body, so a catalog shell
      (body not on this device yet) is completed first, through
      the same single fetch opening it would have made. If the
@@ -3889,6 +3913,26 @@ async function saveNoteToRepoNow(note, options) {
      those standing behaviors hold for Doc-backed notes
      exactly as they do for file notes. */
   if (isDocBackedNote(note)) {
+    /* v2.169: a loaded Doc-backed note whose save
+       changes nothing the Doc content write carries
+       (the body and the attachment records the
+       upload build inlines from it stand equal to
+       the last saved baseline, judged after the
+       reconciliation above has repaired the note
+       and its baseline together) takes the
+       catalog-only path: the save can only be
+       carrying catalog facts. Any doubt (no
+       baseline, a changed word, a changed record)
+       takes the full save below, exactly as
+       before, so a real edit riding along with a
+       rename is never swallowed. Offline the full
+       save keeps its standing connection error. */
+    if (sanitizeDocId(note.docId) &&
+        docNoteContentCargoUnchanged(note) &&
+        !(typeof state !== "undefined" &&
+          state.online === false)) {
+      return saveDocBackedNoteCatalogOnly(note);
+    }
     return saveDocBackedNote(note, options);
   }
   /* v2.8: capture the version history facts BEFORE anything in
@@ -4064,6 +4108,121 @@ async function saveNoteToRepoNow(note, options) {
     }
     throw err;
   }
+}
+
+/* v2.169: the catalog-only save of a Doc-backed
+   note. A Doc-backed note's title lives in the
+   catalog, not in its Doc's content
+   (docLoadNoteBody's own contract: title, tags,
+   and notebook stay the catalog's), but through
+   v2.168 every save of such a note ran the full
+   content write anyway: docBuildUploadHtml
+   downloaded every attachment image in the note
+   to inline it as a data URI (40 to 110 poster
+   downloads and megabytes of base64 conversion
+   on the main thread for a movie catalog note),
+   and docSaveDocument re-uploaded the whole
+   converted body before its rename leg renamed
+   the Doc file, so renaming a catalog note
+   locked the whole app until the parade finished
+   (Chris's report, November 15, 2026). The
+   judgment: the content write's cargo is the
+   body and the attachment records the upload
+   build inlines from it, so when the note's last
+   saved baseline exists and the body and the
+   sanitized attachment records both stand equal
+   to it, nothing the content write carries has
+   changed and the save can only be carrying
+   catalog facts (title, tags, the tick memory,
+   the thumbnail, the pin, the reminder pair, the
+   notebook), which persist through the catalog
+   write exactly as the tag work of v2.166 and
+   v2.167 established. No baseline, or any
+   difference, answers false: the full save runs,
+   so the light path can never swallow a real
+   edit. */
+function docNoteContentCargoUnchanged(note) {
+  const baseline = lastSavedContentByNoteId[note.id];
+  if (!baseline) { return false; }
+  if (String(note.body || "") !==
+      String(baseline.body || "")) { return false; }
+  return JSON.stringify(
+      sanitizeAttachments(note.attachments || [])) ===
+    JSON.stringify(
+      sanitizeAttachments(baseline.attachments || []));
+}
+
+/* The catalog-only save itself, called from
+   saveNoteToRepoNow under the per note chain like
+   every save. Exactly two remote things, in this
+   order: the Drive file rename, then the catalog
+   write. The rename leg reuses docSaveDocument's
+   own shape (the bounded docApiLeg at the
+   metadata bound around a metadata PATCH carrying
+   the new name) and fires when the Doc's known
+   name differs from the title; an unknown name (a
+   shell this session never loaded carries no
+   docName) counts as differing, so the PATCH then
+   stands the standing title on the file, a no-op
+   rename that makes the name known, and docName
+   follows on success exactly as the full save
+   leaves it. Unlike the full save's leg, a failed
+   rename is NOT swallowed here: the rename is
+   this save's whole point, so its failure rejects
+   the save and surfaces the way every save failure
+   surfaces. The end state on that failure: the
+   rename ran first, so nothing has been persisted
+   by this save (the stored catalog still holds
+   the old title and the Doc still holds the old
+   name; they agree), the baseline is not advanced,
+   and docName still holds the old name, so the
+   next save of the note, light or full, sees the
+   difference and retries the rename: the
+   divergence heals on the next successful save
+   and is never silently left standing. After the
+   rename, the save leaves the note exactly as the
+   full save's tail leaves it: the updated stamp
+   re-stamped, a loaded note's tick memory
+   recomputed from its (unchanged) body, the
+   baseline advanced to the landed snapshot, and
+   saveCache carrying every catalog fact, the new
+   title included, to the catalog. Zero attachment
+   downloads, zero content upload, zero export:
+   the Doc's content, its revision, and its
+   modified time are untouched by a rename. */
+async function saveDocBackedNoteCatalogOnly(note) {
+  if (typeof state !== "undefined" &&
+      state.online === false) {
+    throw new Error("This note is stored as a Google Doc" +
+      " and needs a connection to save. Your words are" +
+      " still in the editor.");
+  }
+  const docId = sanitizeDocId(note.docId);
+  if (note.title && note.docName !== note.title) {
+    await docApiLeg(docMetaTimeoutMs,
+      "Renaming this note's Google Doc",
+      function (signal) {
+        return docApiJson(
+          "https://www.googleapis.com/drive/v3/files/" +
+          encodeURIComponent(docId), {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json" },
+            body: JSON.stringify({ name: note.title }),
+            signal: signal
+          });
+      });
+    note.docName = note.title;
+  }
+  note.updated = new Date().toISOString();
+  if (note.bodyLoaded !== false) {
+    note.docTicks = docTicksFromBody(note.body);
+  }
+  rememberLastSavedSnapshot(note.id,
+    noteContentSnapshot(note));
+  saveCache();
+  refreshDocLivePoll();
+  return { saved: true, doc: true, catalogOnly: true };
 }
 
 /* v2.121: the Doc-backed save, called from
