@@ -827,6 +827,10 @@ function wireEvents() {
   document.getElementById("navHome").addEventListener("click", function () {
     state.view = { kind: "home", value: null };
     renderAll();
+    /* v2.172: Home is the other close: the resume
+       memory clears with it, so the next launch lands
+       on the start view, not back in the note. */
+    clearResumeMemory();
     setMobileView("list");
   });
   document.getElementById("navAll").addEventListener("click", function () {
@@ -2392,7 +2396,14 @@ function wireEvents() {
   document.getElementById("mobileNewBtn").addEventListener("click", function () {
     document.getElementById("newNoteBtn").click();
   });
-  document.getElementById("editorBackBtn").addEventListener("click", function () { setMobileView("list"); });
+  document.getElementById("editorBackBtn").addEventListener("click", function () {
+    /* v2.172: going back to the list closes the note,
+       and the resume memory closes with it, so the
+       next launch lands on the start view (see the
+       resume section in render.js). */
+    clearResumeMemory();
+    setMobileView("list");
+  });
   /* v2.56: breadcrumb navigation. One delegated listener
      on the bar itself, since renderBreadcrumb rebuilds
      its segments on every editor render; the segments
@@ -4698,6 +4709,14 @@ async function boot() {
   /* v2.35: the note reminder twins of the two calls above. */
   readNoteReminderParamFromUrl();
   startNoteReminderScheduler();
+  /* v2.172: an arrival any boot reader lifted (a Worker
+     sign in return, a web clip, a task or note reminder
+     parameter) outranks the resume pass when the store
+     lands: this boot is an arrival, not a plain launch,
+     so the remembered note does not open over it (see
+     the resume section in render.js). */
+  resumeBootArrival = !!(pendingWorkerAuth || pendingWebClip ||
+    pendingTaskOpenId || pendingNoteReminderOpenId);
   /* Small diagnostic hook: the build stamp is searchable in the file,
      and also visible in the console for support. */
   console.log("SnakeScale Notes v" + APP_VERSION + " build " + APP_BUILD);

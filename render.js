@@ -6591,6 +6591,200 @@ function recalledEditorViewState(noteId) {
 }
 
 /* --------------------------------------------------------------------------
+   v2.172: resume where you left off
+
+   The app remembers, on this device only, the note open
+   in the editor and the editor's scroll place in it
+   (LS_RESUME: { id, s }). The record is written when a
+   note opens (openNoteNow's tail, from where the open
+   leaves the editor standing) and kept current as the
+   reader scrolls, through a passive listener on the
+   editor scroller coalesced onto the next frame, the
+   queueHomePack pattern; it costs one small local
+   write per settled scroll and rides no save or sync
+   path, and it never leaves the device (it stands in
+   no catalog, cache snapshot, or synced file).
+   Closing the note, by the editor's back button or by
+   going Home, clears it, so "nothing open" is a
+   remembered state too.
+
+   On boot, once the store is loaded and the standing
+   startup has settled (connectAndLoad, beside the held
+   web clip's filing), maybeResumeLastNote opens the
+   remembered note through openNote itself, so body
+   loading, Doc refills, and the could not load face
+   behave exactly as a manual open, and puts the scroll
+   back through restoreEditorViewState (scroll only:
+   no caret is restored). A shell's body lands after
+   the pass, and its landing fill restores the note's
+   older banked place (the v2.72 bank above), so the
+   resume place is applied again off the load promise
+   the editor's own continuation rides; the editor's
+   continuation was registered during the open, so it
+   runs first and the resume place stands last.
+
+   Arrivals outrank resume: a boot whose readers lifted
+   an arrival (boot records it in resumeBootArrival),
+   an arrival still standing in the pending holders or
+   in this page's own URL (the boot readers never strip
+   the query), or a held web clip yet to file all stand
+   the pass down, and so does anything already open (a
+   first run's seeded starter, an arrival's note). A
+   remembered note that no longer stands among the
+   library's notes (deleted for good, or standing in
+   Trash or the Archive, neither of which stands in
+   state.notes) reads as no memory, and the record
+   clears. The pass runs once per page session: a
+   reconnect inside a running page never resumes.
+
+   Scope, stated plainly: resume restores the open
+   note and its scroll place. It does not restore an
+   in flight caret, a half typed unsaved edit (the
+   autosave settles edits continuously, and the self
+   update's reload already waits for them to land), an
+   open modal, or the list's own scroll. A remembered
+   note renamed or edited elsewhere since shows its
+   current state, as a manual open would. A storage
+   refusal (a private window) degrades to no resume,
+   silently, the way the update reload's guard treats
+   its own refused record.
+   -------------------------------------------------------------------------- */
+let resumeBootArrival = false;
+let resumePassDone = false;
+let resumeScrollQueued = false;
+let resumeScrollWired = false;
+
+function readResumeMemory() {
+  try {
+    const parsed = JSON.parse(
+      localStorage.getItem(LS_RESUME) || "null");
+    if (parsed && typeof parsed === "object" &&
+        typeof parsed.id === "string" && parsed.id &&
+        Number.isFinite(parsed.s) && parsed.s >= 0) {
+      return { id: parsed.id, s: Math.floor(parsed.s) };
+    }
+  } catch (err) { /* a refused or damaged record reads as none */ }
+  return null;
+}
+
+function writeResumeMemory(id, scrollTop) {
+  try {
+    localStorage.setItem(LS_RESUME, JSON.stringify({
+      id: id,
+      s: Math.max(0, Math.floor(scrollTop || 0))
+    }));
+  } catch (err) {
+    /* A refused store degrades to no resume, silently. */
+  }
+}
+
+function clearResumeMemory() {
+  try { localStorage.removeItem(LS_RESUME); }
+  catch (err) { /* nothing stands to clear in a refused store */ }
+}
+
+/* Bank the open note's standing place: the selection
+   names the note, the editor scroller names the place.
+   Only a note standing in the library counts (a note
+   open read only out of Trash or the Archive is never
+   a resume target), and the place is read only when
+   the editor's fill for this note stands; a shell's
+   pane has no place of the note's own yet, so its
+   record starts at the top and the scroll listener
+   keeps it true from the landing on. */
+function rememberResumePlace() {
+  const id = state.selectedId;
+  if (!id) { return; }
+  const stands = state.notes.some(function (n) {
+    return n.id === id;
+  });
+  if (!stands) { return; }
+  const scroller = document.querySelector(".editor-scroll");
+  const filled = renderEditor._forId === id;
+  writeResumeMemory(id,
+    filled && scroller ? scroller.scrollTop : 0);
+}
+
+/* The scroll writer, coalesced onto the next frame
+   the way queueHomePack coalesces a repack: a scroll
+   settles into one record write per frame at most. */
+function queueResumePlace() {
+  if (resumeScrollQueued) { return; }
+  resumeScrollQueued = true;
+  const run = function () {
+    resumeScrollQueued = false;
+    rememberResumePlace();
+  };
+  if (typeof requestAnimationFrame === "function") {
+    requestAnimationFrame(run);
+  } else {
+    setTimeout(run, 50);
+  }
+}
+
+/* The listener stands on the editor scroller for the
+   page's life; it is wired at the first note open,
+   when the scroller certainly stands in the document. */
+function wireResumeScrollMemory() {
+  if (resumeScrollWired) { return; }
+  const scroller = document.querySelector(".editor-scroll");
+  if (!scroller) { return; }
+  resumeScrollWired = true;
+  scroller.addEventListener("scroll", queueResumePlace,
+    { passive: true });
+}
+
+/* Put a resumed note's scroll back, and keep the
+   record agreeing with the screen: the open above
+   banked the record from the fill's own restored
+   place, which the resume place now replaces. A newer
+   navigation owns the editor by the time a late apply
+   runs, and the apply then stands down. */
+function applyResumeScroll(note, s) {
+  const apply = function () {
+    if (state.selectedId !== note.id) { return; }
+    restoreEditorViewState({ scrollTop: s, caret: -1 });
+    writeResumeMemory(note.id, s);
+  };
+  apply();
+  if (note.bodyLoaded === false &&
+      typeof noteBodyLoads !== "undefined" &&
+      noteBodyLoads[note.id]) {
+    noteBodyLoads[note.id].then(apply);
+  }
+}
+
+/* The boot pass (see the section head): open the
+   remembered note, or stand down and say nothing.
+   Resume adds no error surface of its own: a body
+   load that fails lands on the standing could not
+   load face, exactly as a manual open produces. */
+function maybeResumeLastNote() {
+  if (resumePassDone) { return; }
+  resumePassDone = true;
+  if (!state.repoExists) { return; }
+  if (resumeBootArrival || pendingTaskOpenId ||
+      pendingNoteReminderOpenId || pendingWebClip) {
+    return;
+  }
+  try {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("task") || params.get("noteReminder")) {
+      return;
+    }
+  } catch (err) { /* no query stands to read */ }
+  if (state.selectedId) { return; }
+  const mem = readResumeMemory();
+  if (!mem) { return; }
+  const note = state.notes.find(function (n) {
+    return n.id === mem.id;
+  });
+  if (!note) { clearResumeMemory(); return; }
+  openNote(note.id);
+  applyResumeScroll(note, mem.s);
+}
+
+/* --------------------------------------------------------------------------
    task surfaces: the Things to do tiles and page (v2.24.3),
    the Tasks view, the task editor, and reminder notifications
 
@@ -9435,6 +9629,13 @@ function openNoteNow(id) {
   renderNoteList();
   renderEditor();
   setMobileView("editor");
+  /* v2.172: the note now open is this device's resume
+     place (see the resume section above): the scroll
+     listener is wired here, at the first open, and the
+     record starts from where this open leaves the
+     editor standing. */
+  wireResumeScrollMemory();
+  rememberResumePlace();
   /* v2.73: a switch leaves the outgoing note closed, so a
      transcription that was parked on its unsaved edits
      can land in its stored body now (the settle has

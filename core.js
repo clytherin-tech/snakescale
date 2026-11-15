@@ -203,6 +203,10 @@ const LS_CACHE = "snakescale.cache.v1";
 const LS_QUEUE = "snakescale.queue.v1";
 const LS_SETTINGS = "snakescale.settings.v1";
 const LS_EDITOR_VIEW = "snakescale.editorView.v1";   // v2.72: per note editor view states
+/* v2.172: the resume record: the note open in the editor and
+   its scroll place, this device only, never synced (see the
+   resume section in render.js). */
+const LS_RESUME = "snakescale.resume.v1";
 /* The device key. This random AES-GCM key is kept on this device so
    it can encrypt the Google token store and the local note cache at
    rest across reloads. It is not a credential and it is not a login:

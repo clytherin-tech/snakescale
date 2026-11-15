@@ -9459,6 +9459,15 @@ async function connectAndLoad() {
     if (!paintedFromCache) { bootMark("firstPaint"); }
     hideLoading();
     finalizeBootReport();
+    /* v2.172: the store is loaded and the standing
+       startup has settled here, so the resume pass
+       runs (render.js): a plain launch returns to the
+       note this device last had open. It stands ahead
+       of the held web clip's filing on purpose: the
+       pass reads a held clip as an arrival and stands
+       down, so the clip opens over the landing exactly
+       as it always has. */
+    maybeResumeLastNote();
     /* v2.47: the store is loaded and signed in here, so a
        web clip held from this boot's fragment files now,
        before any starter note opens over it. A clip whose
