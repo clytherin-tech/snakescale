@@ -2872,17 +2872,23 @@ function toggleListSelection(noteId, checked) {
      (the themed selected fill), no checkbox.
 
    Touch has no modifier keys, so selection there starts
-   from the context menu's Select item, which enters a
+   from the long press itself: the stationary touch
+   press that opens the context menu also enters a
    selection MODE (noteSelectMode, in memory on this
-   device only): the selection bar shows, seeded with
-   that note, plain taps toggle cards instead of opening
-   them, and the bar's Done control leaves the mode.
-   Leaving the mode KEEPS the selection: the selection's
-   other exits today (the bulk actions) consume it rather
-   than discarding it, and a mode entered by accident
-   costs nothing because the next plain tap outside the
-   mode collapses the selection anyway. The mode ends
-   when the view changes, with the sets.
+   device only), seeded with the pressed note: the
+   selection bar shows, plain taps toggle cards instead
+   of opening them, and the bar's Done control leaves
+   the mode. (Through v2.170 the press only opened the
+   menu and the menu's Select item entered the mode;
+   v2.171 removes that item at Chris's word, so the
+   press carries the entry itself, the one deliberate
+   change to what the press does.) Leaving the mode
+   KEEPS the selection: the selection's other exits
+   today (the bulk actions) consume it rather than
+   discarding it, and a mode entered by accident costs
+   nothing because the next plain tap outside the mode
+   collapses the selection anyway. The mode ends when
+   the view changes, with the sets.
 
    The context menu itself (openNoteContextMenu) opens
    on a card's contextmenu event, suppressed so the
@@ -2976,26 +2982,21 @@ function handleNoteCardClick(ev, note) {
   /* The plain click: collapse to this note, anchor on
      it, and open it, in that order, so the list the open
      re-renders already wears the collapsed selection.
-     v2.143: one exception. When the clicked card stands
-     in a selection of two or more, the selection stands:
-     a plain click on a selected card is the gesture
-     that leads into dragging the whole selection (a
-     click to look at one of the chosen notes first, or
-     the last click of a selection built with a modifier
-     released a moment early), and collapsing here meant
-     the press that followed armed a one note drag over
-     a selection the user was still looking at (Chris's
-     report: the drag grabbed only the first note). The
-     drag press judges the selection as it stands at
-     press time, so the selection has to survive the
-     clicks that precede it. The note still opens;
-     clicking any card outside the selection collapses
-     as always, and a selection of one is this note
-     either way. */
-  if (!(set.length >= 2 && set.indexOf(note.id) >= 0)) {
-    set.length = 0;
-    set.push(note.id);
-  }
+     v2.171: the collapse is unconditional again, at
+     Chris's Testing Checklist word ("A plain click on
+     one of the selected notes does not clear the
+     selection. It should clear/collapse the selection
+     and open that note"). The v2.143 exception that
+     kept a standing selection alive across a member
+     click, so the drag press that followed could arm
+     the whole set, is retired: the drag press now
+     judges the collapsed selection the click leaves,
+     so a batch drag is built with modifier clicks and
+     pressed without a plain click in between, and a
+     plain click on any card, in the selection or out
+     of it, does the one file manager thing. */
+  set.length = 0;
+  set.push(note.id);
   listSelectionAnchor = note.id;
   /* v2.153: a plain click on a result card arms
      the in-note hit paint for this open (see
@@ -3029,8 +3030,12 @@ function renderListSelectBar() {
   bar.classList.remove("hidden");
 }
 
-/* Enter the touch selection mode, seeded with a note
-   (the context menu's Select item on a touch opening). */
+/* Enter the touch selection mode, seeded with a note.
+   (Through v2.170 the context menu's Select item on a
+   touch opening called this; v2.171 retires the item,
+   and the touch long press in initNoteContextMenu
+   calls it instead, seeded with the pressed note, as
+   the press opens the menu.) */
 function enterNoteSelectMode(note) {
   noteSelectMode = true;
   const set = currentSelectionSet();
@@ -3051,8 +3056,7 @@ function exitNoteSelectMode() {
    was opened from, the notes it targets (one, or the
    whole selection), whether it is a selection menu, the
    card element (focus returns there on Escape), and the
-   pointer kind that opened it (the Select item starts
-   the touch selection mode only for a touch opening). */
+   pointer kind that opened it. */
 let noteCtx = null;
 
 /* After a touch long press opens the menu, the press's
@@ -3372,10 +3376,11 @@ function buildSingleNoteContextItems(menu, note, kind, pointerType) {
     /* v2.115: grouped (see noteCtxSep): Restore
        above the separator, Delete Forever below it.
        No Copy link here or in the Archive menu: a
-       link to a trashed note is a dead end, and
-       archived notes stand outside the @ picker by
-       the standing rule. Select keeps its place at
-       the foot, as it always has. */
+       link to a trashed note is a dead end. (Through
+       v2.170 a Select item stood at the foot of this
+       menu and the Archive one; v2.171 removes it
+       everywhere, and archived notes join the @
+       picker in the same release.) */
     noteCtxSep(menu);
     noteCtxItem(menu, "Delete Forever", function () {
       return confirmDeleteNoteForever(note);
@@ -3392,13 +3397,18 @@ function buildSingleNoteContextItems(menu, note, kind, pointerType) {
        standing group (pin, shortcuts, reminder), then
        the share and make group (Copy link, new in
        this release, Duplicate note, Save as
-       Template), then Select in its own group, then
-       the filing group (Archive, Move to Trash).
-       v2.150: Refresh Note stands in its own group
-       at the very foot, below the filing group and
-       under a separator (Chris's ask: a manual
-       refresh of this one note, at the bottom of
-       the menu). No item renamed or removed. */
+       Template), then the filing group (Archive,
+       Move to Trash). v2.150: Refresh Note stands in
+       its own group at the very foot, below the
+       filing group and under a separator (Chris's
+       ask: a manual refresh of this one note, at the
+       bottom of the menu). v2.171: the Select item
+       that stood in its own group between the share
+       group and the filing group is removed, at
+       Chris's Testing Checklist word (Ctrl and Shift
+       selection do its work on desktop, and on touch
+       the long press starts the selection mode);
+       nothing else renamed, removed, or reordered. */
     noteCtxItem(menu, note.pinned ? "Unpin note" : "Pin note",
       function () { return toggleNotePin(note); });
     noteCtxItem(menu,
@@ -3418,10 +3428,6 @@ function buildSingleNoteContextItems(menu, note, kind, pointerType) {
     });
     noteCtxItem(menu, "Save as Template", function () {
       return promptSaveNoteAsTemplate(note);
-    });
-    noteCtxSep(menu);
-    noteCtxItem(menu, "Select", function () {
-      selectNoteFromContextMenu(note, pointerType);
     });
     noteCtxSep(menu);
     noteCtxItem(menu, "Archive", function () {
@@ -3445,25 +3451,20 @@ function buildSingleNoteContextItems(menu, note, kind, pointerType) {
     });
     return;
   }
-  noteCtxItem(menu, "Select", function () {
-    selectNoteFromContextMenu(note, pointerType);
-  });
 }
 
-/* The menu's Select item: on touch it starts the
-   selection mode seeded with this note; on desktop it
-   selects the note without opening it, and anchors
-   ranges on it. */
-function selectNoteFromContextMenu(note, pointerType) {
-  if (pointerType === "touch") {
-    enterNoteSelectMode(note);
-    return;
-  }
-  const set = currentSelectionSet();
-  if (set.indexOf(note.id) < 0) { set.push(note.id); }
-  listSelectionAnchor = note.id;
-  refreshSelectionUI();
-}
+/* v2.171: the menu's Select item stood here (and in
+   the live branch above) through v2.170, with its
+   selectNoteFromContextMenu helper: on touch it
+   started the selection mode seeded with the note,
+   on desktop it selected the note without opening
+   it. Chris's Testing Checklist retires the item
+   (Ctrl and Shift selection do its work on
+   desktop), so the item and the helper are gone;
+   the selection mode's own machinery
+   (enterNoteSelectMode and its bar) stands
+   untouched above, and the touch long press in
+   initNoteContextMenu enters the mode now. */
 
 /* ----- v2.150: Refresh Note, the context menu's
    manual single note refresh -----------------------
@@ -4140,7 +4141,12 @@ function initNoteContextMenu() {
      it: a moved press is a scroll and opens nothing.
      The move and end listeners live on the document
      while a press is armed, the drag machinery's own
-     pattern for press tracking. */
+     pattern for press tracking. v2.171: the press also
+     enters the touch selection mode, seeded with the
+     pressed note, as it opens the menu: the menu's
+     Select item that used to carry that entry is
+     retired in this release, and the press is the
+     standing touch path into multi selection. */
   let press = null;
   function cancelPress() {
     if (!press) { return; }
@@ -4181,6 +4187,10 @@ function initNoteContextMenu() {
         cancelPress();
         if (!armed) { return; }
         noteCtxClickBlock = true;
+        /* v2.171: the press enters the selection mode
+           (see the long press comment above) as it
+           opens the menu, seeded with this note. */
+        enterNoteSelectMode(armed.note);
         openNoteContextMenu(armed.note, armed.x, armed.y,
           "touch");
       }, 500)
@@ -8068,6 +8078,46 @@ function fillTaskNoteSelect(selectedNoteId) {
     select.appendChild(opt);
   }
   select.value = selectedNoteId || "";
+  syncTaskGoToNoteBtn();
+}
+
+/* v2.171: the Go to Note button beside the Note
+   dropdown (index.html): enabled exactly while a
+   note stands chosen in the dropdown. Synced
+   wherever the dropdown's value is set
+   (fillTaskNoteSelect above, on open and on
+   refill) and on the dropdown's own change
+   (wired in app.js). */
+function syncTaskGoToNoteBtn() {
+  const btn = document.getElementById("taskGoToNoteBtn");
+  const select = document.getElementById("taskNoteSelect");
+  if (!btn || !select) { return; }
+  btn.disabled = !select.value;
+}
+
+/* v2.171: Go to Note, Chris's Testing Checklist ask.
+   The button follows the dropdown's current choice
+   the way a click on a note link in the description
+   already leaves this modal (v2.28.3): when the
+   chosen note is live, the task is saved through
+   saveTaskEditor first, which closes the editor, so
+   what was typed is never thrown away and the link
+   the dropdown shows is the link the task keeps;
+   then followNoteLink opens the note by the standing
+   path. When the chosen note sits in Trash or
+   Archive (the dropdown can hold such a link,
+   labeled), nothing is saved, the editor stays
+   open, and followNoteLink raises the same message
+   it raises from a note. */
+function goToTaskNote() {
+  const select = document.getElementById("taskNoteSelect");
+  const noteId = select ? select.value : "";
+  if (!noteId) { return; }
+  const live = state.notes.some(function (n) {
+    return n.id === noteId;
+  });
+  if (live && taskEditorState) { saveTaskEditor(); }
+  followNoteLink(noteId);
 }
 
 function openTaskEditor(taskId, presetNotebook, presetNoteId, presetDueDate) {

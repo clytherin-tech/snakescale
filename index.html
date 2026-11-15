@@ -44,7 +44,7 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-11-15-SSN-V21700
+  BUILD STAMP: 2026-11-15-SSN-V21710
   Version: 2.106.0
 
   Revision history:
@@ -7893,7 +7893,15 @@
     </div>
     <div class="field">
       <label for="taskNoteSelect">Note</label>
-      <select id="taskNoteSelect"></select>
+      <!-- v2.171: the Go to Note button stands to the
+           right of the dropdown (render.js goToTaskNote):
+           enabled while a note stands chosen, it keeps
+           what was typed, closes the modal, and opens
+           that note. -->
+      <div class="task-note-row">
+        <select id="taskNoteSelect"></select>
+        <button class="btn" id="taskGoToNoteBtn" type="button">Go to Note</button>
+      </div>
       <div class="settings-help">Optional. The note this task belongs to: it shows in that note's Tasks block as well as in the Tasks view. The task itself always lives with the tasks, never inside the note.</div>
     </div>
     <div class="task-form-row">

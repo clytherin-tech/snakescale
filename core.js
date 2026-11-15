@@ -1297,6 +1297,7 @@ async function signOut() {
   clearWorkerSession();
   workerReauthNeeded = false;
   workerAccountEmail = "";
+  workerAccountName = "";
 
   state.sessionKey = null;
   state.providerTokens = { google: null };

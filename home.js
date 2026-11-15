@@ -1063,12 +1063,19 @@ let homeCustomizeOpen = false;
 let homeWidgetsPopoverOpen = false;
 let homeRecentTab = "updated";
 
-/* Evernote greets by the time of day. */
+/* Evernote greets by the time of day. v2.171: the
+   greeting gains the signed in account's first name
+   (accountFirstName, in media.js: the Worker's /me
+   answer), Chris's Testing Checklist ask ("Good
+   Morning, Chris"); with no name known the plain
+   greeting stands, byte for byte as it always has. */
 function homeGreetingText(now) {
   const h = now.getHours();
-  if (h < 12) { return "Good morning"; }
-  if (h < 18) { return "Good afternoon"; }
-  return "Good evening";
+  const first = accountFirstName();
+  const suffix = first ? ", " + first : "";
+  if (h < 12) { return "Good morning" + suffix; }
+  if (h < 18) { return "Good afternoon" + suffix; }
+  return "Good evening" + suffix;
 }
 
 /* Opening a note from Home: the note opens in the notes

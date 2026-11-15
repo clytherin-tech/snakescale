@@ -3875,6 +3875,14 @@ function onMentionSearchInput() {
    results. Trashed notes never match. v2.109.0: archived
    notes no longer match either (Chris's instruction): the
    picker offers live notes only, in every host it serves.
+   v2.171: archived notes match again (Chris's
+   Testing Checklist reverses the v2.109 word): they
+   are read from the Archive collection and fill only
+   the note slots the live matches did not take,
+   standing after them, so an archived note can never
+   push a live one out of the list; the row wears an
+   Archived tag (see renderMentionPopup). Trash stays
+   excluded, in every host the picker serves.
    v2.28.0: in the note host, up to eight matching tasks follow
    the notes (the same title match, most recently updated
    first), and the renderer splits the two kinds with group
@@ -3891,9 +3899,27 @@ function mentionCandidates(query) {
   }).slice().sort(function (a, b) {
     return String(b.updated || "").localeCompare(String(a.updated || ""));
   }).slice(0, 8);
+  /* v2.171: the archived matches, the same title
+     match over the Archive collection (a trashed
+     note never stands there; the flag test is kept
+     for the record's sake), in the same updated
+     order, filling only the slots the live matches
+     left: the note rows never exceed eight, the
+     live rows are exactly the rows they were before
+     this release, and the archived stand after
+     them. */
+  const archivedMatches = state.archive.filter(function (note) {
+    if (note.trashed) { return false; }
+    return (note.title || "").toLowerCase().indexOf(needle) >= 0;
+  }).slice().sort(function (a, b) {
+    return String(b.updated || "").localeCompare(String(a.updated || ""));
+  }).slice(0, Math.max(0, 8 - matches.length));
   const rows = [];
   if (query) { rows.push({ kind: "create" }); }
   matches.forEach(function (note) {
+    rows.push({ kind: "note", note: note });
+  });
+  archivedMatches.forEach(function (note) {
     rows.push({ kind: "note", note: note });
   });
   if (mentionHost === "note") {
@@ -4181,6 +4207,16 @@ function renderMentionPopup(range) {
     texts.appendChild(line1);
     texts.appendChild(line2);
     btn.appendChild(texts);
+    /* v2.171: an archived note's row says so: the row
+       wears the archived dress and an Archived tag,
+       themed in both themes (styles.css). */
+    if (row.kind === "note" && row.note.archived) {
+      btn.classList.add("mention-archived");
+      const archTag = document.createElement("span");
+      archTag.className = "mention-arch-tag";
+      archTag.textContent = "Archived";
+      btn.appendChild(archTag);
+    }
     list.appendChild(btn);
   });
   /* v2.28.1: in the task description host the card must

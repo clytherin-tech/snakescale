@@ -249,13 +249,16 @@ const WORKER_AUTH_BASE = "https://ssnotes-auth.clytherin.workers.dev";
 
 /* The session token in memory, the boot fragment's held
    outcome, the fresh flag a reauth answer arms, and the
-   account email the Worker reports (shown in Settings).
-   The token's durable copy is the encrypted blob under
-   LS_WORKER_SESSION; memory is only its working copy. */
+   account email and display name the Worker reports
+   (the email shown in Settings, the name for the Home
+   greeting). The token's durable copy is the encrypted
+   blob under LS_WORKER_SESSION; memory is only its
+   working copy. */
 let workerSessionToken = null;
 let pendingWorkerAuth = null;
 let workerReauthNeeded = false;
 let workerAccountEmail = "";
+let workerAccountName = "";
 
 function loadWorkerSessionBlob() {
   try { return JSON.parse(localStorage.getItem(LS_WORKER_SESSION) || "null"); }
@@ -460,6 +463,47 @@ function renderWorkerAccountLine() {
   }
 }
 
+/* v2.171: the signed in account's first name, for the
+   Home greeting: the first word of the display name
+   the Worker's /me answer carries, or "" when no name
+   is known (signed out, an older Worker, a failed
+   read), in which case the greeting stands plain,
+   exactly as it did before. */
+function accountFirstName() {
+  const full = String(workerAccountName || "").trim();
+  if (!full) { return ""; }
+  return full.split(/\s+/)[0];
+}
+
+/* v2.171: read the account's display name from the
+   Worker's /me route, the same account answer its
+   /token route's email comes from (see
+   renderWorkerAccountLine). Best effort and silent:
+   any failure leaves the name as it stands, and
+   nothing waits on it. It runs whenever a token
+   lands, so the name is there before Home first
+   paints in the ordinary connect flow; when it lands
+   while Home stands open, Home repaints so the
+   greeting picks it up. */
+async function workerFetchAccountName() {
+  const session = await getWorkerSession();
+  if (!session) { return; }
+  let res;
+  try {
+    res = await fetch(WORKER_AUTH_BASE + "/me", {
+      headers: { "Authorization": "Bearer " + session }
+    });
+  } catch (e) { return; }
+  if (!res || res.status !== 200) { return; }
+  let data = null;
+  try { data = await res.json(); } catch (e) { data = null; }
+  if (!data || !data.name) { return; }
+  workerAccountName = String(data.name);
+  if (state.view && state.view.kind === "home") {
+    renderHome();
+  }
+}
+
 /* Record a fresh Google access token: the one landing
    every successful token acquisition shares, with exactly
    the effects a successful connect has always had (the
@@ -477,6 +521,10 @@ async function recordGoogleAccessToken(accessToken, expiresInSeconds, email) {
   renderRenewalFailureLine();
   if (email) { workerAccountEmail = String(email); }
   renderWorkerAccountLine();
+  /* v2.171: the token landing is also the moment the
+     account's display name is read (best effort, see
+     workerFetchAccountName), for the Home greeting. */
+  workerFetchAccountName();
   saveSettings();
   await storeProviderToken("google", accessToken);
   /* v2.15: every fresh token (re)schedules the automatic

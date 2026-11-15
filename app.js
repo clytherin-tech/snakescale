@@ -2230,6 +2230,14 @@ function wireEvents() {
       if (live && taskEditorState) { saveTaskEditor(); }
       followNoteLink(ssNoteId);
     });
+  /* v2.171: the Edit Task modal's Go to Note button
+     (render.js goToTaskNote), and the Note dropdown's
+     own change keeping the button's enabled state
+     true beside the dirty marking above. */
+  document.getElementById("taskGoToNoteBtn")
+    .addEventListener("click", goToTaskNote);
+  document.getElementById("taskNoteSelect")
+    .addEventListener("change", syncTaskGoToNoteBtn);
   document.getElementById("taskModal").addEventListener("keydown",
     function (ev) {
       if (ev.key === "Escape") { closeTaskEditor(); }
