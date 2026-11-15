@@ -2070,6 +2070,178 @@ function deleteLinkBarAnchor() {
   hideLinkBar();
 }
 
+/* ----- v2.166: Backspace removes the pill behind the caret --------
+   Chris's checklist item (November 14, 2026): "I am unable to use
+   Backspace to delete/remove a pill link from a note/task/etc.. I
+   can delete it if the cursor is in front and I use the delete
+   key, but I cannot backspace to remove it. That should be
+   allowed." The pills are the body's atomic islands: a link
+   wearing a face (a note link or web link in Mention or Preview
+   dress, whose visible child is contenteditable false), a task
+   link, a tag pill, and an event chip. Forward Delete from in
+   front removes such an island whole, because the browser cannot
+   step into it; Backspace from behind it strands the caret
+   against the island's non editable face and nothing happens.
+   This handler gives Backspace the Delete path's own result: the
+   island leaves the body, the caret parks where it stood, and
+   the follow ups are the ones a native deletion runs (the
+   editor history's observer reads the removal as one discrete
+   step, exactly as it reads the link bar's Delete above; the
+   tag pill watch's before and after pair runs around the
+   removal, so a tag whose last pill fell leaves the note the
+   same way it leaves for a keyboard deletion; markDirty carries
+   the save).
+
+   The claim is narrow on purpose. It takes only a bare
+   Backspace (no Ctrl, Meta, or Alt), only a keypress no earlier
+   handler claimed (the checklist's Backspace and the empty
+   line guard keep their first say, in their standing order),
+   only a collapsed caret in the open, editable, live note, and
+   only when the caret stands immediately behind a pill:
+   nothing between the caret and the island but empty text
+   nodes. A character, a space, a line break, or any other
+   element between them leaves the key to ordinary text
+   editing, and a caret inside a pill (a task link's label is
+   editable text) edits the label, never the island. A link in
+   Text dress is not a pill: Delete in front of it eats a
+   character, so Backspace behind it edits characters too. */
+
+/* Whether an element stands in the body as a pill: the
+   atomic islands named above. */
+function isPillElement(el) {
+  if (!el || el.nodeType !== 1) { return false; }
+  if (el.classList.contains("ss-tag-pill") ||
+      el.classList.contains("ss-event-chip")) { return true; }
+  if (el.tagName === "A") {
+    if (el.classList.contains("ss-task-link")) { return true; }
+    if (el.querySelector(":scope > .ss-link-face")) { return true; }
+  }
+  return false;
+}
+
+/* The pill an element or text node belongs to, itself
+   included, walking up no further than the body. Null
+   when it stands in none. */
+function pillAncestorOf(node, bodyEl) {
+  let el = !node ? null
+    : (node.nodeType === 1 ? node : node.parentNode);
+  while (el && el !== bodyEl) {
+    if (isPillElement(el)) { return el; }
+    el = el.parentNode;
+  }
+  return null;
+}
+
+/* What stands immediately before a caret position in the
+   body: the element node there, the string "text" when a
+   character stands there (the only answer ordinary
+   editing needs), or null when nothing stands before the
+   position inside the body. Empty text nodes are stepped
+   over: they hold no character, so a pill behind one
+   still stands immediately behind the caret. An element
+   that is not a pill is descended to its last descendant
+   first: text standing inside it is a character before
+   the caret, not the element. */
+function nodeBeforeCaretPosition(container, offset) {
+  let node = container;
+  let off = offset;
+  for (let guard = 0; guard < 128; guard++) {
+    if (node.nodeType === 3) {
+      if (off > 0) { return "text"; }
+      if (!node.parentNode) { return null; }
+      off = Array.prototype.indexOf.call(
+        node.parentNode.childNodes, node);
+      node = node.parentNode;
+      continue;
+    }
+    if (off > 0) {
+      const child = node.childNodes[off - 1];
+      if (child.nodeType === 3) {
+        if (child.nodeValue.length > 0) { return "text"; }
+        off -= 1;
+        continue;
+      }
+      if (isPillElement(child)) { return child; }
+      let last = child;
+      while (last.nodeType === 1 && last.childNodes.length) {
+        last = last.childNodes[last.childNodes.length - 1];
+      }
+      if (last.nodeType === 3 && last.nodeValue.length > 0) {
+        return "text";
+      }
+      return child;
+    }
+    if (!node.parentNode) { return null; }
+    off = Array.prototype.indexOf.call(
+      node.parentNode.childNodes, node);
+    node = node.parentNode;
+  }
+  return null;
+}
+
+/* The pill standing immediately behind the caret, or
+   null when the caret does not stand in the one posture
+   this handler owns. */
+function pillBeforeCaret(bodyEl) {
+  const sel = window.getSelection();
+  if (!sel || !sel.rangeCount) { return null; }
+  const range = sel.getRangeAt(0);
+  if (!range.collapsed) { return null; }
+  if (!bodyEl.contains(range.startContainer)) { return null; }
+  if (pillAncestorOf(range.startContainer, bodyEl)) {
+    return null;
+  }
+  const before = nodeBeforeCaretPosition(
+    range.startContainer, range.startOffset);
+  if (!before || before === "text") { return null; }
+  return isPillElement(before) ? before : null;
+}
+
+/* The note body's Backspace keypress, judged for the
+   pill behind the caret. Returns true only when it
+   took the keypress, so the wiring can prevent the
+   browser's own backward delete, which would
+   otherwise eat whatever stands behind the pill. */
+function pillBackspaceKey(ev) {
+  if (!ev || ev.key !== "Backspace" ||
+      ev.ctrlKey || ev.metaKey || ev.altKey) { return false; }
+  if (ev.defaultPrevented) { return false; }
+  const bodyEl = document.getElementById("noteBody");
+  if (!bodyEl || bodyEl.contentEditable === "false") {
+    return false;
+  }
+  const note = currentNote();
+  if (!note || note.trashed || note.archived) { return false; }
+  const pill = pillBeforeCaret(bodyEl);
+  if (!pill) { return false; }
+  const parent = pill.parentNode;
+  const at = Array.prototype.indexOf.call(
+    parent.childNodes, pill);
+  /* The tag pill watch's before half, run by hand: a
+     keyboard deletion arms it from its beforeinput, and
+     this removal is a hand built one, so the pair runs
+     around the removal explicitly, landing the same tag
+     outcome the Delete path lands. */
+  captureTagPillsBeforeDelete(
+    { inputType: "deleteContentBackward" });
+  if (linkBarAnchor === pill) { hideLinkBar(); }
+  pill.remove();
+  /* Park the caret where the pill stood, the position
+     the native deletion leaves it in. */
+  try {
+    const range = document.createRange();
+    range.setStart(parent, Math.min(at,
+      parent.childNodes.length));
+    range.collapse(true);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+  } catch (err) { /* the body keeps its own caret */ }
+  reconcileTagPillsAfterDelete();
+  markDirty();
+  return true;
+}
+
 /* ----- v2.9: link view faces ---------------------------------------------
    A Mention or Preview anchor displays a FACE: a runtime only
    node (span.ss-link-face, contenteditable false) built by

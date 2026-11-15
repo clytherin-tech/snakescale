@@ -65,7 +65,13 @@ function editorCtxMenuEl() {
 
 function closeEditorCtxMenu() {
   const menu = editorCtxMenuEl();
-  if (menu) { menu.classList.add("hidden"); }
+  if (menu) {
+    menu.classList.add("hidden");
+    /* v2.166: a height cap (see placeEditorCtxMenu)
+       never outlives the stand that needed it. */
+    menu.style.maxHeight = "";
+    menu.style.overflowY = "";
+  }
 }
 
 function editorCtxMenuIsOpen() {
@@ -153,14 +159,65 @@ function openEditorCtxMenu(x, y) {
       });
   }
   menu.classList.remove("hidden");
+  placeEditorCtxMenu(menu, x, y);
+}
+
+/* v2.166: the editor menu's placement, one judge for
+   the open and for every later change of the menu's
+   size. Through v2.165 the clamp below ran once, at
+   open, against the height the menu wore with both
+   submenus closed; the Format and Numbering submenus
+   then opened IN PLACE under their parent items,
+   growing the menu downward with nothing re-judging
+   its position, so a menu opened near the bottom of
+   the window grew off the bottom and its lower rows
+   could not be reached (Chris's checklist item: "The
+   R/C Context menu in a note goes off the bottom of
+   the screen if I am close to the bottom in a
+   note"). The open keeps its exact standing math
+   (the click point, clamped into the viewport with
+   an 8px margin on both axes); what is new is that
+   the same clamp runs again whenever a submenu opens
+   or closes, against the menu's size as it then
+   stands, and that a menu taller than the window
+   itself is pinned to the top and capped at the
+   window's height with its own scroll, so every row
+   stays reachable in any window. */
+function placeEditorCtxMenu(menu, x, y) {
+  /* A cap left by an earlier, taller stand is cleared
+     before measuring, so the size read is the menu's
+     own. */
+  menu.style.maxHeight = "";
+  menu.style.overflowY = "";
   const width = menu.offsetWidth || 200;
   const height = menu.offsetHeight || 170;
   const left = Math.max(8, Math.min(x,
     window.innerWidth - width - 8));
-  const top = Math.max(8, Math.min(y,
+  let top = Math.max(8, Math.min(y,
     window.innerHeight - height - 8));
+  if (height > window.innerHeight - 16) {
+    top = 8;
+    menu.style.maxHeight =
+      (window.innerHeight - 16) + "px";
+    menu.style.overflowY = "auto";
+  }
   menu.style.left = left + "px";
   menu.style.top = top + "px";
+}
+
+/* Re-judge the open menu's placement after an in place
+   submenu opens or closes: the menu keeps its standing
+   corner and is clamped again at its new size, so
+   growth near the bottom pulls it up the window
+   instead of off it. */
+function reclampEditorCtxMenu() {
+  const menu = editorCtxMenuEl();
+  if (!menu || menu.classList.contains("hidden")) {
+    return;
+  }
+  const left = parseFloat(menu.style.left) || 16;
+  const top = parseFloat(menu.style.top) || 16;
+  placeEditorCtxMenu(menu, left, top);
 }
 
 /* Copy (cut false) or cut (cut true) the current
@@ -554,6 +611,9 @@ function wireEditorCtxMenu() {
       const fmtSub = menu.querySelector(
         "#editorCtxFormatMenu");
       if (fmtSub) { fmtSub.classList.add("hidden"); }
+      /* v2.166: the menu's size just changed in place;
+         its placement is re-judged at the new size. */
+      reclampEditorCtxMenu();
       return;
     }
     if (btn.getAttribute("data-ctx-action") === "format") {
@@ -563,6 +623,9 @@ function wireEditorCtxMenu() {
       const numSub = menu.querySelector(
         "#editorCtxNumMenu");
       if (numSub) { numSub.classList.add("hidden"); }
+      /* v2.166: the menu's size just changed in place;
+         its placement is re-judged at the new size. */
+      reclampEditorCtxMenu();
       return;
     }
     runEditorCtxAction(btn.getAttribute("data-ctx-action"));
@@ -3886,6 +3949,17 @@ function wireEvents() {
      keeps its exact native behavior. */
   noteBodyEl.addEventListener("keydown", function (ev) {
     if (selectedImageDeleteKey(ev)) { ev.preventDefault(); }
+  });
+  /* v2.166: Backspace with the caret standing immediately
+     behind a pill removes the pill (pillBackspaceKey in
+     the link section runs the removal the Delete path
+     runs from in front). It runs after the guards above:
+     a keypress any of them claimed is already prevented,
+     and the judge never takes a claimed keypress.
+     Backspace anywhere else in the body keeps its exact
+     native behavior. */
+  noteBodyEl.addEventListener("keydown", function (ev) {
+    if (pillBackspaceKey(ev)) { ev.preventDefault(); }
   });
 
   /* v2.4: Tab and Shift+Tab belong to the note while the caret is

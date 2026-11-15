@@ -5619,6 +5619,65 @@ function syncPastePopupRows() {
   });
 }
 
+/* v2.166: the rect the popup anchors to when the end
+   bookmark's own rect has collapsed. A range over a
+   node standing in display none content reads back
+   all zeros in a real browser, and that is exactly
+   where a pasted link's bookmark stands: pasting a
+   link copied from a note lands the chip, the
+   decoration pass moves the chip's text into its
+   hidden original wrapper with the session's end
+   bookmark riding on it, and the popup parked itself
+   at the window's upper left corner (8, 6) on exactly
+   those pastes (Chris's checklist item: "The Paste
+   options shows up in the upper left corner of the
+   window sometimes when pasting a link from a note").
+   The hunt stays inside real geometry: when the
+   editor's own rect is all zeros too (a headless DOM),
+   there is no position to trust and null sends the
+   caller back to its standing arithmetic. Otherwise
+   the candidates, in order, are the element just
+   before an element caret and its descendants in
+   document order (the pasted block and the chip
+   inside it), then the bookmark's own ancestors past
+   the hidden wrapper (the chip's anchor above all):
+   the first with a rect that did not collapse wins. */
+function pastePopupAnchorRect(end) {
+  const bodyEl = pasteBodyEl();
+  if (!bodyEl || !end || !end.node) { return null; }
+  const real = function (r) {
+    return r && (r.left || r.top || r.bottom || r.right)
+      ? r : null;
+  };
+  let bodyRect = null;
+  try { bodyRect = bodyEl.getBoundingClientRect(); }
+  catch (err) { bodyRect = null; }
+  if (!real(bodyRect)) { return null; }
+  const node = end.node;
+  const candidates = [];
+  if (node.nodeType === 1 && end.offset > 0) {
+    const before = node.childNodes[end.offset - 1];
+    if (before && before.nodeType === 1) {
+      candidates.push(before);
+      before.querySelectorAll("*").forEach(function (d) {
+        candidates.push(d);
+      });
+    }
+  }
+  let el = node.nodeType === 1 ? node : node.parentElement;
+  while (el && el !== bodyEl) {
+    candidates.push(el);
+    el = el.parentElement;
+  }
+  for (let i = 0; i < candidates.length; i++) {
+    let r = null;
+    try { r = candidates[i].getBoundingClientRect(); }
+    catch (err) { r = null; }
+    if (real(r)) { return r; }
+  }
+  return null;
+}
+
 /* Park the popup at the end of the pasted content: under the
    end bookmark's caret rectangle, flipped above it when the
    card would run off the window's bottom and clamped inside
@@ -5649,6 +5708,16 @@ function positionPastePopup() {
     const bodyRect = pasteBodyEl().getBoundingClientRect();
     rect = { left: bodyRect.left, top: bodyRect.top,
       bottom: bodyRect.top };
+  }
+  /* v2.166: an all zero rect from a bookmark standing in
+     hidden content is not a position (see
+     pastePopupAnchorRect): when the editor's geometry
+     is real, the popup anchors to the pasted content
+     the hunt finds instead of the window's corner. */
+  if (rect && !rect.left && !rect.top && !rect.bottom &&
+      !rect.right) {
+    const hunted = pastePopupAnchorRect(end);
+    if (hunted) { rect = hunted; }
   }
   const popupW = popup.offsetWidth || 300;
   const popupH = popup.offsetHeight || 190;

@@ -1785,10 +1785,85 @@ async function renameTag(oldName, newName) {
   state.listFilters.tags = state.listFilters.tags.map(function (t) {
     return t === oldName ? newName : t;
   });
+  /* v2.166: the rename's persistence, rebuilt (Chris's
+     checklist item: "Renaming a tag is very slow, try
+     to speed it up; it also didn't change all the tags,
+     it left one pinned note with the old tag"). The
+     old loop ran one full saveNoteToRepo per affected
+     note, serially, and two faults stood in it:
+     (1) A Doc-backed note's tags live in its catalog
+     entry, nowhere in its Doc, yet the full save
+     rebuilt and re-uploaded the whole Doc for every
+     tagged note just to move a tag string: the parade
+     that made the rename slow. Doc-backed notes are
+     not saved here at all now: their rewritten tags
+     ride the one debounced catalog write saveCache
+     below schedules, the same light path every piece
+     of Doc-backed furniture (the tick memory above
+     all) already persists by, so a rename over any
+     number of Doc-backed notes costs one catalog
+     write and no Doc traffic at all. Their updated
+     stamps are deliberately not re-stamped: a tag
+     rename is not an edit to the note.
+     (2) A file-backed note still standing as a catalog
+     shell lost the rename inside its own save: the
+     save's shell completion (ensureNoteBodyLoaded)
+     replaces the note's fields from its stored file,
+     tags included, so the file was written back with
+     the OLD tag and the note in memory reverted with
+     it: a tagged note this session had never opened
+     (the pinned note) kept the old name while every
+     opened note renamed. File-backed notes are
+     therefore completed FIRST here, the renamed tags
+     re-applied over the completion, and only then
+     saved, through the standing bulk pool rather than
+     one at a time. A completion that cannot land
+     leaves the note a shell and its save fails into
+     the same count the old loop reported.
+     The open note's tag field is refreshed from its
+     note when the open note was renamed, so a later
+     collectEditor cannot write the old string back
+     over the rename. */
+  const fileBacked = affected.filter(function (note) {
+    return !isDocBackedNote(note);
+  });
+  /* The renamed tag arrays are captured before the
+     loop's first await: a completion landing during
+     the loop replaces a note's fields from its file,
+     tags included, so a capture taken when the loop
+     reached that note could already read the file's
+     old string back. Taken here, before any await,
+     the arrays are the rewrite's own. */
+  const renamedTagsList = fileBacked.map(function (note) {
+    return note.tags;
+  });
+  for (let i = 0; i < fileBacked.length; i++) {
+    const fbNote = fileBacked[i];
+    if (fbNote.bodyLoaded === false) {
+      await ensureNoteBodyLoaded(fbNote);
+    }
+    /* Re-applied unconditionally, for the same reason:
+       a note that was a shell when the loop reached it
+       and a note whose earlier kicked load landed
+       during the loop both end the loop carrying the
+       rename, never the file's old string. */
+    fbNote.tags = renamedTagsList[i];
+  }
   let failed = 0;
-  for (let i = 0; i < affected.length; i++) {
-    try { await saveNoteToRepo(affected[i]); }
-    catch (err) { failed++; }
+  if (fileBacked.length) {
+    const outcomes = await runPooledOutcomes(
+      makeBulkPool(BULK_OP_CONCURRENCY), fileBacked,
+      function (note) { return saveNoteToRepo(note); });
+    outcomes.forEach(function (o) {
+      if (o.status === "rejected") { failed++; }
+    });
+  }
+  const openNote = currentNote();
+  if (openNote && affected.indexOf(openNote) >= 0) {
+    const tagsInput = document.getElementById("noteTags");
+    if (tagsInput) {
+      tagsInput.value = openNote.tags.join(", ");
+    }
   }
   if (state.online && state.repoExists) { await saveIndex(); }
   saveCache();
