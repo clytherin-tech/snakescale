@@ -209,6 +209,19 @@ function sanitizeAttachments(list) {
        make. */
     const tr = sanitizeTranscript(a.transcript);
     if (tr) { rec.transcript = tr; }
+    /* v2.168: a Doc-adopted image's payload hash (see
+       docDataUriHash in media.js), kept only when it
+       stands in that function's own shape (a byte
+       count, a colon, and the hash in hex), so a later
+       body build can claim the record back for the
+       same image instead of uploading a new copy (see
+       docAdoptOneImage). A record minted before the
+       hash existed, or carrying a damaged one,
+       serializes exactly as every record did before. */
+    if (typeof a.imgHash === "string" &&
+        /^\d+:[0-9a-f]+$/.test(a.imgHash)) {
+      rec.imgHash = a.imgHash;
+    }
     out.push(rec);
   });
   return out;

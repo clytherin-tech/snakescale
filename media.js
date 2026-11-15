@@ -2199,6 +2199,44 @@ async function maybeConsolidateLegacyAttachments() {
 }
 
 
+/* v2.168: one upload request under a bound, on the
+   link info AbortController pattern (see the
+   bounded waits section). An abort the bound
+   caused throws the timeout error, marked, so the
+   upload's own network error wording never
+   swallows it; any other failure passes through
+   untouched, into the wording that already stands
+   at each call site. The bound is two minutes: a
+   chunk is 8 MiB, and even a slow home uplink
+   moves that in well under the bound, so meeting
+   it means the request stopped answering, not
+   that it was slow. */
+let driveUploadRequestTimeoutMs = 120000;
+
+async function googleUploadFetch(url, options) {
+  const controller = (typeof AbortController !== "undefined")
+    ? new AbortController() : null;
+  const timer = controller ? setTimeout(function () {
+    controller.abort();
+  }, driveUploadRequestTimeoutMs) : null;
+  try {
+    return await fetch(url, controller
+      ? Object.assign({}, options,
+          { signal: controller.signal })
+      : options);
+  } catch (e) {
+    if (controller && controller.signal.aborted) {
+      const err = new Error("A Google Drive upload " +
+        "request took too long, so it was stopped.");
+      err.driveTimeout = true;
+      throw err;
+    }
+    throw e;
+  } finally {
+    if (timer) { clearTimeout(timer); }
+  }
+}
+
 /* Resumable upload, per Google's protocol: one POST opens a session,
    then the bytes go up in 8 MiB chunks (a multiple of the required
    256 KiB). A 308 answer means "resume incomplete"; its Range header
@@ -2209,7 +2247,7 @@ async function googleUpload(file, storageName, onProgress) {
   const token = await getGoogleAccessToken();
   let initRes;
   try {
-    initRes = await fetch(
+    initRes = await googleUploadFetch(
       "https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable", {
         method: "POST",
         headers: {
@@ -2221,6 +2259,7 @@ async function googleUpload(file, storageName, onProgress) {
         body: JSON.stringify({ name: storageName, parents: [folderId] })
       });
   } catch (e) {
+    if (e && e.driveTimeout) { throw e; }
     throw new Error("Network error starting the Google Drive upload.");
   }
   if (initRes.status === 401) {
@@ -2238,7 +2277,7 @@ async function googleUpload(file, storageName, onProgress) {
     throw new Error("Google Drive did not return an upload session address.");
   }
   if (file.size === 0) {
-    const emptyRes = await fetch(sessionUrl, {
+    const emptyRes = await googleUploadFetch(sessionUrl, {
       method: "PUT",
       headers: { "Content-Range": "bytes */0" }
     });
@@ -2251,11 +2290,12 @@ async function googleUpload(file, storageName, onProgress) {
   }
   const CHUNK = 8 * 1024 * 1024;
   let offset = 0;
+  let stalls = 0;
   while (offset < file.size) {
     const end = Math.min(offset + CHUNK, file.size);
     let res;
     try {
-      res = await fetch(sessionUrl, {
+      res = await googleUploadFetch(sessionUrl, {
         method: "PUT",
         headers: {
           "Content-Range": "bytes " + offset + "-" + (end - 1) + "/" + file.size
@@ -2263,6 +2303,7 @@ async function googleUpload(file, storageName, onProgress) {
         body: file.slice(offset, end)
       });
     } catch (e) {
+      if (e && e.driveTimeout) { throw e; }
       throw new Error("Network error during the Google Drive upload of " + file.name + ".");
     }
     if (res.status === 200 || res.status === 201) {
@@ -2273,7 +2314,26 @@ async function googleUpload(file, storageName, onProgress) {
     if (res.status === 308) {
       const range = res.headers.get("Range");
       const m = range ? range.match(/bytes=0-(\d+)/) : null;
-      offset = m ? (Number(m[1]) + 1) : end;
+      const next = m ? (Number(m[1]) + 1) : end;
+      /* v2.168: a 308 whose Range does not move the
+         offset is the session declining the chunk
+         while answering success's neighbor;
+         answered the same way forever it never
+         completes and never fails, one of the
+         shapes the November 14 wedge wore. Three
+         in a row are a stopped upload, not a slow
+         one, and the upload fails where its caller
+         can report it. */
+      if (next <= offset) {
+        stalls += 1;
+        if (stalls >= 3) {
+          throw new Error("Google Drive upload " +
+            "stopped making progress.");
+        }
+      } else {
+        stalls = 0;
+      }
+      offset = next;
       if (onProgress) { onProgress(Math.round(offset / file.size * 100)); }
       continue;
     }
@@ -2993,6 +3053,122 @@ function docReasonsAreRateLimit(reasons) {
   });
 }
 
+/* v2.168: bounded waits on the Doc paths. Until this
+   build no wait on the way into or out of a Google
+   Doc carried a limit: a fetch whose answer never
+   came, an upload session that stopped answering,
+   a calendar lookup that never returned, each one
+   waited forever, and because a note's body load is
+   a chain of those waits, one wedged step left the
+   note an unopened shell behind a loading bar that
+   never settled and an error that was never
+   recorded (Chris's movie catalog notes, November
+   14, 2026: the load neither landed nor failed,
+   across restarts, and the rename that began the
+   evening froze the whole app behind the same kind
+   of wait in the save). Every wait on the load
+   chain and on the save chain is bounded now, in
+   the two shapes the app already knows: an
+   AbortController timer on the link info pattern
+   (editor.js, linkInfoTimeoutMs) threaded through
+   the fetch as its signal, and a plain race for the
+   promises that take no signal, so even a wait the
+   signal cannot reach (the token read a fetch waits
+   on before it starts) still settles. The bounds
+   are let bindings, not consts, on the
+   linkInfoTimeoutMs precedent, so a test can stand
+   in a shorter fuse. The values are sized for the
+   real loads on a home connection: the catalog
+   Docs export as several megabytes of HTML and a
+   save uploads the same, so the download leg gets
+   two minutes and the save leg three; a file facts
+   or structure read is a JSON answer and gets
+   thirty and sixty seconds; one poster image is a
+   few kilobytes, and its whole adoption gets a
+   three minute outer bound over the upload's own
+   per request bound (see googleUpload), which is
+   what answers for the folder and token waits at
+   the upload's head; a calendar lookup and a linked
+   image fetch are courtesies and get fifteen
+   seconds. A step that meets its bound fails with
+   a timeout error, and the standing machinery takes
+   it from there: the load records it as the note's
+   load error and shows the could not load face, an
+   image adoption lands in its standing fallback, a
+   save reports its failure, and no bar stands
+   forever. */
+let docMetaTimeoutMs = 30000;
+let docExportTimeoutMs = 120000;
+let docJsonTimeoutMs = 60000;
+let docSaveTimeoutMs = 180000;
+let docImageUploadTimeoutMs = 180000;
+let docImageDownloadTimeoutMs = 60000;
+let docExtFetchTimeoutMs = 15000;
+let docChipFetchTimeoutMs = 15000;
+
+function docTimeoutError(what) {
+  const err = new Error(what + " took too long, so " +
+    "it was stopped. Nothing was changed by the " +
+    "stopped step.");
+  err.docTimeout = true;
+  return err;
+}
+
+/* Race one promise against its bound: the promise's
+   own settlement, or a timeout error when the bound
+   passes first. The loser is inert by construction
+   at every call site: each one writes only from the
+   value its await returns, so a step that finishes
+   after its bound has nowhere to write (an upload
+   that lands late leaves its file in Drive
+   unlinked, the standing orphan tradeoff, and no
+   record ever names it). */
+function docBounded(promise, ms, what) {
+  let timer = null;
+  const bound = new Promise(function (resolve, reject) {
+    timer = setTimeout(function () {
+      reject(docTimeoutError(what));
+    }, ms);
+  });
+  const clear = function () {
+    if (timer) { clearTimeout(timer); timer = null; }
+  };
+  return Promise.race([promise, bound]).then(
+    function (v) { clear(); return v; },
+    function (e) { clear(); throw e; });
+}
+
+/* One bounded Doc API leg: run(signal) performs the
+   leg's fetches with the signal threaded through,
+   on the link info pattern, and the leg as a whole
+   races its bound. An abort the bound caused reads
+   as the timeout error, never as the offline error
+   the transport wraps an aborted fetch in. */
+async function docApiLeg(ms, what, run) {
+  const controller = (typeof AbortController !== "undefined")
+    ? new AbortController() : null;
+  let timer = null;
+  const bound = new Promise(function (resolve, reject) {
+    timer = setTimeout(function () {
+      if (controller) { controller.abort(); }
+      reject(docTimeoutError(what));
+    }, ms);
+  });
+  try {
+    return await Promise.race([
+      run(controller ? controller.signal : undefined),
+      bound]);
+  } catch (e) {
+    if (controller && controller.signal.aborted &&
+        !(e && e.docTimeout)) {
+      throw docTimeoutError(what);
+    }
+    throw e;
+  } finally {
+    if (timer) { clearTimeout(timer); }
+  }
+}
+
 /* One Doc API fetch on the calendar pattern: gdriveFetch
    supplies the token and its one silent renewal; a 403
    becomes the module's needs-consent state and a consent
@@ -3109,13 +3285,14 @@ async function docApiJson(url, options) {
    (see docSurfaceListKindsFailure). The plain
    read keeps its old contract for its other
    callers, on top of the judged one. */
-async function docFetchDocumentJsonJudged(docId) {
+async function docFetchDocumentJsonJudged(docId, signal) {
   let failure = { status: 0, message: "" };
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
       const res = await gdriveFetch(
         "https://docs.googleapis.com/v1/documents/" +
-        encodeURIComponent(docId));
+        encodeURIComponent(docId),
+        signal ? { signal: signal } : undefined);
       if (res && res.ok) {
         return { json: await res.json(), failure: null };
       }
@@ -3805,21 +3982,37 @@ function docExportCarriesListMarkup(html) {
 }
 
 async function docFetchDocumentOnce(docId) {
-  const meta = await docApiJson(
-    "https://www.googleapis.com/drive/v3/files/" +
-    encodeURIComponent(docId) +
-    "?fields=" + encodeURIComponent(
-      "id,name,mimeType,headRevisionId,modifiedTime,trashed"));
+  /* v2.168: every leg of the fetch is bounded (see
+     the bounded waits section): the file facts
+     read, the export and its body read, and the
+     structure read below. A leg that meets its
+     bound throws the timeout error, and the load
+     it feeds fails honestly with it. */
+  const meta = await docApiLeg(docMetaTimeoutMs,
+    "Reading this note's Google Doc",
+    function (signal) {
+      return docApiJson(
+        "https://www.googleapis.com/drive/v3/files/" +
+        encodeURIComponent(docId) +
+        "?fields=" + encodeURIComponent(
+          "id,name,mimeType,headRevisionId,modifiedTime,trashed"),
+        signal ? { signal: signal } : undefined);
+    });
   if (!meta || meta.trashed === true ||
       meta.mimeType !== DOC_FILE_MIME) {
     throw docHttpError(404,
       "That note's Google Doc could not be found.");
   }
-  const res = await docApiFetch(
-    "https://www.googleapis.com/drive/v3/files/" +
-    encodeURIComponent(docId) +
-    "/export?mimeType=" + encodeURIComponent("text/html"));
-  const html = await res.text();
+  const html = await docApiLeg(docExportTimeoutMs,
+    "Downloading this note's Google Doc",
+    async function (signal) {
+      const res = await docApiFetch(
+        "https://www.googleapis.com/drive/v3/files/" +
+        encodeURIComponent(docId) +
+        "/export?mimeType=" + encodeURIComponent("text/html"),
+        signal ? { signal: signal } : undefined);
+      return await res.text();
+    });
   /* v2.131: the documents.get leg exists for one
      reader, the converter's checklist kinds, which
      only a Doc whose export carries list markup can
@@ -3839,9 +4032,25 @@ async function docFetchDocumentOnce(docId) {
      gains its first code block in Google still
      converts with its runs on its next fetch. */
   const carriesCode = docExportCarriesMonoMarkup(html);
-  const judged = (carriesLists || carriesCode)
-    ? await docFetchDocumentJsonJudged(docId)
-    : { json: null, failure: null };
+  /* v2.168: the structure read is bounded like the
+     rest, and a bound met here is the soft
+     channel's ordinary failure (no document, a
+     recorded failure), never a thrown one: the
+     load proceeds on the export alone, exactly as
+     it does for a refused read. */
+  let judged = { json: null, failure: null };
+  if (carriesLists || carriesCode) {
+    try {
+      judged = await docApiLeg(docJsonTimeoutMs,
+        "Reading this note's Google Doc's structure",
+        function (signal) {
+          return docFetchDocumentJsonJudged(docId, signal);
+        });
+    } catch (e) {
+      judged = { json: null,
+        failure: { status: 0, message: "" } };
+    }
+  }
   if ((carriesLists || carriesCode) && judged.json) {
     docListKindsRecovered();
     docCodeRunsRecovered();
@@ -3905,29 +4114,50 @@ async function docSaveDocument(note, uploadHtml, options) {
     throw docHttpError(0,
       "This Doc-backed note has no Google Doc to save to.");
   }
-  const res = await docApiFetch(
-    "https://www.googleapis.com/upload/drive/v3/files/" +
-    encodeURIComponent(docId) +
-    "?uploadType=media&fields=" + encodeURIComponent(
-      "id,headRevisionId,modifiedTime"), {
-      method: "PATCH",
-      headers: { "Content-Type": "text/html; charset=UTF-8" },
-      body: uploadHtml
-    });
+  /* v2.168: the save's legs are bounded like the
+     load's (see the bounded waits section): a title
+     edit rides this save, and a save that never
+     answers froze the whole app behind the note
+     switch's settle gate on November 14, 2026. A
+     leg that meets its bound throws the timeout
+     error, and the save fails honestly with it
+     where its caller reports it. */
   let data = null;
-  try { data = await res.json(); } catch (e) { data = null; }
+  data = await docApiLeg(docSaveTimeoutMs,
+    "Saving this note's Google Doc",
+    async function (signal) {
+      const res = await docApiFetch(
+        "https://www.googleapis.com/upload/drive/v3/files/" +
+        encodeURIComponent(docId) +
+        "?uploadType=media&fields=" + encodeURIComponent(
+          "id,headRevisionId,modifiedTime"), {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "text/html; charset=UTF-8" },
+          body: uploadHtml,
+          signal: signal
+        });
+      try { return await res.json(); }
+      catch (e) { return null; }
+    });
   let token = driveTokenFromMetadata(data);
   let modifiedTime = (data && data.modifiedTime) || null;
   let renamed = false;
   if (typeof note.docName === "string" && note.title &&
       note.docName !== note.title) {
     try {
-      await docApiJson(
-        "https://www.googleapis.com/drive/v3/files/" +
-        encodeURIComponent(docId), {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: note.title })
+      await docApiLeg(docMetaTimeoutMs,
+        "Renaming this note's Google Doc",
+        function (signal) {
+          return docApiJson(
+            "https://www.googleapis.com/drive/v3/files/" +
+            encodeURIComponent(docId), {
+              method: "PATCH",
+              headers: {
+                "Content-Type": "application/json" },
+              body: JSON.stringify({ name: note.title }),
+              signal: signal
+            });
         });
       note.docName = note.title;
       renamed = true;
@@ -3936,7 +4166,10 @@ async function docSaveDocument(note, uploadHtml, options) {
   let postPassed = false;
   if (options && options.checklist) {
     try {
-      postPassed = await docConvertChecklistsPostPass(docId);
+      postPassed = await docBounded(
+        docConvertChecklistsPostPass(docId),
+        docJsonTimeoutMs,
+        "Converting this note's checklists in its Google Doc");
     } catch (e) {
       /* best effort by design; the save stands */
       console.warn("Checklist conversion after a Doc" +
@@ -3945,11 +4178,16 @@ async function docSaveDocument(note, uploadHtml, options) {
   }
   if (!token || renamed || postPassed) {
     try {
-      const meta = await docApiJson(
-        "https://www.googleapis.com/drive/v3/files/" +
-        encodeURIComponent(docId) +
-        "?fields=" + encodeURIComponent(
-          "id,headRevisionId,modifiedTime"));
+      const meta = await docApiLeg(docMetaTimeoutMs,
+        "Reading this note's Google Doc",
+        function (signal) {
+          return docApiJson(
+            "https://www.googleapis.com/drive/v3/files/" +
+            encodeURIComponent(docId) +
+            "?fields=" + encodeURIComponent(
+              "id,headRevisionId,modifiedTime"),
+            signal ? { signal: signal } : undefined);
+        });
       token = driveTokenFromMetadata(meta) || token;
       modifiedTime = (meta && meta.modifiedTime) ||
         modifiedTime;
@@ -5310,7 +5548,17 @@ function docExportHtmlToBody(exportHtml, listKinds,
    Across sessions an image is adopted afresh; the earlier
    uploaded copy stays in the attachments folder unlinked,
    the same standing tradeoff the format already accepts
-   for superseded attachment files. */
+   for superseded attachment files.
+   v2.168: across sessions the reuse stands too, on
+   the records themselves: every record the adoption
+   mints carries its payload's hash (imgHash, kept
+   through every round trip by sanitizeAttachments),
+   and a body build whose note already holds records
+   claims the matching ones back (see
+   docAdoptOneImage) instead of uploading a new
+   generation and orphaning the old. Only a record
+   minted before the hash existed is still adopted
+   afresh, once; its replacement carries the hash. */
 const docAdoptedImageCache = {};
 
 function docDataUriHash(text) {
@@ -5334,6 +5582,22 @@ function docDataUriParts(src) {
   };
 }
 
+/* v2.168: the exact byte count a base64 payload
+   decodes to, read off the payload itself: every
+   four characters are three bytes, less the
+   padding. Whitespace is not part of the count,
+   as the decoder ignores it. The reuse claim in
+   docAdoptOneImage judges a record by it without
+   decoding the payload first. */
+function docDataUriByteLength(parts) {
+  const data = String((parts && parts.data) || "")
+    .replace(/\s+/g, "");
+  let n = Math.floor(data.length / 4) * 3;
+  if (data.endsWith("==")) { n -= 2; }
+  else if (data.endsWith("=")) { n -= 1; }
+  return n;
+}
+
 /* v2.135: the record an adoption lands rides a
    sink when the caller passes one (the adoption
    pool in docAdoptImages collects each image's
@@ -5341,7 +5605,7 @@ function docDataUriParts(src) {
    order stays the body's order no matter which
    adoption settles first); without one it lands
    on the note as it always did. */
-async function docAdoptOneImage(note, img, sink) {
+async function docAdoptOneImage(note, img, sink, reusePool) {
   const bag = sink || note.attachments;
   const src = String((img && img.src) || "");
   const label = String((img && img.alt) || "").trim();
@@ -5354,7 +5618,42 @@ async function docAdoptOneImage(note, img, sink) {
   const parts = docDataUriParts(src);
   if (parts && parts.base64 &&
       parts.mime.indexOf("image/") === 0) {
-    const cacheKey = note.id + "|" + docDataUriHash(src);
+    const hash = docDataUriHash(src);
+    const cacheKey = note.id + "|" + hash;
+    /* v2.168: refill reuse (see the section comment
+       above docAdoptedImageCache). A record in the
+       reuse pool whose payload hash, mime, and
+       decoded byte size all match this image IS
+       this image, already adopted, so the record
+       and its Drive file are reused where they
+       stand and nothing is downloaded or uploaded.
+       The claim is synchronous (the pool's workers
+       interleave only at awaits, and there is none
+       before it in this branch) and one to one: a
+       claimed record leaves the pool, so two
+       copies of one image claim two records. An
+       image whose bytes changed under the same
+       name hashes differently and falls through to
+       the fresh adoption below; a record minted
+       before hashes existed carries none and is
+       never claimed. */
+    if (reusePool && reusePool.length) {
+      const wantSize = docDataUriByteLength(parts);
+      for (let ri = 0; ri < reusePool.length; ri++) {
+        const rec = reusePool[ri];
+        if (rec && rec.imgHash === hash &&
+            rec.mime === parts.mime &&
+            Number(rec.size) === wantSize) {
+          reusePool.splice(ri, 1);
+          docAdoptedImageCache[cacheKey] = rec;
+          bag.push(rec);
+          return "<figure class=\"ss-attachment\"" +
+            " data-attachment-id=\"" + rec.id + "\"" +
+            widthStyle +
+            " contenteditable=\"false\"></figure>";
+        }
+      }
+    }
     const cached = docAdoptedImageCache[cacheKey];
     if (cached) {
       bag.push(cached);
@@ -5387,13 +5686,27 @@ async function docAdoptOneImage(note, img, sink) {
         sanitizeFileName(name);
       const file = new File([bytes], name,
         { type: parts.mime });
-      const uploaded = await driver.upload(file, storageName,
-        function () {});
+      /* v2.168: the upload is bounded (see the
+         bounded waits section): a step that never
+         answers lands in the catch below and this
+         image takes its standing fallback, instead
+         of holding the whole note open forever.
+         The bound here is the outer one; the
+         upload's own requests carry theirs (see
+         googleUpload), and this one answers for
+         the folder and token waits at the upload's
+         head, whichever driver stands behind it. */
+      const uploaded = await docBounded(
+        driver.upload(file, storageName,
+          function () {}),
+        docImageUploadTimeoutMs,
+        "Uploading one of this note's images");
       if (!uploaded || !uploaded.fileId) { return fallback; }
       const record = {
         id: attId, provider: svc, fileId: uploaded.fileId,
         name: name, storageName: storageName,
         mime: parts.mime, size: bytes.length,
+        imgHash: hash,
         created: new Date().toISOString()
       };
       docAdoptedImageCache[cacheKey] = record;
@@ -5422,6 +5735,16 @@ async function docAdoptOneImage(note, img, sink) {
    Doc-backed note's attachments are exactly the images
    its Doc currently carries, adopted by this pass. */
 async function docAdoptImages(note, converted) {
+  /* v2.168: the records the note already holds are
+     this pass's reuse pool (see the claim in
+     docAdoptOneImage): captured before the reset,
+     claimed one to one by the images that are
+     still the images they were adopted from, and
+     whatever goes unclaimed simply does not stand
+     in the new list, exactly as the reset below
+     has always ruled. A cold note holds no records
+     and adopts everything, as it always has. */
+  const reusePool = (note.attachments || []).slice();
   note.attachments = [];
   if (!converted.images.length) { return converted.html; }
   const holder = document.createElement("div");
@@ -5457,7 +5780,7 @@ async function docAdoptImages(note, converted) {
       const idx = Number(token.getAttribute("data-doc-img"));
       bags[i] = [];
       swaps[i] = await docAdoptOneImage(note,
-        converted.images[idx], bags[i]);
+        converted.images[idx], bags[i], reusePool);
     }
   };
   const pool = [];
@@ -6774,8 +7097,16 @@ async function docEnrichReformedEventChips(note) {
     if (!(key in seen)) {
       let ev = null;
       try {
-        const got = await gcalFetchEventById(calId,
-          eventId);
+        /* v2.168: the lookup is bounded like every
+           wait on the load chain; a lookup that
+           meets its bound throws into the catch
+           below and reads as no event, this
+           function's standing answer to a failed
+           fetch. */
+        const got = await docBounded(
+          gcalFetchEventById(calId, eventId),
+          docChipFetchTimeoutMs,
+          "Looking up a calendar event for this note");
         if (got && got.outcome === "ok" && got.ev) {
           ev = got.ev;
         }
@@ -6815,10 +7146,19 @@ async function docBuildUploadHtml(note) {
       const alt = el.getAttribute("data-ss-ext-alt") || "";
       let payloadSrc = src;
       try {
-        const fetched = await fetch(src);
-        if (fetched && fetched.ok) {
-          payloadSrc = await blobToDataUri(
-            await fetched.blob());
+        /* v2.168: the fetch and its body read are
+           bounded (see the bounded waits section);
+           a fetch that meets its bound lands in the
+           catch below and the web address crosses
+           instead, as it does for a refused fetch. */
+        const blob = await docBounded((async function () {
+          const fetched = await fetch(src);
+          return (fetched && fetched.ok)
+            ? await fetched.blob() : null;
+        })(), docExtFetchTimeoutMs,
+          "Fetching an image this note links to");
+        if (blob) {
+          payloadSrc = await blobToDataUri(blob);
         }
       } catch (e) { /* the web address crosses instead */ }
       el.outerHTML = "<img src=\"" +
@@ -6839,7 +7179,16 @@ async function docBuildUploadHtml(note) {
         typeof driver.download === "function" &&
         record.fileId) {
       try {
-        const blob = await driver.download(record.fileId);
+        /* v2.168: the download is bounded (see the
+           bounded waits section); a download that
+           meets its bound lands in the catch below
+           and the Drive link crosses instead, so one
+           stuck image file can no longer freeze the
+           save, and the rename riding it, behind it. */
+        const blob = await docBounded(
+          driver.download(record.fileId),
+          docImageDownloadTimeoutMs,
+          "Downloading one of this note's images");
         const uri = await blobToDataUri(blob);
         el.outerHTML = "<img src=\"" + uri + "\" alt=\"" +
           escapeHtml(record.name || "image") + "\"" +
