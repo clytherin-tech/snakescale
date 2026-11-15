@@ -5917,11 +5917,20 @@ function clearHighlightSelection() {
    now, so what remains is a styled wrapper with the styling
    gone. An inline element that arrived attributeless (a plain
    <b> the user typed, say) is removeFormat's business inside
-   the selection, not this pass's. */
-const CLEAR_DEEP_UNWRAP_ALWAYS = { SPAN: 1, FONT: 1, CENTER: 1 };
+   the selection, not this pass's.
+   v2.167: MARK, BIG, SMALL, and TT stand in the unconditional
+   set below, not this one. They are pure presentation like
+   SPAN and FONT (a highlight, a size shift, a typewriter
+   face), and the native removeFormat cannot be relied on to
+   unwrap them: the documented model leaves an attributeless
+   one standing inside the selection, so a clear that trusted
+   the two passes together left highlighted and resized words
+   still dressed. The deep clean takes them on sight, the way
+   it has always taken SPAN and FONT. */
+const CLEAR_DEEP_UNWRAP_ALWAYS = { SPAN: 1, FONT: 1, CENTER: 1,
+  MARK: 1, BIG: 1, SMALL: 1, TT: 1 };
 const CLEAR_DEEP_UNWRAP_IF_STRIPPED = { B: 1, I: 1, U: 1, EM: 1,
-  STRONG: 1, S: 1, STRIKE: 1, SUB: 1, SUP: 1, SMALL: 1, BIG: 1,
-  TT: 1, MARK: 1 };
+  STRONG: 1, S: 1, STRIKE: 1, SUB: 1, SUP: 1 };
 const CLEAR_PRESENTATIONAL_ATTRS = ["face", "size", "color",
   "bgcolor", "align", "valign"];
 

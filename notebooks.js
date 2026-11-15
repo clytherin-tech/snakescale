@@ -1916,10 +1916,55 @@ async function deleteTag(tag) {
   state.listFilters.tags = state.listFilters.tags.filter(function (t) {
     return t !== tag;
   });
+  /* v2.167: the deletion's persistence, rebuilt on
+     the rename's shape (v2.166). The old loop saved
+     every affected note one at a time, in full, and
+     shared the two faults the rename's fix named:
+     a Doc-backed note paid a full Doc rebuild and
+     re-upload for a tags-only change, and a
+     file-backed note standing as a catalog shell
+     lost the deletion inside its own save, whose
+     completion replaces note.tags from the stored
+     file, and kept the deleted tag. Now Doc-backed
+     notes are not saved at all: their arrays stand
+     rewritten above and ride the saveIndex and
+     saveCache below, updated stamps untouched.
+     File-backed notes are completed first, with
+     the post-delete arrays captured before the
+     loop's first await and re-applied
+     unconditionally over each completion, then
+     saved through the standing bulk pool. The open
+     note's tag field is refreshed from its note
+     when the open note carried the tag, the
+     rename's own move. Failures count into the
+     same toast the old loop reported. */
+  const fileBacked = affected.filter(function (note) {
+    return !isDocBackedNote(note);
+  });
+  const postDeleteTagsList = fileBacked.map(
+    function (note) { return note.tags; });
+  for (let i = 0; i < fileBacked.length; i++) {
+    const fbNote = fileBacked[i];
+    if (fbNote.bodyLoaded === false) {
+      await ensureNoteBodyLoaded(fbNote);
+    }
+    fbNote.tags = postDeleteTagsList[i];
+  }
   let failed = 0;
-  for (let i = 0; i < affected.length; i++) {
-    try { await saveNoteToRepo(affected[i]); }
-    catch (err) { failed++; }
+  if (fileBacked.length) {
+    const outcomes = await runPooledOutcomes(
+      makeBulkPool(BULK_OP_CONCURRENCY), fileBacked,
+      function (note) { return saveNoteToRepo(note); });
+    outcomes.forEach(function (o) {
+      if (o.status === "rejected") { failed++; }
+    });
+  }
+  const openNote = currentNote();
+  if (openNote && affected.indexOf(openNote) >= 0) {
+    const tagsInput = document.getElementById("noteTags");
+    if (tagsInput) {
+      tagsInput.value = openNote.tags.join(", ");
+    }
   }
   if (state.online && state.repoExists) { await saveIndex(); }
   saveCache();

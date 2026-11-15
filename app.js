@@ -74,6 +74,70 @@ function closeEditorCtxMenu() {
   }
 }
 
+/* v2.167: the Format flyout's placement judge, the
+   notebook menu's placeNbSubmenu math carried to the
+   editor menu: the panel stands at its item's right
+   edge, flips to the item's left when the window's
+   right side has no room, and clamps inside the
+   window on both axes with an 8px margin. */
+function placeEditorCtxSubmenu(panel, anchor) {
+  const r = anchor.getBoundingClientRect();
+  const pw = panel.offsetWidth || 180;
+  const ph = panel.offsetHeight || 0;
+  let left = r.right + 4;
+  if (left + pw > window.innerWidth - 8) {
+    left = r.left - pw - 4;
+  }
+  if (left < 8) { left = 8; }
+  let top = r.top - 6;
+  if (top + ph > window.innerHeight - 8) {
+    top = window.innerHeight - ph - 8;
+  }
+  if (top < 8) { top = 8; }
+  panel.style.left = left + "px";
+  panel.style.top = top + "px";
+}
+
+/* v2.167: the Format item's toggle. Opening the
+   flyout closes the Numbering submenu (the sibling
+   courtesy the menu has always kept), reads the
+   standing selection's format state the way the
+   menu open always has (v2.109.0) and marks the
+   rows that carry it, then places the panel beside
+   its item. Clear Formatting carries no state and
+   is never marked. */
+function toggleEditorCtxFormatMenu() {
+  const menu = editorCtxMenuEl();
+  if (!menu) { return; }
+  const fmtMenu = menu.querySelector(
+    "#editorCtxFormatMenu");
+  const anchor = menu.querySelector(
+    '[data-ctx-action="format"]');
+  if (!fmtMenu || !anchor) { return; }
+  const numMenu = menu.querySelector(
+    "#editorCtxNumMenu");
+  if (numMenu) { numMenu.classList.add("hidden"); }
+  const opening = fmtMenu.classList.contains("hidden");
+  fmtMenu.classList.toggle("hidden", !opening);
+  if (!opening) { return; }
+  const fmtStates = { bold: "bold",
+    italic: "italic", underline: "underline",
+    strike: "strikeThrough" };
+  fmtMenu.querySelectorAll("[data-format-cmd]")
+    .forEach(function (btn) {
+      const stateCmd = fmtStates[
+        btn.getAttribute("data-format-cmd")];
+      let on = false;
+      if (stateCmd) {
+        try {
+          on = !!document.queryCommandState(stateCmd);
+        } catch (e) { on = false; }
+      }
+      btn.classList.toggle("current", on);
+    });
+  placeEditorCtxSubmenu(fmtMenu, anchor);
+}
+
 function editorCtxMenuIsOpen() {
   const menu = editorCtxMenuEl();
   return !!menu && !menu.classList.contains("hidden");
@@ -133,30 +197,15 @@ function openEditorCtxMenu(x, y) {
     }
   }
   /* v2.109.0: the Format submenu starts closed on
-     every open, and its rows for the formats the
-     standing selection currently carries are marked
-     current, asked of the document the same moment
-     the Numbering marks are read. Clear Formatting
-     carries no state and is never marked. */
+     every open. v2.167: its rows' current marks are
+     read when the flyout itself opens (see
+     toggleEditorCtxFormatMenu below), the moment
+     the selection the marks describe stands in
+     front of the reader. */
   const fmtMenu = menu.querySelector(
     "#editorCtxFormatMenu");
   if (fmtMenu) {
     fmtMenu.classList.add("hidden");
-    const fmtStates = { bold: "bold",
-      italic: "italic", underline: "underline",
-      strike: "strikeThrough" };
-    fmtMenu.querySelectorAll("[data-format-cmd]")
-      .forEach(function (btn) {
-        const stateCmd = fmtStates[
-          btn.getAttribute("data-format-cmd")];
-        let on = false;
-        if (stateCmd) {
-          try {
-            on = !!document.queryCommandState(stateCmd);
-          } catch (e) { on = false; }
-        }
-        btn.classList.toggle("current", on);
-      });
   }
   menu.classList.remove("hidden");
   placeEditorCtxMenu(menu, x, y);
@@ -617,15 +666,11 @@ function wireEditorCtxMenu() {
       return;
     }
     if (btn.getAttribute("data-ctx-action") === "format") {
-      const sub = menu.querySelector(
-        "#editorCtxFormatMenu");
-      if (sub) { sub.classList.toggle("hidden"); }
-      const numSub = menu.querySelector(
-        "#editorCtxNumMenu");
-      if (numSub) { numSub.classList.add("hidden"); }
-      /* v2.166: the menu's size just changed in place;
-         its placement is re-judged at the new size. */
-      reclampEditorCtxMenu();
+      /* v2.167: the Format submenu is a flyout now:
+         it opens beside its item and no longer grows
+         the menu, so the v2.166 re-clamp has nothing
+         to re-judge here. */
+      toggleEditorCtxFormatMenu();
       return;
     }
     runEditorCtxAction(btn.getAttribute("data-ctx-action"));

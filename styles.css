@@ -3085,17 +3085,27 @@ body.dark #nbActionMenu.nb-context:hover::-webkit-scrollbar-thumb{
   margin-top:4px;padding-top:4px;
 }
 #editorCtxNumMenu.hidden{display:none;}
-/* v2.109.0: the Format submenu takes the same in
-   place dress as the Numbering style submenu: a
-   separated group under its parent item, opening in
-   place, its current rows marked by the shared
-   .current and .ctx-check rules below. */
+/* v2.167: the Format submenu is a pop out flyout
+   beside its item: the notebook menu's Add to Stack
+   flyout dress carried to the editor menu, a fixed
+   panel with the brown top border the app's floating
+   menus wear, placed by placeEditorCtxSubmenu in
+   app.js. Its rows keep the shared .current and
+   .ctx-check marking below, and its item carries the
+   submenu caret. */
+.editor-ctx-fmt-wrap{display:block;}
 #editorCtxFormatMenu{
+  position:fixed;z-index:70;min-width:180px;
   display:flex;flex-direction:column;gap:2px;
-  border-top:1px solid var(--border);
-  margin-top:4px;padding-top:4px;
+  background:var(--panel);border:1px solid var(--line);
+  border-top:3px solid var(--brown-500);
+  border-radius:12px;box-shadow:var(--shadow);
+  padding:6px;
 }
 #editorCtxFormatMenu.hidden{display:none;}
+#editorCtxMenu .att-menu-item.has-submenu::after{
+  content:"\203A";float:right;opacity:.6;font-weight:700;
+}
 #editorCtxMenu .ctx-check{
   visibility:hidden;display:inline-block;width:16px;
   color:var(--accent);font-weight:700;

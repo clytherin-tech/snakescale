@@ -44,7 +44,7 @@
   cache. There is no server and no shared database anywhere in this
   design.
 
-  BUILD STAMP: 2026-11-14-SSN-V21660
+  BUILD STAMP: 2026-11-14-SSN-V21670
   Version: 2.106.0
 
   Revision history:
@@ -7079,18 +7079,23 @@
                  checklist item): the basic formatting
                  tools on the menu's preserved selection,
                  the toolbar buttons' own commands,
-                 including Clear Formatting. It follows
-                 the Numbering style submenu's pattern:
-                 opens in place under its parent item,
-                 and a row whose format the selection
-                 currently carries is marked current. -->
-            <button class="att-menu-item" type="button" data-ctx-action="format">Format</button>
-            <div id="editorCtxFormatMenu" class="hidden">
-              <button class="att-menu-item" type="button" data-format-cmd="bold"><span class="ctx-check">&#10003;</span>Bold</button>
-              <button class="att-menu-item" type="button" data-format-cmd="italic"><span class="ctx-check">&#10003;</span>Italic</button>
-              <button class="att-menu-item" type="button" data-format-cmd="underline"><span class="ctx-check">&#10003;</span>Underline</button>
-              <button class="att-menu-item" type="button" data-format-cmd="strike"><span class="ctx-check">&#10003;</span>Strikethrough</button>
-              <button class="att-menu-item" type="button" data-format-cmd="clear"><span class="ctx-check">&#10003;</span>Clear Formatting</button>
+                 including Clear Formatting. v2.167: the
+                 submenu is a pop out flyout beside its
+                 item, wrapped the way the notebook menu
+                 wraps Add to Stack, instead of opening
+                 in place under its parent item; a row
+                 whose format the selection currently
+                 carries is marked current when the
+                 flyout opens. -->
+            <div class="editor-ctx-fmt-wrap">
+              <button class="att-menu-item has-submenu" type="button" data-ctx-action="format">Format</button>
+              <div id="editorCtxFormatMenu" class="hidden">
+                <button class="att-menu-item" type="button" data-format-cmd="bold"><span class="ctx-check">&#10003;</span>Bold</button>
+                <button class="att-menu-item" type="button" data-format-cmd="italic"><span class="ctx-check">&#10003;</span>Italic</button>
+                <button class="att-menu-item" type="button" data-format-cmd="underline"><span class="ctx-check">&#10003;</span>Underline</button>
+                <button class="att-menu-item" type="button" data-format-cmd="strike"><span class="ctx-check">&#10003;</span>Strikethrough</button>
+                <button class="att-menu-item" type="button" data-format-cmd="clear"><span class="ctx-check">&#10003;</span>Clear Formatting</button>
+              </div>
             </div>
             <!-- v2.101.0: the Numbering style item and
                  its submenu. The item stands only while

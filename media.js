@@ -5702,6 +5702,99 @@ function docApplyTickMemory(note, body) {
    the catalog's, which is where they live for this shape.
    Any failure throws to the caller (ensureNoteBodyLoaded),
    whose standing contract leaves the note a shell. */
+/* v2.167: the Table of Contents block's travelling
+   dress. The block itself is a derivation of the
+   note's headings (editor.js paints it from them at
+   render, at input, and at the save funnel's
+   canonical pass), so what crosses into the Doc is a
+   plain one-column table: the first row's cell reads
+   "Table of Contents" and each following row carries
+   one heading's text, in document order. Tables are
+   the Doc conversion's most reliable passenger, the
+   same reason the checklist's glyph column rides one,
+   and the rows are read off the headings at upload,
+   never off the block's standing paint, so a stale
+   block cannot write stale rows. On the way back,
+   docApplyTocTables recognizes exactly this shape
+   and rebuilds the bare block, which the render pass
+   then paints live from the headings. */
+function docTocTableHtml(holder) {
+  const entries = tocEntriesFrom(holder);
+  let rows = "<tr><td>Table of Contents</td></tr>";
+  entries.forEach(function (entry) {
+    rows += "<tr><td>" + escapeHtml(entry.text) +
+      "</td></tr>";
+  });
+  return "<table><tbody>" + rows + "</tbody></table>";
+}
+
+/* v2.167: the Table of Contents' way back. A table
+   standing at the body's top level whose every row
+   holds exactly one cell, whose first cell reads
+   "Table of Contents", and whose remaining cells are
+   exactly the body's own H1 to H3 heading texts in
+   order, is the block in its travelling dress: it is
+   replaced by a bare block, and renderEditor's
+   standing TOC pass paints the live entries back
+   onto it from the headings themselves. The match is
+   exact on purpose, the caution the tick memory
+   above keeps: a table Chris made himself, or one
+   whose rows no longer agree with the headings
+   because a heading was renamed inside Google Docs,
+   stands as the table it now is rather than being
+   swallowed into a block that would silently
+   rewrite it. */
+function docApplyTocTables(body) {
+  if (!body || body.indexOf("<table") < 0) {
+    return body;
+  }
+  const holder = document.createElement("div");
+  holder.innerHTML = body;
+  const headingTexts = [];
+  holder.querySelectorAll("h1, h2, h3")
+    .forEach(function (h) {
+      headingTexts.push(docTickItemText(h));
+    });
+  let swapped = false;
+  const tables = holder.querySelectorAll("table");
+  for (let i = 0; i < tables.length; i++) {
+    const table = tables[i];
+    if (table.parentElement !== holder) { continue; }
+    const rows = table.rows;
+    if (!rows || rows.length < 1) { continue; }
+    const cellTexts = [];
+    let oneCellEach = true;
+    for (let r = 0; r < rows.length; r++) {
+      if (rows[r].cells.length !== 1) {
+        oneCellEach = false;
+        break;
+      }
+      cellTexts.push(docTickItemText(rows[r].cells[0]));
+    }
+    if (!oneCellEach) { continue; }
+    if (cellTexts[0] !== "Table of Contents") {
+      continue;
+    }
+    if (cellTexts.length - 1 !== headingTexts.length) {
+      continue;
+    }
+    let agrees = true;
+    for (let k = 0; k < headingTexts.length; k++) {
+      if (cellTexts[k + 1] !== headingTexts[k]) {
+        agrees = false;
+        break;
+      }
+    }
+    if (!agrees) { continue; }
+    const block = document.createElement("div");
+    block.setAttribute("class", "ss-toc");
+    block.setAttribute("contenteditable", "false");
+    table.replaceWith(block);
+    swapped = true;
+  }
+  return swapped ? holder.innerHTML : body;
+}
+
 async function docLoadNoteBody(note) {
   const docId = sanitizeDocId(note.docId);
   if (!docId) {
@@ -5741,6 +5834,11 @@ async function docLoadNoteBody(note) {
   } else {
     note.body = docApplyTickMemory(note, note.body);
   }
+  /* v2.167: a Table of Contents block that crossed
+     as a table (see docTocTableHtml) is rebuilt as
+     the live block before the chip pass below
+     reads the body. */
+  note.body = docApplyTocTables(note.body);
   /* v2.134: links in the app's own chip forms are
      dressed back into pills, and re-formed event chips
      are enriched from the calendar (see the chips
@@ -6695,6 +6793,18 @@ async function docEnrichReformedEventChips(note) {
 async function docBuildUploadHtml(note) {
   const holder = document.createElement("div");
   holder.innerHTML = note.body || "";
+  /* v2.167: a Table of Contents block crosses as a
+     plain one-column table (see docTocTableHtml
+     below); the swap runs before every other pass
+     so the table is treated like any table the
+     note carries. */
+  const tocBlocks = holder.querySelectorAll(".ss-toc");
+  for (let ti = 0; ti < tocBlocks.length; ti++) {
+    const tocScratch = document.createElement("div");
+    tocScratch.innerHTML = docTocTableHtml(holder);
+    tocBlocks[ti].replaceWith(
+      tocScratch.firstElementChild);
+  }
   const figures = holder.querySelectorAll(
     "figure.ss-attachment, div.ss-attachment");
   for (let i = 0; i < figures.length; i++) {
