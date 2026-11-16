@@ -294,36 +294,59 @@ function syncTasksPane() {
   }
 }
 
-/* v2.152: the view a committed search interrupted
-   (the Tasks view, in either of its modes, or the
-   Email view), or null while no search stands
-   between the user and where they were. Those
-   views park the list pane (syncTasksPane above),
-   so a search committed there rendered its
-   results into a pane nobody could see; the
-   search now lands on its results the way a
-   search from Home has since v2.33, and clearing
-   the search resumes the interrupted view. The
-   resume fires only while the results landing
-   (All Notes) still stands, so a user who
-   navigated away on purpose mid search is never
-   yanked back. Home keeps its standing one way
-   landing and never stands here. */
+/* v2.152: the view a committed search interrupted,
+   or null while no search stands between the user
+   and where they were. Views that park the list
+   pane (Tasks, Email) rendered a search's results
+   into a pane nobody could see, so the search
+   landed on its results the way a search from Home
+   has since v2.33, and clearing the search resumed
+   the interrupted view. The resume fires only
+   while the results landing (All Notes) still
+   stands, so a user who navigated away on purpose
+   mid search is never yanked back. Home keeps its
+   standing one way landing and never stands here.
+   v2.176: the landing is the search's own, from
+   every live view. Through v2.175 the results were
+   pooled by whichever view stood when they
+   rendered (visibleNotes pools the view first), so
+   a search inside a notebook, a tag, Pinned, or
+   Reminders presented only that view's matches and
+   the rest waited behind a click on All Notes:
+   Chris's Gratz search, run from the Email tab on
+   November 16, 2026, showed him part of his
+   results, and the missing ones were the ones the
+   standing view did not pool. The landing now
+   fires from every live view through the one
+   function below, and the interrupted view (a
+   notebook, a tag, Pinned, Reminders, Tasks, or
+   Email) is remembered for the resume on clear,
+   Home's one way landing excepted, as it has
+   always been. Trash and Archive stand outside
+   the landing by design: a search there forages
+   that collection only, as it always has. And a
+   memory whose search was cleared away from the
+   landing is dropped, never resumed by a later
+   search's clear (see resumeSearchReturnView). */
 let searchReturnView = null;
 
-/* Land on the standing search's results from a
-   full main area view, remembering it. Returns
-   true when it landed (the caller then stops);
-   from a notes list the results already stand,
-   and it returns false. */
+/* Land on the standing search's results, from
+   any live view, remembering the view it
+   interrupted. Returns true when it landed (the
+   caller then stops); while the results already
+   stand (the All Notes view), and in Trash and
+   the Archive, whose searches are their own, it
+   returns false and the caller re-renders the
+   list where it stands. */
 function presentSearchFromCurrentView() {
   if (!state.search) { return false; }
-  if (state.view.kind !== "tasks" &&
-      state.view.kind !== "email") {
+  const kind = state.view.kind;
+  if (kind === "all" || kind === "trash" ||
+      kind === "archive") {
     return false;
   }
-  if (!searchReturnView) {
-    searchReturnView = { kind: state.view.kind,
+  if (kind !== "home" && !searchReturnView) {
+    searchReturnView = { kind: kind,
       value: state.view.value || null };
   }
   state.view = { kind: "all", value: null };
@@ -334,10 +357,19 @@ function presentSearchFromCurrentView() {
 
 /* Resume the view a search interrupted, on the
    search's clearing. Returns true when it
-   resumed. */
+   resumed. v2.176: a memory whose search was
+   cleared while the results landing did not stand
+   (the user navigated away on purpose mid search
+   and cleared the box there) is dropped, so no
+   later search's clear can resume a view that
+   search never interrupted: the never yanked
+   back rule, kept whole. */
 function resumeSearchReturnView() {
   if (!searchReturnView) { return false; }
-  if (state.view.kind !== "all") { return false; }
+  if (state.view.kind !== "all") {
+    searchReturnView = null;
+    return false;
+  }
   state.view = searchReturnView;
   searchReturnView = null;
   renderAll();
@@ -5968,6 +6000,184 @@ function visibleNotes() {
   return list;
 }
 
+/* --------------------------------------------------------------------------
+   v2.176: the search body fill. A shell note (bodyLoaded
+   false) is searched by its catalog preview alone (see
+   noteListText in tasks.js), so a word that stands only
+   in its body matches nothing: on a device that has not
+   opened the note, part of the library is invisible to
+   search. While a search stands, this fill fetches the
+   standing pool's shell bodies in the background,
+   through ensureNoteBodyLoaded (the one body loader:
+   its freshness adoption, its shared in flight fetches,
+   and the editor's guards all judge as they do for any
+   caller), paced on the pending deletions table
+   (PENDING_DELETE_TIMING: a 400 ms floor between fetch
+   starts, a breather across a long queue, quota answers
+   backed off and the pass stood down when they outlast
+   the bounded waits). Each landed body is judged under
+   the query standing at its landing: only a verdict
+   that changed repaints, and only under that same
+   query, so a body that lands after the query moved
+   joins the library silently (its cost is paid once
+   per note per device: a fetched body persists in the
+   device cache) and never repaints a stale result set.
+   The pass stands down when no search stands, when
+   the store goes away, or when quota outlasts the
+   waits; the next list render with a search standing
+   kicks it again. A shell is attempted once per
+   standing query, so a note whose fetch keeps failing
+   cannot spin the fill. */
+let searchFillRunning = false;
+let searchFillAttemptedQ = null;
+const searchFillAttempted = Object.create(null);
+let searchFillLastStart = 0;
+let searchFillSinceBreather = 0;
+
+/* The pool the standing search judges, the same
+   choice visibleNotes makes: the Trash and the
+   Archive search their own collections, every live
+   view searches the live library. */
+function searchFillPool() {
+  if (state.view.kind === "trash") {
+    return { key: "trash", notes: state.trash };
+  }
+  if (state.view.kind === "archive") {
+    return { key: "archive", notes: state.archive };
+  }
+  return { key: "live", notes: state.notes };
+}
+
+/* One note against a search, judged the way
+   visibleNotes judges it: the grammar path for a
+   query carrying syntax, the plain matcher for a
+   plain one. */
+function searchFillMatches(note, q) {
+  const parsed = parseSearchQuery(q);
+  if (parsed) { return noteMatchesParsedSearch(note, parsed); }
+  return noteMatchesPlainSearch(note, q);
+}
+
+/* The paced gate, the pending deletions drain's own
+   shape on the same timing table: a floor between
+   fetch starts and a breather across a long queue. */
+async function searchFillPace() {
+  const timing = PENDING_DELETE_TIMING;
+  if (searchFillSinceBreather >= timing.breatherEvery) {
+    searchFillSinceBreather = 0;
+    await new Promise(function (resolve) {
+      setTimeout(resolve, timing.breatherMs);
+    });
+  }
+  const waitMs = timing.paceMs -
+    (Date.now() - searchFillLastStart);
+  if (searchFillLastStart > 0 && waitMs > 0) {
+    await new Promise(function (resolve) {
+      setTimeout(resolve, waitMs);
+    });
+  }
+  searchFillLastStart = Date.now();
+  searchFillSinceBreather += 1;
+}
+
+function kickSearchBodyFill() {
+  if (!state.search) {
+    /* No search stands: the next search starts with
+       a clean attempt ledger. */
+    searchFillAttemptedQ = null;
+    Object.keys(searchFillAttempted).forEach(function (id) {
+      delete searchFillAttempted[id];
+    });
+    return;
+  }
+  if (searchFillRunning) { return; }
+  if (searchFillAttemptedQ !== state.search) {
+    searchFillAttemptedQ = state.search;
+    Object.keys(searchFillAttempted).forEach(function (id) {
+      delete searchFillAttempted[id];
+    });
+  }
+  const pool = searchFillPool();
+  const owed = pool.notes.some(function (n) {
+    return n.bodyLoaded === false &&
+      !searchFillAttempted[n.id];
+  });
+  if (!owed) { return; }
+  searchFillRunning = true;
+  runSearchBodyFill().then(function () {
+    searchFillRunning = false;
+  }, function () {
+    searchFillRunning = false;
+  });
+}
+
+/* One pass over the standing pool's shells, in pool
+   order. The evidence is re-judged at every step:
+   the query standing NOW governs each fetch's
+   verdict pair, a cleared query ends the pass, and
+   each note is resolved fresh from the pool, so a
+   note a sync replaced or removed mid pass is
+   simply skipped. */
+async function runSearchBodyFill() {
+  const timing = PENDING_DELETE_TIMING;
+  let quotaWaits = 0;
+  let poolKey = null;
+  let queue = [];
+  for (;;) {
+    const q = state.search;
+    if (!q) { return; }
+    if (!state.online || !state.repoExists) { return; }
+    const pool = searchFillPool();
+    if (pool.key !== poolKey || !queue.length) {
+      poolKey = pool.key;
+      queue = pool.notes.filter(function (n) {
+        return n.bodyLoaded === false &&
+          !searchFillAttempted[n.id];
+      }).map(function (n) { return n.id; });
+      if (!queue.length) { return; }
+    }
+    const id = queue.shift();
+    const note = pool.notes.find(function (n) {
+      return n.id === id;
+    });
+    if (!note || note.bodyLoaded !== false) { continue; }
+    searchFillAttempted[id] = true;
+    const matchedBefore = searchFillMatches(note, q);
+    await searchFillPace();
+    /* The pace may have outlived the search or the
+       store; a fetch owed to a standing search is
+       still owed if the query merely changed (its
+       body joins the library either way), so only a
+       cleared search or a gone store stands down
+       here, before the fetch fires. */
+    if (!state.search || !state.repoExists) { return; }
+    await ensureNoteBodyLoaded(note);
+    if (note.bodyLoaded === false) {
+      if (orphanDeleteIsQuotaError(note.bodyLoadError)) {
+        quotaWaits += 1;
+        if (quotaWaits > timing.maxQuotaWaits) { return; }
+        const step = timing.backoffStepsMs[Math.min(
+          quotaWaits - 1, timing.backoffStepsMs.length - 1)];
+        await new Promise(function (resolve) {
+          setTimeout(resolve,
+            Math.min(step, timing.backoffCapMs));
+        });
+      }
+      continue;
+    }
+    quotaWaits = 0;
+    /* Repaint only under the query the fetch was
+       judged with, and only when the landed body
+       changed the note's verdict under it: the
+       results on screen are always the standing
+       query's own. */
+    if (state.search === q &&
+        searchFillMatches(note, q) !== matchedBefore) {
+      renderNoteList();
+    }
+  }
+}
+
 function viewTitle() {
   if (state.view.kind === "home") { return "Home"; }
   if (state.view.kind === "tasks") { return "Tasks"; }
@@ -6161,6 +6371,10 @@ function renderNoteList() {
     renderTasksView();
     return;
   }
+  /* v2.176: while a search stands, its shell bodies
+     fill in behind the results (see the search body
+     fill section below visibleNotes). */
+  kickSearchBodyFill();
   const list = visibleNotes();
   document.getElementById("listTitle").textContent = viewTitle();
   document.getElementById("listSub").textContent =

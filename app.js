@@ -1662,20 +1662,15 @@ function wireEvents() {
          note's and the reading pane's; the lists
          repaint from the standing render). */
       searchHitsOnSearchChange();
-      /* v2.33: a search typed while Home is showing lands
-         on its results, the way Evernote leaves Home for
-         a search; from any other view only the list
-         re-renders, as always. */
-      if (state.view.kind === "home" && state.search) {
-        state.view = { kind: "all", value: null };
-        renderAll();
-        setMobileView("list");
-        return;
-      }
-      /* v2.152: from the Tasks (Calendar) or Email
-         view the same landing, through the shared
-         presentation, and a cleared search
-         resumes the view the search interrupted. */
+      /* v2.176: a standing search lands on its
+         results from every live view, through the
+         one shared presentation (the v2.33 Home
+         landing and the v2.152 Tasks and Email
+         landing are its ancestors; the notebook,
+         tag, Pinned, and Reminders views searched
+         only their own pools until this build), and
+         a cleared search resumes the view the
+         search interrupted. */
       if (state.search && presentSearchFromCurrentView()) {
         return;
       }
@@ -1702,6 +1697,31 @@ function wireEvents() {
       if (panel && !panel.classList.contains("hidden")) {
         renderSavedSearchPanel();
       }
+    });
+  /* v2.176: Enter in the search bar brings the
+     standing search's results back, from wherever
+     the user has wandered (another view, the Email
+     view, an open note): the results are always one
+     Enter away. The query is judged as it stands in
+     the box, so words typed faster than the input
+     debounce are honored; an empty box does
+     nothing, and the browser's own Enter behavior
+     in the field is prevented. */
+  document.getElementById("searchInput").addEventListener("keydown",
+    function (ev) {
+      if (ev.key !== "Enter") { return; }
+      ev.preventDefault();
+      const q = ev.target.value.trim().toLowerCase();
+      if (!q) { return; }
+      if (state.search !== q) {
+        state.search = q;
+        searchHitsOnSearchChange();
+      }
+      closeSavedSearchPanel();
+      if (!presentSearchFromCurrentView()) {
+        renderNoteList();
+      }
+      setMobileView("list");
     });
   /* v2.32: the panel and its menu close on a click outside
      the search wrap, and on Escape, the closers the other

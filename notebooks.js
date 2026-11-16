@@ -2980,12 +2980,10 @@ function runSavedSearch(entry) {
      (Calendar) or Email view, the results land the
      same way, through the typed search's own
      presentation, and the interrupted view resumes
-     when the search clears; from a notes list,
-     nothing changes. */
-  if (state.view.kind === "home") {
-    state.view = { kind: "all", value: null };
-    renderAll();
-  } else if (!presentSearchFromCurrentView()) {
+     when the search clears. v2.176: the landing is
+     the one shared presentation, from every live
+     view, exactly as if the search had been typed. */
+  if (!presentSearchFromCurrentView()) {
     renderNoteList();
   }
   setMobileView("list");
