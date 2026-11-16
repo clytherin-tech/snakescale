@@ -9372,6 +9372,16 @@ async function connectAndLoad() {
      the seeding decision reads the store itself before any
      cached state is painted. */
   bootMark("signInReady");
+  /* v2.174: a boot standing signed in with no account
+     name held (memory and the device cache both empty:
+     a first run of this build on an existing device, a
+     cleared cache) asks the Worker for the name here,
+     once the sign in has settled, instead of waiting
+     for a token landing that a live stored token never
+     brings. Best effort, like every name read: the
+     answer repaints Home if Home stands open by then
+     (see workerFetchAccountName in media.js). */
+  if (!accountFirstName()) { workerFetchAccountName(); }
 
   /* v2.0: Google is the only attachment provider. Settings written
      by an older build may still carry another value in this field;
@@ -9437,17 +9447,55 @@ async function connectAndLoad() {
        has, so the landing applies only when this boot
        did not seed. */
     if (!starter) { applyStartView(); }
+    /* v2.174: the resume hold. When this device holds a
+       resume record and no arrival outranks it (the
+       judgment is resumeHoldStands, in render.js, the
+       pass's own arrival rules), the boot does not paint
+       the landing at the cache paint and then jump: the
+       loading face stays up until the resume judgment
+       has run, and the reveal lands on the note, or on
+       the landing when the record resolves to nothing.
+       Through v2.173 the cache paint presented Home for
+       the whole sync and the pass jumped afterward,
+       which read in the field as resume not working. A
+       first run's starter never holds, and neither does
+       any arrival boot. */
+    const resumeHold = !starter && resumeHoldStands();
     const paintedFromCache = await loadCacheWithKey();
+    /* v2.174: the early landing. When the cache just
+       adopted already holds the remembered note with
+       its body, the note opens from that copy here,
+       ahead of the sync (resumeFromCachePaint, in
+       render.js): no fetch stands between the cache and
+       the paint, and the sync below reconciles behind
+       the open note through the standing machinery that
+       judges any note opened at the cache paint, its
+       freshness adoption and refill rules unchanged, so
+       a store copy that has moved past the cached body
+       is completed and refilled the standing way, never
+       adopted from the cache as final. A note the cache
+       holds only as a shell, or not at all, leaves the
+       landing to the pass after the sync. */
+    let resumeEarly = false;
     if (paintedFromCache) {
-      renderAll();
+      if (resumeHold) {
+        resumeEarly = resumeFromCachePaint();
+      }
+      if (!resumeHold && !resumeEarly) { renderAll(); }
       bootMark("cachePainted");
     } else {
       bootCacheSkipped();
     }
-    showScreen("app");
-    if (paintedFromCache) {
+    if (resumeEarly) {
+      showScreen("app");
       bootMark("firstPaint");
       hideLoading();
+    } else if (!resumeHold) {
+      showScreen("app");
+      if (paintedFromCache) {
+        bootMark("firstPaint");
+        hideLoading();
+      }
     }
     await syncNow(false);
     bootMark("synced");
@@ -9456,18 +9504,60 @@ async function connectAndLoad() {
        this moment and starts polling (when the setting is on).
        Changes from before this boot are already in hand. */
     startAutoSync();
-    if (!paintedFromCache) { bootMark("firstPaint"); }
-    hideLoading();
-    finalizeBootReport();
-    /* v2.172: the store is loaded and the standing
-       startup has settled here, so the resume pass
-       runs (render.js): a plain launch returns to the
-       note this device last had open. It stands ahead
-       of the held web clip's filing on purpose: the
-       pass reads a held clip as an arrival and stands
-       down, so the clip opens over the landing exactly
-       as it always has. */
-    maybeResumeLastNote();
+    if (!resumeHold) {
+      if (!paintedFromCache) { bootMark("firstPaint"); }
+      hideLoading();
+      finalizeBootReport();
+      /* v2.172: the store is loaded and the standing
+         startup has settled here, so the resume pass
+         runs (render.js): a plain launch returns to the
+         note this device last had open. It stands ahead
+         of the held web clip's filing on purpose: the
+         pass reads a held clip as an arrival and stands
+         down, so the clip opens over the landing exactly
+         as it always has. An early landing above already
+         spent the pass, so it does not run again. */
+      if (!resumeEarly) { maybeResumeLastNote(); }
+    } else if (!resumeEarly) {
+      /* The hold releases: the pass runs first, then the
+         reveal lands on whatever it left standing (the
+         resumed note, rendered by its open, or the
+         landing, painted now from the synced library),
+         and the boot report freezes after the reveal, so
+         its first paint mark names the moment the reader
+         actually saw the destination. */
+      maybeResumeLastNote();
+      if (!state.selectedId) { renderAll(); }
+      showScreen("app");
+      bootMark("firstPaint");
+      hideLoading();
+      finalizeBootReport();
+    } else {
+      /* The early landing opened its note from the
+         device cache before this sync; the synced
+         library is the final word on whether that
+         note still stands live. A note the store has
+         since trashed, archived, or dropped reads as
+         no memory, exactly as the pass itself judges
+         it: the landing closes the standing way (the
+         open id clears, as a trash move of the open
+         note clears it), the record clears, the start
+         view re-applies, and the landing paints in
+         its place, the boot standing exactly as it
+         would have had the pass found nothing. A
+         note still live stands untouched: the common
+         case pays nothing for the check. */
+      const landedNote = state.notes.find(function (n) {
+        return n.id === state.selectedId;
+      });
+      if (state.selectedId && !landedNote) {
+        state.selectedId = null;
+        clearResumeMemory();
+        applyStartView();
+        renderAll();
+      }
+      finalizeBootReport();
+    }
     /* v2.47: the store is loaded and signed in here, so a
        web clip held from this boot's fragment files now,
        before any starter note opens over it. A clip whose

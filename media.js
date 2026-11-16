@@ -463,14 +463,51 @@ function renderWorkerAccountLine() {
   }
 }
 
+/* v2.174: the account name's device cache. The name a
+   /me read lands is kept on this device (localStorage,
+   the resume record's pattern: never synced, standing
+   in no catalog, cache snapshot, or Drive file), so a
+   returning boot can greet by name from Home's first
+   paint. Through v2.173 the name stood in memory only
+   and the read ran only when a fresh token landed; on
+   the ordinary returning boot the stored token is
+   still live, no token lands, the read never ran, and
+   the greeting stood plain for the whole session,
+   which is the field report this build answers. A
+   refused store reads as no cache, silently. */
+function readCachedAccountName() {
+  try {
+    return String(
+      localStorage.getItem(LS_ACCOUNT_NAME) || "");
+  } catch (e) { return ""; }
+}
+
+function cacheAccountName(name) {
+  try {
+    if (name) {
+      localStorage.setItem(LS_ACCOUNT_NAME, name);
+    }
+  } catch (e) {
+    /* A refused store degrades to no cache, silently. */
+  }
+}
+
+function clearCachedAccountName() {
+  try { localStorage.removeItem(LS_ACCOUNT_NAME); }
+  catch (e) { /* nothing stands to clear in a refused store */ }
+}
+
 /* v2.171: the signed in account's first name, for the
    Home greeting: the first word of the display name
    the Worker's /me answer carries, or "" when no name
    is known (signed out, an older Worker, a failed
    read), in which case the greeting stands plain,
-   exactly as it did before. */
+   exactly as it did before. v2.174: the name held in
+   memory wins; the device cache answers when memory
+   holds none (a cold boot before any read has run). */
 function accountFirstName() {
-  const full = String(workerAccountName || "").trim();
+  const full = String(
+    workerAccountName || readCachedAccountName() || "").trim();
   if (!full) { return ""; }
   return full.split(/\s+/)[0];
 }
@@ -480,9 +517,13 @@ function accountFirstName() {
    /token route's email comes from (see
    renderWorkerAccountLine). Best effort and silent:
    any failure leaves the name as it stands, and
-   nothing waits on it. It runs whenever a token
-   lands, so the name is there before Home first
-   paints in the ordinary connect flow; when it lands
+   nothing waits on it. It runs whenever a token lands
+   and, since v2.174, once more from the boot when the
+   sign in stands live and no name is held (see
+   connectAndLoad), because a returning boot whose
+   stored token is still live lands no token at all.
+   A name that lands is cached on the device (see
+   readCachedAccountName above), and when it lands
    while Home stands open, Home repaints so the
    greeting picks it up. */
 async function workerFetchAccountName() {
@@ -499,6 +540,7 @@ async function workerFetchAccountName() {
   try { data = await res.json(); } catch (e) { data = null; }
   if (!data || !data.name) { return; }
   workerAccountName = String(data.name);
+  cacheAccountName(workerAccountName);
   if (state.view && state.view.kind === "home") {
     renderHome();
   }

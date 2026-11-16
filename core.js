@@ -207,6 +207,13 @@ const LS_EDITOR_VIEW = "snakescale.editorView.v1";   // v2.72: per note editor v
    its scroll place, this device only, never synced (see the
    resume section in render.js). */
 const LS_RESUME = "snakescale.resume.v1";
+/* v2.174: the signed in account's display name, cached on
+   this device only (never synced), so the Home greeting
+   can carry it from the first paint of a cold boot
+   instead of waiting for a token landing that a live
+   stored token never brings (see the account name
+   block in media.js). */
+const LS_ACCOUNT_NAME = "snakescale.accountName.v1";
 /* The device key. This random AES-GCM key is kept on this device so
    it can encrypt the Google token store and the local note cache at
    rest across reloads. It is not a credential and it is not a login:
@@ -1302,6 +1309,10 @@ async function signOut() {
   workerReauthNeeded = false;
   workerAccountEmail = "";
   workerAccountName = "";
+  /* v2.174: the device cached account name goes with
+     them (see media.js); the next sign in on this
+     device starts nameless, as a fresh device does. */
+  clearCachedAccountName();
 
   state.sessionKey = null;
   state.providerTokens = { google: null };

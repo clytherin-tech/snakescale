@@ -6648,6 +6648,25 @@ function recalledEditorViewState(noteId) {
    refusal (a private window) degrades to no resume,
    silently, the way the update reload's guard treats
    its own refused record.
+
+   v2.174: the landing no longer stops at Home on its
+   way, and it no longer waits for the whole sync
+   when the device already holds what it needs.
+   Chris's field verdict on v2.172 was that resume
+   worked but Home stood painted for seconds first
+   and read as broken. So a boot holding a record
+   (and no arrival) now holds its reveal behind the
+   loading face until the resume judgment has run
+   (the hold, judged in connectAndLoad through
+   resumeHoldStands below), and when the cache the
+   boot just adopted already holds the remembered
+   note with its body, the note opens from that copy
+   at the cache paint, ahead of the sync, which
+   reconciles behind it through the standing
+   machinery (resumeFromCachePaint below). The
+   pass after the sync keeps every case the early
+   landing cannot stand: no cache, a shell in the
+   cache, a note the cache never held.
    -------------------------------------------------------------------------- */
 let resumeBootArrival = false;
 let resumePassDone = false;
@@ -6759,20 +6778,76 @@ function applyResumeScroll(note, s) {
    Resume adds no error surface of its own: a body
    load that fails lands on the standing could not
    load face, exactly as a manual open produces. */
-function maybeResumeLastNote() {
-  if (resumePassDone) { return; }
-  resumePassDone = true;
-  if (!state.repoExists) { return; }
+/* v2.174: does an arrival outrank resume on this boot?
+   The pass's standing judgment, shared with the boot's
+   hold and early landing below: an arrival any boot
+   reader lifted, an arrival still standing in the
+   pending holders or in this page's own URL (the boot
+   readers never strip the query), or a held web clip
+   yet to file. */
+function resumeArrivalStands() {
   if (resumeBootArrival || pendingTaskOpenId ||
       pendingNoteReminderOpenId || pendingWebClip) {
-    return;
+    return true;
   }
   try {
     const params = new URLSearchParams(window.location.search);
     if (params.get("task") || params.get("noteReminder")) {
-      return;
+      return true;
     }
   } catch (err) { /* no query stands to read */ }
+  return false;
+}
+
+/* v2.174: should this boot hold its reveal for the
+   resume judgment? A record stands on this device and
+   no arrival outranks it. connectAndLoad reads the
+   record's existence here, synchronously, ahead of the
+   cache paint, which is what makes the hold possible;
+   what the record names is judged later, by the early
+   landing and the pass. */
+function resumeHoldStands() {
+  if (resumeArrivalStands()) { return false; }
+  return !!readResumeMemory();
+}
+
+/* v2.174: the early landing, run from connectAndLoad at
+   the cache paint: when the library the cache just
+   adopted already holds the remembered note with its
+   body, open it from that copy now, ahead of the boot
+   sync, and spend the pass. The open is the standing
+   openNote, so the editor, the scroll restore, and the
+   record's own upkeep behave exactly as the pass's open
+   does; the sync that follows reconciles behind the
+   open note through the standing machinery (the load's
+   freshness adoption judges the cached body against
+   the store's tokens, and a body the store has moved
+   past is completed and refilled the standing way,
+   never adopted from the cache as final). Answers
+   false, spending nothing, when the cache holds the
+   note only as a shell or not at all: the pass after
+   the sync owns those landings, as it always has. */
+function resumeFromCachePaint() {
+  if (resumePassDone) { return false; }
+  if (resumeArrivalStands()) { return false; }
+  if (state.selectedId) { return false; }
+  const mem = readResumeMemory();
+  if (!mem) { return false; }
+  const note = state.notes.find(function (n) {
+    return n.id === mem.id;
+  });
+  if (!note || note.bodyLoaded === false) { return false; }
+  resumePassDone = true;
+  openNote(note.id);
+  applyResumeScroll(note, mem.s);
+  return true;
+}
+
+function maybeResumeLastNote() {
+  if (resumePassDone) { return; }
+  resumePassDone = true;
+  if (!state.repoExists) { return; }
+  if (resumeArrivalStands()) { return; }
   if (state.selectedId) { return; }
   const mem = readResumeMemory();
   if (!mem) { return; }
