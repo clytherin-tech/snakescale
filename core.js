@@ -214,6 +214,15 @@ const LS_RESUME = "snakescale.resume.v1";
    stored token never brings (see the account name
    block in media.js). */
 const LS_ACCOUNT_NAME = "snakescale.accountName.v1";
+/* v2.175: the pending deletions record: the storage
+   files a confirmed Empty Trash or Delete Selected
+   still owes Google Drive, kept on this device only
+   (never synced), so the notes can leave the list at
+   confirm time and the deletions can finish in the
+   background, across an app close if it comes to
+   that (see the pending deletions section in
+   render.js). */
+const LS_PENDING_DELETES = "snakescale.pendingDeletes.v1";
 /* The device key. This random AES-GCM key is kept on this device so
    it can encrypt the Google token store and the local note cache at
    rest across reloads. It is not a credential and it is not a login:

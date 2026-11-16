@@ -9564,6 +9564,14 @@ async function connectAndLoad() {
        filing fails keeps the create flow's own wording;
        the held payload is spent either way, so it can
        never file twice. */
+    /* v2.175: the store stands ready here, so a pending
+       deletions record this device still owes (an Empty
+       Trash whose drain an app close interrupted)
+       resumes: fire and forget, the boot never waits on
+       it, and the drain paces itself against the same
+       Drive budget as everything else (see the pending
+       deletions section in render.js). */
+    kickPendingDeleteDrain();
     await filePendingWebClip();
     if (starter) {
       openNote(starter.id);

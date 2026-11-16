@@ -1834,6 +1834,13 @@ async function reconcileCatalogListings(catalog, listings) {
   });
   const seenIds = Object.create(null);
   const out = { notes: [], trash: [], archive: [] };
+  /* v2.175: the note ids this device's pending
+     deletions record still owes storage deletions
+     for (see the pending deletions section in
+     render.js): no load on this device ever takes
+     one back into state, however its file still
+     stands in the store. */
+  const pendingIds = pendingDeleteIds();
 
   /* v2.132: the Doc claims. A catalog entry that stands
      Doc-backed claims its note id against the file pass:
@@ -1901,6 +1908,9 @@ async function reconcileCatalogListings(catalog, listings) {
     for (const entry of (entries || [])) {
       if (entry.isDir || !/\.md$/i.test(entry.name)) { continue; }
       const fallbackId = entry.name.replace(/\.md$/i, "");
+      /* v2.175: a pending deletion's file is never
+         taken back (see pendingIds above). */
+      if (pendingIds[fallbackId]) { continue; }
       /* v2.132: a Doc-claimed id's .md is the note's
          frozen fallback, not the note (see the claim
          set above): skip it whole and let the Doc pass
@@ -2011,6 +2021,9 @@ async function reconcileCatalogListings(catalog, listings) {
   const docLiveTokens = docLiveTokenMap(listings);
   (catalog.entries || []).forEach(function (entry) {
     if (!entry || entry.backend !== "doc") { return; }
+    /* v2.175: a pending deletion's Doc entry is
+       never rebuilt into state either. */
+    if (pendingIds[entry.id]) { return; }
     if (!sanitizeDocId(entry.docId)) { return; }
     if (seenIds[entry.id]) { return; }
     seenIds[entry.id] = true;
@@ -2144,11 +2157,18 @@ function classicDocClaimed(collection, slug, id) {
    about which files exist. */
 async function loadListingsClassic(listings) {
   const out = { notes: [], trash: [], archive: [] };
+  /* v2.175: pending deletions are never rebuilt
+     into state on this device (see
+     reconcileCatalogListings). */
+  const pendingIds = pendingDeleteIds();
   for (const nb of state.notebooks) {
     const entries = listings.notebooks[nb.slug];
     for (const entry of (entries || [])) {
       if (entry.isDir || !/\.md$/i.test(entry.name)) { continue; }
       const fallbackId = entry.name.replace(/\.md$/i, "");
+      /* v2.175: a pending deletion's file is never
+         rebuilt into state. */
+      if (pendingIds[fallbackId]) { continue; }
       /* v2.132: a Doc-claimed id's file is its frozen
          fallback, not the note (see classicDocClaimed). */
       if (classicDocClaimed("notebook", nb.slug, fallbackId)) {
@@ -2168,6 +2188,9 @@ async function loadListingsClassic(listings) {
   for (const entry of (trashEntries || [])) {
     if (entry.isDir || !/\.md$/i.test(entry.name)) { continue; }
     const fallbackId = entry.name.replace(/\.md$/i, "");
+    /* v2.175: a pending deletion's file is never
+       rebuilt into state. */
+    if (pendingIds[fallbackId]) { continue; }
     if (classicDocClaimed("trash", null, fallbackId)) {
       continue;
     }
@@ -2187,6 +2210,9 @@ async function loadListingsClassic(listings) {
   for (const entry of (archiveEntries || [])) {
     if (entry.isDir || !/\.md$/i.test(entry.name)) { continue; }
     const fallbackId = entry.name.replace(/\.md$/i, "");
+    /* v2.175: a pending deletion's file is never
+       rebuilt into state. */
+    if (pendingIds[fallbackId]) { continue; }
     if (classicDocClaimed("archive", null, fallbackId)) {
       continue;
     }
@@ -2312,6 +2338,9 @@ function mergeCatalogDocShells(loaded) {
       });
     });
   lastCatalogDocEntries.forEach(function (stashed) {
+    /* v2.175: a pending deletion's stashed Doc entry
+       is never merged back into state. */
+    if (pendingDeleteIds()[stashed.entry.id]) { return; }
     const found = have[stashed.entry.id];
     if (found && isDocBackedNote(found.note)) { return; }
     const shell = noteFromCatalogEntry(stashed.entry,

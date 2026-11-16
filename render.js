@@ -4343,30 +4343,483 @@ function nativeMenuTargetKeepsMenu(target) {
   return !!target.closest('[contenteditable="true"]');
 }
 
-/* Permanently delete several trashed notes, one at a time. Each
-   note goes through exactly what the editor's Delete Forever
-   button does for a single note: a best effort cleanup of its
-   cloud attachment files first, then deleteNoteForever (the per
-   note operation chain, the store delete, the offline queue when
-   disconnected). Files the app cannot reach are collected and
-   returned, so the caller can name them in the same warning the
-   single delete shows. Sequential, so storage sees the deletes in
-   the order the notes were listed. */
-async function deleteNotesForever(notes) {
+/* --------------------------------------------------------------------------
+   v2.175: pending deletions. Through v2.174, Empty Trash
+   and Delete Selected ran their storage deletions inline,
+   one note at a time (deleteNotesForever awaiting each
+   note's attachments and file deletes in turn), so the
+   Trash list drained one note per Drive round trip and
+   the completion toast waited for the whole drain:
+   Chris's field report of November 16, 2026. Now the
+   notes leave the list and the catalog the moment the
+   user confirms, and the storage deletions finish in
+   the background from a queue this device remembers.
+
+   The record (LS_PENDING_DELETES in core.js; this
+   device only, never synced, standing in no catalog,
+   cache snapshot, or Drive file; every read and write
+   try/catch wrapped and silent, the resume record's
+   pattern):
+
+     { v: 1, notes: [ { id, title, files: [...] } ] }
+
+   One entry per note, holding the storage still owed
+   for it, in the order the standing flow works it:
+     { k: "att", provider, fileId, name }
+         an attachment file, removed through its
+         provider's trash (the v2.66 split: attachments
+         land in Drive trash, recoverable; the note's
+         own files delete for good)
+     { k: "note", path }
+         the note file, hard deleted through the store
+     { k: "history", path }
+         the note's version history file, hard deleted
+         through the store
+     { k: "doc", fileId }
+         the Google Doc of a note that still stood
+         Doc-backed when it was confirmed (a trash or
+         archive catalog entry can stand Doc-backed as
+         a shell; the inline flow's store delete never
+         reached that Doc, and the drain takes it too)
+   An entry leaves the record as its deletion lands, a
+   note's entry leaves when its files are gone, and
+   the record itself is removed when nothing is owed.
+
+   The confirm time ordering is the contract (see
+   deleteNotesForever below): the record is persisted
+   FIRST, then the notes leave state and the catalog
+   write dropping them lands, and only then do the
+   render and the caller's toast move. The record
+   standing first is also what keeps a reload honest:
+   every store load skips a file whose note id stands
+   in the record (the load filters in tasks.js), so a
+   note whose file still stands in Drive while its
+   deletion is owed can never reappear in a list on
+   this device. If the catalog write does not land,
+   the confirm rolls back instead: the notes return
+   to their lists, the record gives back the entries
+   it just took, and the failure surfaces through the
+   caller's error path in place of the success toast.
+
+   The drain (runPendingDeleteDrain) works the record
+   in the background, one storage call at a time,
+   paced on the orphan Delete All's values
+   (PENDING_DELETE_TIMING: a 400 ms floor between call
+   starts, a 10 second breather after every 100 calls,
+   quota answers backed off 15, 30, then 60 seconds
+   and retried on the same call rather than failing
+   the file). Each note's work rides chainNoteOp, the
+   chain Delete Forever has always used, so a trash
+   move still in flight for that note settles first
+   and the delete reads the token it assigned. The
+   drain starts when a confirm lands, at boot once
+   the store stands ready, and when the browser comes
+   back online; it never blocks a boot or an action,
+   and it stops its pass quietly when the device goes
+   offline or quota answers outlast the bounded waits,
+   leaving the rest of the record standing for the
+   next start. A file whose deletion fails for any
+   other reason leaves the record only through the
+   warning at the end of the pass
+   (warnUndeletedAttachments, the standing surface):
+   the note it belonged to stays gone, the file is
+   named, and from that moment its id stands in no
+   reference the orphan scan keeps, so the Settings
+   scan finds it as the backstop. While a file stands
+   in the record, the scan counts its id as referenced
+   and never reports it (see collectOrphanReferences),
+   so a queued file is never double handled. */
+const PENDING_DELETE_TIMING = {
+  paceMs: 400,
+  breatherEvery: 100,
+  breatherMs: 10000,
+  backoffStepsMs: [15000, 30000, 60000],
+  backoffCapMs: 60000,
+  maxQuotaWaits: 6
+};
+let pendingDeleteDrainRunning = false;
+let pendingDeleteLastCallStart = 0;
+let pendingDeleteCallsSinceBreather = 0;
+
+function readPendingDeletes() {
+  try {
+    const parsed = JSON.parse(
+      localStorage.getItem(LS_PENDING_DELETES) || "null");
+    if (!parsed || !Array.isArray(parsed.notes)) {
+      return { v: 1, notes: [] };
+    }
+    return parsed;
+  } catch (e) { return { v: 1, notes: [] }; }
+}
+
+function writePendingDeletes(record) {
+  try {
+    if (!record.notes.length) {
+      localStorage.removeItem(LS_PENDING_DELETES);
+    } else {
+      localStorage.setItem(LS_PENDING_DELETES,
+        JSON.stringify(record));
+    }
+  } catch (e) {
+    /* A refused store degrades to no record, silently,
+       the degradation every device record here accepts:
+       the drain then simply has nothing remembered. */
+  }
+}
+
+/* The note ids a store load must never resurrect on
+   this device: every id standing in the record. Read
+   fresh at each load, so a record written moments ago
+   by a confirm is already in force. */
+function pendingDeleteIds() {
+  const ids = Object.create(null);
+  readPendingDeletes().notes.forEach(function (entry) {
+    if (entry && entry.id) { ids[entry.id] = true; }
+  });
+  return ids;
+}
+
+/* One note's record entry, built from the note as it
+   stands at confirm time, in the standing flow's work
+   order: its attachments, its note file, its history
+   file, and its Doc when it still stands Doc-backed. */
+function pendingDeleteEntryFor(note) {
+  const files = [];
+  (note.attachments || []).forEach(function (att) {
+    if (!att || !att.fileId) { return; }
+    files.push({
+      k: "att", provider: String(att.provider || ""),
+      fileId: String(att.fileId),
+      name: String(att.name || "file")
+    });
+  });
+  files.push({ k: "note", path: notePath(note) });
+  files.push({
+    k: "history", path: versionHistoryPath(note.id)
+  });
+  if (isDocBackedNote(note) && note.docId) {
+    files.push({ k: "doc", fileId: String(note.docId) });
+  }
+  return {
+    id: note.id,
+    title: String(note.title || "Untitled note"),
+    files: files
+  };
+}
+
+/* Take a batch of notes into the record, at confirm
+   time, before anything else moves. Answers the ids
+   taken, so a rolled back confirm can give back
+   exactly its own entries. An id already standing
+   (its deletion still owed from an earlier confirm)
+   has its entry rebuilt from the note as it stands
+   now, never duplicated. */
+function addPendingDeletes(notes) {
+  const record = readPendingDeletes();
+  const taken = [];
+  notes.forEach(function (note) {
+    const entry = pendingDeleteEntryFor(note);
+    const at = record.notes.findIndex(function (e) {
+      return e.id === note.id;
+    });
+    if (at >= 0) { record.notes[at] = entry; }
+    else { record.notes.push(entry); }
+    taken.push(note.id);
+  });
+  writePendingDeletes(record);
+  return taken;
+}
+
+function removePendingDeletes(ids) {
+  const record = readPendingDeletes();
+  record.notes = record.notes.filter(function (e) {
+    return ids.indexOf(e.id) < 0;
+  });
+  writePendingDeletes(record);
+}
+
+/* Persist one note's entry as the drain works it: its
+   remaining files replace the stored entry, and an
+   entry with nothing left leaves the record. The
+   record is re-read first, so a confirm that landed
+   while the drain worked is never overwritten by the
+   drain's older picture. */
+function persistPendingEntry(entry) {
+  const record = readPendingDeletes();
+  const at = record.notes.findIndex(function (e) {
+    return e.id === entry.id;
+  });
+  if (at < 0) { return; }
+  if (entry.files.length) { record.notes[at] = entry; }
+  else { record.notes.splice(at, 1); }
+  writePendingDeletes(record);
+}
+
+/* The drain's pacing gate, on the orphan Delete All's
+   discipline: a floor between one storage call's start
+   and the next, and a breather after every batch of
+   calls, so a long drain hands the Drive budget back
+   to sync and the image loads between batches. */
+async function pendingDeletePace() {
+  const timing = PENDING_DELETE_TIMING;
+  if (pendingDeleteCallsSinceBreather >=
+      timing.breatherEvery) {
+    pendingDeleteCallsSinceBreather = 0;
+    await new Promise(function (resolve) {
+      setTimeout(resolve, timing.breatherMs);
+    });
+  }
+  const waitMs = timing.paceMs -
+    (Date.now() - pendingDeleteLastCallStart);
+  if (pendingDeleteLastCallStart > 0 && waitMs > 0) {
+    await new Promise(function (resolve) {
+      setTimeout(resolve, waitMs);
+    });
+  }
+  pendingDeleteLastCallStart = Date.now();
+  pendingDeleteCallsSinceBreather += 1;
+}
+
+/* How a failed file is named in the settle warning:
+   an attachment by its file name, as the standing
+   warning has always named them; the note's own files
+   by the note's title, with the history file marked
+   as what it is. */
+function pendingDeleteFileLabel(entry, file) {
+  if (file.k === "att") { return file.name; }
+  if (file.k === "history") {
+    return entry.title + " (version history)";
+  }
+  return entry.title;
+}
+
+/* Work the record to empty, in the background. One
+   pass: notes in record order, each note's files in
+   entry order, each storage call through the paced,
+   quota retrying gate below. The pass stops quietly
+   (the record keeps what it still owes) when the
+   device goes offline, the store goes away, or quota
+   answers outlast the bounded consecutive waits; the
+   next kick (a confirm, a boot, a reconnect) starts
+   another pass where this one stopped. Files that
+   fail for any other reason are collected and named
+   once, when the pass settles, through the standing
+   warning; their entries have already left the
+   record file by file as the pass worked, which is
+   what hands them to the orphan scan as its
+   backstop. */
+async function runPendingDeleteDrain() {
+  const timing = PENDING_DELETE_TIMING;
   const failed = [];
-  for (const note of notes) {
-    const atts = note.attachments || [];
-    if (atts.length) {
-      if (state.online) {
-        const missed = await deleteAttachmentsBestEffort(note);
-        missed.forEach(function (name) { failed.push(name); });
-      } else {
-        atts.forEach(function (a) { failed.push(a.name); });
+  let quotaWaits = 0;
+  let stopped = false;
+  /* One storage call, paced and judged: "done" when it
+     lands, "failed" when it refuses for a reason that
+     is not quota, "stop" when the pass must end here
+     (offline, or quota past the bounded waits). A
+     quota answer waits out the backoff steps and
+     retries the SAME call, so no file is ever failed
+     by a limit it could have outlasted. */
+  const call = async function (fn) {
+    for (;;) {
+      if (!state.online || !state.repoExists) {
+        return "stop";
+      }
+      await pendingDeletePace();
+      try {
+        await fn();
+        quotaWaits = 0;
+        return "done";
+      } catch (err) {
+        if (!state.online) { return "stop"; }
+        if (orphanDeleteIsQuotaError(err)) {
+          quotaWaits += 1;
+          if (quotaWaits > timing.maxQuotaWaits) {
+            return "stop";
+          }
+          const step = timing.backoffStepsMs[Math.min(
+            quotaWaits - 1,
+            timing.backoffStepsMs.length - 1)];
+          await new Promise(function (resolve) {
+            setTimeout(resolve,
+              Math.min(step, timing.backoffCapMs));
+          });
+          continue;
+        }
+        return "failed";
       }
     }
-    await deleteNoteForever(note);
+  };
+  /* One file's storage work, as a sequence of gated
+     calls: an attachment is its provider's trash (a
+     provider that is missing or not connected fails
+     the file at once, the standing best effort
+     judgment); a Doc is a delete by id; a store file
+     is read for its token and then hard deleted, and
+     a file that is not there is already deleted. */
+  const workFile = async function (entry, file) {
+    if (file.k === "att") {
+      const driver = providers[file.provider];
+      if (!driver) { return "failed"; }
+      let status = null;
+      try { status = await driver.getStatus(); }
+      catch (e) { return "failed"; }
+      if (!status || !status.connected) { return "failed"; }
+      return call(function () {
+        return driver.trash(file.fileId);
+      });
+    }
+    if (file.k === "doc") {
+      return call(function () {
+        return googleDelete(file.fileId);
+      });
+    }
+    let found = null;
+    const got = await call(async function () {
+      found = await storeGetFile(file.path);
+    });
+    if (got !== "done") { return got; }
+    if (!found) { return "done"; }
+    return call(function () {
+      return storeDeleteFile(file.path, found.token,
+        "Delete note forever");
+    });
+  };
+  while (!stopped) {
+    const record = readPendingDeletes();
+    if (!record.notes.length) { break; }
+    const entry = record.notes[0];
+    const outcome = await chainNoteOp({ id: entry.id },
+      async function () {
+        while (entry.files.length) {
+          const file = entry.files[0];
+          const r = await workFile(entry, file);
+          if (r === "stop") { return "stop"; }
+          if (r === "failed") {
+            failed.push(pendingDeleteFileLabel(entry, file));
+          }
+          entry.files.shift();
+          persistPendingEntry(entry);
+        }
+        return "done";
+      });
+    if (outcome === "stop") { stopped = true; }
   }
-  return failed;
+  if (failed.length) { warnUndeletedAttachments(failed); }
+}
+
+/* Start the drain if anything is owed and the store
+   stands ready. Fire and forget by design: no caller
+   (a confirm, the boot, the online event) ever waits
+   on it. A pass already running is the only guard it
+   needs; a kick that lands mid pass is spent, because
+   the running pass re-reads the record as it works
+   and picks up what the kick's confirm added. */
+function kickPendingDeleteDrain() {
+  if (pendingDeleteDrainRunning) { return; }
+  if (!state.online || !state.repoExists) { return; }
+  if (!readPendingDeletes().notes.length) { return; }
+  pendingDeleteDrainRunning = true;
+  runPendingDeleteDrain().catch(function () {
+    /* The drain judges its own failures file by file;
+       nothing it can throw belongs on a caller's
+       surface. */
+  }).then(function () {
+    pendingDeleteDrainRunning = false;
+  });
+}
+
+/* Permanently delete several trashed notes.
+   v2.175: this is the confirm time half of the pending
+   deletions flow (the section above); through v2.174
+   it ran the storage deletions themselves inline, one
+   note at a time, and the list drained as they landed.
+   Now: the pending record is persisted first, the
+   notes leave state under the catalog write hold, and
+   flushCatalogWrites' verdict is judged before
+   anything else moves. A write that does not land
+   rolls the confirm back whole (the notes return to
+   their lists exactly as they stood, the record gives
+   back the entries it just took, the cache is
+   rewritten) and the failure throws to the caller's
+   standing error path, so no success toast ever stands
+   over a deletion the store never heard about. Once
+   the drop has landed, the per note local cleanup the
+   single Delete Forever runs through deleteNoteForever
+   (its linked tasks' links cleared, its shortcut
+   dropped, its divergence mark and saved content
+   memory forgotten) runs here too, one render shows
+   the final list, and the drain is kicked to finish
+   the storage deletions in the background. Offline
+   there is no store to land a write against, so no
+   verdict is judged: the record and the local cache
+   carry the drop, and the drain runs when the store
+   stands ready. The return is the names of files that
+   could not be deleted, as it always was; none can be
+   known at confirm time any more, so it is empty, and
+   the drain names its own failures when its pass
+   settles. */
+async function deleteNotesForever(notes) {
+  if (!notes.length) { return []; }
+  const taken = addPendingDeletes(notes);
+  const priorTrash = state.trash;
+  const priorArchive = state.archive;
+  const priorSelectedId = state.selectedId;
+  holdCatalogWrites();
+  try {
+    notes.forEach(function (note) {
+      state.trash = state.trash.filter(function (n) {
+        return n.id !== note.id;
+      });
+      state.archive = state.archive.filter(function (n) {
+        return n.id !== note.id;
+      });
+      if (state.selectedId === note.id) {
+        state.selectedId = null;
+      }
+    });
+    saveCache();
+  } finally {
+    releaseCatalogWrites();
+  }
+  if (state.online && state.repoExists) {
+    const landed = await flushCatalogWrites();
+    if (!landed) {
+      state.trash = priorTrash;
+      state.archive = priorArchive;
+      state.selectedId = priorSelectedId;
+      removePendingDeletes(taken);
+      saveCache();
+      renderAll();
+      throw new Error("The deletion could not be " +
+        "confirmed with " + storageDisplayName() +
+        ", so nothing was deleted. Check the " +
+        "connection and try again.");
+    }
+  }
+  let shortcutChanged = false;
+  notes.forEach(function (note) {
+    /* v2.49.0: the note's linked tasks outlive it, but
+       their link pointed here, so it is cleared, via
+       the task mutation funnel, exactly as the single
+       Delete Forever clears it in deleteNoteForever. */
+    clearTaskNoteLinks(note.id);
+    if (shortcutsDrop("note", note.id)) {
+      shortcutChanged = true;
+    }
+    clearNoteDivergence(note.id);
+    forgetLastSavedContent(note.id);
+    delete versionHistoryCache[note.id];
+    versionHistoryPruneNeeded.delete(note.id);
+  });
+  if (shortcutChanged && state.online &&
+      state.repoExists) {
+    saveIndex();
+  }
+  saveCache();
+  renderAll();
+  kickPendingDeleteDrain();
+  return [];
 }
 
 /* The storage phrase the permanent delete confirmations use, the
@@ -11111,6 +11564,24 @@ async function collectOrphanReferences() {
       addRecords(v && v.attachments);
     });
   }
+  /* v2.175: attachment files a pending deletion still
+     owes a provider trash for are referenced by the
+     record that owes them (see the pending deletions
+     section): the scan must not call them orphaned
+     while the drain stands between the user and their
+     deletion, or a Delete All here would race the
+     drain over the same files. When a file's deletion
+     finally fails, its entry leaves the record with
+     the drain's warning, and from then on this union
+     no longer holds its id, so the next scan finds
+     the file exactly as the backstop promises. */
+  readPendingDeletes().notes.forEach(function (entry) {
+    (entry.files || []).forEach(function (file) {
+      if (file && file.k === "att" && file.fileId) {
+        refs.add(String(file.fileId));
+      }
+    });
+  });
   return refs;
 }
 

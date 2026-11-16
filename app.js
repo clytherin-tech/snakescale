@@ -4166,6 +4166,10 @@ function wireEvents() {
     /* Readiness is storeSyncReady(): a connected store plus a live
        Google sign in in memory, so coming back online auto syncs. */
     if (storeSyncReady()) { syncNow(false); }
+    /* v2.175: a pending deletions drain that stopped
+       for the offline window resumes with the
+       connection; it no-ops when nothing is owed. */
+    kickPendingDeleteDrain();
   });
   window.addEventListener("offline", function () {
     state.online = false;
