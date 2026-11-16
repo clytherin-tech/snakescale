@@ -1125,6 +1125,14 @@ let autoSyncEditorGuard = null;    /* {id, sha} during an auto-sync */
 const SYNC_PLAN_FULL = "full";
 let syncStagedToken = null;
 let pendingSyncPlan = null;
+/* v2.177: the record of the patch load that carried
+   the most recent load (see loadPatchedFromRepo in
+   tasks.js): the note ids it patched and whether a
+   sidebar count moved, or null when the last load
+   was not a patch. syncNow spends it on the
+   targeted repaint and clears it, and
+   resetSyncStagingState forgets it with the rest. */
+let patchLoadInfo = null;
 let lastUserActivityAt = Date.now();
 
 /* The idle clock's stamp, wired in wireEvents. */
@@ -1463,6 +1471,7 @@ function syncStagingArmed() {
 function resetSyncStagingState() {
   syncStagedToken = null;
   pendingSyncPlan = null;
+  patchLoadInfo = null;
   syncTailGeneration++;
   syncTailPromise = null;
 }
@@ -1490,6 +1499,30 @@ function resetSyncStagingState() {
    ends and both folders are judged fresh. Returns the
    plan, or null when the window could not be honestly
    classified. */
+/* v2.177: the folder id to place map the classifier
+   judges a changed file's parents by (see
+   classifySyncChanges in this section), named so the
+   patch load in tasks.js judges a changed file's
+   live parents by the very same map. */
+function syncFolderPlaces() {
+  const folderPlace = Object.create(null);
+  Object.keys(driveCache.folderIds).forEach(function (path) {
+    const id = driveCache.folderIds[path];
+    if (!id) { return; }
+    if (path === "notebooks") {
+      folderPlace[id] = "structure";
+    } else if (path === "trash" || path === "archive") {
+      folderPlace[id] = path;
+    } else if (path.indexOf("notebooks/") === 0) {
+      folderPlace[id] = "nb:" + path.slice("notebooks/".length);
+    } else {
+      folderPlace[id] = "other";
+    }
+  });
+  if (driveCache.rootId) { folderPlace[driveCache.rootId] = "other"; }
+  return folderPlace;
+}
+
 function classifySyncChanges(records) {
   if (!lastListings) { return null; }
   const plan = {
@@ -1497,6 +1530,13 @@ function classifySyncChanges(records) {
     incoming: false,
     folders: [],       /* notebook slugs to re-list */
     collections: [],   /* "trash" / "archive" to settle deferred */
+    /* v2.177: the patch descriptors (see the patch
+       load in tasks.js): one per note file or Doc
+       this window names, coalesced by file id, and
+       whether every note change in the window was
+       honestly captured by one. */
+    notes: [],
+    patchable: true,
     startToken: null, endToken: null, empty: true
   };
   const touchFolder = function (slug) {
@@ -1524,22 +1564,11 @@ function classifySyncChanges(records) {
   /* Folder id to its place: a notebook slug ("nb:"), a
      collection, "structure" for the notebooks root, or
      "other" for the folders the load never reads
-     (versions, attachments, the root itself). */
-  const folderPlace = Object.create(null);
-  Object.keys(driveCache.folderIds).forEach(function (path) {
-    const id = driveCache.folderIds[path];
-    if (!id) { return; }
-    if (path === "notebooks") {
-      folderPlace[id] = "structure";
-    } else if (path === "trash" || path === "archive") {
-      folderPlace[id] = path;
-    } else if (path.indexOf("notebooks/") === 0) {
-      folderPlace[id] = "nb:" + path.slice("notebooks/".length);
-    } else {
-      folderPlace[id] = "other";
-    }
-  });
-  if (driveCache.rootId) { folderPlace[driveCache.rootId] = "other"; }
+     (versions, attachments, the root itself). Built by
+     syncFolderPlaces so the patch load in tasks.js
+     judges a changed file's live parents by the very
+     same map. */
+  const folderPlace = syncFolderPlaces();
   /* File id to the place whose retained listing holds
      it. */
   const holderPlace = Object.create(null);
@@ -1575,6 +1604,110 @@ function classifySyncChanges(records) {
     if (note.trashed) { return "trash"; }
     if (note.archived) { return "archive"; }
     return note.notebook ? "nb:" + note.notebook : null;
+  };
+  /* v2.177: the patch descriptors, recorded beside
+     the placement judgments from the same facts (see
+     loadPatchedFromRepo in tasks.js). Recording never
+     feeds back into placement: the marks stand
+     exactly as they always have, and a window the
+     placement cannot judge fails whole below whether
+     or not any descriptor was recorded for it. A
+     descriptor carries the note's id, its kind (a
+     note file, or a Doc a Doc-backed note claims),
+     whether the record removes it, the live marks
+     the record carries, and the home its parents
+     prove, when they prove one. */
+  const patchByFileId = Object.create(null);
+  const judgeDescriptorHome = function (d, change) {
+    const file = change.file || null;
+    if (!file || !Array.isArray(file.parents)) { return; }
+    const places = Object.create(null);
+    file.parents.forEach(function (parentId) {
+      const p = folderPlace[parentId];
+      if (p) { places[p] = true; }
+    });
+    const keys = Object.keys(places);
+    if (!keys.length) { return; }
+    d.homeKnown = true;
+    if (keys.length === 1) { d.home = keys[0]; }
+    else { d.homeConflict = true; }
+  };
+  const recordDescriptor = function (change, mappedNoteId) {
+    const fileId = change.fileId;
+    const file = change.file || null;
+    if (mappedNoteId) {
+      const held = findNoteById(mappedNoteId);
+      if (held && isDocBackedNote(held)) {
+        if (sanitizeDocId(held.docId) !== fileId) {
+          /* A Doc-backed note's frozen fallback .md:
+             the loads skip it whole (the Doc claims
+             it in the reconcile), so the patch does
+             too. */
+          return "noop";
+        }
+        const dd = {
+          fileId: fileId, noteId: mappedNoteId,
+          kind: "doc", removed: !!change.removed,
+          name: file ? (file.name || null) : null,
+          token: file ? driveTokenFromMetadata(file) : null,
+          modifiedTime: file ? (file.modifiedTime || null) : null,
+          home: null, homeKnown: false, homeConflict: false
+        };
+        judgeDescriptorHome(dd, change);
+        patchByFileId[fileId] = dd;
+        return "noted";
+      }
+      const fd = {
+        fileId: fileId, noteId: mappedNoteId,
+        kind: "file", removed: !!change.removed,
+        name: file ? (file.name || null) : null,
+        home: null, homeKnown: false, homeConflict: false
+      };
+      judgeDescriptorHome(fd, change);
+      patchByFileId[fileId] = fd;
+      return "noted";
+    }
+    if (file && /\.md$/i.test(file.name || "")) {
+      const probe = { home: null, homeKnown: false,
+        homeConflict: false };
+      judgeDescriptorHome(probe, change);
+      const place = probe.home;
+      if (probe.homeKnown && !probe.homeConflict &&
+          place && place !== "other" &&
+          place !== "structure") {
+        const derivedId =
+          (file.name || "").replace(/\.md$/i, "");
+        if (!derivedId) { return "noop"; }
+        if (findNoteById(derivedId)) {
+          /* A second file wearing a standing note's
+             name, under a file id the note does not
+             own: only the listings can judge whether
+             it is a duplicate, so the patch stands
+             down for the whole window. */
+          plan.patchable = false;
+          return "noted";
+        }
+        patchByFileId[fileId] = {
+          fileId: fileId, noteId: derivedId,
+          kind: "file", removed: !!change.removed,
+          name: file.name || null,
+          home: probe.home, homeKnown: true,
+          homeConflict: false
+        };
+        return "noted";
+      }
+      if (probe.homeKnown && !probe.homeConflict &&
+          (place === "other" || place === "structure")) {
+        /* A .md the loads never see (the version
+           history folder above all): it changes no
+           note. */
+        return "noop";
+      }
+      /* A possible note file whose home this record
+         cannot prove: the patch stands down. */
+      return "unexplained";
+    }
+    return "noop";
   };
   let failed = false;
   (records || []).forEach(function (change) {
@@ -1657,6 +1790,9 @@ function classifySyncChanges(records) {
         }
       });
     }
+    if (recordDescriptor(change, noteId) === "unexplained") {
+      plan.patchable = false;
+    }
     if (placed) { return; }
     /* A file in a folder the load never reads, placed by
        its parents above, needs no load input. A change
@@ -1670,6 +1806,24 @@ function classifySyncChanges(records) {
     if (autoSyncKnownIds.has(fileId)) { failed = true; }
   });
   if (failed) { return null; }
+  /* v2.177: the patch's roll: the descriptors the
+     window recorded, judged once more as a set. A
+     mapped note file whose home this window could
+     not prove stands the patch down whole; the
+     staged load judges it with listings instead.
+     Name-derived descriptors were judged when they
+     were recorded. */
+  plan.notes = Object.keys(patchByFileId).map(
+    function (fileId) { return patchByFileId[fileId]; });
+  plan.notes.forEach(function (d) {
+    if (d.kind !== "file") { return; }
+    if (autoSyncNoteIdByFileId[d.fileId] !== d.noteId) {
+      return;
+    }
+    if (!d.removed && (!d.homeKnown || d.homeConflict)) {
+      plan.patchable = false;
+    }
+  });
   plan.empty = !plan.tasks && !plan.index && !plan.catalog &&
     !plan.incoming && !plan.folders.length &&
     !plan.collections.length;

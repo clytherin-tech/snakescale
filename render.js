@@ -226,6 +226,117 @@ function renderAll() {
   refreshSyncPill();
 }
 
+/* v2.177: the repaint for a sync the patch load
+   carried (see loadPatchedFromRepo in tasks.js):
+   only the surfaces the patch touched. The note
+   list's changed rows, the sidebar when a count
+   moved, Home when it stands (its widgets read the
+   library), and the open note through renderEditor
+   when the patch changed it or took it away, under
+   the sync's standing refill judgment
+   (syncOpenNoteRefresh, armed by syncNow around
+   this call). Everything else, the open editor
+   above all when its note stands unpatched, is
+   left exactly as it was: no whole-app render, and
+   the reader's place, scroll, and selection never
+   move. */
+function refreshPatchSurfaces(info) {
+  if (!info) { return; }
+  if (info.countsMoved) { renderSidebar(); }
+  refreshPatchedNoteList(info);
+  if (state.view.kind === "home") { renderHome(); }
+  const openId = state.selectedId || null;
+  if (openId && (!findNoteById(openId) ||
+      (info.ids || []).indexOf(openId) >= 0)) {
+    renderEditor();
+  }
+  refreshSyncPill();
+}
+
+/* v2.177: repaint the standing note list for a
+   patch sync: the patched notes' rows are rebuilt
+   through the standing card construction and the
+   sequence is reconciled against the list the view
+   now shows, while every unpatched row keeps its
+   element, so the list's scroll, the rows'
+   thumbnails, and the reader's place in the list
+   all stand. The faces a surgical update cannot
+   honestly reproduce (the empty states, a list
+   that was never rendered, the Things to do page
+   standing over the list) fall back to the
+   standing list render, which is still only the
+   list, never the whole app. */
+function refreshPatchedNoteList(info) {
+  const listEl = document.getElementById("noteList");
+  if (!listEl) { return; }
+  if (lastRenderedListViewKey === null ||
+      state.thingsNotebook) {
+    renderNoteList();
+    return;
+  }
+  const list = visibleNotes();
+  const standingCards =
+    listEl.querySelectorAll(".note-card[data-note-id]");
+  if (!list.length || !standingCards.length) {
+    renderNoteList();
+    return;
+  }
+  const tiles = taskTilesForCurrentView();
+  const items = listItemsWithTiles(list, tiles);
+  const patched = Object.create(null);
+  (info.ids || []).forEach(function (id) {
+    patched[id] = true;
+  });
+  const selectSet = state.view.kind === "trash"
+    ? state.trashSelection
+    : state.view.kind === "archive"
+      ? state.archiveSelection : state.listSelection;
+  const keptCards = Object.create(null);
+  standingCards.forEach(function (el) {
+    keptCards[el.getAttribute("data-note-id")] = el;
+  });
+  const keptTiles = Object.create(null);
+  listEl.querySelectorAll(".note-card[data-task-tile]")
+    .forEach(function (el) {
+      keptTiles[el.getAttribute("data-task-tile")] = el;
+    });
+  const sequence = [];
+  items.forEach(function (item) {
+    if (item.tile) {
+      sequence.push(keptTiles[item.tile.slug] ||
+        buildTaskTileEl(item.tile));
+      return;
+    }
+    const note = item.note;
+    if (keptCards[note.id] && !patched[note.id]) {
+      sequence.push(keptCards[note.id]);
+      return;
+    }
+    sequence.push(buildNoteListCard(note, selectSet));
+  });
+  listEl.querySelectorAll(".note-card").forEach(
+    function (el) { el.remove(); });
+  /* The mail search section is not a managed child:
+     it stands after the rows and is left exactly
+     where it stands. */
+  const section =
+    listEl.querySelector(".mail-search-section");
+  sequence.forEach(function (el) {
+    if (section) { listEl.insertBefore(el, section); }
+    else { listEl.appendChild(el); }
+  });
+  document.getElementById("listSub").textContent =
+    list.length + (list.length === 1 ? " note" : " notes") +
+    (state.search
+      ? " matching \"" + state.search + "\"" : "");
+  if (state.search) {
+    searchHitPaintResultsIn(listEl);
+    kickSearchBodyFill();
+  }
+  renderListSelectBar();
+  refreshBacklinksPanel();
+}
+
 /* v2.24.1: which panes show follows the view. While the
    Tasks view is active, the tasks pane shows and the list
    and editor panes hide; every other view hides the tasks
@@ -6347,6 +6458,152 @@ function attachmentTypeIconSvg(att) {
     "stroke-width=\"1.8\" stroke-linejoin=\"round\"/></svg>";
 }
 
+/* v2.177: one note's list card, lifted out of
+   renderNoteList so a patch sync's targeted
+   repaint builds a changed note's row through
+   the very same construction (see
+   refreshPatchedNoteList below). */
+function buildNoteListCard(note, selectSet) {
+  const card = document.createElement("div");
+  card.className = "note-card" +
+    ((note.id === state.selectedId && !state.thingsNotebook)
+      ? " active" : "");
+  /* v2.4: the drag and drop pointer handler is delegated on the
+     list, so the card itself carries the note id it stands for. */
+  card.setAttribute("data-note-id", note.id);
+  if (selectSet) {
+    /* v2.58: a selected card wears the multi-selected
+       treatment, and that IS the indicator now. There
+       is no checkbox: selection input is the card's
+       own click with its modifiers
+       (handleNoteCardClick), or the touch selection
+       mode the context menu starts. */
+    if (selectSet.indexOf(note.id) >= 0) {
+      card.classList.add("multi-selected");
+    }
+  }
+  /* v2.18: the card's text column, in the mockup's order: the
+     meta line (notebook name, a dot, relative updated time),
+     the bold title, the one line preview, and the tag pills.
+     The column is every card's left half now (through v2.17
+     it existed only beside a chosen image thumbnail); the
+     thumbnail box, when the note has one, is appended to
+     the card after the column, which puts it at the right. */
+  const main = document.createElement("div");
+  main.className = "card-main";
+  card.appendChild(main);
+
+  const meta = document.createElement("div");
+  meta.className = "card-meta";
+  const metaNb = notebookNameForNote(note);
+  const metaWhen = relativeTimeLabel(note.updated);
+  meta.textContent = metaNb ? metaNb + " · " + metaWhen : metaWhen;
+  main.appendChild(meta);
+
+  const titleRow = document.createElement("div");
+  titleRow.className = "card-title";
+  if (note.pinned && !note.trashed && !note.archived) {
+    const pin = document.createElement("span");
+    pin.className = "pin-mark";
+    pin.textContent = "PINNED";
+    titleRow.appendChild(pin);
+  }
+  const titleText = document.createElement("span");
+  titleText.className = "card-title-text";
+  titleText.textContent = note.title || "Untitled note";
+  titleRow.appendChild(titleText);
+  main.appendChild(titleRow);
+
+  /* v2.20: noteListText is the body derived text for a loaded
+     note and the catalog preview for a shell; the same 140
+     character cap either way. */
+  const snippetText = noteListText(note).slice(0, 140);
+  if (snippetText) {
+    const snip = document.createElement("div");
+    snip.className = "card-snippet";
+    snip.textContent = snippetText;
+    main.appendChild(snip);
+  }
+  if (note.tags.length) {
+    const row = document.createElement("div");
+    row.className = "chip-row";
+    note.tags.forEach(function (t) {
+      const chip = document.createElement("span");
+      chip.className = "tag-chip";
+      chip.textContent = t;
+      row.appendChild(chip);
+    });
+    main.appendChild(row);
+  }
+  /* v2.35: the reminder line, under the tag row: the bell
+     glyph and the moment in the app's date words
+     (noteReminderLabel), wearing .overdue while an
+     unfinished reminder's moment has passed and .done
+     once it is marked done. The pair rides on the note
+     object for shells and loaded notes alike (the
+     catalog carries it at shape 3), so the line renders
+     before the note is ever opened. */
+  if (note.reminderAt) {
+    const rem = document.createElement("div");
+    rem.className = "card-reminder" +
+      (note.reminderDoneAt ? " done"
+        : (new Date(note.reminderAt).getTime() <= Date.now()
+          ? " overdue" : ""));
+    rem.innerHTML = '<svg viewBox="0 0 20 20" width="13" height="13" aria-hidden="true" focusable="false"><path d="M10 2.5a5.5 5.5 0 0 0-5.5 5.5c0 4-1.2 5.2-2 6h14c-.8-.8-2-2-2-6A5.5 5.5 0 0 0 10 2.5zM8.4 16.8a1.8 1.8 0 0 0 3.2 0" fill="currentColor" stroke="none"/></svg>';
+    const remText = document.createElement("span");
+    remText.textContent = noteReminderLabel(note);
+    rem.appendChild(remText);
+    main.appendChild(rem);
+  }
+
+  /* v2.18: the thumbnail box. The attachment it shows is the
+     note's chosen thumbnail (the v2.11 front matter field)
+     when that record is still on the note, and otherwise
+     the note's first attachment; a note with neither renders
+     no box at all. An image fills the box through the same
+     loadListThumb path the chosen thumbnail always used;
+     anything else shows its attachment type icon centered
+     (the audio waveform in Chris's mockup). */
+  /* v2.120: an external first image fills the same
+     box straight from its address (no record, no
+     store fetch); the attachment box below is
+     otherwise exactly as it stood. */
+  const cardExt = cardThumbnailExternal(note);
+  const cardAtt = cardThumbnailAttachment(note);
+  if (cardExt) {
+    const box = document.createElement("div");
+    box.className = "card-thumb-box";
+    const thumb = document.createElement("img");
+    thumb.className = "card-thumb";
+    thumb.alt = "";
+    thumb.setAttribute("loading", "lazy");
+    thumb.src = cardExt;
+    box.appendChild(thumb);
+    card.appendChild(box);
+  } else if (cardAtt) {
+    const box = document.createElement("div");
+    box.className = "card-thumb-box";
+    if (isImageAttachment(cardAtt)) {
+      const thumb = document.createElement("img");
+      thumb.className = "card-thumb";
+      thumb.alt = "";
+      box.appendChild(thumb);
+      loadListThumb(thumb, cardAtt);
+    } else {
+      const icon = document.createElement("span");
+      icon.className = "card-thumb-icon";
+      icon.setAttribute("aria-hidden", "true");
+      icon.innerHTML = attachmentTypeIconSvg(cardAtt);
+      box.appendChild(icon);
+    }
+    card.appendChild(box);
+  }
+  card.addEventListener("click", function (ev) {
+    handleNoteCardClick(ev, note);
+  });
+  return card;
+}
+
 function renderNoteList() {
   syncTasksPane();
   const viewKey = state.view.kind + ":" + (state.view.value || "");
@@ -6453,145 +6710,7 @@ function renderNoteList() {
       listEl.appendChild(buildTaskTileEl(item.tile));
       return;
     }
-    const note = item.note;
-    const card = document.createElement("div");
-    card.className = "note-card" +
-      ((note.id === state.selectedId && !state.thingsNotebook)
-        ? " active" : "");
-    /* v2.4: the drag and drop pointer handler is delegated on the
-       list, so the card itself carries the note id it stands for. */
-    card.setAttribute("data-note-id", note.id);
-    if (selectSet) {
-      /* v2.58: a selected card wears the multi-selected
-         treatment, and that IS the indicator now. There
-         is no checkbox: selection input is the card's
-         own click with its modifiers
-         (handleNoteCardClick), or the touch selection
-         mode the context menu starts. */
-      if (selectSet.indexOf(note.id) >= 0) {
-        card.classList.add("multi-selected");
-      }
-    }
-    /* v2.18: the card's text column, in the mockup's order: the
-       meta line (notebook name, a dot, relative updated time),
-       the bold title, the one line preview, and the tag pills.
-       The column is every card's left half now (through v2.17
-       it existed only beside a chosen image thumbnail); the
-       thumbnail box, when the note has one, is appended to
-       the card after the column, which puts it at the right. */
-    const main = document.createElement("div");
-    main.className = "card-main";
-    card.appendChild(main);
-
-    const meta = document.createElement("div");
-    meta.className = "card-meta";
-    const metaNb = notebookNameForNote(note);
-    const metaWhen = relativeTimeLabel(note.updated);
-    meta.textContent = metaNb ? metaNb + " · " + metaWhen : metaWhen;
-    main.appendChild(meta);
-
-    const titleRow = document.createElement("div");
-    titleRow.className = "card-title";
-    if (note.pinned && !note.trashed && !note.archived) {
-      const pin = document.createElement("span");
-      pin.className = "pin-mark";
-      pin.textContent = "PINNED";
-      titleRow.appendChild(pin);
-    }
-    const titleText = document.createElement("span");
-    titleText.className = "card-title-text";
-    titleText.textContent = note.title || "Untitled note";
-    titleRow.appendChild(titleText);
-    main.appendChild(titleRow);
-
-    /* v2.20: noteListText is the body derived text for a loaded
-       note and the catalog preview for a shell; the same 140
-       character cap either way. */
-    const snippetText = noteListText(note).slice(0, 140);
-    if (snippetText) {
-      const snip = document.createElement("div");
-      snip.className = "card-snippet";
-      snip.textContent = snippetText;
-      main.appendChild(snip);
-    }
-    if (note.tags.length) {
-      const row = document.createElement("div");
-      row.className = "chip-row";
-      note.tags.forEach(function (t) {
-        const chip = document.createElement("span");
-        chip.className = "tag-chip";
-        chip.textContent = t;
-        row.appendChild(chip);
-      });
-      main.appendChild(row);
-    }
-    /* v2.35: the reminder line, under the tag row: the bell
-       glyph and the moment in the app's date words
-       (noteReminderLabel), wearing .overdue while an
-       unfinished reminder's moment has passed and .done
-       once it is marked done. The pair rides on the note
-       object for shells and loaded notes alike (the
-       catalog carries it at shape 3), so the line renders
-       before the note is ever opened. */
-    if (note.reminderAt) {
-      const rem = document.createElement("div");
-      rem.className = "card-reminder" +
-        (note.reminderDoneAt ? " done"
-          : (new Date(note.reminderAt).getTime() <= Date.now()
-            ? " overdue" : ""));
-      rem.innerHTML = '<svg viewBox="0 0 20 20" width="13" height="13" aria-hidden="true" focusable="false"><path d="M10 2.5a5.5 5.5 0 0 0-5.5 5.5c0 4-1.2 5.2-2 6h14c-.8-.8-2-2-2-6A5.5 5.5 0 0 0 10 2.5zM8.4 16.8a1.8 1.8 0 0 0 3.2 0" fill="currentColor" stroke="none"/></svg>';
-      const remText = document.createElement("span");
-      remText.textContent = noteReminderLabel(note);
-      rem.appendChild(remText);
-      main.appendChild(rem);
-    }
-
-    /* v2.18: the thumbnail box. The attachment it shows is the
-       note's chosen thumbnail (the v2.11 front matter field)
-       when that record is still on the note, and otherwise
-       the note's first attachment; a note with neither renders
-       no box at all. An image fills the box through the same
-       loadListThumb path the chosen thumbnail always used;
-       anything else shows its attachment type icon centered
-       (the audio waveform in Chris's mockup). */
-    /* v2.120: an external first image fills the same
-       box straight from its address (no record, no
-       store fetch); the attachment box below is
-       otherwise exactly as it stood. */
-    const cardExt = cardThumbnailExternal(note);
-    const cardAtt = cardThumbnailAttachment(note);
-    if (cardExt) {
-      const box = document.createElement("div");
-      box.className = "card-thumb-box";
-      const thumb = document.createElement("img");
-      thumb.className = "card-thumb";
-      thumb.alt = "";
-      thumb.setAttribute("loading", "lazy");
-      thumb.src = cardExt;
-      box.appendChild(thumb);
-      card.appendChild(box);
-    } else if (cardAtt) {
-      const box = document.createElement("div");
-      box.className = "card-thumb-box";
-      if (isImageAttachment(cardAtt)) {
-        const thumb = document.createElement("img");
-        thumb.className = "card-thumb";
-        thumb.alt = "";
-        box.appendChild(thumb);
-        loadListThumb(thumb, cardAtt);
-      } else {
-        const icon = document.createElement("span");
-        icon.className = "card-thumb-icon";
-        icon.setAttribute("aria-hidden", "true");
-        icon.innerHTML = attachmentTypeIconSvg(cardAtt);
-        box.appendChild(icon);
-      }
-      card.appendChild(box);
-    }
-    card.addEventListener("click", function (ev) {
-      handleNoteCardClick(ev, note);
-    });
-    listEl.appendChild(card);
+    listEl.appendChild(buildNoteListCard(item.note, selectSet));
   });
   /* v2.24.3: a view with tiles but no notes (a notebook whose
      work is all tasks, so far) keeps the quiet line that sat

@@ -2368,6 +2368,541 @@ function mergeCatalogDocShells(loaded) {
   });
 }
 
+
+/* --------------------------------------------------------------------------
+   v2.177: the patch load
+
+   A staged plan (see the staged sync section in
+   media.js) names the notes its window's changes
+   touch. Through v2.176 the staged load answered
+   such a plan by re-listing the touched folders and
+   running the whole merged-evidence reconcile over
+   fresh and retained evidence alike, and syncNow
+   then repainted the whole app. The patch load
+   spends the plan's own knowledge instead: for each
+   note the plan names, it reads just that note's
+   file (by its Drive id: one metadata read, and the
+   bytes only when the catalog cannot vouch for
+   them) or rebuilds its Doc shell from the retained
+   catalog entry and the change record's own live
+   marks, and patches the standing library in place.
+   No folder is listed, the catalog is not
+   downloaded, and no other note is touched.
+
+   The honesty rules are the classifier's and the
+   staged load's, unmoved: the patch answers true
+   only for a plan it can prove (the eligibility
+   judgments inline); anything else answers false
+   and the staged load, and behind it the full load,
+   runs exactly as before. Every judgment completes
+   before the first state write, so a patch that
+   stands down leaves the library exactly as it
+   stood. The constructions are the reconcile's own
+   (the catalog entry branch and the parse branch of
+   its take(), and its Doc pass), run per note, so a
+   patched library is the library the full load
+   would have built from the same store; the harness
+   proves that equivalence case by case.
+
+   Two standing behaviors ride along unchanged. A
+   note whose new home is the Trash or the Archive
+   leaves its old list here and joins its collection
+   in the pass's deferred tail, exactly as a staged
+   pass leaves it (the tail's fresh listing and
+   reconcile are the judgment, as before). And the
+   load's tail is finishLoadFromRepo's own sequence
+   of post-load passes, run over the patched lists
+   in its order: the tasks landing, the corpus
+   rebuild, the baseline reseed, the reminder pass,
+   the shortcut prune, and the cache snapshot. */
+
+/* A place string (see syncFolderPlaces in media.js)
+   as the home a patch lands a note in: the standing
+   list it joins, the collection the catalog keys
+   it under, and its notebook slug when it has one.
+   Answers null for a place no load reads. */
+function patchPlaceHome(place) {
+  if (place === "trash") {
+    return { collection: "trash", listName: "trash", slug: null };
+  }
+  if (place === "archive") {
+    return { collection: "archive", listName: "archive",
+      slug: null };
+  }
+  if (place && place.indexOf("nb:") === 0) {
+    return { collection: "notebook", listName: "notes",
+      slug: place.slice(3) };
+  }
+  return null;
+}
+
+function patchStateList(listName) {
+  if (listName === "trash") { return state.trash; }
+  if (listName === "archive") { return state.archive; }
+  return state.notes;
+}
+
+/* Remove a note from the standing lists by id.
+   Answers the list it stood in and the note, or
+   null when it stands nowhere. */
+function patchStateRemove(noteId) {
+  const lists = [["notes", state.notes],
+    ["trash", state.trash], ["archive", state.archive]];
+  for (const pair of lists) {
+    const list = pair[1] || [];
+    const at = list.findIndex(function (n) {
+      return n.id === noteId;
+    });
+    if (at >= 0) {
+      const note = list[at];
+      list.splice(at, 1);
+      return { listName: pair[0], note: note };
+    }
+  }
+  return null;
+}
+
+/* The retained listing entry for one file id,
+   wherever it stands: a notebook's array, the
+   Trash, or the Archive. Answers { place, entries,
+   index } or null. */
+function patchListingFind(fileId) {
+  if (!lastListings) { return null; }
+  const scan = function (entries, place) {
+    if (!entries) { return null; }
+    for (let i = 0; i < entries.length; i++) {
+      if (entries[i] && !entries[i].isDir &&
+          entries[i].fileId === fileId) {
+        return { place: place, entries: entries, index: i };
+      }
+    }
+    return null;
+  };
+  const slugs = Object.keys(lastListings.notebooks || {});
+  for (const slug of slugs) {
+    const hit = scan(lastListings.notebooks[slug], "nb:" + slug);
+    if (hit) { return hit; }
+  }
+  return scan(lastListings.trash, "trash") ||
+    scan(lastListings.archive, "archive");
+}
+
+function patchListingEntriesFor(place) {
+  if (!lastListings) { return null; }
+  if (place === "trash") { return lastListings.trash; }
+  if (place === "archive") { return lastListings.archive; }
+  if (place && place.indexOf("nb:") === 0) {
+    return lastListings.notebooks[place.slice(3)] || null;
+  }
+  return null;
+}
+
+/* The place a file's live parents prove, judged by
+   the classifier's own map: the one place they name,
+   null when they name no known folder, and
+   "conflict" when they name two. */
+function patchHomePlace(parents) {
+  if (!Array.isArray(parents)) { return null; }
+  const places = syncFolderPlaces();
+  let found = null;
+  for (const parentId of parents) {
+    const place = places[parentId];
+    if (!place) { continue; }
+    if (found && found !== place) { return "conflict"; }
+    found = place;
+  }
+  return found;
+}
+
+/* One file's metadata, read by its Drive id: no
+   folder is listed to find it. Answers the metadata,
+   or null when the file is gone. */
+async function patchFetchFileMeta(fileId) {
+  const res = await gdriveFetch(
+    "https://www.googleapis.com/drive/v3/files/" +
+    encodeURIComponent(fileId) + "?fields=" +
+    encodeURIComponent("id,name,mimeType,parents," +
+      "headRevisionId,modifiedTime,trashed"));
+  if (res.status === 404) { return null; }
+  if (!res.ok) {
+    throw new Error(await gdriveErrorMessage(res,
+      "Google Drive read failed with status " + res.status));
+  }
+  return res.json();
+}
+
+/* One file's bytes, read by its Drive id. Answers
+   the text, or null when the file is gone. */
+async function patchFetchFileText(fileId) {
+  const res = await gdriveFetch(
+    "https://www.googleapis.com/drive/v3/files/" +
+    encodeURIComponent(fileId) + "?alt=media");
+  if (res.status === 404) { return null; }
+  if (!res.ok) {
+    throw new Error(await gdriveErrorMessage(res,
+      "Google Drive read failed with status " + res.status));
+  }
+  return res.text();
+}
+
+async function loadPatchedFromRepo(plan) {
+  if (!lastListings) { return false; }
+  if (!plan || plan.patchable !== true) { return false; }
+  /* The structural flags keep their standing loads:
+     an index change can name notebooks the patch has
+     no evidence for, a catalog that moved can carry
+     Doc-backed facts (titles, tags, pins, reminders)
+     no file change in the window names, and the drop
+     box drain is syncNow's own main-pass work. */
+  if (plan.index || plan.catalog || plan.incoming) {
+    return false;
+  }
+  const descriptors = plan.notes || [];
+  const catalog = retainedCatalogForLoad();
+  if (!catalog) { return false; }
+  /* The retained catalog's entries, keyed as the
+     reconcile keys them, under its own validation: a
+     malformed entry is the reconcile's to decline
+     over, not the patch's to guess past. */
+  const entriesByKey = Object.create(null);
+  const entriesById = Object.create(null);
+  let malformed = false;
+  (catalog.entries || []).forEach(function (entry) {
+    if (!entry || typeof entry !== "object" ||
+        typeof entry.id !== "string" || !entry.id ||
+        typeof entry.collection !== "string") {
+      malformed = true;
+      return;
+    }
+    entriesById[entry.id] = entry;
+    if (typeof entry.token === "string" &&
+        typeof entry.fileId === "string") {
+      entriesByKey[entry.collection + "|" + entry.id] = entry;
+    }
+  });
+  if (malformed) { return false; }
+
+  /* The tasks read starts now, as the staged load's
+     does, and lands through the same early landing;
+     a patch that stands down below leaves the read
+     to the generation guard, exactly as a staged
+     load that stands down does. */
+  const tasksGeneration = ++tasksLoadGeneration;
+  tasksLoadApplied = false;
+  let tasksPromise;
+  if (plan.tasks) {
+    tasksPromise = readTasksForLoad();
+    startTasksLanding(tasksPromise, tasksGeneration);
+  } else {
+    tasksPromise = Promise.resolve(null);
+  }
+
+  /* Phase one: judge every descriptor and build
+     every note it names, fetching only those files.
+     Nothing in this phase writes the library, so
+     standing down anywhere in it (answering false)
+     leaves the library exactly as it stood, and the
+     staged load judges the window whole. */
+  reconcileDocBumps = {};
+  attachmentParseWarnings = 0;
+  const pendingIds = pendingDeleteIds();
+  const jobs = [];
+  for (const d of descriptors) {
+    if (pendingIds[d.noteId]) {
+      /* A note this device is still deleting (see
+         the v2.175 pending deletes): the loads skip
+         its id wherever it stands, and so does the
+         patch, listings untouched, as the reconcile
+         leaves them. */
+      jobs.push({ d: d, action: "remove", heldOnly: true });
+      continue;
+    }
+    if (d.kind === "doc") {
+      const entry = entriesById[d.noteId];
+      if (!entry || entry.backend !== "doc" ||
+          sanitizeDocId(entry.docId) !== d.fileId) {
+        return false;
+      }
+      /* The shell, built exactly as the reconcile's
+         Doc pass builds it: from the retained entry,
+         its held body carried when the live pair
+         still matches the pair the body was read
+         under, and the v2.146 updated stamp bump
+         recorded when the pair moved. The live pair
+         here is the change record's own marks, as the
+         poll judges them; a Doc the record removes,
+         or places outside every listed folder, reads
+         as no mark, and the carry fails toward the
+         refetch, exactly as the reconcile reads a Doc
+         its listings cannot see. */
+      const prev = findNoteById(d.noteId);
+      const shell = noteFromCatalogEntry(entry,
+        entry.collection);
+      let liveMark = null;
+      if (!d.removed && !(d.homeKnown &&
+          (d.homeConflict || d.home === "other" ||
+           d.home === "structure"))) {
+        liveMark = { token: d.token || null,
+          modifiedTime: d.modifiedTime || null };
+      }
+      const liveToken = liveMark ? liveMark.token : null;
+      const pairMtimesOk = (liveMark &&
+          liveMark.modifiedTime && prev &&
+          prev.docModifiedTime)
+        ? liveMark.modifiedTime === prev.docModifiedTime
+        : (typeof liveToken === "string" &&
+           liveToken.indexOf("mtime:") === 0);
+      if (prev && isDocBackedNote(prev) &&
+          typeof prev.body === "string" &&
+          liveToken && prev.sha &&
+          liveToken === prev.sha && pairMtimesOk) {
+        shell.body = prev.body;
+        shell.bodyLoaded = true;
+        shell.sha = liveToken;
+        shell.docModifiedTime = liveMark.modifiedTime ||
+          prev.docModifiedTime || null;
+        const prevTicks = sanitizeDocTicks(prev.docTicks);
+        if (prevTicks) { shell.docTicks = prevTicks; }
+        shell.attachments = prev.attachments || [];
+        shell.docName = prev.docName;
+        shell.previewText =
+          htmlToText(prev.body).slice(0, 140);
+      }
+      const docPairMoved = !!prev &&
+        isDocBackedNote(prev) && !!liveMark &&
+        typeof liveMark.modifiedTime === "string" &&
+        !!liveMark.modifiedTime &&
+        ((!!liveToken && !!prev.sha &&
+          liveToken !== prev.sha) ||
+         (!!prev.docModifiedTime &&
+          liveMark.modifiedTime !== prev.docModifiedTime));
+      if (docPairMoved) {
+        reconcileDocBumps[d.noteId] = {
+          modifiedTime: liveMark.modifiedTime,
+          previousUpdated: shell.updated || ""
+        };
+        shell.updated = liveMark.modifiedTime;
+      }
+      jobs.push({ d: d, action: "doc", entry: entry,
+        note: shell });
+      continue;
+    }
+    if (d.removed) {
+      jobs.push({ d: d, action: "remove" });
+      continue;
+    }
+    const meta = await patchFetchFileMeta(d.fileId);
+    if (!meta || meta.trashed) {
+      jobs.push({ d: d, action: "remove" });
+      continue;
+    }
+    const place = patchHomePlace(meta.parents);
+    if (place === "conflict") { return false; }
+    const home = patchPlaceHome(place);
+    if (!home) {
+      /* The file stands outside every folder the
+         loads read, or its home cannot be proven:
+         the loads' answer is that the note is gone
+         from the library. */
+      jobs.push({ d: d, action: "remove" });
+      continue;
+    }
+    if (home.slug && !lastListings.notebooks[home.slug]) {
+      return false;
+    }
+    const cat = entriesByKey[home.collection + "|" + d.noteId];
+    if (cat && cat.backend === "doc") { return false; }
+    const liveToken = driveTokenFromMetadata(meta);
+    const prev = findNoteById(d.noteId);
+    let note = null;
+    if (cat && cat.token === liveToken &&
+        cat.fileId === d.fileId) {
+      /* The reconcile's trusted entry branch (see
+         take() in reconcileCatalogListings): the
+         note rebuilt from its catalog entry, its
+         held body carried when it stands at this
+         exact revision, and no download spent. */
+      note = noteFromCatalogEntry(cat, home.collection);
+      if (prev && prev.sha === liveToken &&
+          typeof prev.body === "string") {
+        note.body = prev.body;
+        note.attachments = prev.attachments;
+        note.bodyLoaded = true;
+        note.previewText = htmlToText(prev.body).slice(0, 140);
+      }
+      note.sha = liveToken;
+      note.fileId = d.fileId;
+    } else {
+      const text = await patchFetchFileText(d.fileId);
+      if (text === null) {
+        jobs.push({ d: d, action: "remove" });
+        continue;
+      }
+      bootCountNoteDownload();
+      const fallbackId = (meta.name || "")
+        .replace(/\.md$/i, "") || d.noteId;
+      note = parseNoteFile(text, liveToken, fallbackId,
+        home.collection === "trash",
+        home.collection === "archive");
+      if (note.id !== d.noteId) {
+        /* The file's own front matter names a
+           different note than the plan named: an
+           identity the listings must judge. */
+        return false;
+      }
+      if (!note.notebook &&
+          home.collection === "notebook") {
+        note.notebook = home.slug;
+      }
+      note.fileId = d.fileId;
+    }
+    /* A move into the Trash or the Archive joins its
+       collection in the deferred tail, as a staged
+       pass leaves it; every other landing patches in
+       place here. */
+    const wasIn = prev ?
+      (prev.trashed ? "trash"
+        : (prev.archived ? "archive" : "notes")) : null;
+    const deferIn = (home.listName === "trash" ||
+        home.listName === "archive") &&
+      wasIn !== home.listName;
+    jobs.push({ d: d, action: deferIn ? "deferIn" : "put",
+      home: home, note: note, meta: meta,
+      liveToken: liveToken });
+  }
+
+  /* Phase two: the patch itself. Every job was
+     judged and built above; this phase only writes,
+     in the plan's order: the standing lists, the
+     retained listings the next classification and
+     the deferred tail judge by, and the driver's
+     path cache. */
+  const patchedIds = [];
+  let countsMoved = false;
+  const countsOf = function () {
+    return state.notes.length + "/" + state.trash.length +
+      "/" + state.archive.length;
+  };
+  const countsBefore = countsOf();
+  for (const job of jobs) {
+    const d = job.d;
+    patchedIds.push(d.noteId);
+    if (job.action === "remove") {
+      patchStateRemove(d.noteId);
+      if (!job.heldOnly) {
+        const hit = patchListingFind(d.fileId);
+        if (hit) { hit.entries.splice(hit.index, 1); }
+      }
+      continue;
+    }
+    if (job.action === "doc") {
+      const targetList = job.entry.collection === "notebook"
+        ? "notes" : job.entry.collection;
+      const beforeDoc = patchStateRemove(d.noteId);
+      patchStateList(targetList).push(job.note);
+      if (beforeDoc && beforeDoc.listName !== targetList) {
+        countsMoved = true;
+      }
+      /* The Doc's own retained listing entry: out
+         when the Doc is gone, refreshed where it
+         stands, and carried to its new folder's
+         array when the record placed it in one. */
+      const hitDoc = patchListingFind(d.fileId);
+      if (d.removed) {
+        if (hitDoc) { hitDoc.entries.splice(hitDoc.index, 1); }
+      } else if (hitDoc) {
+        const entry = hitDoc.entries[hitDoc.index];
+        entry.token = d.token || entry.token;
+        entry.modifiedTime = d.modifiedTime || null;
+        if (d.homeKnown && !d.homeConflict && d.home &&
+            d.home !== "other" && d.home !== "structure" &&
+            d.home !== hitDoc.place) {
+          hitDoc.entries.splice(hitDoc.index, 1);
+          const target = patchListingEntriesFor(d.home);
+          if (target) { target.push(entry); }
+        }
+      }
+      continue;
+    }
+    /* File jobs: "put" lands the note in its home
+       list; "deferIn" only takes it out of its old
+       one, leaving the collection landing to the
+       deferred tail, as a staged pass leaves it. */
+    const before = patchStateRemove(d.noteId);
+    if (job.action === "put") {
+      patchStateList(job.home.listName).push(job.note);
+      if (before && before.note &&
+          before.note.notebook !== job.note.notebook) {
+        countsMoved = true;
+      }
+    }
+    /* The retained listing follows the file: out of
+       its old folder's array, and (for a landing the
+       patch itself judges) into its new home's,
+       carrying the live entry facts. A deferred
+       collection landing adds no entry here: the
+       tail's fresh listing supplies it. */
+    const hit = patchListingFind(d.fileId);
+    if (hit) { hit.entries.splice(hit.index, 1); }
+    if (job.action === "put") {
+      const target = patchListingEntriesFor(
+        job.home.slug ? "nb:" + job.home.slug
+          : job.home.collection);
+      if (target) {
+        target.push({
+          name: job.meta.name,
+          path: (job.home.slug
+            ? "notebooks/" + job.home.slug
+            : job.home.collection) + "/" + job.meta.name,
+          isDir: false,
+          fileId: d.fileId,
+          token: job.liveToken,
+          modifiedTime: job.meta.modifiedTime || null
+        });
+      }
+    }
+    /* The driver's path cache follows the file too,
+       so a later save by name finds the file where
+       it now stands. */
+    if (before && before.note) {
+      const oldPath = notePath(before.note);
+      if (driveCache.fileIds[oldPath] === d.fileId) {
+        delete driveCache.fileIds[oldPath];
+      }
+    }
+    if (job.action === "put") {
+      driveCache.fileIds[job.home.slug
+        ? "notebooks/" + job.home.slug + "/" + job.meta.name
+        : job.home.collection + "/" + job.meta.name] = d.fileId;
+    }
+  }
+  if (countsOf() !== countsBefore) { countsMoved = true; }
+
+  /* The load's tail: finishLoadFromRepo's own
+     sequence of post-load passes, run over the
+     patched lists in its order. */
+  syncLoadGeneration++;
+  const tasksLoad = await tasksPromise;
+  applyLoadedTasks(tasksLoad, tasksGeneration);
+  rebuildAutoSyncKnownIds();
+  rememberLastSavedContentForAllNotes();
+  clearVersionHistoryCache();
+  catalogArmed = true;
+  checkNoteReminders();
+  maybeOpenPendingNoteReminder();
+  pruneShortcuts();
+  saveCache();
+  if (attachmentParseWarnings > 0) {
+    toast("Warning: " + attachmentParseWarnings +
+      " note(s) had unreadable " +
+      "attachment data and were opened without it. " +
+      "The notes themselves are fine.", true);
+    attachmentParseWarnings = 0;
+  }
+  patchLoadInfo = { ids: patchedIds, countsMoved: countsMoved };
+  return true;
+}
+
 /* --------------------------------------------------------------------------
    v2.142: the staged load's retained evidence
 
@@ -2720,6 +3255,9 @@ async function finishLoadFromRepo(loaded, tasksPromise, tasksGeneration) {
 }
 
 async function loadAllFromRepo(plan) {
+  /* v2.177: a load that is not a patch leaves no
+     patch record behind for syncNow to spend. */
+  patchLoadInfo = null;
   /* v2.143: the load fence. Any catalog write this
      session still owes (a notebook move above all)
      lands before this load reads anything, on the
@@ -2748,6 +3286,8 @@ async function loadAllFromRepo(plan) {
      below, so the full path remains the answer for
      everything a plan cannot prove. */
   if (plan) {
+    const patchedDone = await loadPatchedFromRepo(plan);
+    if (patchedDone) { return; }
     const stagedDone = await loadStagedFromRepo(plan);
     if (stagedDone) { return; }
   }
@@ -2975,6 +3515,12 @@ async function syncNow(showToast) {
     refreshGcalAfterSync();
     refreshMailAfterSync();
   }
+  /* v2.177: the patch record of the load that just
+     ran, spent on the targeted repaint below and
+     cleared here so no later pass can spend it
+     twice. */
+  const patchInfo = patchLoadInfo;
+  patchLoadInfo = null;
     /* v2.20: if the load left the OPEN note as a catalog shell
        (its stored revision moved past the body this session
        held, so reconciliation trusted the listing and kept no
@@ -2993,18 +3539,34 @@ async function syncNow(showToast) {
       await ensureNoteBodyLoaded(openAfterLoad);
     }
     syncOpenNoteRefresh = openNoteCtx;
-    /* v2.112.0: the reader's place, captured with
-       the load landed and the render about to run,
-       and restored on the render's far side, so the
-       sync leaves the reader where it found them
-       (see the place block at captureSyncPlace). */
-    const syncPlace = captureSyncPlace();
-    try {
-      renderAll();
-    } finally {
-      syncOpenNoteRefresh = null;
+    if (patchInfo) {
+      /* v2.177: a patch pass repaints only what the
+         patch changed (see refreshPatchSurfaces in
+         render.js): the affected list rows, the
+         sidebar counts when they moved, and the open
+         note through the standing refresh judgment
+         above when it is one of the patched notes.
+         Nothing wholesale moves, so the reader's
+         place needs no capture or restore. */
+      try {
+        refreshPatchSurfaces(patchInfo);
+      } finally {
+        syncOpenNoteRefresh = null;
+      }
+    } else {
+      /* v2.112.0: the reader's place, captured with
+         the load landed and the render about to run,
+         and restored on the render's far side, so
+         the sync leaves the reader where it found
+         them (see the place block at captureSyncPlace). */
+      const syncPlace = captureSyncPlace();
+      try {
+        renderAll();
+      } finally {
+        syncOpenNoteRefresh = null;
+      }
+      restoreSyncPlace(syncPlace);
     }
-    restoreSyncPlace(syncPlace);
     /* v2.146: the open note's outside bump, handed
        to the pending refill when the render above
        refused it. The load raised the open note's
