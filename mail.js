@@ -6391,7 +6391,7 @@ function initMailBindings() {
     "click", function () { requestCloseMailCompose(); });
   mailEl("mailComposeModal").addEventListener("click",
     function (ev) {
-      if (ev.target === ev.currentTarget) {
+      if (pressGuardBackdropClick(ev)) {
         requestCloseMailCompose();
       }
     });

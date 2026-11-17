@@ -1318,7 +1318,7 @@ function wireEvents() {
     closeNbNameModal();
   });
   document.getElementById("nbNameModal").addEventListener("click", function (ev) {
-    if (ev.target === ev.currentTarget) { closeNbNameModal(); }
+    if (pressGuardBackdropClick(ev)) { closeNbNameModal(); }
   });
   document.getElementById("nbNameInput").addEventListener("keydown", function (ev) {
     if (ev.key === "Enter") {
@@ -1343,7 +1343,7 @@ function wireEvents() {
     closeNbDeleteConfirm();
   });
   document.getElementById("nbDeleteModal").addEventListener("click", function (ev) {
-    if (ev.target === ev.currentTarget) { closeNbDeleteConfirm(); }
+    if (pressGuardBackdropClick(ev)) { closeNbDeleteConfirm(); }
   });
   document.addEventListener("keydown", function (ev) {
     if (ev.key !== "Escape") { return; }
@@ -1363,7 +1363,7 @@ function wireEvents() {
     closeStackDeleteConfirm();
   });
   document.getElementById("stackDeleteModal").addEventListener("click", function (ev) {
-    if (ev.target === ev.currentTarget) { closeStackDeleteConfirm(); }
+    if (pressGuardBackdropClick(ev)) { closeStackDeleteConfirm(); }
   });
   document.addEventListener("keydown", function (ev) {
     if (ev.key !== "Escape") { return; }
@@ -1383,7 +1383,7 @@ function wireEvents() {
     closeTemplateGallery();
   });
   document.getElementById("templateModal").addEventListener("click", function (ev) {
-    if (ev.target === ev.currentTarget) { closeTemplateGallery(); }
+    if (pressGuardBackdropClick(ev)) { closeTemplateGallery(); }
   });
   /* v2.42: the merge order dialog's buttons, backdrop,
      and Escape. Merge confirms the order the rows stand
@@ -1399,7 +1399,7 @@ function wireEvents() {
     closeMergeOrderDialog(null);
   });
   document.getElementById("mergeOrderModal").addEventListener("click", function (ev) {
-    if (ev.target === ev.currentTarget) { closeMergeOrderDialog(null); }
+    if (pressGuardBackdropClick(ev)) { closeMergeOrderDialog(null); }
   });
   document.addEventListener("keydown", function (ev) {
     if (ev.key !== "Escape") { return; }
@@ -1462,7 +1462,7 @@ function wireEvents() {
     confirmScanDialog();
   });
   document.getElementById("scanModal").addEventListener("click", function (ev) {
-    if (ev.target === ev.currentTarget) { closeScanDialog(); }
+    if (pressGuardBackdropClick(ev)) { closeScanDialog(); }
   });
   document.querySelectorAll("#scanStage .scan-handle")
     .forEach(function (h) {
@@ -1531,7 +1531,7 @@ function wireEvents() {
     saveSketchDialog();
   });
   document.getElementById("sketchModal").addEventListener("click", function (ev) {
-    if (ev.target === ev.currentTarget) { closeSketchDialog(); }
+    if (pressGuardBackdropClick(ev)) { closeSketchDialog(); }
   });
   document.addEventListener("keydown", function (ev) {
     if (ev.key !== "Escape") { return; }
@@ -1855,7 +1855,7 @@ function wireEvents() {
      versions input applies on change. */
   document.getElementById("settingsCloseBtn").addEventListener("click", closeSettingsModal);
   document.getElementById("settingsModal").addEventListener("click", function (ev) {
-    if (ev.target === ev.currentTarget) { closeSettingsModal(); }
+    if (pressGuardBackdropClick(ev)) { closeSettingsModal(); }
   });
   document.getElementById("settingsModal").addEventListener("keydown", function (ev) {
     if (ev.key === "Escape") { closeSettingsModal(); }
@@ -2035,10 +2035,10 @@ function wireEvents() {
     }
   });
   document.getElementById("gcalEventModal").addEventListener("click", function (ev) {
-    if (ev.target === ev.currentTarget) { closeGcalEventEditor(); }
+    if (pressGuardBackdropClick(ev)) { closeGcalEventEditor(); }
   });
   document.getElementById("gcalDeleteModal").addEventListener("click", function (ev) {
-    if (ev.target === ev.currentTarget) { closeGcalDeleteConfirm(); }
+    if (pressGuardBackdropClick(ev)) { closeGcalDeleteConfirm(); }
   });
   /* v2.83: the event view's wiring, and the two Link a
      note buttons (the editor's and the view's). */
@@ -2085,7 +2085,7 @@ function wireEvents() {
     taskRowMenuDelete();
   });
   document.getElementById("gcalViewModal").addEventListener("click", function (ev) {
-    if (ev.target === ev.currentTarget) { closeGcalEventView(); }
+    if (pressGuardBackdropClick(ev)) { closeGcalEventView(); }
   });
   /* v2.65: the orphaned attachments scan button. The scan
      runs only from this press; the function's own guard
@@ -2158,7 +2158,7 @@ function wireEvents() {
     });
   document.getElementById("taskModal").addEventListener("click",
     function (ev) {
-      if (ev.target === ev.currentTarget) { closeTaskEditor(); }
+      if (pressGuardBackdropClick(ev)) { closeTaskEditor(); }
     });
   /* v2.28.0: the description toolbar. A mousedown on a
      button is swallowed so the description editor's
@@ -2326,7 +2326,7 @@ function wireEvents() {
   document.getElementById("onboardingBackBtn").addEventListener("click", onboardingBack);
   document.getElementById("onboardingSkipBtn").addEventListener("click", finishOnboarding);
   document.getElementById("onboardingModal").addEventListener("click", function (ev) {
-    if (ev.target === ev.currentTarget) { finishOnboarding(); }
+    if (pressGuardBackdropClick(ev)) { finishOnboarding(); }
   });
   document.getElementById("onboardingModal").addEventListener("keydown", function (ev) {
     if (ev.key === "Escape") { finishOnboarding(); }
@@ -2355,7 +2355,7 @@ function wireEvents() {
   document.getElementById("shareCloseBtn").addEventListener("click", closeShareDialog);
   document.getElementById("shareCloseXBtn").addEventListener("click", closeShareDialog);
   document.getElementById("shareModal").addEventListener("click", function (ev) {
-    if (ev.target === ev.currentTarget) { closeShareDialog(); }
+    if (pressGuardBackdropClick(ev)) { closeShareDialog(); }
   });
   document.getElementById("shareModal").addEventListener("keydown", function (ev) {
     if (ev.key === "Escape") { closeShareDialog(); }
@@ -2497,7 +2497,17 @@ function wireEvents() {
     if (target.closest("#tagPicker") ||
         target.closest(".tag-picker-row") ||
         target === noteTagsInput) { return; }
-    closeTagPicker();
+    /* v2.183: the dismissal defers to the press's
+       end through the press-origin guard (core.js):
+       the picker falls only if the press also ends
+       outside it, so a press that starts outside and
+       is released inside never dismisses it. */
+    pressGuardDeferDismissal(function (t) {
+      return !!(t && t.closest &&
+        !t.closest("#tagPicker") &&
+        !t.closest(".tag-picker-row") &&
+        t !== noteTagsInput);
+    }, closeTagPicker);
   });
   document.addEventListener("keydown", function (ev) {
     if (ev.key !== "Escape" || !tagPickerOpen()) { return; }
@@ -2812,18 +2822,19 @@ function wireEvents() {
   document.addEventListener("click", function (ev) {
     const target = ev.target;
     if (!target || !target.closest) { return; }
+    /* v2.183: both outside judgments run through
+       the press-origin guard (core.js), like the
+       mention popup's above. */
     if (eventLinkPopupOpen() &&
-        !target.closest("#eventLinkPopup") &&
-        !target.closest("#noteBody") &&
-        !target.closest("#homeScratchText") &&
-        !target.closest("#homeScratchToolbar")) {
+        pressGuardOutsideClick(ev, ["#eventLinkPopup",
+          "#noteBody", "#homeScratchText",
+          "#homeScratchToolbar"])) {
       closeEventLinkPopup();
     }
     if (tagLinkPopupOpen() &&
-        !target.closest("#tagLinkPopup") &&
-        !target.closest("#noteBody") &&
-        !target.closest("#homeScratchText") &&
-        !target.closest("#homeScratchToolbar")) {
+        pressGuardOutsideClick(ev, ["#tagLinkPopup",
+          "#noteBody", "#homeScratchText",
+          "#homeScratchToolbar"])) {
       closeTagLinkPopup();
     }
   });
@@ -2874,11 +2885,13 @@ function wireEvents() {
     if (!mentionPopupOpen()) { return; }
     const target = ev.target;
     if (!target || !target.closest) { return; }
-    if (target.closest("#mentionPopup") ||
-        target.closest("#noteBody") ||
-        target.closest("#taskDescInput") ||
-        target.closest("#homeScratchText") ||
-        target.closest("#homeScratchToolbar")) { return; }
+    /* v2.183: the outside judgment runs through the
+       press-origin guard (core.js): a press that
+       started inside the popup, or started outside
+       and ended inside it, never closes it. */
+    if (!pressGuardOutsideClick(ev, ["#mentionPopup",
+        "#noteBody", "#taskDescInput", "#homeScratchText",
+        "#homeScratchToolbar"])) { return; }
     closeMentionPopup();
   });
   const mentionPopupEl = document.getElementById("mentionPopup");
@@ -2977,7 +2990,14 @@ function wireEvents() {
     if (target && target.closest && target.closest("#pastePopup")) {
       return;
     }
-    closePastePopup();
+    /* v2.183: the dismissal defers to the press's
+       end through the press-origin guard (core.js),
+       like the tag picker's: the popup falls only
+       when the press also ends outside it. */
+    pressGuardDeferDismissal(function (t) {
+      return !!(t && t.closest &&
+        !t.closest("#pastePopup"));
+    }, closePastePopup);
   });
 
   /* Checklist toggling: a click on a checkbox inside the body flips the
@@ -3524,7 +3544,7 @@ function wireEvents() {
     closeImageLightbox();
   });
   document.getElementById("imgLightbox").addEventListener("click", function (ev) {
-    if (ev.target === ev.currentTarget) { closeImageLightbox(); }
+    if (pressGuardBackdropClick(ev)) { closeImageLightbox(); }
   });
 
   /* v2.11: the image editor's controls. The canvas takes the pen
@@ -3594,7 +3614,7 @@ function wireEvents() {
     saveImageEditor().catch(function (err) { toast(err.message, true); });
   });
   document.getElementById("imgEditorModal").addEventListener("click", function (ev) {
-    if (ev.target === ev.currentTarget) { closeImageEditor(); }
+    if (pressGuardBackdropClick(ev)) { closeImageEditor(); }
   });
 
   /* v2.11: clicking an image's caption opens its editor (a
@@ -3666,8 +3686,10 @@ function wireEvents() {
     if (!menu || menu.classList.contains("hidden")) { return; }
     const target = ev.target;
     if (!target || !target.closest) { return; }
-    if (target.closest("#tableMenu")) { return; }
-    if (target.closest("#tableMenuBtn")) { return; }
+    /* v2.183: the outside judgment runs through the
+       press-origin guard (core.js). */
+    if (!pressGuardOutsideClick(ev,
+        ["#tableMenu", "#tableMenuBtn"])) { return; }
     closeTableMenu();
   });
   document.addEventListener("keydown", function (ev) {
@@ -4098,7 +4120,7 @@ function wireEvents() {
      or Escape closes the picker without inserting anything. */
   document.getElementById("noteLinkCancelBtn").addEventListener("click", closeNoteLinkPicker);
   document.getElementById("noteLinkModal").addEventListener("click", function (ev) {
-    if (ev.target === ev.currentTarget) { closeNoteLinkPicker(); }
+    if (pressGuardBackdropClick(ev)) { closeNoteLinkPicker(); }
   });
   document.getElementById("noteLinkSearch").addEventListener("input", function (ev) {
     renderNoteLinkResults(ev.target.value);

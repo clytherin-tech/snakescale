@@ -7636,7 +7636,14 @@ function wireToolbar() {
      controls. v2.24.5: the phone panel rides along on both rules; it
      sits inside #toolbar, so its own clicks never read as outside. */
   document.addEventListener("click", function (ev) {
-    if (!ev.target.closest("#toolbar")) {
+    /* v2.183: the outside judgment runs through the
+       press-origin guard (core.js): a press that
+       started inside the toolbar (the Insert menu and
+       its sub-menus live there) and ended outside it
+       no longer closes the menus, and a press that
+       started outside and ended inside does not
+       either. */
+    if (pressGuardOutsideClick(ev, ["#toolbar"])) {
       closeToolbarMenus();
       closeTbPanel();
     }

@@ -658,6 +658,136 @@ const state = {
    2. Small utilities
    -------------------------------------------------------------------------- */
 
+/* v2.183: the press-origin guard. One shared judgment
+   for every surface that dismisses on an outside press:
+   the modal family's backdrop clicks, the image
+   lightbox, the popups' and menus' document level
+   outside click closers, and the two press-start
+   closers (the tag picker and the paste popup). Chris's
+   report: highlighting text inside a dialog, the
+   pointer drifts off it, and releasing the button
+   outside closes the dialog and loses the edit, because
+   a press that starts inside a surface and ends outside
+   it still produces a click on the nearest common
+   ancestor of the press's two ends, which a plain
+   target judgment reads as a backdrop or outside click.
+   The guard records where each press started and where
+   it ended (pointer events, with the mouse events as
+   their companion and fallback, so mouse and touch are
+   judged alike), and a dismissal is genuine only when
+   the press BOTH started and ended outside the surface:
+   a press starting inside and releasing outside never
+   dismisses, a press starting outside and releasing
+   inside never dismisses, and a press that starts and
+   ends outside dismisses exactly as it always has. A
+   click with no recorded press behind it (a keyboard
+   driven or programmatic click) is judged on its
+   target alone, as every closer judged it before.
+   Escape dismissal is untouched everywhere. */
+let pressGuardPress = null;       /* { down, up } of the press in flight */
+let pressGuardClickEvent = null;  /* the click the record belongs to */
+let pressGuardClickOrigin = null; /* that click's press record */
+let pressGuardPending = [];       /* deferred press-start dismissals */
+
+function pressGuardNoteDown(target) {
+  /* A new press supersedes the last one and any
+     dismissal a previous press left unsettled. The
+     pointer and mouse reports of one press carry the
+     same target, so the second report simply re-states
+     the same record. */
+  pressGuardPress = { down: target, up: null };
+  pressGuardPending = [];
+}
+
+function pressGuardNoteUp(target) {
+  if (pressGuardPress) { pressGuardPress.up = target; }
+  /* A press-start dismissal deferred at the press's
+     start is judged now, at its end: it lands only
+     when the press also ends outside its surface. */
+  const pending = pressGuardPending;
+  pressGuardPending = [];
+  pending.forEach(function (p) {
+    if (p.isOutside(target)) { p.closeFn(); }
+  });
+}
+
+document.addEventListener("pointerdown", function (ev) {
+  pressGuardNoteDown(ev.target);
+}, true);
+document.addEventListener("mousedown", function (ev) {
+  pressGuardNoteDown(ev.target);
+}, true);
+document.addEventListener("pointerup", function (ev) {
+  pressGuardNoteUp(ev.target);
+}, true);
+document.addEventListener("mouseup", function (ev) {
+  pressGuardNoteUp(ev.target);
+}, true);
+document.addEventListener("pointercancel", function () {
+  pressGuardPress = null;
+  pressGuardPending = [];
+}, true);
+document.addEventListener("click", function (ev) {
+  /* The click's judges run later in this same dispatch
+     (the closers listen in the bubble phase), so the
+     press record is handed over here, keyed to this
+     exact click, and the in-flight record is spent: a
+     later click with no press of its own is judged on
+     its target alone. */
+  pressGuardClickEvent = ev;
+  pressGuardClickOrigin = pressGuardPress;
+  pressGuardPress = null;
+}, true);
+
+/* True when the press behind this click stayed outside
+   the region isInside describes at both ends. No
+   recorded press reads as a genuine outside press, so
+   programmatic clicks keep their standing judgment. */
+function pressGuardPressOutside(ev, isInside) {
+  const rec = ev === pressGuardClickEvent ?
+    pressGuardClickOrigin : null;
+  if (!rec || !rec.down) { return true; }
+  if (isInside(rec.down)) { return false; }
+  if (isInside(rec.up || rec.down)) { return false; }
+  return true;
+}
+
+/* The modal family's judge: the click must land on the
+   backdrop itself (the standing target judgment), and
+   the press behind it must have started and ended on
+   the backdrop too, never inside the card it frames. */
+function pressGuardBackdropClick(ev) {
+  const root = ev.currentTarget;
+  if (!root || ev.target !== root) { return false; }
+  return pressGuardPressOutside(ev, function (t) {
+    return !!t && t !== root && !!root.contains(t);
+  });
+}
+
+/* The popups' and menus' judge: the click's target and
+   both ends of the press behind it must all stand
+   outside every selector's region. */
+function pressGuardOutsideClick(ev, selectors) {
+  const isInside = function (t) {
+    if (!t || !t.closest) { return false; }
+    for (let i = 0; i < selectors.length; i++) {
+      if (t.closest(selectors[i])) { return true; }
+    }
+    return false;
+  };
+  if (isInside(ev.target)) { return false; }
+  return pressGuardPressOutside(ev, isInside);
+}
+
+/* The press-start closers' door: a dismissal asked for
+   at a press's start is held until the press ends, and
+   lands only when the release target also stands
+   outside (isOutside judges it). */
+function pressGuardDeferDismissal(isOutside, closeFn) {
+  pressGuardPending.push(
+    { isOutside: isOutside, closeFn: closeFn });
+}
+
 /* Escape user text before it is placed into any HTML string. List rendering
    mostly builds DOM nodes with textContent, and this helper covers the few
    places where an HTML string is assembled (tag chips inside cards are
