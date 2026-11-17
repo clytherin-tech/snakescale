@@ -3030,8 +3030,8 @@ function initNoteDragAndDrop() {
    settle is an ordinary autosave in every respect (the
    untouched note gate, the conflict machinery, the v2.50
    settlement counts) that merely happens before the editor
-   lets go of the note instead of 800 ms after the last
-   keystroke. The pass reports its outcome as a string so
+   lets go of the note instead of one quiet period after
+   the last keystroke. The pass reports its outcome as a string so
    the settle can tell a landing from a pause from a hard
    failure: "landed" (written, queued offline, preserved
    through a conflict, or the untouched gate's no op),
@@ -3201,7 +3201,7 @@ async function runEditorAutosave() {
   return saveLanded ? "landed" : (savePaused ? "held" : "failed");
 }
 
-/* v2.51: the autosave's 800 ms debounce, as a named timer
+/* v2.51: the autosave's debounce, as a named timer
    instead of the generic debounce helper, with exactly the
    debounce's behavior: every call (markDirty's, and any
    direct caller forcing a pass) resets the wait, and the
@@ -3210,7 +3210,29 @@ async function runEditorAutosave() {
    cancel a pending pass: once a settle has run the pass
    early and landed the edits, the timer that was counting
    down to run it again must not fire a second, pointless
-   pass against whatever note the editor shows by then. */
+   pass against whatever note the editor shows by then.
+
+   v2.178: the wait itself is five seconds of quiet, not
+   the 800 ms this debounce carried through v2.177.
+   Chris asked for this on Nov 16, 2026: every pause
+   longer than the old wait landed its own save, and on
+   a Doc-backed note every landed save writes the Google
+   Doc, so an ordinary burst of typing and pausing
+   flooded the Doc's version history with one version
+   per pause. Now a save waits for five seconds with no
+   editor activity, and because every call still resets
+   the wait, resuming inside the window defers the save
+   again: everything that reaches this timer reaches it
+   through markDirty (typing, the title field, checklist
+   ticks, formatting commands, image work in the body,
+   and the block grip drag's drop, which calls markDirty
+   when a block actually moved), so one burst of editing
+   of any kind lands as one save and one version.
+   Nothing else about the pass moves: the note switch
+   settle below still runs it immediately on leaving,
+   cancelPendingAutosave still cancels it, and
+   deliberate saves never wait on this timer. */
+const EDITOR_AUTOSAVE_QUIET_MS = 5000;
 let editorAutosaveTimer = null;
 function autosave() {
   if (editorAutosaveTimer !== null) {
@@ -3219,7 +3241,7 @@ function autosave() {
   editorAutosaveTimer = setTimeout(function () {
     editorAutosaveTimer = null;
     void runEditorAutosave();
-  }, 800);
+  }, EDITOR_AUTOSAVE_QUIET_MS);
 }
 
 /* Cancel the pending debounced autosave pass, if one is
@@ -3239,7 +3261,8 @@ function cancelPendingAutosave() {
    experiment (and re-proven against v2.50.0 before this
    fix): edits live in the editor's fields and reach the
    note's stored object only when the debounced autosave
-   collects them, 800 ms after the last keystroke. Opening
+   collects them, one quiet period after the last
+   keystroke. Opening
    another note inside that window re-rendered the editor
    from the new note's stored body, and the pending pass
    then collected the NEW note's fields against the new
