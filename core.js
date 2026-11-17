@@ -223,6 +223,12 @@ const LS_ACCOUNT_NAME = "snakescale.accountName.v1";
    that (see the pending deletions section in
    render.js). */
 const LS_PENDING_DELETES = "snakescale.pendingDeletes.v1";
+/* v2.181: the IMDb preview data cache: the parsed
+   imdb-previews.json entries, kept on this device
+   only (never synced), so a cold boot can answer a
+   link hover before the first load lands (see the
+   IMDb previews block in tasks.js). */
+const LS_IMDB_PREVIEWS = "snakescale.imdbPreviews.v1";
 /* The device key. This random AES-GCM key is kept on this device so
    it can encrypt the Google token store and the local note cache at
    rest across reloads. It is not a credential and it is not a login:
@@ -1341,6 +1347,10 @@ async function signOut() {
      stay in Drive, and the editor closes with the session. */
   state.tasks = [];
   resetTasksRuntimeState();
+  /* v2.181: the IMDb preview data is the signed in
+     store's, so its session state and device cache
+     go with the tasks'. */
+  resetImdbPreviewsRuntimeState();
   closeTaskEditor();
   /* v2.15: signing out cancels the pending automatic renewal,
      so no silent ask can resurrect the session just left. */

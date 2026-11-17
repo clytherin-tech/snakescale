@@ -1188,6 +1188,79 @@ function setLinkBarMode(editing) {
   const form = document.getElementById("linkEditForm");
   if (view) { view.classList.toggle("hidden", editing); }
   if (form) { form.classList.toggle("hidden", !editing); }
+  /* v2.181: the IMDb preview extension follows the
+     mode: it stands under the view face and never
+     under the edit form (the form is the whole bar
+     while it is up). Every show of the bar passes
+     through here, so this one call keeps the
+     extension honest for hover, tap, and the
+     return from an edit alike. */
+  refreshLinkBarImdbPreview(linkBarAnchor);
+}
+
+/* ---------------- v2.181: the IMDb preview extension ------
+   The link bar, extended: when the bar serves an
+   IMDb title link and the preview data (see the
+   IMDb previews block in tasks.js) holds an entry
+   for the title, a block under the bar's standing
+   face shows the entry's poster and description.
+   The face above it (the link and its open, copy,
+   edit, unlink, and view-as tools) is untouched,
+   and editing through it is the ordinary edit.
+   Display only: the block lives in the bar, which
+   lives outside #noteBody, so nothing here can
+   reach a saved note, dirty one, or be saved. */
+
+/* The IMDb title id inside a link address, or null:
+   imdb.com/title/tt<digits>, with or without the
+   www, with any trailing path or query allowed. */
+function imdbIdOfHref(href) {
+  const m = /^(?:https?:\/\/)?(?:www\.)?imdb\.com\/title\/(tt\d+)(?:[/?#]|$)/i
+    .exec(String(href || ""));
+  return m ? m[1].toLowerCase() : null;
+}
+
+/* Show or hide the preview extension for the anchor
+   the bar is serving. An entry stands only when
+   the bar is in its view face; the edit face, an
+   ordinary link, an unknown title, and a store
+   with no preview data all leave the block hidden
+   and emptied, which is the pre v2.181 bar exactly.
+   A poster that fails to load hides itself (its
+   error wiring stands in app.js), leaving the
+   description standing alone with no broken image
+   artifact. */
+function refreshLinkBarImdbPreview(anchor) {
+  const block = document.getElementById("linkBarImdbPreview");
+  if (!block) { return; }
+  const img = document.getElementById("linkBarImdbPoster");
+  const desc = document.getElementById("linkBarImdbDesc");
+  const href = anchor
+    ? (anchor.getAttribute("href") || anchor.href || "")
+    : "";
+  const ttId = anchor ? imdbIdOfHref(href) : null;
+  const entry = (!linkBarEditing && ttId)
+    ? imdbPreviewEntry(ttId) : null;
+  if (!entry) {
+    block.classList.add("hidden");
+    if (img) {
+      img.removeAttribute("src");
+      img.classList.add("hidden");
+    }
+    if (desc) { desc.textContent = ""; }
+    return;
+  }
+  if (desc) { desc.textContent = entry.description || ""; }
+  if (img) {
+    if (entry.posterUrl) {
+      img.classList.remove("hidden");
+      img.src = entry.posterUrl;
+    } else {
+      img.classList.add("hidden");
+      img.removeAttribute("src");
+    }
+  }
+  block.classList.remove("hidden");
 }
 
 /* Position the bar just ABOVE the given link (below it when there is

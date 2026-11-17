@@ -3249,6 +3249,17 @@ function wireEvents() {
      openNoteLink with the href captured when the bar was shown, so
      the protocol safety check applies exactly as it does to
      Ctrl+click, and the bar closes first. */
+  /* v2.181: a preview poster that fails to load
+     hides itself, so the card degrades to its
+     description with no broken image artifact. */
+  const linkBarImdbPosterEl =
+    document.getElementById("linkBarImdbPoster");
+  if (linkBarImdbPosterEl) {
+    linkBarImdbPosterEl.addEventListener("error", () => {
+      linkBarImdbPosterEl.classList.add("hidden");
+      linkBarImdbPosterEl.removeAttribute("src");
+    });
+  }
   document.getElementById("linkBarUrl").addEventListener("click", function (ev) {
     ev.preventDefault();
     /* v2.10: for a note link the label is the target's title

@@ -3297,6 +3297,25 @@ body.dark #nbActionMenu.nb-context:hover::-webkit-scrollbar-thumb{
 #cellBgSub .tb-swatches{padding:2px;}
 /* The bar's normal view: one row of globe, address, icon buttons. */
 #linkBarView{display:flex;align-items:center;gap:4px;}
+/* v2.181: the IMDb preview extension under the link
+   bar's face: the poster at a fixed height (so the
+   bar's size is settled before the image lands and
+   the positioning pass measures the final size) and
+   the description beside it, capped to the same
+   height with its own scroll. */
+#linkBarImdbPreview{
+  display:flex;gap:10px;align-items:flex-start;
+  margin-top:6px;padding:10px 6px 4px;
+  border-top:1px solid rgba(234,243,236,.18);
+  max-width:340px;
+}
+#linkBarImdbPoster{
+  height:120px;width:auto;flex:none;border-radius:6px;
+}
+#linkBarImdbDesc{
+  font-size:12.5px;line-height:1.45;color:#EAF3EC;
+  max-height:120px;overflow-y:auto;
+}
 #linkBarGlobe{display:inline-flex;flex:none;color:#9FD4B2;padding:0 2px 0 4px;}
 #linkBarGlobe svg{display:block;}
 #linkBarUrl{

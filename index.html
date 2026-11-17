@@ -6894,6 +6894,16 @@
                 <button class="btn small accent" id="linkEditSave" type="button">Save</button>
               </div>
             </div>
+            <!-- v2.181: the IMDb preview extension: the poster
+                 and description for an IMDb title link, shown
+                 under the bar's standing face (see
+                 refreshLinkBarImdbPreview in editor.js).
+                 Display only; it lives in the bar, outside
+                 the note body, and is never saved. -->
+            <div id="linkBarImdbPreview" class="hidden">
+              <img id="linkBarImdbPoster" class="hidden" alt="">
+              <div id="linkBarImdbDesc"></div>
+            </div>
           </div>
           <!-- v2.10: the View Link As menu is the link bar's
                SIBLING now, not its child (through v2.9 it hung

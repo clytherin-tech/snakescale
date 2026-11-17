@@ -71,6 +71,16 @@
    task's updated stamp, which records human edits.
    -------------------------------------------------------------------------- */
 const TASKS_FILE = "tasks.json";
+/* v2.181: the IMDb preview data file, an app owned
+   file in the store root beside tasks.json: a map
+   from an IMDb title id ("tt0133093") to the
+   poster address and description the link bar's
+   preview extension shows. The app only ever
+   READS it; it is written outside the app (Sarah
+   generates it from the movie catalog data), so
+   a store without one is an ordinary store and
+   every IMDb link in it is a plain link. */
+const IMDB_PREVIEWS_FILE = "imdb-previews.json";
 const TASKS_SHAPE_VERSION = 1;
 const TASKS_WRITE_DEBOUNCE_MS = 800;
 
@@ -85,6 +95,15 @@ let tasksWritable = false;       /* a real mutation has armed overwriting */
 let tasksLoadApplied = false;    /* v2.53: this load's tasks read has landed */
 let tasksLoadGeneration = 0;     /* v2.53: per load stamp; a stale read's
                                     landing is refused (see applyLoadedTasks) */
+/* v2.181: the IMDb preview state: the entries the
+   last judged load read (seeded from the device
+   cache at startup, so a hover can be answered
+   before the first load lands), and the token of
+   the previews file last read, the echo test the
+   sync classifier and the change trigger judge
+   by, exactly as lastTasksToken serves tasks. */
+let imdbPreviewsById = loadImdbPreviewsDeviceCache();
+let lastImdbPreviewsToken = null;
 /* v2.148: the tombstone list: the ids of tasks deleted in
    the app, carried in tasks.json beside the task list
    (see buildTasksObject). A deletion removes the record
@@ -603,6 +622,134 @@ function applyLoadedTasks(tasksLoad, generation) {
   saveCache();
   repaintTaskSurfaces();
   return true;
+}
+
+/* ---------------- v2.181: IMDb preview data ----------------
+   The data half of the link bar's IMDb preview (the
+   card half lives in editor.js). The shape on disk is
+   a plain object: { "tt0133093": { posterUrl: "...",
+   description: "..." }, ... }. Every judgment here is
+   the tasks read's judgment in miniature: the parse is
+   strict and degrades to an empty map rather than
+   failing anything, a transport failure keeps the
+   data already held, and a landing is judged by the
+   load generation that started its read, so a stale
+   read can never overwrite a newer one. Nothing in
+   this block ever writes to the store. */
+
+/* The strict parse: only well formed entries stand
+   (an IMDb title id key, string fields), each kept
+   as exactly {posterUrl, description}; an entry
+   with neither field has nothing to show and drops. */
+function sanitizeImdbPreviews(parsed) {
+  const out = Object.create(null);
+  if (!parsed || typeof parsed !== "object" ||
+      Array.isArray(parsed)) { return out; }
+  Object.keys(parsed).forEach(function (key) {
+    if (!/^tt\d+$/.test(key)) { return; }
+    const raw = parsed[key];
+    if (!raw || typeof raw !== "object") { return; }
+    const posterUrl = typeof raw.posterUrl === "string"
+      ? raw.posterUrl : "";
+    const description = typeof raw.description === "string"
+      ? raw.description : "";
+    if (!posterUrl && !description) { return; }
+    out[key] = { posterUrl: posterUrl,
+      description: description };
+  });
+  return out;
+}
+
+/* The device cache's read, at startup: the last
+   entries this device judged, or an empty map. */
+function loadImdbPreviewsDeviceCache() {
+  try {
+    const raw = localStorage.getItem(LS_IMDB_PREVIEWS);
+    if (!raw) { return Object.create(null); }
+    return sanitizeImdbPreviews(JSON.parse(raw));
+  } catch (e) { return Object.create(null); }
+}
+
+/* The device cache's write, at every landing: a full
+   or blocked store leaves the in-memory map standing
+   and is not an error anyone surfaces. */
+function saveImdbPreviewsDeviceCache() {
+  try {
+    localStorage.setItem(LS_IMDB_PREVIEWS,
+      JSON.stringify(imdbPreviewsById));
+  } catch (e) { /* the in-memory copy stands */ }
+}
+
+/* The previews read for a load, the tasks read's
+   sibling: returns null on a transport failure (the
+   load keeps the data it already holds), and
+   otherwise {entries, token}: a missing file is an
+   empty map and no token (the store simply has no
+   preview data), and an unparseable file is an
+   empty map with its token kept, so the classifier
+   can judge its echo like any other read file's. */
+async function readImdbPreviewsForLoad() {
+  let file = null;
+  try {
+    file = await storeGetFile(IMDB_PREVIEWS_FILE);
+  } catch (err) { return null; }
+  if (!file) { return { entries: Object.create(null),
+    token: null }; }
+  let entries = Object.create(null);
+  try {
+    entries = sanitizeImdbPreviews(JSON.parse(file.text));
+  } catch (err) { entries = Object.create(null); }
+  return { entries: entries, token: file.token };
+}
+
+/* A previews read's landing, judged exactly as a
+   tasks landing is: the generation that started the
+   read must still be the standing load generation,
+   so a read a superseded load left in flight lands
+   nowhere. Landing replaces the held map whole (the
+   file is the whole truth, never a merge) and
+   refreshes the device cache from it. */
+function applyLoadedImdbPreviews(previewsLoad, generation) {
+  if (!previewsLoad) { return false; }
+  if (generation !== tasksLoadGeneration) { return false; }
+  imdbPreviewsById = previewsLoad.entries;
+  lastImdbPreviewsToken = previewsLoad.token;
+  saveImdbPreviewsDeviceCache();
+  return true;
+}
+
+/* The landing continuation the load paths start
+   beside the tasks one, with the same containment:
+   a failure inside the landing is warned about and
+   never allowed to fail the load around it. */
+function startImdbPreviewsLanding(previewsPromise, generation) {
+  previewsPromise.then(function (previewsLoad) {
+    try {
+      applyLoadedImdbPreviews(previewsLoad, generation);
+    } catch (err) {
+      console.warn("IMDb previews landing failed: " +
+        (err && err.message));
+    }
+  });
+}
+
+/* The one lookup the link bar makes: the entry for
+   an IMDb title id, or null. In memory only; a hover
+   never fetches anything. */
+function imdbPreviewEntry(ttId) {
+  if (!ttId) { return null; }
+  return imdbPreviewsById[ttId] || null;
+}
+
+/* Sign out drops the previews session state with the
+   tasks': the data is the signed in store's, so
+   neither the held map nor the device cache may
+   leak into the next sign in on this device. */
+function resetImdbPreviewsRuntimeState() {
+  imdbPreviewsById = Object.create(null);
+  lastImdbPreviewsToken = null;
+  try { localStorage.removeItem(LS_IMDB_PREVIEWS); }
+  catch (e) { /* a blocked store has nothing to forget */ }
 }
 
 /* Sign out drops the tasks session state, mirroring
@@ -2596,6 +2743,16 @@ async function loadPatchedFromRepo(plan) {
   } else {
     tasksPromise = Promise.resolve(null);
   }
+  /* v2.181: the IMDb previews read, started under
+     the same condition as the staged load's (the
+     plan's tasks or previews mark), landing through
+     the same generation guard: a patch that stands
+     down leaves the read to the guard, exactly as
+     it leaves the tasks read. */
+  if (plan.tasks || plan.previews) {
+    startImdbPreviewsLanding(readImdbPreviewsForLoad(),
+      tasksGeneration);
+  }
 
   /* Phase one: judge every descriptor and build
      every note it names, fetching only those files.
@@ -3114,6 +3271,14 @@ async function loadStagedFromRepo(plan) {
        previous load left in flight. */
     tasksPromise = Promise.resolve(null);
   }
+  /* v2.181: the IMDb previews read rides the same
+     condition as the tasks read, widened by the
+     plan's own previews mark: a window that moved
+     either root data file re-reads the previews. */
+  if (plan.tasks || plan.previews) {
+    startImdbPreviewsLanding(readImdbPreviewsForLoad(),
+      tasksGeneration);
+  }
   if (plan.index) {
     const indexAndFolders = await Promise.all([
       storeGetFile("index.json"), storeListDir("notebooks")]);
@@ -3314,6 +3479,11 @@ async function loadAllFromRepo(plan) {
   tasksLoadApplied = false;
   const tasksPromise = readTasksForLoad();
   startTasksLanding(tasksPromise, tasksGeneration);
+  /* v2.181: the IMDb previews read starts with the
+     tasks read and lands the same way; a full load
+     always re-reads the file. */
+  startImdbPreviewsLanding(readImdbPreviewsForLoad(),
+    tasksGeneration);
   /* v2.21: the index read and the notebooks listing are
      independent; they run together now. Promise.all keeps the
      old failure surface: a rejection from either fails the

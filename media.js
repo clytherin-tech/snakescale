@@ -1213,6 +1213,20 @@ function autoSyncChangeTouchesStore(change) {
     }
     return true;
   }
+  /* v2.181: the previews file gets the tasks answer:
+     another writer's new preview data triggers a
+     sync so it can land, and the echo of the token
+     this device last read does not. */
+  const previewsFileId = driveCache.fileIds[IMDB_PREVIEWS_FILE];
+  if (previewsFileId && change.fileId === previewsFileId) {
+    if (change.removed) { return true; }
+    if (change.file && lastImdbPreviewsToken &&
+        driveTokenFromMetadata(change.file) ===
+        lastImdbPreviewsToken) {
+      return false;
+    }
+    return true;
+  }
   const incomingFileId = driveCache.fileIds[INCOMING_FILE];
   if (incomingFileId && change.fileId === incomingFileId) {
     if (change.removed) { return true; }
@@ -1527,6 +1541,7 @@ function classifySyncChanges(records) {
   if (!lastListings) { return null; }
   const plan = {
     tasks: false, index: false, catalog: false,
+    previews: false,   /* v2.181: imdb-previews.json moved */
     incoming: false,
     folders: [],       /* notebook slugs to re-list */
     collections: [],   /* "trash" / "archive" to settle deferred */
@@ -1558,6 +1573,7 @@ function classifySyncChanges(records) {
   };
   markStore(CATALOG_FILE, "catalog");
   markStore(TASKS_FILE, "tasks");
+  markStore(IMDB_PREVIEWS_FILE, "previews");
   markStore(INCOMING_FILE, "incoming");
   markStore("index.json", "index");
   markStore(MAIL_SNOOZE_FILE, "snooze");
@@ -1739,6 +1755,17 @@ function classifySyncChanges(records) {
         }
         return;
       }
+      /* v2.181: the previews file judges by its own
+         last read token, exactly as tasks does: this
+         device's held copy is the standing truth and
+         anything else re-reads it. */
+      if (storeKind === "previews") {
+        if (!(token && lastImdbPreviewsToken &&
+            token === lastImdbPreviewsToken)) {
+          plan.previews = true;
+        }
+        return;
+      }
       if (storeKind === "incoming") {
         if (!(token && incomingProcessedToken &&
             token === incomingProcessedToken)) {
@@ -1825,7 +1852,7 @@ function classifySyncChanges(records) {
     }
   });
   plan.empty = !plan.tasks && !plan.index && !plan.catalog &&
-    !plan.incoming && !plan.folders.length &&
+    !plan.previews && !plan.incoming && !plan.folders.length &&
     !plan.collections.length;
   return plan;
 }
