@@ -6836,9 +6836,46 @@ function clearFormattingNormalize(bodyEl, touchedBefore) {
 const TB_MENU_IDS = ["insertMenu", "textColorMenu", "highlightMenu", "moreMenu"];
 
 function closeToolbarMenus() {
+  closeInsertSubmenus();
   TB_MENU_IDS.forEach(function (id) {
     document.getElementById(id).classList.add("hidden");
   });
+}
+
+/* v2.182: the Insert menu's sub-menus (Media, Code).
+   One panel flies out at a time: opening one puts the
+   others away, and every parent menu close puts them
+   all away (closeToolbarMenus above, the one funnel
+   every menu close passes through). Opening is
+   idempotent, never a toggle, so a touch tap that
+   follows the hover it synthesized cannot open and
+   shut in one gesture. A panel that would run off
+   the right edge of the screen flips to its parent
+   row's left instead. */
+function closeInsertSubmenus() {
+  document.querySelectorAll("#insertMenu .tb-submenu")
+    .forEach(function (panel) {
+      panel.classList.add("hidden");
+    });
+  document.querySelectorAll("#insertMenu .tb-submenu-btn")
+    .forEach(function (btn) {
+      btn.setAttribute("aria-expanded", "false");
+    });
+}
+
+function openInsertSubmenu(panel) {
+  if (!panel) { return; }
+  closeInsertSubmenus();
+  panel.classList.remove("hidden");
+  const wrap = panel.closest(".tb-submenu-wrap");
+  const btn = wrap ?
+    wrap.querySelector(".tb-submenu-btn") : null;
+  if (btn) { btn.setAttribute("aria-expanded", "true"); }
+  panel.classList.remove("flip");
+  const rect = panel.getBoundingClientRect();
+  if (rect.right > window.innerWidth - 8) {
+    panel.classList.add("flip");
+  }
 }
 
 /* Open one menu and close the rest. The clicked button already saved
@@ -7344,6 +7381,36 @@ function updateTbDock() {
 }
 
 /* ----- Insert and More actions ------------------------------------------- */
+/* v2.182: insert a link at a bare caret, wearing
+   its own address as its text: the general Link
+   insert's no-selection path. The anchor is built and
+   placed by hand (no execCommand), so the placement
+   is the same in every engine; the caret lands after
+   it. */
+function insertLinkAtCaret(url) {
+  const bodyEl = document.getElementById("noteBody");
+  if (!bodyEl || !url) { return; }
+  const anchor = document.createElement("a");
+  anchor.setAttribute("href", url);
+  anchor.textContent = url;
+  const sel = window.getSelection();
+  let placed = false;
+  if (sel && sel.rangeCount) {
+    const range = sel.getRangeAt(0);
+    if (range.collapsed &&
+        bodyEl.contains(range.startContainer)) {
+      range.deleteContents();
+      range.insertNode(anchor);
+      range.setStartAfter(anchor);
+      range.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(range);
+      placed = true;
+    }
+  }
+  if (!placed) { bodyEl.appendChild(anchor); }
+}
+
 function runInsertAction(kind) {
   closeToolbarMenus();
   if (kind === "attach") {
@@ -7387,6 +7454,14 @@ function runInsertAction(kind) {
     openNoteLinkPicker();
     return;
   }
+  if (kind === "imdbLink") {
+    /* The IMDb dialog is the picker's sibling: it captures the
+       caret itself (it needs the selection for the link text
+       decision) and marks dirty only when a link is actually
+       inserted, so opening and cancelling changes nothing. */
+    openImdbLinkDialog();
+    return;
+  }
   if (kind === "table") {
     insertStarterTable();
   } else if (kind === "toc") {
@@ -7404,16 +7479,21 @@ function runInsertAction(kind) {
     insertInlineCode();
   } else if (kind === "link") {
     const sel = window.getSelection();
-    if (!sel || !sel.rangeCount || sel.getRangeAt(0).collapsed) {
-      toast("Select the text to turn into a link first.", true);
-      return;
-    }
+    const collapsed = !sel || !sel.rangeCount ||
+      sel.getRangeAt(0).collapsed;
     const url = prompt("Link address (https://...)");
     if (!url) { return; }
     /* The prompt stole focus and may have disturbed the selection, so
        restore the saved range again before creating the link. */
     restoreFormatSelection();
-    document.execCommand("createLink", false, url.trim());
+    if (collapsed) {
+      /* v2.182: no selection is required: at a bare
+         caret the link inserts at the caret wearing its
+         own address as its text. */
+      insertLinkAtCaret(url.trim());
+    } else {
+      document.execCommand("createLink", false, url.trim());
+    }
     /* v2.6.0: the fresh anchor gets its hover tooltip (its own
        address) at birth, from the same resolver renders use.
        v2.9: the view decoration runs too; a fresh link is a Text
@@ -7574,6 +7654,40 @@ function wireToolbar() {
       btn.addEventListener("click", function () {
         runInsertAction(btn.getAttribute("data-insert"));
       });
+    });
+  /* v2.182: the Insert menu's sub-menus: a hover or a
+     tap on a sub-menu's row flies its panel out (a tap
+     never fires an insert; the row carries no
+     data-insert), leaving the row puts the panel away,
+     and Escape closes an open sub-menu before the menu
+     (the document level Escape below never sees the
+     press when a sub-menu took it). */
+  document.querySelectorAll("#insertMenu .tb-submenu-wrap").forEach(
+    function (wrap) {
+      const btn = wrap.querySelector(".tb-submenu-btn");
+      const panel = wrap.querySelector(".tb-submenu");
+      if (!btn || !panel) { return; }
+      btn.addEventListener("click", function () {
+        openInsertSubmenu(panel);
+      });
+      wrap.addEventListener("mouseenter", function () {
+        openInsertSubmenu(panel);
+      });
+      wrap.addEventListener("mouseleave", function () {
+        panel.classList.add("hidden");
+        btn.setAttribute("aria-expanded", "false");
+      });
+    });
+  document.getElementById("insertMenu").addEventListener("keydown",
+    function (ev) {
+      if (ev.key !== "Escape") { return; }
+      const open = document.querySelector(
+        "#insertMenu .tb-submenu:not(.hidden)");
+      if (open) {
+        ev.stopPropagation();
+        ev.preventDefault();
+        closeInsertSubmenus();
+      }
     });
   document.querySelectorAll("#moreMenu button[data-more]").forEach(
     function (btn) {

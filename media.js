@@ -4768,12 +4768,49 @@ function docRenderText(text, emph, base) {
   return out;
 }
 
+/* v2.182: Google wraps every address in a Doc's
+   HTML export in its own redirect (a Google /url
+   address whose q parameter names the target), and
+   a wrapped address saved back wraps again, so
+   addresses arrive nested several layers deep. Peel
+   the wrapper off, repeatedly, until the address is
+   its own target again; an address that is not a
+   wrapper, or whose wrapper names no target, stands
+   as it arrived. Hygiene only: the caller judges the
+   unwrapped address exactly as it judged the wrapped
+   one, and the unwrapping by itself never makes a
+   note dirty (the loaded body is the load baseline;
+   the clean addresses reach the Doc on the next
+   genuine save). */
+function docUnwrapGoogleHref(href) {
+  let cur = href;
+  for (let i = 0; i < 10; i++) {
+    if (!/^https?:\/\/www\.google\.com\/url\?/i.test(cur)) {
+      return cur;
+    }
+    const parts = cur.slice(cur.indexOf("?") + 1).split("&");
+    let target = null;
+    for (let j = 0; j < parts.length; j++) {
+      if (parts[j].indexOf("q=") === 0) {
+        try {
+          target = decodeURIComponent(parts[j].slice(2));
+        } catch (e) { target = null; }
+        break;
+      }
+    }
+    if (!target) { return cur; }
+    cur = target;
+  }
+  return cur;
+}
+
 /* Whether an address may cross into the editor as a
    link: the same scheme judgment the external image gate
    makes (http, https, mailto), plus the app's own note
    links. */
 function docSafeLinkHref(href) {
   if (typeof href !== "string" || !href) { return null; }
+  href = docUnwrapGoogleHref(href);
   if (/^https?:\/\//i.test(href) ||
       /^mailto:/i.test(href) ||
       /^ssnote:/i.test(href)) {

@@ -103,6 +103,7 @@ let tasksLoadGeneration = 0;     /* v2.53: per load stamp; a stale read's
    sync classifier and the change trigger judge
    by, exactly as lastTasksToken serves tasks. */
 let imdbPreviewsById = loadImdbPreviewsDeviceCache();
+let imdbFetchedById = loadImdbFetchedDeviceCache();
 let lastImdbPreviewsToken = null;
 /* v2.148: the tombstone list: the ids of tasks deleted in
    the app, carried in tasks.json beside the task list
@@ -660,6 +661,226 @@ function sanitizeImdbPreviews(parsed) {
   return out;
 }
 
+/* v2.182: the self-service fetch cache. Titles the
+   resolver fetched from public reference data live
+   here, on this device only, keyed by IMDb title id:
+   a hit holds {title, posterUrl, description, at},
+   a miss holds {miss: true, at} and is judged stale
+   after IMDB_FETCH_MISS_MS, so a title with no
+   reference entry is not refetched on every hover
+   but is retried days later. Hits do not expire;
+   reference data for a released film is stable, and
+   the curated file above always outranks this cache.
+   Sign out forgets the cache with the previews. */
+const IMDB_FETCH_MISS_MS = 7 * 24 * 60 * 60 * 1000;
+const IMDB_FETCH_TIMEOUT_MS = 10000;
+const IMDB_FETCH_DESC_CAP = 1200;
+
+/* The strict parse of the fetch cache, mirroring
+   sanitizeImdbPreviews: only well formed records
+   stand, a hit keeping its strings and its stamp, a
+   miss keeping only its stamp. */
+function sanitizeImdbFetched(parsed) {
+  const out = Object.create(null);
+  if (!parsed || typeof parsed !== "object" ||
+      Array.isArray(parsed)) { return out; }
+  Object.keys(parsed).forEach(function (key) {
+    if (!/^tt\d+$/.test(key)) { return; }
+    const raw = parsed[key];
+    if (!raw || typeof raw !== "object") { return; }
+    const at = typeof raw.at === "number" ? raw.at : 0;
+    if (raw.miss === true) {
+      out[key] = { miss: true, at: at };
+      return;
+    }
+    const title = typeof raw.title === "string" ? raw.title : "";
+    const posterUrl = typeof raw.posterUrl === "string"
+      ? raw.posterUrl : "";
+    const description = typeof raw.description === "string"
+      ? raw.description : "";
+    if (!posterUrl && !description) { return; }
+    out[key] = { title: title, posterUrl: posterUrl,
+      description: description, at: at };
+  });
+  return out;
+}
+
+function loadImdbFetchedDeviceCache() {
+  try {
+    const raw = localStorage.getItem(LS_IMDB_FETCHED);
+    if (!raw) { return Object.create(null); }
+    return sanitizeImdbFetched(JSON.parse(raw));
+  } catch (e) { return Object.create(null); }
+}
+
+function saveImdbFetchedDeviceCache() {
+  try {
+    localStorage.setItem(LS_IMDB_FETCHED,
+      JSON.stringify(imdbFetchedById));
+  } catch (e) { /* a full or blocked store simply keeps
+    nothing; the in-memory map still serves this session */ }
+}
+
+/* The cache's two judgments: a usable hit for the id,
+   and whether a recorded miss is still fresh enough
+   to stand in for an answer. */
+function imdbFetchedHit(ttId) {
+  const rec = ttId ? imdbFetchedById[ttId] : null;
+  if (!rec || rec.miss) { return null; }
+  return { title: rec.title || "",
+    posterUrl: rec.posterUrl || "",
+    description: rec.description || "" };
+}
+
+function imdbFetchedMissFresh(ttId) {
+  const rec = ttId ? imdbFetchedById[ttId] : null;
+  if (!rec || rec.miss !== true) { return false; }
+  return (Date.now() - (rec.at || 0)) < IMDB_FETCH_MISS_MS;
+}
+
+/* The one network seam of the resolver: a GET judged
+   as {ok, status, body}, ok false on a transport
+   failure and on a non success status alike, body
+   the parsed JSON or null. The status rides along
+   because an answered 404 (the reference data has
+   no such article) is a different thing from a
+   request that never landed, and only the first
+   may be negative-cached. */
+async function imdbFetchJson(url) {
+  let res = null;
+  try {
+    const ctl = new AbortController();
+    const timer = setTimeout(function () { ctl.abort(); },
+      IMDB_FETCH_TIMEOUT_MS);
+    try {
+      res = await fetch(url, { signal: ctl.signal });
+    } finally { clearTimeout(timer); }
+  } catch (e) { return { ok: false, status: 0, body: null }; }
+  let body = null;
+  try { body = await res.json(); } catch (e) { body = null; }
+  return { ok: !!(res && res.ok),
+    status: res ? res.status : 0, body: body };
+}
+
+/* In-flight lookups, by title id: one fetch per title
+   no matter how many hovers or dialogs ask at once. */
+const imdbFetchFlights = Object.create(null);
+
+/* The live lookup for one title id: the id resolves
+   to a Wikidata item through its IMDb id property
+   (P345) at the SPARQL endpoint, the item's English
+   Wikipedia article is read through the Wikipedia
+   summary API, whose extract is the description and
+   whose lead image stands in for the poster. No key,
+   no account, and no request to imdb.com itself.
+   The answer is written into the fetch cache as it
+   lands: a found entry as a hit, an answered nothing
+   (no item, no article, nothing usable in the
+   summary) as a miss. A request that never landed
+   caches nothing, so a later hover may retry it.
+   Resolves to {title, posterUrl, description} or
+   null, never rejects. */
+function fetchImdbReference(ttId) {
+  if (!ttId) { return Promise.resolve(null); }
+  if (imdbFetchFlights[ttId]) {
+    return imdbFetchFlights[ttId];
+  }
+  const flight = (async function () {
+    try {
+      const query = "SELECT ?article WHERE {" +
+        " ?item wdt:P345 \"" + ttId + "\"." +
+        " ?article schema:about ?item;" +
+        " schema:isPartOf <https://en.wikipedia.org/>." +
+        " } LIMIT 1";
+      const sparql = await imdbFetchJson(
+        "https://query.wikidata.org/sparql?query=" +
+        encodeURIComponent(query) + "&format=json");
+      if (!sparql.ok) { return null; }
+      const bindings = sparql.body && sparql.body.results &&
+        Array.isArray(sparql.body.results.bindings)
+        ? sparql.body.results.bindings : [];
+      let slug = "";
+      if (bindings.length && bindings[0].article &&
+          typeof bindings[0].article.value === "string") {
+        const at = bindings[0].article.value
+          .indexOf("/wiki/");
+        if (at >= 0) {
+          slug = bindings[0].article.value.slice(at + 6);
+        }
+      }
+      if (!slug) {
+        imdbFetchedById[ttId] = { miss: true,
+          at: Date.now() };
+        saveImdbFetchedDeviceCache();
+        return null;
+      }
+      let summarySlug = slug;
+      try {
+        summarySlug = decodeURIComponent(slug);
+      } catch (e) { /* the raw slug still names it */ }
+      const summary = await imdbFetchJson(
+        "https://en.wikipedia.org/api/rest_v1/page/summary/" +
+        encodeURIComponent(summarySlug));
+      if (!summary.ok) {
+        if (summary.status === 404) {
+          imdbFetchedById[ttId] = { miss: true,
+            at: Date.now() };
+          saveImdbFetchedDeviceCache();
+        }
+        return null;
+      }
+      const s = summary.body || {};
+      const entry = {
+        title: typeof s.title === "string" ? s.title : "",
+        posterUrl: (s.originalimage &&
+            typeof s.originalimage.source === "string" &&
+            s.originalimage.source) ||
+          (s.thumbnail &&
+            typeof s.thumbnail.source === "string" &&
+            s.thumbnail.source) || "",
+        description: (typeof s.extract === "string"
+          ? s.extract.trim() : "")
+          .slice(0, IMDB_FETCH_DESC_CAP)
+      };
+      if (!entry.posterUrl && !entry.description) {
+        imdbFetchedById[ttId] = { miss: true,
+          at: Date.now() };
+        saveImdbFetchedDeviceCache();
+        return null;
+      }
+      imdbFetchedById[ttId] = { title: entry.title,
+        posterUrl: entry.posterUrl,
+        description: entry.description, at: Date.now() };
+      saveImdbFetchedDeviceCache();
+      return entry;
+    } catch (e) { return null; }
+    finally { delete imdbFetchFlights[ttId]; }
+  })();
+  imdbFetchFlights[ttId] = flight;
+  return flight;
+}
+
+/* The one resolver the insert dialog and the link
+   bar's repaint share: the curated preview file
+   first, then this device's fetch cache, then one
+   live fetch (which fills the cache as it lands). A
+   fresh miss answers null at once. The file layer
+   carries no title, so a cached title rides along
+   when one exists. */
+async function resolveImdbPreview(ttId) {
+  if (!ttId) { return null; }
+  const file = imdbPreviewsById[ttId] || null;
+  const hit = imdbFetchedHit(ttId);
+  if (file) {
+    return { title: hit ? hit.title : "",
+      posterUrl: file.posterUrl || "",
+      description: file.description || "" };
+  }
+  if (hit) { return hit; }
+  if (imdbFetchedMissFresh(ttId)) { return null; }
+  return fetchImdbReference(ttId);
+}
+
 /* The device cache's read, at startup: the last
    entries this device judged, or an empty map. */
 function loadImdbPreviewsDeviceCache() {
@@ -734,11 +955,17 @@ function startImdbPreviewsLanding(previewsPromise, generation) {
 }
 
 /* The one lookup the link bar makes: the entry for
-   an IMDb title id, or null. In memory only; a hover
-   never fetches anything. */
+   an IMDb title id, or null. The curated file layer
+   first, then the device fetch cache (v2.182); in
+   memory only, a hover never waits on this. */
 function imdbPreviewEntry(ttId) {
   if (!ttId) { return null; }
-  return imdbPreviewsById[ttId] || null;
+  const file = imdbPreviewsById[ttId];
+  if (file) { return file; }
+  const hit = imdbFetchedHit(ttId);
+  if (!hit) { return null; }
+  return { posterUrl: hit.posterUrl,
+    description: hit.description };
 }
 
 /* Sign out drops the previews session state with the
@@ -749,6 +976,9 @@ function resetImdbPreviewsRuntimeState() {
   imdbPreviewsById = Object.create(null);
   lastImdbPreviewsToken = null;
   try { localStorage.removeItem(LS_IMDB_PREVIEWS); }
+  catch (e) { /* a blocked store has nothing to forget */ }
+  imdbFetchedById = Object.create(null);
+  try { localStorage.removeItem(LS_IMDB_FETCHED); }
   catch (e) { /* a blocked store has nothing to forget */ }
 }
 

@@ -229,6 +229,7 @@ const LS_PENDING_DELETES = "snakescale.pendingDeletes.v1";
    link hover before the first load lands (see the
    IMDb previews block in tasks.js). */
 const LS_IMDB_PREVIEWS = "snakescale.imdbPreviews.v1";
+const LS_IMDB_FETCHED = "snakescale.imdbFetched.v1";
 /* The device key. This random AES-GCM key is kept on this device so
    it can encrypt the Google token store and the local note cache at
    rest across reloads. It is not a credential and it is not a login:

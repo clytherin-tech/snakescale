@@ -3444,6 +3444,24 @@ function wireEvents() {
     closeExtImageDialog();
   });
 
+  /* v2.182: the IMDb link dialog's wiring: the
+     address field drives the lookup, a hand touched
+     text field is never overwritten by it, and the
+     form submits to the insert. */
+  document.getElementById("imdbLinkForm").addEventListener("submit", function (ev) {
+    ev.preventDefault();
+    submitImdbLinkDialog();
+  });
+  document.getElementById("imdbLinkCancelBtn").addEventListener("click", function () {
+    closeImdbLinkDialog();
+  });
+  document.getElementById("imdbLinkUrl").addEventListener("input", function () {
+    queueImdbLinkLookup();
+  });
+  document.getElementById("imdbLinkText").addEventListener("input", function () {
+    imdbLinkTextTouched = true;
+  });
+
   /* v2.14.1: the audio card menu's items run through one delegated
      listener, like the image menu's; a disabled item (the read
      only note state) never runs. */

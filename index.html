@@ -6671,19 +6671,35 @@
               <span class="tb-menu-wrap">
                 <button type="button" id="insertBtn" title="Insert into the note" aria-haspopup="true">+ Insert &#9662;</button>
                 <div class="tb-menu hidden" id="insertMenu" role="menu">
-                  <button type="button" data-insert="attach">Attach file or image</button>
-                  <button type="button" data-insert="webImage">Image from web</button>
-                  <button type="button" data-insert="scan">Scan document</button>
-                  <button type="button" data-insert="sketch">Sketch</button>
+                  <div class="tb-menu-label">Links</div>
                   <button type="button" data-insert="link">Link</button>
+                  <button type="button" data-insert="imdbLink">IMDb link</button>
                   <button type="button" data-insert="noteLink">Link to note</button>
-                  <button type="button" data-insert="divider">Divider</button>
-                  <button type="button" data-insert="datetime">Date and time</button>
+                  <div class="tb-menu-sep" role="separator"></div>
+                  <div class="tb-submenu-wrap">
+                    <button type="button" class="tb-submenu-btn" data-submenu="media" aria-haspopup="true" aria-expanded="false">Media <span class="tb-submenu-caret" aria-hidden="true">&#9656;</span></button>
+                    <div class="tb-submenu hidden" role="menu" aria-label="Media">
+                      <button type="button" data-insert="attach">Attach file or image</button>
+                      <button type="button" data-insert="webImage">Image from web</button>
+                      <button type="button" data-insert="scan">Scan document</button>
+                      <button type="button" data-insert="sketch">Sketch</button>
+                    </div>
+                  </div>
+                  <div class="tb-menu-sep" role="separator"></div>
+                  <div class="tb-menu-label">Content</div>
                   <button type="button" data-insert="table">Table</button>
-                  <button type="button" data-insert="toc">Table of contents</button>
                   <button type="button" data-insert="noteTasks">Tasks</button>
-                  <button type="button" data-insert="codeBlock">Code block</button>
-                  <button type="button" data-insert="inlineCode">Inline code</button>
+                  <button type="button" data-insert="toc">Table of contents</button>
+                  <button type="button" data-insert="datetime">Date and time</button>
+                  <button type="button" data-insert="divider">Divider</button>
+                  <div class="tb-menu-sep" role="separator"></div>
+                  <div class="tb-submenu-wrap">
+                    <button type="button" class="tb-submenu-btn" data-submenu="code" aria-haspopup="true" aria-expanded="false">Code <span class="tb-submenu-caret" aria-hidden="true">&#9656;</span></button>
+                    <div class="tb-submenu hidden" role="menu" aria-label="Code">
+                      <button type="button" data-insert="codeBlock">Code block</button>
+                      <button type="button" data-insert="inlineCode">Inline code</button>
+                    </div>
+                  </div>
                 </div>
               </span>
             </div>
@@ -7567,6 +7583,29 @@
     <div class="modal-foot">
       <button class="btn" id="noteLinkCancelBtn" type="button">Cancel</button>
     </div>
+  </div>
+</div>
+
+<div id="imdbLinkDialog" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="imdbLinkTitle">
+  <div class="modal-card">
+    <h2 id="imdbLinkTitle">Insert IMDb link</h2>
+    <p class="modal-sub">Paste an IMDb title address. The link is inserted where your cursor was, wearing the title it finds; its poster and description fill in for the link's preview on this device.</p>
+    <form id="imdbLinkForm" novalidate>
+      <div class="field">
+        <label for="imdbLinkUrl">IMDb address</label>
+        <input type="url" id="imdbLinkUrl" placeholder="https://www.imdb.com/title/tt..." autocomplete="off">
+      </div>
+      <div class="field">
+        <label for="imdbLinkText">Link text</label>
+        <input type="text" id="imdbLinkText" placeholder="The title, once it is found" autocomplete="off">
+      </div>
+      <p class="modal-sub" id="imdbLinkStatus"></p>
+      <p class="error-text" id="imdbLinkError" role="alert"></p>
+      <div class="modal-foot">
+        <button class="btn" id="imdbLinkCancelBtn" type="button">Cancel</button>
+        <button class="btn primary" id="imdbLinkSubmitBtn" type="submit" disabled>Insert link</button>
+      </div>
+    </form>
   </div>
 </div>
 

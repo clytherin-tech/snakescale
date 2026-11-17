@@ -2234,7 +2234,7 @@ body.dark .home-cal-note-time{color:var(--accent);}
    without ever shouting. */
 #noteList, .editor-scroll, .tasks-scroll, #sidebar, #sidebarRail, #railFlyout,
 #tagPicker, .mention-list, .note-link-list, .filter-tag-list,
-.version-history-list, .version-preview, .tb-menu, .modal,
+.version-history-list, .version-preview, .tb-menu, .tb-submenu, .modal,
 .nb-submenu, #nbActionMenu.nb-context,
 .share-people-list, .share-suggestions{
   scrollbar-width: thin;
@@ -2245,7 +2245,7 @@ body.dark .home-cal-note-time{color:var(--accent);}
 .mention-list:hover, .note-link-list:hover,
 .share-people-list:hover, .share-suggestions:hover,
 .filter-tag-list:hover, .version-history-list:hover,
-.version-preview:hover, .tb-menu:hover, .modal:hover,
+.version-preview:hover, .tb-menu:hover, .tb-submenu:hover, .modal:hover,
 .nb-submenu:hover, #nbActionMenu.nb-context:hover{
   scrollbar-color: rgba(139,94,52,.55) transparent;
 }
@@ -2258,7 +2258,7 @@ body.dark .note-link-list:hover, body.dark .filter-tag-list:hover,
 body.dark .share-people-list:hover,
 body.dark .share-suggestions:hover,
 body.dark .version-history-list:hover,
-body.dark .version-preview:hover, body.dark .tb-menu:hover,
+body.dark .version-preview:hover, body.dark .tb-menu:hover, body.dark .tb-submenu:hover,
 body.dark .modal:hover, body.dark .nb-submenu:hover,
 body.dark #nbActionMenu.nb-context:hover{
   scrollbar-color: rgba(139,94,52,.65) transparent;
@@ -2270,7 +2270,7 @@ body.dark #nbActionMenu.nb-context:hover{
 .note-link-list::-webkit-scrollbar,
 .filter-tag-list::-webkit-scrollbar,
 .version-history-list::-webkit-scrollbar,
-.version-preview::-webkit-scrollbar, .tb-menu::-webkit-scrollbar,
+.version-preview::-webkit-scrollbar, .tb-menu::-webkit-scrollbar, .tb-submenu::-webkit-scrollbar,
 .modal::-webkit-scrollbar, .nb-submenu::-webkit-scrollbar,
 #nbActionMenu.nb-context::-webkit-scrollbar{
   width:10px;height:10px;
@@ -2286,7 +2286,7 @@ body.dark #nbActionMenu.nb-context:hover{
 .filter-tag-list::-webkit-scrollbar-track,
 .version-history-list::-webkit-scrollbar-track,
 .version-preview::-webkit-scrollbar-track,
-.tb-menu::-webkit-scrollbar-track,
+.tb-menu::-webkit-scrollbar-track, .tb-submenu::-webkit-scrollbar-track,
 .modal::-webkit-scrollbar-track,
 .nb-submenu::-webkit-scrollbar-track,
 #nbActionMenu.nb-context::-webkit-scrollbar-track{
@@ -2303,7 +2303,7 @@ body.dark #nbActionMenu.nb-context:hover{
 .filter-tag-list::-webkit-scrollbar-thumb,
 .version-history-list::-webkit-scrollbar-thumb,
 .version-preview::-webkit-scrollbar-thumb,
-.tb-menu::-webkit-scrollbar-thumb,
+.tb-menu::-webkit-scrollbar-thumb, .tb-submenu::-webkit-scrollbar-thumb,
 .modal::-webkit-scrollbar-thumb,
 .nb-submenu::-webkit-scrollbar-thumb,
 #nbActionMenu.nb-context::-webkit-scrollbar-thumb{
@@ -2319,7 +2319,7 @@ body.dark #nbActionMenu.nb-context:hover{
 .filter-tag-list:hover::-webkit-scrollbar-thumb,
 .version-history-list:hover::-webkit-scrollbar-thumb,
 .version-preview:hover::-webkit-scrollbar-thumb,
-.tb-menu:hover::-webkit-scrollbar-thumb,
+.tb-menu:hover::-webkit-scrollbar-thumb, .tb-submenu:hover::-webkit-scrollbar-thumb,
 .modal:hover::-webkit-scrollbar-thumb,
 .nb-submenu:hover::-webkit-scrollbar-thumb,
 #nbActionMenu.nb-context:hover::-webkit-scrollbar-thumb{
@@ -2338,7 +2338,7 @@ body.dark .note-link-list:hover::-webkit-scrollbar-thumb,
 body.dark .filter-tag-list:hover::-webkit-scrollbar-thumb,
 body.dark .version-history-list:hover::-webkit-scrollbar-thumb,
 body.dark .version-preview:hover::-webkit-scrollbar-thumb,
-body.dark .tb-menu:hover::-webkit-scrollbar-thumb,
+body.dark .tb-menu:hover::-webkit-scrollbar-thumb, body.dark .tb-submenu:hover::-webkit-scrollbar-thumb,
 body.dark .modal:hover::-webkit-scrollbar-thumb,
 body.dark .nb-submenu:hover::-webkit-scrollbar-thumb,
 body.dark #nbActionMenu.nb-context:hover::-webkit-scrollbar-thumb{
@@ -2355,7 +2355,7 @@ body.dark #nbActionMenu.nb-context:hover::-webkit-scrollbar-thumb{
 .filter-tag-list::-webkit-scrollbar-thumb:hover,
 .version-history-list::-webkit-scrollbar-thumb:hover,
 .version-preview::-webkit-scrollbar-thumb:hover,
-.tb-menu::-webkit-scrollbar-thumb:hover,
+.tb-menu::-webkit-scrollbar-thumb:hover, .tb-submenu::-webkit-scrollbar-thumb:hover,
 .modal::-webkit-scrollbar-thumb:hover,
 .nb-submenu::-webkit-scrollbar-thumb:hover,
 #nbActionMenu.nb-context::-webkit-scrollbar-thumb:hover{
@@ -2577,6 +2577,30 @@ body.dark #nbActionMenu.nb-context:hover::-webkit-scrollbar-thumb{
   border:1px solid transparent;padding:4px 8px;
 }
 .tb-menu button:hover{background:var(--soft);border-color:var(--border);}
+.tb-menu-label{
+  font-size:11px;font-weight:700;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--muted);padding:6px 8px 2px;
+}
+.tb-menu-sep{height:1px;background:var(--border);margin:4px 2px;}
+.tb-submenu-wrap{position:relative;}
+.tb-menu .tb-submenu-btn{justify-content:space-between;}
+.tb-submenu-caret{color:var(--muted);font-size:11px;}
+.tb-submenu{
+  position:absolute;left:100%;top:-7px;margin-left:4px;min-width:200px;
+  max-width:86vw;max-height:70vh;overflow-y:auto;z-index:31;
+  background:var(--surface);border:1px solid var(--border);
+  border-top:3px solid var(--brown-600);
+  border-radius:var(--radius-card);box-shadow:var(--shadow);
+  padding:6px;display:flex;flex-direction:column;gap:2px;
+}
+.tb-submenu.flip{left:auto;right:100%;margin-left:0;margin-right:4px;}
+.tb-submenu.hidden{display:none;}
+.tb-submenu button{
+  display:flex;align-items:center;justify-content:flex-start;width:100%;
+  min-height:30px;text-align:left;background:transparent;
+  border:1px solid transparent;padding:4px 8px;
+}
+.tb-submenu button:hover{background:var(--soft);border-color:var(--border);}
 /* v1.3 color buttons: a letter over a small bar that always shows the
    last used color, so the current choice is visible at a glance. */
 .tb-color-btn{display:flex;flex-direction:column;align-items:center;
@@ -6031,6 +6055,8 @@ body.dark .share-suggestions:hover::-webkit-scrollbar-thumb{
   .toolbar button{padding:6px 9px;}
   .toolbar select{padding:6px 7px;}
   .tb-menu button{min-height:40px;padding:8px;}
+  .tb-submenu{position:static;margin:2px 0 2px 12px;box-shadow:none;max-height:none;}
+  .tb-submenu button{min-height:40px;padding:8px;}
   .tb-swatches{grid-template-columns:repeat(6,32px);gap:6px;}
   .tb-swatches .swatch{
     width:32px;height:32px;min-width:32px;min-height:32px;

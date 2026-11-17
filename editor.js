@@ -1215,9 +1215,28 @@ function setLinkBarMode(editing) {
    imdb.com/title/tt<digits>, with or without the
    www, with any trailing path or query allowed. */
 function imdbIdOfHref(href) {
+  const raw = String(href || "");
   const m = /^(?:https?:\/\/)?(?:www\.)?imdb\.com\/title\/(tt\d+)(?:[/?#]|$)/i
-    .exec(String(href || ""));
-  return m ? m[1].toLowerCase() : null;
+    .exec(raw);
+  if (m) { return m[1].toLowerCase(); }
+  /* v2.182, defense in depth: an address still
+     wearing a Google redirect wrapper (the load
+     converter unwraps them, but a wrapper that slips
+     past any other path) still names its title: the
+     id is searched inside the wrapper, then inside
+     its decoded target, a few layers deep. */
+  if (!/google\.com\/url\?/i.test(raw)) { return null; }
+  let cur = raw;
+  for (let i = 0; i < 6; i++) {
+    const inner = /imdb\.com\/title\/(tt\d+)/i.exec(cur);
+    if (inner) { return inner[1].toLowerCase(); }
+    let decoded = "";
+    try { decoded = decodeURIComponent(cur); }
+    catch (e) { return null; }
+    if (decoded === cur) { return null; }
+    cur = decoded;
+  }
+  return null;
 }
 
 /* Show or hide the preview extension for the anchor
@@ -1248,6 +1267,9 @@ function refreshLinkBarImdbPreview(anchor) {
       img.classList.add("hidden");
     }
     if (desc) { desc.textContent = ""; }
+    if (ttId && !linkBarEditing) {
+      maybeFetchImdbPreviewForBar(ttId);
+    }
     return;
   }
   if (desc) { desc.textContent = entry.description || ""; }
@@ -1261,6 +1283,27 @@ function refreshLinkBarImdbPreview(anchor) {
     }
   }
   block.classList.remove("hidden");
+}
+
+/* v2.182: the bar's self-service kick. When the bar
+   serves an IMDb link no layer can answer yet, one
+   fetch goes out for its title (the resolver dedupes
+   it, and the fresh-miss judgment keeps a missing
+   title from refetching); if the fetch lands while
+   the bar still serves that same link, the extension
+   repaints. A hover never blocks and a failure is a
+   silent plain bar: nothing here is awaited and the
+   rejection hand is deliberately empty. */
+function maybeFetchImdbPreviewForBar(ttId) {
+  if (!ttId || imdbFetchedMissFresh(ttId)) { return; }
+  fetchImdbReference(ttId).then(function (entry) {
+    if (!entry || !linkBarAnchor) { return; }
+    if (imdbIdOfHref(linkBarAnchor.getAttribute("href") ||
+        linkBarAnchor.href || "") !== ttId) { return; }
+    if (!linkBarVisible() || linkBarEditing) { return; }
+    refreshLinkBarImdbPreview(linkBarAnchor);
+    positionLinkBar(linkBarAnchor);
+  }, function () { /* a failed fetch is a plain bar */ });
 }
 
 /* Position the bar just ABOVE the given link (below it when there is
@@ -3129,6 +3172,209 @@ function pickNoteLinkTarget(target) {
     placed = true;
   }
   if (!placed) { bodyEl.appendChild(anchor); }
+  markDirty();
+}
+
+/* ================= v2.182: the IMDb link dialog =================
+   The Insert menu's IMDb link item: one address field
+   (prefilled from the clipboard when it reads as an
+   IMDb title address), one link text field (prefilled
+   from the selection, else from the title the resolver
+   fetches), and an Insert that stands as soon as the
+   address names a title, lookup or no lookup. The
+   inserted content is an ordinary link and nothing
+   else: the fetched poster and description live only
+   in the preview data layers, never in the note. */
+let imdbLinkPending = null;
+let imdbLinkSeq = 0;
+let imdbLinkTextTouched = false;
+let imdbLinkLookupTimer = null;
+
+function closeImdbLinkDialog() {
+  const dlg = document.getElementById("imdbLinkDialog");
+  if (dlg) { dlg.classList.add("hidden"); }
+  imdbLinkPending = null;
+  imdbLinkSeq += 1;
+}
+
+/* The title id the address field names, or null: any
+   imdb.com/title/tt<digits> address counts, with or
+   without the www or a trailing path and query. */
+function imdbLinkAddressId() {
+  const field = document.getElementById("imdbLinkUrl");
+  const m = /imdb\.com\/title\/(tt\d+)/i
+    .exec(field ? field.value : "");
+  return m ? m[1].toLowerCase() : null;
+}
+
+function refreshImdbLinkDialogState() {
+  const submit = document.getElementById("imdbLinkSubmitBtn");
+  if (submit) { submit.disabled = !imdbLinkAddressId(); }
+}
+
+/* The dialog's own lookup: as the address settles on
+   a title id, resolve it (file, cache, or one fetch)
+   and offer its title as the link text, unless the
+   user has taken the text field over or a selection
+   already named the link. A stale landing (the
+   address moved on, the dialog closed) is dropped. */
+function runImdbLinkLookup() {
+  const ttId = imdbLinkAddressId();
+  refreshImdbLinkDialogState();
+  const status = document.getElementById("imdbLinkStatus");
+  if (!ttId) {
+    if (status) { status.textContent = ""; }
+    return;
+  }
+  const pending = imdbLinkPending;
+  if (!pending) { return; }
+  if (pending.entry && pending.entryFor === ttId) { return; }
+  const seq = ++imdbLinkSeq;
+  if (status) { status.textContent = "Looking up the title..."; }
+  resolveImdbPreview(ttId).then(function (entry) {
+    if (seq !== imdbLinkSeq || imdbLinkPending !== pending) {
+      return;
+    }
+    if (imdbLinkAddressId() !== ttId) { return; }
+    pending.entry = entry;
+    pending.entryFor = ttId;
+    const st = document.getElementById("imdbLinkStatus");
+    if (entry) {
+      if (st) { st.textContent = "Found: " + (entry.title || ttId); }
+      const textField = document.getElementById("imdbLinkText");
+      if (textField && !imdbLinkTextTouched &&
+          !pending.label && entry.title) {
+        textField.value = entry.title;
+      }
+    } else if (st) {
+      st.textContent = "No reference entry for this title; " +
+        "the link will still insert, and its preview can " +
+        "fill in later.";
+    }
+  }, function () { /* a failed lookup is not an error */ });
+}
+
+function queueImdbLinkLookup() {
+  refreshImdbLinkDialogState();
+  if (imdbLinkLookupTimer !== null) {
+    clearTimeout(imdbLinkLookupTimer);
+  }
+  imdbLinkLookupTimer = setTimeout(function () {
+    imdbLinkLookupTimer = null;
+    runImdbLinkLookup();
+  }, 250);
+}
+
+function openImdbLinkDialog() {
+  const note = currentNote();
+  if (!note) {
+    toast("Open a note first.", true);
+    return;
+  }
+  if (note.trashed || note.archived) {
+    toast("Links cannot be inserted while a note is in " +
+      "Trash or the Archive.", true);
+    return;
+  }
+  /* The selection names the link before anything is
+     fetched: read it first (runInsertAction has just
+     restored it), then capture the caret before the
+     dialog takes focus away from the editor. */
+  const bodyEl = document.getElementById("noteBody");
+  const sel = window.getSelection();
+  let label = "";
+  if (sel && sel.rangeCount) {
+    const range = sel.getRangeAt(0);
+    if (!range.collapsed &&
+        bodyEl.contains(range.commonAncestorContainer)) {
+      label = range.toString().trim();
+    }
+  }
+  captureCaret();
+  imdbLinkPending = { range: savedCaretRange,
+    label: label, entry: null, entryFor: null };
+  imdbLinkTextTouched = false;
+  imdbLinkSeq += 1;
+  const urlField = document.getElementById("imdbLinkUrl");
+  const textField = document.getElementById("imdbLinkText");
+  const status = document.getElementById("imdbLinkStatus");
+  const error = document.getElementById("imdbLinkError");
+  if (urlField) { urlField.value = ""; }
+  if (textField) { textField.value = label; }
+  if (status) { status.textContent = ""; }
+  if (error) { error.textContent = ""; }
+  refreshImdbLinkDialogState();
+  const dlg = document.getElementById("imdbLinkDialog");
+  if (!dlg) { imdbLinkPending = null; return; }
+  dlg.classList.remove("hidden");
+  /* The clipboard offer, attempted only inside this
+     opening gesture and only while the field still
+     stands empty: a denial or a clipboard that does
+     not read as an IMDb title address leaves the
+     dialog exactly as it opened. */
+  try {
+    if (navigator.clipboard && navigator.clipboard.readText) {
+      navigator.clipboard.readText().then(function (text) {
+        const clip = String(text || "").trim();
+        if (!clip || !imdbLinkPending) { return; }
+        if (!/imdb\.com\/title\/tt\d+/i.test(clip)) { return; }
+        const field = document.getElementById("imdbLinkUrl");
+        if (!field || field.value) { return; }
+        field.value = clip;
+        queueImdbLinkLookup();
+      }, function () { /* no clipboard, no offer */ });
+    }
+  } catch (e) { /* the field simply starts empty */ }
+  setTimeout(function () {
+    const field = document.getElementById("imdbLinkUrl");
+    if (field) { field.focus(); }
+  }, 30);
+}
+
+function submitImdbLinkDialog() {
+  const ttId = imdbLinkAddressId();
+  const error = document.getElementById("imdbLinkError");
+  if (!ttId) {
+    if (error) {
+      error.textContent = "That does not look like an IMDb " +
+        "title address (imdb.com/title/tt...).";
+    }
+    return;
+  }
+  const pending = imdbLinkPending;
+  const urlField = document.getElementById("imdbLinkUrl");
+  const textField = document.getElementById("imdbLinkText");
+  const entered = urlField ? urlField.value.trim() : "";
+  const typed = textField ? textField.value.trim() : "";
+  const text = typed ||
+    (pending && pending.entry && pending.entry.title) ||
+    (pending && pending.label) || entered;
+  const href = "https://www.imdb.com/title/" + ttId + "/";
+  closeImdbLinkDialog();
+  const bodyEl = document.getElementById("noteBody");
+  if (!bodyEl) { return; }
+  bodyEl.focus();
+  const anchor = document.createElement("a");
+  anchor.setAttribute("href", href);
+  anchor.textContent = text || href;
+  let placed = false;
+  const range = pending && pending.range;
+  if (range && bodyEl.contains(range.startContainer)) {
+    const sel2 = window.getSelection();
+    sel2.removeAllRanges();
+    sel2.addRange(range);
+    const live = sel2.getRangeAt(0);
+    live.deleteContents();
+    live.insertNode(anchor);
+    live.setStartAfter(anchor);
+    live.collapse(true);
+    sel2.removeAllRanges();
+    sel2.addRange(live);
+    placed = true;
+  }
+  if (!placed) { bodyEl.appendChild(anchor); }
+  decorateLinkTooltips(bodyEl);
+  decorateLinkViews(bodyEl);
   markDirty();
 }
 
