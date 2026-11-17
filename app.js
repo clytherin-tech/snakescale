@@ -3125,7 +3125,13 @@ function wireEvents() {
     }
     const anchor = (target && target.closest) ? target.closest("a") : null;
     if (!anchor) {
-      hideLinkBar();
+      /* v2.185: a click on a non link part of the body
+         is this handler's outside close for the bar,
+         and it stands down while the bar's edit form
+         is up, like the document closer does: the
+         form closes only through its own buttons,
+         Escape, or the app level hides. */
+      if (!linkBarEditing) { hideLinkBar(); }
       return;
     }
     /* v2.37.0: a table of contents entry resolves here,
@@ -3379,14 +3385,42 @@ function wireEvents() {
     const bar = document.getElementById("linkBar");
     if ((!bar || bar.classList.contains("hidden")) &&
         !noteLinkCardVisible()) { return; }
-    const target = ev.target;
-    if (!target || !target.closest) { return; }
-    if (target.closest("#linkBar")) { return; }
-    if (target.closest("#linkViewMenu")) { return; }
-    if (target.closest("#noteLinkCard")) { return; }
-    if (target.closest("#noteLinkModal")) { return; }
-    const anchor = target.closest("a");
-    if (anchor && document.getElementById("noteBody").contains(anchor)) { return; }
+    /* v2.185: while the bar's edit form is up, this
+       closer stands down entirely: the form closes
+       only through its own buttons, Escape, or the
+       app level hides (the rule editor.js states
+       over scheduleLinkBarHide), so no outside press,
+       genuine or dragged, closes it mid-edit. */
+    if (linkBarEditing) { return; }
+    /* v2.185: the press-origin guard (v2.183) judges
+       this closer too, with the bar's standing
+       carve-outs as its surface. A press that started
+       inside the bar and released outside it (a text
+       selection drag out of the form, above all)
+       synthesizes a click on the common ancestor of
+       the press's two ends, which the old target-only
+       judgment read as an outside click and closed
+       the bar with, losing the edit. */
+    if (!pressGuardOutsideClick(ev, ["#linkBar",
+        "#linkViewMenu", "#noteLinkCard",
+        "#noteLinkModal"])) { return; }
+    /* Clicks on body links stay the body listener's
+       business (it repositions or reopens the bar).
+       The same synthesis can land the click on the
+       ancestor rather than the anchor the press
+       touched, so the press's own ends are judged
+       through the guard as well as the click's
+       target. */
+    const bodyEl = document.getElementById("noteBody");
+    const bodyAnchor = function (t) {
+      if (!t || !t.closest || !bodyEl) { return null; }
+      const a = t.closest("a");
+      return (a && bodyEl.contains(a)) ? a : null;
+    };
+    if (bodyAnchor(ev.target)) { return; }
+    if (!pressGuardPressOutside(ev, function (t) {
+        return !!bodyAnchor(t);
+      })) { return; }
     hideLinkBar();
   });
 
@@ -3642,6 +3676,11 @@ function wireEvents() {
     hideLinkBar();
   });
   document.querySelector(".editor-scroll").addEventListener("scroll", function () {
+    /* v2.185: an open edit survives the scroll too:
+       the form closes only through its own buttons,
+       Escape, or the app level hides. The view mode
+       scroll close stands as it was. */
+    if (linkBarEditing) { return; }
     hideLinkBar();
   });
   /* v1.7: scrolling the editor closes the image menu too, since its

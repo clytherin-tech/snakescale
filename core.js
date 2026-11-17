@@ -724,7 +724,15 @@ document.addEventListener("mouseup", function (ev) {
   pressGuardNoteUp(ev.target);
 }, true);
 document.addEventListener("pointercancel", function () {
-  pressGuardPress = null;
+  /* v2.185: the press record itself survives a
+     cancel, until a click spends it or the next
+     press supersedes it: a platform that delivers
+     a click after a cancel must not see that click
+     judged on its target alone, which would
+     resurrect the drag-out dismissal for a press
+     that started inside a surface. The deferred
+     dismissals still die here: a canceled press
+     never completes a press-start dismissal. */
   pressGuardPending = [];
 }, true);
 document.addEventListener("click", function (ev) {
