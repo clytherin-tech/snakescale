@@ -5973,6 +5973,104 @@ async function docAdoptOneImage(note, img, sink, reusePool) {
   return fallback;
 }
 
+/* v2.179: the attachment figures a note still holds
+   outside its Doc, in standing order: the figures of
+   its current body first, then any the open editor
+   holds above that body (an insert whose upload has
+   landed lives in the editor before any save has
+   collected it). Each entry carries the canonical
+   shell a body build would need to keep the figure.
+   Only image figures are read: a Doc crosses only
+   images as figures, and the loss this build closes
+   is the image loss. */
+function docStandingAttachmentFigures(note) {
+  const seen = new Set();
+  const out = [];
+  const scan = function (root) {
+    if (!root) { return; }
+    root.querySelectorAll(
+      "figure.ss-attachment[data-attachment-id]")
+      .forEach(function (el) {
+        const id = el.getAttribute("data-attachment-id");
+        if (!id || seen.has(id)) { return; }
+        seen.add(id);
+        out.push({ id: id,
+          shell: "<figure class=\"ss-attachment\"" +
+            " data-attachment-id=\"" + id + "\"" +
+            docFigureWidthStyle(el) +
+            " contenteditable=\"false\"></figure>" });
+      });
+  };
+  if (note.body) {
+    const holder = document.createElement("div");
+    holder.innerHTML = note.body;
+    scan(holder);
+  }
+  if (typeof renderEditor !== "undefined" &&
+      renderEditor._forId === note.id) {
+    scan(document.getElementById("noteBody"));
+  }
+  return out;
+}
+
+/* v2.179: keep the records (and, in the built body,
+   the figures) of standing images this build could
+   not claim, because the Doc does not carry them
+   yet: their uploads have landed and the editor
+   holds them, but no save has inlined them into the
+   Doc. The reset in docAdoptImages has always ruled
+   unclaimed records away, which is right for records
+   whose images are simply gone (a cold note, a
+   removed image) and wrong for these: ruling them
+   away dropped the record copy, and the next save
+   then wrote "[Image]" over the editor's figure,
+   losing the image from both copies at once.
+   Deliberate removal is untouched: a deleted image's
+   figure leaves the editor and the body, so it never
+   stands here, and its record is never preserved.
+   Returns true when anything was preserved. */
+function docPreserveHeldAttachments(note, reusePool,
+    standing, holder) {
+  const claimed = new Set((note.attachments || [])
+    .map(function (rec) { return rec.id; }));
+  const byId = new Map();
+  (reusePool || []).forEach(function (rec) {
+    if (rec && rec.id) { byId.set(rec.id, rec); }
+  });
+  const held = standing.filter(function (entry) {
+    return byId.has(entry.id) && !claimed.has(entry.id);
+  });
+  if (!held.length) { return false; }
+  held.forEach(function (entry) {
+    note.attachments.push(byId.get(entry.id));
+  });
+  if (holder) {
+    const order = standing.map(function (entry) {
+      return entry.id;
+    });
+    let ref = null;
+    for (let i = order.indexOf(held[0].id) - 1;
+        i >= 0; i--) {
+      ref = holder.querySelector(
+        "figure.ss-attachment[data-attachment-id=\"" +
+        order[i] + "\"]");
+      if (ref) { break; }
+    }
+    held.forEach(function (entry) {
+      const tmp = document.createElement("div");
+      tmp.innerHTML = entry.shell;
+      const fig = tmp.firstChild;
+      if (ref && ref.parentNode) {
+        ref.after(fig);
+      } else {
+        holder.appendChild(fig);
+      }
+      ref = fig;
+    });
+  }
+  return true;
+}
+
 /* Replace every image token in a converted body with its
    adopted form, in place, and return the finished body
    string. The note's attachment list is reset first: a
@@ -5989,8 +6087,23 @@ async function docAdoptImages(note, converted) {
      has always ruled. A cold note holds no records
      and adopts everything, as it always has. */
   const reusePool = (note.attachments || []).slice();
+  /* v2.179: the figures this note still holds outside
+     its Doc (see docPreserveHeldAttachments): their
+     records stand in the pool unclaimed, because the
+     Doc cannot vouch for images no save has inlined
+     yet, and they are preserved at this build's exits
+     instead of being ruled away by the reset. */
+  const standingFigs = docStandingAttachmentFigures(note);
   note.attachments = [];
-  if (!converted.images.length) { return converted.html; }
+  if (!converted.images.length) {
+    const heldHolder = document.createElement("div");
+    heldHolder.innerHTML = converted.html;
+    if (docPreserveHeldAttachments(note, reusePool,
+        standingFigs, heldHolder)) {
+      return heldHolder.innerHTML;
+    }
+    return converted.html;
+  }
   const holder = document.createElement("div");
   holder.innerHTML = converted.html;
   const tokens = holder.querySelectorAll("[data-doc-img]");
@@ -6037,6 +6150,8 @@ async function docAdoptImages(note, converted) {
     });
     tokens[i].outerHTML = swaps[i];
   }
+  docPreserveHeldAttachments(note, reusePool,
+    standingFigs, holder);
   return holder.innerHTML;
 }
 
@@ -13141,6 +13256,55 @@ async function handleIncomingFiles(fileList, opts) {
   hideUploadProgress();
 }
 
+/* v2.179: attachment uploads in flight, by note id.
+   uploadOneAttachment registers each upload here just
+   before it starts and unregisters the moment its
+   record is pushed (or the upload fails), and
+   saveDocBackedNote (tasks.js) waits on this registry
+   before building a Doc save's upload HTML. The wait
+   exists because docBuildUploadHtml writes the
+   literal text "[Image]" for a figure whose record
+   the note does not hold yet: a save landing while a
+   paste's upload was still in flight wrote the note
+   without that image, and any body build that landed
+   before the next save (a reopen, a refill) then made
+   the loss permanent in both copies. The wait is
+   bounded by ATTACH_SAVE_WAIT_MS: a genuinely stuck
+   upload lets the save proceed as it always has
+   rather than wedging every later save behind it. */
+const ATTACH_SAVE_WAIT_MS = 15000;
+const attachmentUploadsInFlight = new Map();
+function beginAttachmentUpload(note) {
+  if (!note || !note.id) { return function () {}; }
+  let set = attachmentUploadsInFlight.get(note.id);
+  if (!set) {
+    set = new Set();
+    attachmentUploadsInFlight.set(note.id, set);
+  }
+  const token = {};
+  set.add(token);
+  let ended = false;
+  return function () {
+    if (ended) { return; }
+    ended = true;
+    set.delete(token);
+    if (!set.size) {
+      attachmentUploadsInFlight.delete(note.id);
+    }
+  };
+}
+async function awaitNoteAttachmentUploads(note) {
+  if (!note || !note.id) { return; }
+  const deadline = Date.now() + ATTACH_SAVE_WAIT_MS;
+  while (Date.now() < deadline) {
+    const set = attachmentUploadsInFlight.get(note.id);
+    if (!set || !set.size) { return; }
+    await new Promise(function (resolve) {
+      setTimeout(resolve, 50);
+    });
+  }
+}
+
 async function uploadOneAttachment(note, providerName, driver, file, opts) {
   const attId = newNoteId() + "a";
   const storageName = attId + "__" + sanitizeFileName(file.name);
@@ -13167,10 +13331,30 @@ async function uploadOneAttachment(note, providerName, driver, file, opts) {
   captureCaret();
   insertPlaceholderAtCaret(el);
   setUploadProgress(file.name, 0);
+  const uploadDone = beginAttachmentUpload(note);
   try {
     const result = await driver.upload(file, storageName, function (pct) {
       setUploadProgress(file.name, pct);
     });
+    /* v2.179: an image record carries its payload's
+       hash (imgHash), the same hash docAdoptOneImage
+       computes over the data URI it finds in a Doc
+       export, read here from the file's own bytes.
+       Without it the v2.168 reuse pool could never
+       claim an inserted image's record: every body
+       build re-adopted the image under a new record
+       id, orphaned the uploaded file, and left the
+       editor's figure pointing at an id the note no
+       longer held, so the next save wrote "[Image]"
+       into the Doc for it and reconcile dropped the
+       new record. A hash that cannot be read simply
+       leaves the record as it was before v2.179. */
+    let imgHash = "";
+    if (isImage) {
+      try {
+        imgHash = docDataUriHash(await blobToDataUri(file));
+      } catch (hashErr) { imgHash = ""; }
+    }
     const att = {
       id: attId,
       provider: providerName,
@@ -13181,14 +13365,17 @@ async function uploadOneAttachment(note, providerName, driver, file, opts) {
       size: file.size,
       created: new Date().toISOString()
     };
+    if (imgHash) { att.imgHash = imgHash; }
     /* v2.46: the record half of the sketch marking. */
     if (opts && opts.sketch) { att.sketch = true; }
     note.attachments = note.attachments || [];
     note.attachments.push(att);
+    uploadDone();
     await hydrateOneAttachment(note, el);
     markDirty();
     toast("Attached " + file.name + ".");
   } catch (err) {
+    uploadDone();
     el.remove();
     toast("Upload failed for " + file.name + ": " + err.message, true);
   }

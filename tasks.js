@@ -4847,6 +4847,12 @@ async function saveDocBackedNote(note, options) {
     note.docId = created.id;
     note.docName = note.title || "";
   }
+  /* v2.179: wait (bounded, see media.js) for this
+     note's attachment uploads still in flight to
+     land before the upload HTML is built, so a save
+     landing mid-paste cannot write "[Image]" over a
+     figure whose record is about to exist. */
+  await awaitNoteAttachmentUploads(note);
   const uploadHtml = await docBuildUploadHtml(note);
   const saved = await docSaveDocument(note, uploadHtml, {
     checklist: docUploadChecklistCount(uploadHtml) > 0
