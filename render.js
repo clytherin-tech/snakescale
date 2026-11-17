@@ -4487,6 +4487,219 @@ function nativeMenuTargetKeepsMenu(target) {
 }
 
 /* --------------------------------------------------------------------------
+   v2.180: background delete activity: the close guard
+   and the progress toast.
+
+   Two background drains delete files after the user
+   has already seen the result: the pending deletions
+   drain (the section below: Empty Trash, Delete
+   Selected, and Delete Forever over a selection drop
+   their notes at confirm and owe the storage
+   deletions to the record), and the orphan scan's
+   Delete All (further below: the list clears at
+   confirm and the paced trash calls drain behind
+   it). Chris's asks (November 16, 2026): he wants to
+   SEE that deleting is going on wherever he is in
+   the app, and he wants closing the window mid
+   delete to ask first. This section is the one
+   signal both drains feed:
+
+   - Every drain reports begin, progress (files
+     deleted, files owed in total, files failed),
+     and end (with its honest outcome) under its
+     own key, "pending" or "orphan".
+   - While any drain runs, a beforeunload guard
+     stands: closing the window or tab raises the
+     browser's own are-you-sure prompt (the browser
+     supplies the words; the app only decides
+     whether it appears). The guard arms when the
+     first drain begins and stands down the moment
+     none is running, so it can never appear over a
+     quiet app, and a drain that finishes, stops, or
+     fails out always disarms it (the pending
+     drain's kick carries a settle safety with the
+     same duty, in case a pass ever ends unjudged).
+   - One progress toast in the ordinary toast box
+     speaks for all delete work: while drains run it
+     counts the files deleted out of the files owed
+     across every drain of the episode, and when the
+     last drain ends it lands on the episode's end
+     state (done, ended with failures, or stopped
+     with the rest left in place) and then dismisses
+     on the ordinary toast timings. A drain that
+     begins while an end state still stands reopens
+     the episode instead of opening a second toast:
+     there is never more than one delete toast.
+
+   The counts are the drains' own: a file counts as
+   deleted only when its storage call has landed,
+   and a stopped drain's end state says stopped,
+   never done. Nothing here is persisted: the guard
+   and the toast are this session's surfaces, and
+   the pending record below remains the only memory
+   a delete carries between sessions. */
+const bgDeleteSources = {};
+let bgDeleteGuardArmed = false;
+let bgDeleteToastEl = null;
+let bgDeleteToastTextEl = null;
+let bgDeleteToastTimer = null;
+
+function bgDeleteAnyRunning() {
+  return Object.keys(bgDeleteSources).some(function (key) {
+    return bgDeleteSources[key].running;
+  });
+}
+
+function bgDeleteBeforeUnload(event) {
+  event.preventDefault();
+  event.returnValue = "";
+}
+
+/* Arm or stand down the close guard to match the
+   drains: the listener exists only while a drain
+   runs, so a quiet app carries no close warning at
+   all, and both drains ending (for any reason) is
+   the only way it ever stands down. */
+function bgDeleteSyncGuard() {
+  const want = bgDeleteAnyRunning();
+  if (want === bgDeleteGuardArmed) { return; }
+  bgDeleteGuardArmed = want;
+  if (want) {
+    window.addEventListener("beforeunload",
+      bgDeleteBeforeUnload);
+  } else {
+    window.removeEventListener("beforeunload",
+      bgDeleteBeforeUnload);
+  }
+}
+
+function bgDeleteTotals() {
+  const totals = { deleted: 0, total: 0, failed: 0,
+    stopped: false };
+  Object.keys(bgDeleteSources).forEach(function (key) {
+    const s = bgDeleteSources[key];
+    totals.deleted += s.deleted;
+    totals.total += s.total;
+    totals.failed += s.failed;
+    if (s.stopped) { totals.stopped = true; }
+  });
+  return totals;
+}
+
+function bgDeleteToastText() {
+  const t = bgDeleteTotals();
+  const counts = t.deleted + " of " + t.total +
+    " files deleted";
+  const failedClause = t.failed
+    ? ", " + t.failed + " failed" : "";
+  if (bgDeleteAnyRunning()) {
+    return "Deleting in the background: " + counts +
+      failedClause + ".";
+  }
+  if (t.stopped) {
+    return "Background deletes stopped: " + counts +
+      failedClause + ". The rest were left in place.";
+  }
+  if (t.failed) {
+    return "Background deletes ended with failures: " +
+      counts + failedClause + ".";
+  }
+  return "Background deletes done: " + counts + ".";
+}
+
+/* Paint (or repaint) the one delete toast. While a
+   drain runs it stands with no dismissal timer; at
+   the episode's end it takes the end wording and
+   the ordinary toast's dismissal timing (longer
+   when the end was not clean), and the episode's
+   records clear as it goes. */
+function bgDeleteRenderToast() {
+  const box = document.getElementById("toastBox");
+  if (!box) { return; }
+  if (!bgDeleteToastEl) {
+    bgDeleteToastEl = document.createElement("div");
+    bgDeleteToastEl.className =
+      "toast progress bg-delete-progress";
+    bgDeleteToastTextEl = document.createElement("span");
+    bgDeleteToastTextEl.className =
+      "bg-delete-progress-text";
+    bgDeleteToastEl.appendChild(bgDeleteToastTextEl);
+    box.appendChild(bgDeleteToastEl);
+  }
+  if (bgDeleteToastTimer) {
+    clearTimeout(bgDeleteToastTimer);
+    bgDeleteToastTimer = null;
+  }
+  const totals = bgDeleteTotals();
+  const running = bgDeleteAnyRunning();
+  bgDeleteToastTextEl.textContent = bgDeleteToastText();
+  bgDeleteToastEl.classList.toggle("error",
+    !running && (totals.failed > 0 || totals.stopped));
+  if (!running) {
+    bgDeleteToastTimer = setTimeout(function () {
+      bgDeleteToastTimer = null;
+      if (bgDeleteToastEl && bgDeleteToastEl.parentNode) {
+        bgDeleteToastEl.parentNode.removeChild(
+          bgDeleteToastEl);
+      }
+      bgDeleteToastEl = null;
+      bgDeleteToastTextEl = null;
+      Object.keys(bgDeleteSources).forEach(function (key) {
+        delete bgDeleteSources[key];
+      });
+    }, (totals.failed > 0 || totals.stopped) ? 7000 : 4200);
+  }
+}
+
+/* A drain begins. Its counts start at zero and its
+   first progress report (which both drains make at
+   once) sets the real total; beginning while an end
+   state still stands reopens the episode on the
+   same toast element. */
+function bgDeleteBegin(key) {
+  bgDeleteSources[key] = {
+    running: true, deleted: 0, total: 0, failed: 0,
+    stopped: false, stopReason: ""
+  };
+  bgDeleteSyncGuard();
+  bgDeleteRenderToast();
+}
+
+/* A drain reports its counts, as they stand now:
+   a file is in `deleted` only once its storage
+   call has landed, and `total` is every file the
+   drain still owes plus the ones already resolved,
+   so a queue that grows mid drain (a confirm
+   landing while the pending drain works) grows
+   the total honestly instead of passing 100%. */
+function bgDeleteProgress(key, deleted, total, failed) {
+  const s = bgDeleteSources[key];
+  if (!s || !s.running) { return; }
+  s.deleted = deleted;
+  s.total = total;
+  s.failed = failed;
+  bgDeleteRenderToast();
+}
+
+/* A drain ends, with its outcome: how many files
+   failed, and whether it stopped with work still
+   owed (and why: "cancelled", "quota", or
+   "connection"). Ending is idempotent: a source
+   that is not running has nothing to end, which is
+   what makes the pending kick's settle safety
+   safe to run after every pass. */
+function bgDeleteEnd(key, outcome) {
+  const s = bgDeleteSources[key];
+  if (!s || !s.running) { return; }
+  s.running = false;
+  s.failed = (outcome && outcome.failed) || 0;
+  s.stopped = !!(outcome && outcome.stopped);
+  s.stopReason = (outcome && outcome.stopReason) || "";
+  bgDeleteSyncGuard();
+  bgDeleteRenderToast();
+}
+
+/* --------------------------------------------------------------------------
    v2.175: pending deletions. Through v2.174, Empty Trash
    and Delete Selected ran their storage deletions inline,
    one note at a time (deleteNotesForever awaiting each
@@ -4756,6 +4969,24 @@ async function runPendingDeleteDrain() {
   const failed = [];
   let quotaWaits = 0;
   let stopped = false;
+  /* v2.180: this pass feeds the shared background
+     delete activity (see the section above): it
+     begins only when the record actually owes
+     files, reports its counts as each file lands,
+     and ends with the pass's honest outcome (a
+     clean finish, failures, or a stop that leaves
+     the rest standing in the record). */
+  let bgBegan = false;
+  let bgDeleted = 0;
+  const bgReport = function () {
+    if (!bgBegan) { return; }
+    let remaining = 0;
+    readPendingDeletes().notes.forEach(function (e) {
+      remaining += (e.files || []).length;
+    });
+    bgDeleteProgress("pending", bgDeleted,
+      bgDeleted + remaining, failed.length);
+  };
   /* One storage call, paced and judged: "done" when it
      lands, "failed" when it refuses for a reason that
      is not quota, "stop" when the pass must end here
@@ -4828,6 +5059,11 @@ async function runPendingDeleteDrain() {
         "Delete note forever");
     });
   };
+  if (readPendingDeletes().notes.length) {
+    bgDeleteBegin("pending");
+    bgBegan = true;
+    bgReport();
+  }
   while (!stopped) {
     const record = readPendingDeletes();
     if (!record.notes.length) { break; }
@@ -4843,12 +5079,25 @@ async function runPendingDeleteDrain() {
           }
           entry.files.shift();
           persistPendingEntry(entry);
+          if (r === "done") { bgDeleted += 1; }
+          bgReport();
         }
         return "done";
       });
     if (outcome === "stop") { stopped = true; }
   }
   if (failed.length) { warnUndeletedAttachments(failed); }
+  if (bgBegan) {
+    const stillOwed = readPendingDeletes().notes.length > 0;
+    bgDeleteEnd("pending", {
+      failed: failed.length,
+      stopped: stillOwed,
+      stopReason: stillOwed
+        ? (!state.online || !state.repoExists
+          ? "connection" : "quota")
+        : ""
+    });
+  }
 }
 
 /* Start the drain if anything is owed and the store
@@ -4869,6 +5118,20 @@ function kickPendingDeleteDrain() {
        surface. */
   }).then(function () {
     pendingDeleteDrainRunning = false;
+    /* v2.180: the settle safety for the close
+       guard: if a pass somehow left its activity
+       report unfinished (a throw the drain did
+       not judge), end it here with the record's
+       own truth, so the guard can never stand
+       armed over a drain that is no longer
+       running. A pass that ended itself makes
+       this a no-op (bgDeleteEnd ignores a source
+       that is not running). */
+    bgDeleteEnd("pending", {
+      failed: 0,
+      stopped: readPendingDeletes().notes.length > 0,
+      stopReason: "connection"
+    });
   });
 }
 
@@ -11694,6 +11957,20 @@ let orphanDeleteAllCancelRequested = false;
 let orphanDeleteAllProgress = null;
 let orphanDeleteAllSummary = null;
 let orphanDeleteAllProgressEl = null;
+/* v2.180: the standing note that stands in the
+   cleared list's place while a Delete All drain
+   runs, in Chris's own substance (November 16,
+   2026): the app must remain open for the deletes
+   to finish, and an early close is not an error
+   state, it just leaves the rest in Drive for a
+   later scan to find. There is no resume queue
+   for orphans; the re-scan is the pickup. */
+const ORPHAN_DELETE_ALL_NOTE = "Deleting these " +
+  "files in the background. Keep the app open " +
+  "until the deletes finish: if you close it " +
+  "early, whatever is left simply stays in Google " +
+  "Drive, and you can run the scan again later " +
+  "and delete what remains.";
 /* The last scan's shape: {filesChecked, references,
    foundCount, orphans: [{fileId, name, mime, size,
    modifiedTime, error, deleting}]}. Memory only, and
@@ -12028,6 +12305,26 @@ function renderOrphanScanResults() {
   host.innerHTML = "";
   const scan = orphanScanState;
   if (!scan) { return; }
+  /* v2.180: while a Delete All drain stands, the
+     list's place is taken by the standing note and
+     the run's own status block (the progress line
+     and its Stop button, the surfaces the run has
+     always kept): the rows are gone from the
+     moment the run was confirmed, and what the
+     drain still owes stands in no row. When the
+     run settles this branch stops standing, and
+     the ordinary rendering below shows whatever
+     the run left in the scan (failures and the
+     unworked rest keep their rows and their
+     reasons, exactly as they always have). */
+  if (orphanDeleteAllProgress) {
+    const note = document.createElement("div");
+    note.className = "orphan-delete-note";
+    note.textContent = ORPHAN_DELETE_ALL_NOTE;
+    host.appendChild(note);
+    renderOrphanDeleteAllStatus(host);
+    return;
+  }
   const summary = document.createElement("div");
   summary.className = "orphan-summary";
   const msg = document.createElement("span");
@@ -12446,6 +12743,8 @@ async function deleteAllOrphans() {
   orphanDeleteAllCancelRequested = false;
   orphanDeleteAllSummary = null;
   orphanDeleteAllProgress = progress;
+  bgDeleteBegin("orphan");
+  bgDeleteProgress("orphan", 0, progress.total, 0);
   renderOrphanScanResults();
   let stopReason = "";
   let lastStart = 0;
@@ -12525,6 +12824,8 @@ async function deleteAllOrphans() {
     if (stopReason) { break; }
     workedSinceBreather += 1;
     updateOrphanDeleteAllProgress();
+    bgDeleteProgress("orphan", progress.deleted,
+      progress.total, progress.failed.length);
     if (workedSinceBreather >= timing.breatherEvery &&
         i < snapshot.length - 1) {
       workedSinceBreather = 0;
@@ -12549,6 +12850,11 @@ async function deleteAllOrphans() {
   };
   orphanDeleteAllProgress = null;
   orphanDeleteAllProgressEl = null;
+  bgDeleteEnd("orphan", {
+    failed: progress.failed.length,
+    stopped: !!stopReason,
+    stopReason: stopReason
+  });
   renderOrphanScanResults();
 }
 
