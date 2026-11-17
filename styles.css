@@ -3328,10 +3328,13 @@ body.dark #nbActionMenu.nb-context:hover::-webkit-scrollbar-thumb{
    the description beside it, capped to the same
    height with its own scroll. */
 #linkBarImdbPreview{
-  display:flex;gap:10px;align-items:flex-start;
+  display:flex;flex-direction:column;
   margin-top:6px;padding:10px 6px 4px;
   border-top:1px solid rgba(234,243,236,.18);
   max-width:340px;
+}
+#linkBarImdbMain{
+  display:flex;gap:10px;align-items:flex-start;
 }
 #linkBarImdbPoster{
   height:120px;width:auto;flex:none;border-radius:6px;
@@ -3340,6 +3343,14 @@ body.dark #nbActionMenu.nb-context:hover::-webkit-scrollbar-thumb{
   font-size:12.5px;line-height:1.45;color:#EAF3EC;
   max-height:120px;overflow-y:auto;
 }
+/* v2.184: the people lines under the poster and
+   description, in the description's own text voice,
+   their labels in the bar's standing accent. */
+.link-bar-imdb-line{
+  font-size:12.5px;line-height:1.45;color:#EAF3EC;
+  margin-top:6px;
+}
+.link-bar-imdb-label{color:#9FD4B2;font-weight:600;}
 #linkBarGlobe{display:inline-flex;flex:none;color:#9FD4B2;padding:0 2px 0 4px;}
 #linkBarGlobe svg{display:block;}
 #linkBarUrl{

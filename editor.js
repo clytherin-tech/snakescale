@@ -1249,11 +1249,37 @@ function imdbIdOfHref(href) {
    error wiring stands in app.js), leaving the
    description standing alone with no broken image
    artifact. */
+/* v2.184: one people line of the extension (the
+   Starring line, the Director line): its label and
+   names when the entry carries the field, hidden
+   and emptied when it does not, so a field the data
+   lacks leaves no placeholder behind. The line is
+   built from text nodes only, like the description
+   above it. */
+function fillImdbPreviewLine(el, label, text) {
+  if (!el) { return; }
+  if (!text) {
+    el.classList.add("hidden");
+    el.textContent = "";
+    return;
+  }
+  el.textContent = "";
+  const lab = document.createElement("span");
+  lab.className = "link-bar-imdb-label";
+  lab.textContent = label;
+  el.appendChild(lab);
+  el.appendChild(document.createTextNode(text));
+  el.classList.remove("hidden");
+}
+
 function refreshLinkBarImdbPreview(anchor) {
   const block = document.getElementById("linkBarImdbPreview");
   if (!block) { return; }
   const img = document.getElementById("linkBarImdbPoster");
   const desc = document.getElementById("linkBarImdbDesc");
+  const cast = document.getElementById("linkBarImdbCast");
+  const directorEl = document.getElementById(
+    "linkBarImdbDirector");
   const href = anchor
     ? (anchor.getAttribute("href") || anchor.href || "")
     : "";
@@ -1267,12 +1293,22 @@ function refreshLinkBarImdbPreview(anchor) {
       img.classList.add("hidden");
     }
     if (desc) { desc.textContent = ""; }
+    fillImdbPreviewLine(cast, "Starring: ", "");
+    fillImdbPreviewLine(directorEl, "Director: ", "");
     if (ttId && !linkBarEditing) {
       maybeFetchImdbPreviewForBar(ttId);
     }
     return;
   }
   if (desc) { desc.textContent = entry.description || ""; }
+  /* v2.184: the people lines stand under the poster
+     and description, each only when the entry
+     carries it. */
+  fillImdbPreviewLine(cast, "Starring: ",
+    (entry.actors && entry.actors.length)
+      ? entry.actors.join(", ") : "");
+  fillImdbPreviewLine(directorEl, "Director: ",
+    entry.director || "");
   if (img) {
     if (entry.posterUrl) {
       img.classList.remove("hidden");

@@ -655,8 +655,25 @@ function sanitizeImdbPreviews(parsed) {
     const description = typeof raw.description === "string"
       ? raw.description : "";
     if (!posterUrl && !description) { return; }
-    out[key] = { posterUrl: posterUrl,
+    const entry = { posterUrl: posterUrl,
       description: description };
+    /* v2.184: the file's people ride along when they
+       are well formed: the main actors as a list of
+       names, the director as one name. Anything else
+       is dropped, never repaired, so a stale or hand
+       edited file degrades to the poster and
+       description exactly as before. */
+    if (Array.isArray(raw.actors)) {
+      const names = raw.actors.filter(function (n) {
+        return typeof n === "string" && !!n.trim();
+      }).map(function (n) { return n.trim(); });
+      if (names.length) { entry.actors = names; }
+    }
+    if (typeof raw.director === "string" &&
+        !!raw.director.trim()) {
+      entry.director = raw.director.trim();
+    }
+    out[key] = entry;
   });
   return out;
 }
@@ -874,7 +891,9 @@ async function resolveImdbPreview(ttId) {
   if (file) {
     return { title: hit ? hit.title : "",
       posterUrl: file.posterUrl || "",
-      description: file.description || "" };
+      description: file.description || "",
+      actors: file.actors || null,
+      director: file.director || "" };
   }
   if (hit) { return hit; }
   if (imdbFetchedMissFresh(ttId)) { return null; }

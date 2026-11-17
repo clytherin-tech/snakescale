@@ -6917,8 +6917,16 @@
                  Display only; it lives in the bar, outside
                  the note body, and is never saved. -->
             <div id="linkBarImdbPreview" class="hidden">
-              <img id="linkBarImdbPoster" class="hidden" alt="">
-              <div id="linkBarImdbDesc"></div>
+              <div id="linkBarImdbMain">
+                <img id="linkBarImdbPoster" class="hidden" alt="">
+                <div id="linkBarImdbDesc"></div>
+              </div>
+              <!-- v2.184: the title's people under the
+                   poster and description: the main actors
+                   and the director, each standing only
+                   when the preview data carries it. -->
+              <div id="linkBarImdbCast" class="link-bar-imdb-line hidden"></div>
+              <div id="linkBarImdbDirector" class="link-bar-imdb-line hidden"></div>
             </div>
           </div>
           <!-- v2.10: the View Link As menu is the link bar's
