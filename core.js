@@ -1309,27 +1309,37 @@ function logoTile(x, y, s) {
     ' L' + x2 + ' ' + (y2 - f) + ' L' + (x2 - f) + ' ' + (y2 - f) + ' Z"/>';
 }
 
-/* The v1.1 S uses twenty tiles on a five column by seven row grid. The
-   two left rows form the upper bowl, the shared middle row turns the path,
-   and the two right rows plus the bottom row form the lower bowl. Larger
-   gate instances are scaled by CSS from this same vector, so every screen
-   uses exactly the same mark and gradient. */
+/* The Virida page mark (the patch of 2026-11-18): redrawn from
+   the approved Virida Notes icon at Chris's call after the rename
+   left the v1.1 tile S standing beside the new name. A white page
+   with a folded
+   top right corner, a Deep Forest V, and two writing lines, drawn
+   without the icon's green tile, because every slot sits on a themed
+   surface in one theme or the other. The page carries a thin Deep
+   Forest outline so its shape reads on light surfaces, and the V, the
+   fold, and the lines are the Deep Forest primary green, #14532D.
+   Every element is a path, so the loading overlay's pulse animation
+   still sweeps the mark the way it swept the tiles. The tile helper
+   and the gradient defs above stand as the old mark's history;
+   nothing draws with them now. The page is drawn on a 100 by 150
+   grid: the page from (10, 5) to (90, 145), its corner cut on the
+   diagonal from (72, 5) to (90, 23), the fold's green triangle under
+   that diagonal, the V centered in the upper half, and the two lines
+   under it, the second shorter, as on the icon. */
 function logoSvg(size) {
-  const t = 26, gap = 4, step = t + gap;
-  const tiles = [
-            [1, 0], [2, 0], [3, 0], [4, 0],
-    [0, 1], [1, 1],
-    [0, 2], [1, 2],
-            [1, 3], [2, 3], [3, 3],
-                            [3, 4], [4, 4],
-                            [3, 5], [4, 5],
-    [0, 6], [1, 6], [2, 6], [3, 6]
-  ];
-  let parts = "";
-  tiles.forEach(function (pos) {
-    parts += logoTile(pos[0] * step, pos[1] * step, t);
-  });
-  const w = 5 * step - gap, h = 7 * step - gap;
+  const w = 100, h = 150;
+  const green = "#14532D";
+  const parts =
+    '<path fill="#FFFFFF" stroke="' + green + '" stroke-width="3" ' +
+      'd="M16 5 H72 L90 23 V139 Q90 145 84 145 H16 Q10 145 10 139 ' +
+      'V11 Q10 5 16 5 Z"/>' +
+    '<path fill="' + green + '" d="M72 5 L90 23 L72 23 Z"/>' +
+    '<path fill="' + green + '" d="M24 56 L50 94 L76 56 L64 56 ' +
+      'L50 80 L36 56 Z"/>' +
+    '<path fill="none" stroke="' + green + '" stroke-width="6.5" ' +
+      'stroke-linecap="round" d="M28 116 H72"/>' +
+    '<path fill="none" stroke="' + green + '" stroke-width="6.5" ' +
+      'stroke-linecap="round" d="M28 128 H56"/>';
   return '<svg width="' + size + '" height="' + Math.round(size * h / w) +
     '" viewBox="0 0 ' + w + ' ' + h + '" role="img" aria-label="Virida Notes logo">' +
     parts + '</svg>';
