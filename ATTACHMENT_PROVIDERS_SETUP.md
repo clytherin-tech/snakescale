@@ -1,12 +1,12 @@
-# SnakeScale Notes: Attachment Providers Setup Guide
+# Virida Notes: Attachment Providers Setup Guide
 
-This guide is for Chris, the publisher of SnakeScale Notes. It covers the one time setup that makes Google sign in, and with it attachment storage, work. Since v2.0, Google Drive is the only data store in SnakeScale: notes and attachments live in the same Google account, under one sign in.
+This guide is for Chris, the publisher of Virida Notes. It covers the one time setup that makes Google sign in, and with it attachment storage, work. Since v2.0, Google Drive is the only data store in Virida Notes: notes and attachments live in the same Google account, under one sign in.
 
 ## The short version
 
 Notes live in a folder named SnakeScale Notes in each user's own Google Drive. Attachments and images live in the same account, in an attachments subfolder inside that same SnakeScale Notes folder. The note itself keeps only a small reference to each attachment file.
 
-Users sign in with OAuth. In the app they click a button labeled Sign in with Google, they approve access on Google's own website, and they come back signed in. That one sign in covers notes and attachments alike. SnakeScale never sees their Google password, and users never register anything.
+Users sign in with OAuth. In the app they click a button labeled Sign in with Google, they approve access on Google's own website, and they come back signed in. That one sign in covers notes and attachments alike. Virida Notes never sees their Google password, and users never register anything.
 
 Before that sign in button can work, Google requires the app itself to be registered. That registration is a ONE TIME publisher setup, done by Chris as the app owner. It produces one public client ID from Google. Registering is free.
 
@@ -25,7 +25,7 @@ End users will never need a Google Cloud project or any other developer account.
    - User support email: your email address.
    - Fill in the required contact fields and save.
 5. On the consent screen's scopes step, add exactly one scope: https://www.googleapis.com/auth/drive.file
-   - This scope limits SnakeScale to files it creates itself, plus files a user explicitly picks. The app cannot browse a user's whole Drive.
+   - This scope limits Virida Notes to files it creates itself, plus files a user explicitly picks. The app cannot browse a user's whole Drive.
 6. Open APIs and Services, then Credentials. Click Create Credentials, then OAuth client ID.
    - Application type: Web application.
    - Name: SnakeScale Notes Web.
@@ -33,7 +33,7 @@ End users will never need a Google Cloud project or any other developer account.
    - Optional, only for testing the app from a local web server: also add http://localhost:8000
    - No redirect URI is needed for this sign in flow.
 7. Click Create. Google shows a client ID that ends in apps.googleusercontent.com. Copy it.
-8. For the published SnakeScale app there is nothing to paste: the client ID from step 7 is the one baked into the app. Paste a client ID into the Google OAuth client ID field in Attachments settings only when testing a different client, or when running a fork with its own registration (a fork can also replace the PUBLISHER_GOOGLE_CLIENT_ID constant in the app file instead).
+8. For the published Virida Notes app there is nothing to paste: the client ID from step 7 is the one baked into the app. Paste a client ID into the Google OAuth client ID field in Attachments settings only when testing a different client, or when running a fork with its own registration (a fork can also replace the PUBLISHER_GOOGLE_CLIENT_ID constant in the app file instead).
 
 Publishing note: while the consent screen is in Testing mode, only Google accounts listed as test users can sign in. To let the public use it, publish the consent screen from the same OAuth consent screen page. Because drive.file is a non sensitive scope, publishing is usually straightforward, but Google may still show verification steps or ask for a privacy policy link before or after publishing. That is normal and only ever happens once, to the publisher.
 

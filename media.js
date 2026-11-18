@@ -56,7 +56,7 @@ function loadProviderTokenBlob() {
 
 async function storeProviderToken(provider, token) {
   if (!state.sessionKey) {
-    throw new Error("SnakeScale Notes is not ready to save a provider sign in on this device yet.");
+    throw new Error("Virida Notes is not ready to save a provider sign in on this device yet.");
   }
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const cipher = await crypto.subtle.encrypt(
@@ -271,7 +271,7 @@ function loadWorkerSessionBlob() {
    other credential on this device. */
 async function storeWorkerSession(token) {
   if (!state.sessionKey) {
-    throw new Error("SnakeScale Notes is not ready to save a provider sign in on this device yet.");
+    throw new Error("Virida Notes is not ready to save a provider sign in on this device yet.");
   }
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const cipher = await crypto.subtle.encrypt(
@@ -13217,7 +13217,7 @@ function copyWebClipBookmarklet() {
     if (feedback) {
       feedback.textContent = "Bookmarklet code copied. " +
         "Paste it as the URL of a new bookmark named " +
-        "Clip to SnakeScale Notes.";
+        "Clip to Virida Notes.";
     }
   };
   if (navigator.clipboard &&

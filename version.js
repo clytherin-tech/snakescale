@@ -17,5 +17,5 @@
    the split they live here, in the first script the
    shell loads, so every other part reads the same two
    values and no other file hardcodes them. */
-const APP_BUILD = "2026-11-17-SSN-V21860";
-const APP_VERSION = "2.186.0";
+const APP_BUILD = "2026-11-17-SSN-V21870";
+const APP_VERSION = "2.187.0";

@@ -1331,7 +1331,7 @@ function logoSvg(size) {
   });
   const w = 5 * step - gap, h = 7 * step - gap;
   return '<svg width="' + size + '" height="' + Math.round(size * h / w) +
-    '" viewBox="0 0 ' + w + ' ' + h + '" role="img" aria-label="SnakeScale Notes logo">' +
+    '" viewBox="0 0 ' + w + ' ' + h + '" role="img" aria-label="Virida Notes logo">' +
     parts + '</svg>';
 }
 
@@ -1419,7 +1419,7 @@ function wipeDeviceKey() {
    reloads them. */
 async function signOut() {
   const ok = confirm(
-    "Sign out of SnakeScale Notes on this device? Your notes stay safe in " +
+    "Sign out of Virida Notes on this device? Your notes stay safe in " +
     "Google Drive. Local copies on this device will be cleared, including " +
     "any edits still waiting to sync, so sync first if the sync pill is " +
     "not green.");

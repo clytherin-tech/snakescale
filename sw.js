@@ -104,7 +104,7 @@
 
 "use strict";
 
-const CACHE_NAME = "snakescale-shell-2026-11-17-SSN-V21860";
+const CACHE_NAME = "snakescale-shell-2026-11-17-SSN-V21870";
 
 /* The shell, as paths relative to this worker's scope (the site
    root). "./" and "./index.html" are both listed: the first is the
@@ -150,27 +150,27 @@ const PAGE_KEY = "./index.html";
    build if this block is stale. Never edit it by hand. */
 // BEGIN GENERATED ASSET HASHES (gen_asset_hashes.py)
 const ASSET_HASHES = {
-  "./index.html": "f3a1acc5d91d21e25cea4fec5308c11cf9560d400d787724ec8ffc0ceec4596a",
+  "./index.html": "fca656041da9c803328f69e2035ea6799137ab79c297fd822c0dd4251b3b5ced",
   "./styles.css": "fc858e8ac9a3e17e61902682e13f5e77a3622e5acbb86e4909246e7af424db3a",
-  "./version.js": "e23eff436a57944ec89849a8d76aa8eb1cdd939ac143683eacda63f30d6f8143",
-  "./core.js": "47465edc4d7438d8321592c8bb40b00db81728a509ee3476b5621d15e8be1e80",
+  "./version.js": "eba615d4e587aa3bdcf5c787be6f9b97439483b5a6e76192fa62e052c878e3aa",
+  "./core.js": "d97282ffe5bf129b4b8694cf0cf3f2671fe8d75f9b01f2beee224465435f7c83",
   "./store.js": "f0a1861ab630ad58d17ffdef60a9b24bdee892813291ae1a88e1ad3c7aa59edc",
   "./sync.js": "0181cb3d7efa5e38d2ff3975001e55f2bf8f4948a29c757b5148c1e65b482c64",
   "./tasks.js": "0df858d361c54d2f6a0fa793acb2cec226d186d701af36259ec4ff077be18c06",
   "./notebooks.js": "8bfe790a13d0fa111d0cedefe54ff98ace1523275555a99262cd283e396a16a1",
   "./home.js": "ffd2d0908c771ed0c57120448296be5cf52f805c6ff142df1f3313ac73306921",
   "./calendar.js": "1d8926b971eecfa2a7cfd0e285272ad26bc8ff95a88138878f3dff1c078c79b4",
-  "./mail.js": "641c753128d00688de26b82a66c9a8087fc6c733d654657828b696dfe414a37d",
-  "./render.js": "569c09deaf544b6b4a9600ff790bb386ac26bd4566fcb94e588e3ba5117853ca",
+  "./mail.js": "8e7989ef75cd9b29f4b9893f7a22ab2908d6b9dcceadc1f8a4d22f572e8cec43",
+  "./render.js": "e64ceb7614f7c440bbf8c032db87939af788a76aaf9da573ca340935c714a1b7",
   "./editor.js": "c961dd13449ce4e8be3ec2ea59aa21d05dbfca8137cf2f87adb1978d1a9869d8",
   "./editor-tools.js": "b69b06cd4004c22ac8ba07c8278e477e85d42199925b6f8c7ef8beacffe7ae50",
-  "./media.js": "87eda4228dd00b253b546d5afd0b25577e55de3f85b1db31d688975fb3834f21",
-  "./app.js": "0788b3e92e2593978aa4e4330030ba0eeb0dc9e1db4447cf6093bde74e60ee8e",
-  "./manifest.webmanifest": "3023da8f798f72a653465cd72fc269090e5c0e18dbc0d2f52afb0d54cda8c16c",
-  "./icon-192.png": "d663e8dbb927453044a9760c7ed49d13d6be2c155ffff85245f09a02c319848e",
-  "./icon-512.png": "0745bbae85b4dd2c4b726154c043022330ac2067e31944bc4db32e48352cb5f9",
-  "./icon-maskable-512.png": "4a147e82c17ef92666fc5fa59dd06bf6b4bd844c072e62a2dc27d52d919faacf",
-  "./apple-touch-icon.png": "fe3998937952e0dca681323b6471ccd40920aa3e55ac03c95581dbd064f74859"
+  "./media.js": "76bf36ac91b46997264bdd22ad9326dbf59deb269197d498051473b741f97215",
+  "./app.js": "87f9ac2f71c326a81fa0cc21a60cbccd962fb15963b05f80f893b97670673161",
+  "./manifest.webmanifest": "c4bb2054518b8763407f0834ba9033f690677674c003d9f4eeb4b0286cad9a94",
+  "./icon-192.png": "f3b785c13d078d71790c4330c0749324796115cb06b2215629ba6e2ebdaa35f6",
+  "./icon-512.png": "0955bd92167aa1a79b2cdf541277b32c325cf665ae7b440eb6c7fa5dc995cd3d",
+  "./icon-maskable-512.png": "d4b0b38ef1b20da3996540e921fbe14bb0cba915827c45ca5f9aa14447b7b793",
+  "./apple-touch-icon.png": "9872580e29622e8e607551abe9348b06353b7499534d42fd26ceea24a00a8e00"
 };
 // END GENERATED ASSET HASHES
 
@@ -421,7 +421,7 @@ self.addEventListener("push", function (event) {
     }
   }
   const title = typeof payload.title === "string" &&
-    payload.title ? payload.title : "SnakeScale Notes";
+    payload.title ? payload.title : "Virida Notes";
   const options = {
     body: typeof payload.body === "string"
       ? payload.body : "",

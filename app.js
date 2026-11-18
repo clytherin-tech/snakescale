@@ -789,7 +789,7 @@ function wireEvents() {
       await createDeviceKey();
       saveSettings();
       showGoogleConnectScreen(
-        "One step left: sign in with Google. SnakeScale Notes will create " +
+        "One step left: sign in with Google. Virida Notes will create " +
         "the SnakeScale Notes folder in your Drive and your first " +
         "notebook and starter note.");
     } catch (err) {
@@ -4706,7 +4706,7 @@ function onSwControllerChange() {
   swUpdatePending = true;
   renderUpdateReadyPill();
   if (!swReloadGuardSpent() && updateReloadBlocked()) {
-    toast("A new version of SnakeScale Notes is ready. " +
+    toast("A new version of Virida Notes is ready. " +
       "It will load as soon as your unsaved work is saved.");
   }
   maybeReloadForUpdate();
@@ -4833,7 +4833,7 @@ async function boot() {
     pendingTaskOpenId || pendingNoteReminderOpenId);
   /* Small diagnostic hook: the build stamp is searchable in the file,
      and also visible in the console for support. */
-  console.log("SnakeScale Notes v" + APP_VERSION + " build " + APP_BUILD);
+  console.log("Virida Notes v" + APP_VERSION + " build " + APP_BUILD);
 
   /* v2.79.0: a held Worker return routes through the gate's
      preparation whatever the stored state says: the fragment

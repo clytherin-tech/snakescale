@@ -9441,10 +9441,17 @@ function unarchiveNoteNow(note, quiet) {
    ticked), a small table, and an ordinary Text mode web link. The
    note is pinned and carries the welcome and examples tags.
    -------------------------------------------------------------------------- */
-const STARTER_NOTE_TITLE = "Start here: see what SnakeScale Notes can do";
+const STARTER_NOTE_TITLE = "Start here: see what Virida Notes can do";
+/* v2.187: a starter note planted before the Virida
+   rename carries the pre-rename title. It stays
+   recognized wherever the starter note is judged by
+   title, so a returning user is never handed a
+   second starter note. */
+const STARTER_NOTE_LEGACY_TITLE =
+  "Start here: see what SnakeScale Notes can do";
 const STARTER_NOTE_TAGS = ["welcome", "examples"];
 const STARTER_NOTE_BODY =
-  "<p>Welcome to <b>SnakeScale Notes</b>. This note lives in your own " +
+  "<p>Welcome to <b>Virida Notes</b>. This note lives in your own " +
   "Google Drive, in the SnakeScale Notes folder, and so does everything " +
   "else you write here. It is also a tour: each part below is a real, " +
   "working example you can edit, tick, or delete.</p>" +
@@ -9470,8 +9477,8 @@ const STARTER_NOTE_BODY =
   "<tr><td>This tour</td><td>The starter note, in Personal</td></tr>" +
   "</tbody></table>" +
   "<h2>Links that show more</h2>" +
-  "<p>The SnakeScale Notes home page: <a href=\"https://nine34.com/snakescale\">" +
-  "SnakeScale Notes, in one page</a>. Rest the mouse on any link in a " +
+  "<p>The Virida Notes home page: <a href=\"https://nine34.com/snakescale\">" +
+  "Virida Notes, in one page</a>. Rest the mouse on any link in a " +
   "note (or tap it) and a small bar appears: from its menu you can " +
   "switch the link between Text, Mention, and Preview views, and " +
   "Preview shows the page's real title and picture.</p>" +
@@ -9839,7 +9846,7 @@ async function connectAndLoad() {
     await filePendingWebClip();
     if (starter) {
       openNote(starter.id);
-      toast("Google Drive connected. Welcome to SnakeScale Notes.");
+      toast("Google Drive connected. Welcome to Virida Notes.");
       /* v2.13: the first run walkthrough opens over the freshly
          seeded app. The trigger is this seeding itself, in this
          boot: no settings flag is consulted, so an existing or

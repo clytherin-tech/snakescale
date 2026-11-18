@@ -200,9 +200,9 @@ function renderAppVersion() {
      the Getting started tab), from the same single source. */
   const settingsEl = document.getElementById("settingsVersion");
   if (settingsEl) {
-    settingsEl.textContent = "SnakeScale Notes, version " + APP_VERSION;
+    settingsEl.textContent = "Virida Notes, version " + APP_VERSION;
   }
-  document.title = "SnakeScale Notes v" + APP_VERSION;
+  document.title = "Virida Notes v" + APP_VERSION;
 }
 
 function showScreen(name) {
@@ -11675,7 +11675,7 @@ function setVersionsFeedback(text) {
 }
 function versionsLimitFeedback(limit) {
   if (limit === 0) { return "Version history is off."; }
-  return "SnakeScale Notes keeps up to " + limit + " version" +
+  return "Virida Notes keeps up to " + limit + " version" +
     (limit === 1 ? "" : "s") + " per note.";
 }
 
@@ -12942,10 +12942,10 @@ function applyVersionsLimitFromInput() {
    -------------------------------------------------------------------------- */
 const ONBOARDING_STEPS = [
   {
-    title: "Welcome to SnakeScale Notes",
+    title: "Welcome to Virida Notes",
     lines: [
       "Your notes live in your own Google Drive, in a folder the app " +
-        "creates for you. They are never stored on a SnakeScale Notes server.",
+        "creates for you. They are never stored on a Virida Notes server.",
       "The developer cannot see your notes, and your Google sign in is " +
         "the only account you need."
     ]
@@ -13092,7 +13092,8 @@ function onboardingBack() {
 async function addStarterNoteFromSettings() {
   closeSettingsModal();
   const existing = state.notes.find(function (n) {
-    return n.title === STARTER_NOTE_TITLE;
+    return n.title === STARTER_NOTE_TITLE ||
+      n.title === STARTER_NOTE_LEGACY_TITLE;
   });
   if (existing) {
     openNote(existing.id);
