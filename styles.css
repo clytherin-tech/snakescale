@@ -1930,6 +1930,10 @@ body.dark .home-widget-drag:hover{color:var(--accent);}
 }
 body.ss-home-dragging{cursor:grabbing;user-select:none;}
 .home-widget-head{display:flex;align-items:center;gap:10px;margin-bottom:10px;}
+/* v2.186: the head's actions tray (the Email
+   widget's selection buttons live there); empty
+   for every other widget, taking no room. */
+.home-widget-actions{display:flex;align-items:center;gap:6px;}
 .home-widget-title{margin:0;font-size:15px;color:var(--primary);}
 body.dark .home-widget-title{color:var(--accent);}
 button.home-widget-title{
@@ -5126,6 +5130,15 @@ body.dark .task-cal-more{color:var(--accent);}
   font-size:13.5px;
 }
 .home-mail-row:hover{background:var(--accent-soft);}
+/* v2.186: a picked widget row wears the Email
+   view's picked dress (the soft accent ground
+   and the inset accent bar), in both themes by
+   the same variables; the header's three icon
+   buttons stand dimmed while nothing is picked,
+   their hover dress stood down with them. */
+.home-mail-row.picked{background:var(--accent-soft);box-shadow:inset -3px 0 0 var(--accent);}
+.home-mail-actions .mail-icon-btn:disabled{opacity:.45;cursor:default;}
+.home-mail-actions .mail-icon-btn:disabled:hover{color:var(--muted);background:var(--surface);border-color:var(--border);}
 .home-mail-from{font-weight:700;white-space:nowrap;
   overflow:hidden;text-overflow:ellipsis;max-width:38%;}
 .home-mail-subject{flex:1;min-width:0;white-space:nowrap;

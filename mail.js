@@ -150,6 +150,17 @@ function showMailUndoToast(kind, snap) {
     reversal.catch(function () {
       /* the reversal reports through the write paths */
     });
+    /* v2.186: an Undo taken while Home stands (the
+       widget's own triage offers this same toast)
+       repaints Home when the reversal lands, so
+       the restored messages come back into the
+       widget; the reversal's write paths repaint
+       only the Email view. */
+    reversal.then(function () {
+      if (state.view && state.view.kind === "home") {
+        renderHome();
+      }
+    });
   });
   el.appendChild(btn);
   box.appendChild(el);
@@ -1283,6 +1294,27 @@ function mailArmDropTarget(el, target) {
 
 let mailSelection = new Set();
 let mailSelectionAnchorId = null;
+/* v2.186: the Home Email widget's own selection,
+   the Email view's model at widget size: a plain
+   click picks one message and anchors there,
+   Ctrl+click toggles one in or out, Shift+click
+   takes the range from the anchor (Shift+Ctrl adds
+   it), and a double click still opens the message,
+   the road the widget has always had (Chris's
+   correction: the widget opens on a double click,
+   never a plain one, so the plain click is free to
+   pick). The set names messages in the widget's
+   own list (the Inbox's unread), and it lives only
+   while Home stands: leaving Home clears it
+   (renderAll), and a fresh mail landing clears it
+   (the two landing repaints below), because a
+   repaint replaces the rows it pointed at. The
+   header buttons run the picked records through
+   the view's own dispatcher (mailRunTargets), so
+   the widget's triage and the view's are one
+   machinery, the one Undo toast included. */
+let homeMailSelection = new Set();
+let homeMailSelectionAnchorId = null;
 let mailRowMenuCtx = null;
 
 /* The selected records standing in the current
@@ -1754,10 +1786,26 @@ function mailSnoozeRun(recs, untilMs) {
   if (!recs || !recs.length) {
     return Promise.resolve(false);
   }
-  if (recs.length === 1) {
-    return mailSnoozeMessage(recs[0], untilMs);
-  }
-  return mailSnoozeMessages(recs, untilMs);
+  const run = recs.length === 1
+    ? mailSnoozeMessage(recs[0], untilMs)
+    : mailSnoozeMessages(recs, untilMs);
+  /* v2.186: a snooze picked from the Home widget
+     settles here too, and its write paths repaint
+     only the Email view; when Home stands, the
+     pick clears the widget's selection and Home
+     repaints with the result. The Email view's
+     own picks see no change: the branch stands
+     down unless Home is the standing view. A
+     menu dismissed without a pick never reaches
+     this run at all, so a dismissed snooze costs
+     the selection nothing. */
+  return run.then(function (ok) {
+    if (state.view && state.view.kind === "home") {
+      homeMailClearSelection();
+      renderHome();
+    }
+    return ok;
+  });
 }
 
 /* Reverse a whole batch: every item's row copies
@@ -1870,18 +1918,28 @@ async function mailUndoBatch(snap) {
    target runs the standing single path, so its
    toast and its undo are the ones it always had. */
 function mailRunTargets(recs, action, x, y) {
-  if (!recs || !recs.length) { return; }
+  if (!recs || !recs.length) { return null; }
+  /* v2.186: the archive and trash runs return
+     their promise, so the Home widget can repaint
+     when a run it started completes; the snooze
+     road settles inside mailSnoozeRun, which
+     carries the widget's settle itself. The Email
+     view's callers ignore the return, as they
+     always have. */
   if (action === "archive") {
     if (recs.length === 1) {
-      mailArchiveWithUndo(recs[0]);
-    } else { mailBatchArchive(recs); }
+      return mailArchiveWithUndo(recs[0]);
+    }
+    return mailBatchArchive(recs);
   } else if (action === "trash") {
     if (recs.length === 1) {
-      mailTrashWithUndo(recs[0]);
-    } else { mailBatchTrash(recs); }
+      return mailTrashWithUndo(recs[0]);
+    }
+    return mailBatchTrash(recs);
   } else if (action === "snooze") {
-    openMailSnoozeMenuFor(recs, x, y);
+    return openMailSnoozeMenuFor(recs, x, y);
   }
+  return null;
 }
 
 /* A multi drag lands: the whole selection moves by
@@ -3319,6 +3377,39 @@ function buildHomeEmailWidget() {
     if (homeCustomSession) { return; }
     openMailInbox();
   });
+  /* v2.186: the selection's three works stand in
+     the head, in line with the title: Archive,
+     Snooze, and Delete, icon only, wearing the
+     Email view's own dress (the reading pane's
+     three glyphs on the mail-icon-btn shape),
+     present at all times and disabled while
+     nothing is picked. Each runs the picked
+     records through the view's own dispatcher;
+     the Snooze button anchors the standing
+     snooze menu on itself, the way the view's
+     selection bar anchors it on its own. */
+  parts.actions.classList.add("home-mail-actions");
+  [["archive", "homeMailArchiveBtn", "Archive",
+    "<svg viewBox=\"0 0 20 20\" width=\"17\" height=\"17\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><rect x=\"2.5\" y=\"3\" width=\"15\" height=\"4\" rx=\"1\"/><path d=\"M4 7v8a1.5 1.5 0 0 0 1.5 1.5h9A1.5 1.5 0 0 0 16 15V7M8 10h4\"/></svg>"],
+   ["snooze", "homeMailSnoozeBtn", "Snooze",
+    "<svg viewBox=\"0 0 20 20\" width=\"17\" height=\"17\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><circle cx=\"10\" cy=\"10\" r=\"7.5\"/><path d=\"M10 5.8V10l3 2\"/></svg>"],
+   ["trash", "homeMailTrashBtn", "Delete",
+    "<svg viewBox=\"0 0 20 20\" width=\"17\" height=\"17\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.6\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M3 5h14M8 5V3.5A.5.5 0 0 1 8.5 3h3a.5.5 0 0 1 .5.5V5M5 5l.8 11a1.5 1.5 0 0 0 1.5 1.4h5.4A1.5 1.5 0 0 0 14.2 16L15 5M8.3 8.5v5M11.7 8.5v5\"/></svg>"]]
+    .forEach(function (spec) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className =
+        "mail-icon-btn home-mail-action-btn";
+      btn.id = spec[1];
+      btn.title = spec[2];
+      btn.setAttribute("aria-label", spec[2]);
+      btn.innerHTML = spec[3];
+      btn.disabled = homeMailSelection.size === 0;
+      btn.addEventListener("click", function () {
+        homeMailRunSelected(spec[0], btn);
+      });
+      parts.actions.appendChild(btn);
+    });
   if (mailStatus === "ok") {
     const unread = mailInboxUnread();
     if (typeof unread === "number" && unread > 0) {
@@ -3391,12 +3482,177 @@ function buildHomeEmailWidget() {
     time.className = "home-mail-time";
     time.textContent = mailRowTimeLabel(rec);
     row.appendChild(time);
-    row.addEventListener("click", function () {
+    /* v2.186: a click picks (homeMailRowClick
+       carries the plain, Ctrl, and Shift rules);
+       opening stays where it has always lived,
+       on the double click. */
+    if (homeMailSelection.has(rec.id)) {
+      row.classList.add("picked");
+    }
+    row.addEventListener("click", function (ev) {
+      homeMailRowClick(rec, ev);
+    });
+    row.addEventListener("dblclick", function () {
+      if (homeCustomSession) { return; }
       openMailOnMessage(rec.id);
     });
     parts.body.appendChild(row);
   });
   return parts.widget;
+}
+
+/* v2.186: the Home Email widget's selection works
+   (the state stands with mailSelection's
+   declaration, above). homeMailWidgetRows reads
+   the records the widget is showing from the
+   cache at press time, in the widget's own order
+   (the Inbox's five most recent unread), so a
+   range always runs over what Chris can see. */
+function homeMailWidgetRows() {
+  const key = mailListKey(
+    { kind: "folder", id: "inbox" });
+  const list = mailLists[key];
+  if (!list || !list.loaded) { return []; }
+  return list.rows.filter(function (r) {
+    return r.unread;
+  }).slice(0, 5);
+}
+
+function homeMailSelectedRecords() {
+  return homeMailWidgetRows().filter(function (r) {
+    return homeMailSelection.has(r.id);
+  });
+}
+
+/* The range rule, the view's own (mailSelectRangeTo
+   at widget size): from the anchor to the pressed
+   row over the widget's rows; a plain Shift
+   replaces the selection with the range, Shift
+   with Ctrl or Cmd adds it, and the anchor never
+   moves on a Shift press. No anchor standing (or
+   the anchor's row gone): the range is the
+   pressed row alone. */
+function homeMailSelectRangeTo(id, add) {
+  const rows = homeMailWidgetRows();
+  const to = rows.findIndex(function (r) {
+    return r.id === id;
+  });
+  if (to === -1) { return; }
+  let from = rows.findIndex(function (r) {
+    return r.id === homeMailSelectionAnchorId;
+  });
+  if (from === -1) { from = to; }
+  const lo = Math.min(from, to);
+  const hi = Math.max(from, to);
+  if (!add) { homeMailSelection = new Set(); }
+  for (let i = lo; i <= hi; i++) {
+    homeMailSelection.add(rows[i].id);
+  }
+}
+
+/* One row press, the view's semantics in the
+   view's own order: Shift leads (a range, the
+   anchor unmoved), Ctrl or Cmd toggles the one
+   row and anchors on it, and a plain press picks
+   the one row and anchors on it. A plain press
+   never opens: the widget opens on a double
+   click, the rows' standing road (the dblclick
+   listener in the builder). Home customize mode
+   swallows the press whole, as it swallows the
+   title's click. */
+function homeMailRowClick(rec, ev) {
+  if (homeCustomSession) { return; }
+  if (ev.shiftKey) {
+    homeMailSelectRangeTo(rec.id,
+      !!(ev.ctrlKey || ev.metaKey));
+  } else if (ev.ctrlKey || ev.metaKey) {
+    homeMailSelectionAnchorId = rec.id;
+    if (homeMailSelection.has(rec.id)) {
+      homeMailSelection.delete(rec.id);
+    } else {
+      homeMailSelection.add(rec.id);
+    }
+  } else {
+    homeMailSelection = new Set([rec.id]);
+    homeMailSelectionAnchorId = rec.id;
+  }
+  homeMailPaintSelection();
+}
+
+/* Dress the standing widget for the selection:
+   the picked rows wear the picked dress and the
+   three header buttons wake or dim with whether
+   anything stands picked. No widget standing
+   (Home not built) is no work. */
+function homeMailPaintSelection() {
+  const widget = document.querySelector(
+    ".home-widget[data-widget-type=\"email\"]");
+  if (!widget) { return; }
+  widget.querySelectorAll(".home-mail-row")
+    .forEach(function (row) {
+      row.classList.toggle("picked",
+        homeMailSelection.has(
+          row.getAttribute("data-mail-id")));
+    });
+  ["homeMailArchiveBtn", "homeMailSnoozeBtn",
+   "homeMailTrashBtn"].forEach(function (id) {
+    const btn = document.getElementById(id);
+    if (btn) {
+      btn.disabled = homeMailSelection.size === 0;
+    }
+  });
+}
+
+/* The selection clears: the set empties, the
+   anchor lets go, and the standing widget
+   repaints its dress. */
+function homeMailClearSelection() {
+  homeMailSelection = new Set();
+  homeMailSelectionAnchorId = null;
+  homeMailPaintSelection();
+}
+
+/* The reset the repaint roads call (renderAll on
+   leaving Home, the mail landings on a repaint):
+   the state lets go without painting, because
+   the repaint that follows rebuilds the widget
+   from the emptied set anyway. */
+function homeMailResetSelection() {
+  homeMailSelection = new Set();
+  homeMailSelectionAnchorId = null;
+}
+
+/* A header button's run: the picked records go
+   through the Email view's own dispatcher
+   (mailRunTargets, the selection bar's road),
+   the Snooze button anchoring the menu on
+   itself; when an archive or trash run lands,
+   the selection clears and Home repaints with
+   the result. The snooze road settles in
+   mailSnoozeRun, which carries the same clear
+   and repaint for a pick; a menu dismissed
+   without a pick settles nothing, so the
+   selection stands for another try, as the
+   view's own does. */
+function homeMailRunSelected(action, btn) {
+  const recs = homeMailSelectedRecords();
+  if (!recs.length) { return; }
+  let x = 0, y = 0;
+  if (btn) {
+    const r = btn.getBoundingClientRect();
+    x = r.left;
+    y = r.bottom + 4;
+  }
+  const run = mailRunTargets(recs, action, x, y);
+  if (run && typeof run.then === "function") {
+    run.then(function () {
+      homeMailClearSelection();
+      if (state.view &&
+          state.view.kind === "home") {
+        renderHome();
+      }
+    });
+  }
 }
 
 /* ---------------- v2.82: Email, the Gmail client ----
@@ -3928,6 +4184,11 @@ async function loadMailLabels() {
   /* v2.83: the Home Email widget reads these caches;
      a landing load repaints Home too. */
   if (state.view && state.view.kind === "home") {
+    /* v2.186: the repaint replaces the widget's
+       rows, so its selection clears with the
+       landing rather than pointing at rows that
+       are gone. */
+    homeMailResetSelection();
     renderHome();
   }
   if (!mailOwnAddress) {
@@ -3983,6 +4244,9 @@ async function loadMailList(key, append) {
   }
   /* v2.83: the Home Email widget, as above. */
   if (state.view && state.view.kind === "home") {
+    /* v2.186: as at the landing above, the
+       widget's selection clears with the repaint. */
+    homeMailResetSelection();
     renderHome();
   }
   updateMailBadge();

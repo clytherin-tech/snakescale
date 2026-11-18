@@ -104,7 +104,7 @@
 
 "use strict";
 
-const CACHE_NAME = "snakescale-shell-2026-11-17-SSN-V21850";
+const CACHE_NAME = "snakescale-shell-2026-11-17-SSN-V21860";
 
 /* The shell, as paths relative to this worker's scope (the site
    root). "./" and "./index.html" are both listed: the first is the
@@ -151,17 +151,17 @@ const PAGE_KEY = "./index.html";
 // BEGIN GENERATED ASSET HASHES (gen_asset_hashes.py)
 const ASSET_HASHES = {
   "./index.html": "f3a1acc5d91d21e25cea4fec5308c11cf9560d400d787724ec8ffc0ceec4596a",
-  "./styles.css": "58a7e09aee128a1ba1bc87ef451a83f4c3758b644870026a34e7be38c414901e",
-  "./version.js": "5253817fc96c95cff7206bb6ad68d19da8b08ab3bb75c4c9d942cb181fb625bd",
+  "./styles.css": "fc858e8ac9a3e17e61902682e13f5e77a3622e5acbb86e4909246e7af424db3a",
+  "./version.js": "e23eff436a57944ec89849a8d76aa8eb1cdd939ac143683eacda63f30d6f8143",
   "./core.js": "47465edc4d7438d8321592c8bb40b00db81728a509ee3476b5621d15e8be1e80",
   "./store.js": "f0a1861ab630ad58d17ffdef60a9b24bdee892813291ae1a88e1ad3c7aa59edc",
   "./sync.js": "0181cb3d7efa5e38d2ff3975001e55f2bf8f4948a29c757b5148c1e65b482c64",
   "./tasks.js": "0df858d361c54d2f6a0fa793acb2cec226d186d701af36259ec4ff077be18c06",
   "./notebooks.js": "8bfe790a13d0fa111d0cedefe54ff98ace1523275555a99262cd283e396a16a1",
-  "./home.js": "d77c485f2bdd23c55bccbc574682e5c9080e475956511e19e012493bdb906a72",
+  "./home.js": "ffd2d0908c771ed0c57120448296be5cf52f805c6ff142df1f3313ac73306921",
   "./calendar.js": "1d8926b971eecfa2a7cfd0e285272ad26bc8ff95a88138878f3dff1c078c79b4",
-  "./mail.js": "4832b8f601b63f282d1728036e89d7a7c5d5bc860f32503095a7da19d0243176",
-  "./render.js": "02e7b2ca344e3961c09d6787b458d6b858183bb7a9ebd95101b490d7a3326ca1",
+  "./mail.js": "641c753128d00688de26b82a66c9a8087fc6c733d654657828b696dfe414a37d",
+  "./render.js": "569c09deaf544b6b4a9600ff790bb386ac26bd4566fcb94e588e3ba5117853ca",
   "./editor.js": "c961dd13449ce4e8be3ec2ea59aa21d05dbfca8137cf2f87adb1978d1a9869d8",
   "./editor-tools.js": "b69b06cd4004c22ac8ba07c8278e477e85d42199925b6f8c7ef8beacffe7ae50",
   "./media.js": "87eda4228dd00b253b546d5afd0b25577e55de3f85b1db31d688975fb3834f21",

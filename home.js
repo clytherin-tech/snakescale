@@ -1166,12 +1166,25 @@ function homeWidgetShell(type, titleText) {
   title.className = "home-widget-title";
   title.textContent = titleText;
   head.appendChild(title);
+  /* v2.186: an actions tray stands in the head
+     after the title, the slot the Email widget
+     fills with its selection's three icon
+     buttons. It is empty for every other
+     widget, and an empty tray takes no room,
+     so a widget with nothing in it lays out
+     exactly as it did before the slot existed;
+     the Email widget's buttons stand between
+     its title and its unread pill, whose own
+     margin keeps its standing right push. */
+  const actions = document.createElement("div");
+  actions.className = "home-widget-actions";
+  head.appendChild(actions);
   widget.appendChild(head);
   const body = document.createElement("div");
   body.className = "home-widget-body";
   widget.appendChild(body);
   return { widget: widget, head: head, body: body,
-    title: title };
+    title: title, actions: actions };
 }
 
 /* A note row, shared by the Recent and Filtered Notes

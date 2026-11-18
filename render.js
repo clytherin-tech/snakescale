@@ -218,6 +218,16 @@ function showScreen(name) {
 
 
 function renderAll() {
+  /* v2.186: the Home Email widget's selection
+     lives only while Home stands; a render that
+     lands anywhere else lets it go before the
+     repaint, so no stale pick survives the trip
+     away. A render that lands on Home keeps it:
+     the widget rebuilds its dress from the set,
+     and Home's own repaints are not a leaving. */
+  if (!state.view || state.view.kind !== "home") {
+    homeMailResetSelection();
+  }
   syncTasksPane();
   renderSidebar();
   renderNoteList();
