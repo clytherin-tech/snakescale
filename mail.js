@@ -5602,6 +5602,36 @@ async function openMailMessage(id) {
   }
 }
 
+/* The reading pane's link tooltips (the mail round
+   of 2026-11-18): every anchor the cleaned body
+   carries gets its own address as its title, so
+   hovering a link in an open message shows where
+   it really goes, the tracker's long address
+   included, under the friendly words the sender
+   dressed it in. The rule is the note editor's
+   standing one (a link's tooltip is its own
+   address), kept as the pane's own pass because a
+   received message's links are never note links.
+   The cleaner has already stripped every attribute
+   but the address from each anchor, so no sender
+   title survives to argue; the pass still
+   overwrites unconditionally, and an anchor with
+   no address gets no title. The pass walks the
+   rendered body, so the Show images re-render,
+   which rebuilds the body through renderMailRead,
+   reapplies it; and the search hit paint that runs
+   after it only ever rewrites text nodes, never an
+   anchor's attributes, so a painted message keeps
+   its tooltips. */
+function mailTitleLinks(bodyEl) {
+  if (!bodyEl || !bodyEl.querySelectorAll) { return; }
+  bodyEl.querySelectorAll("a").forEach(function (anchor) {
+    const href = anchor.getAttribute("href");
+    if (href) { anchor.setAttribute("title", href); }
+    else { anchor.removeAttribute("title"); }
+  });
+}
+
 /* The reading pane: the empty words until a message
    stands; then its subject, its header lines, its
    action bar (the Trash action reading Move to
@@ -5743,6 +5773,7 @@ function renderMailRead() {
       !(full.hasRemoteImages && !mailShowImages));
   }
   mailEl("mailBody").innerHTML = bodyHtml;
+  mailTitleLinks(mailEl("mailBody"));
   /* v2.153: a message opened from the search's
      Email section wears its hits in the pane
      (subject and body), for as long as it stands

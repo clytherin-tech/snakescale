@@ -4481,7 +4481,22 @@ function initNativeMenuSuppression() {
    the false islands inside the editor, like its
    attachment cards, are part of the region around
    them, while its task rows were answered before
-   this is consulted). */
+   this is consulted).
+
+   The mail round of 2026-11-18 adds the open
+   email's reading surface to the carve-out: the
+   subject line, the header lines under it (the
+   From, To, and Date block), and the message
+   body. A received message is read, not edited,
+   and the browser's menu is the reader's tool
+   there: copy the words, copy a link's address,
+   open it in a new tab. The carve-out names the
+   three elements by id, so the reader's own
+   furniture (its action bar, its attachment
+   rows, its back button) keeps the blanket, and
+   the message list is untouched: its rows keep
+   their own app menu, answered by their own
+   listener before this guard is consulted. */
 function nativeMenuTargetKeepsMenu(target) {
   const field = target.closest("input, textarea");
   if (field) {
@@ -4492,6 +4507,14 @@ function nativeMenuTargetKeepsMenu(target) {
       "password", "number", "date", "time",
       "datetime-local", "month", "week"]
       .indexOf(type) !== -1;
+  }
+  /* The open email's reading surface (see the
+     header note): the subject, the header
+     lines, and the body keep the browser's
+     menu. */
+  if (target.closest(
+      "#mailReadSubject, #mailReadMeta, #mailBody")) {
+    return true;
   }
   return !!target.closest('[contenteditable="true"]');
 }
