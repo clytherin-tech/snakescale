@@ -5622,13 +5622,36 @@ async function openMailMessage(id) {
    reapplies it; and the search hit paint that runs
    after it only ever rewrites text nodes, never an
    anchor's attributes, so a painted message keeps
-   its tooltips. */
+   its tooltips.
+   The same pass sends every addressed anchor to a
+   new window: target _blank, with rel noopener,
+   the opener cut the way the app's own window.open
+   calls cut it, so the page a click opens cannot
+   reach back into this one. The cleaner strips
+   target with every other attribute but the
+   address, so without this the pane's links would
+   navigate the app itself away to the link's
+   address, and the reader would lose the app to a
+   page they only meant to look at (Chris's report
+   on the day the tooltips landed). An anchor with
+   no address goes nowhere whatever marks it
+   carries, so the pass clears target and rel
+   there, as it clears the title: an anchor in the
+   pane carries the pass's marks exactly when it
+   carries an address. */
 function mailTitleLinks(bodyEl) {
   if (!bodyEl || !bodyEl.querySelectorAll) { return; }
   bodyEl.querySelectorAll("a").forEach(function (anchor) {
     const href = anchor.getAttribute("href");
-    if (href) { anchor.setAttribute("title", href); }
-    else { anchor.removeAttribute("title"); }
+    if (href) {
+      anchor.setAttribute("title", href);
+      anchor.setAttribute("target", "_blank");
+      anchor.setAttribute("rel", "noopener");
+    } else {
+      anchor.removeAttribute("title");
+      anchor.removeAttribute("target");
+      anchor.removeAttribute("rel");
+    }
   });
 }
 
