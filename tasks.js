@@ -5253,6 +5253,252 @@ async function saveDocBackedNoteCatalogOnly(note) {
    boundary). A failure of any step (including the Doc
    module's needs-consent state) throws, and the callers
    treat it exactly like a failed file save. */
+/* ----- the save-time probe and merge (2026-11-18) -----
+   The save half of the stale-save rollback fix (the
+   merge itself lives in media.js; the diagnosis is
+   in this build's findings). saveDocBackedNote
+   below probes a standing Doc's markers before it
+   builds its upload, and when the Doc moved, this
+   block merges the candidate against the live Doc
+   instead of overwriting it. */
+
+/* The owed record: note id -> the base body a
+   merged save consumed, kept when the editor could
+   not be settled onto the merged body afterward
+   (the reader typed through the merge's flight, so
+   the refill judgment rightly refused). While a
+   record stands, the note's editor still shows
+   pre-merge words over a baseline that has already
+   moved past them, so the next save must merge
+   again from that base even when its probe proves
+   the Doc itself never moved again; without the
+   record, that next save would take the fast path
+   and erase the outside work the first merge
+   preserved. A fresh body load clears the record
+   (see docLoadNoteBody in media.js): the loaded
+   body IS the live Doc, and no older baseline has
+   anything left to protect. Session state only: a
+   reload re-loads every open body from its Doc
+   anyway. */
+const docMergeOwedBaseByNoteId = Object.create(null);
+
+function docClearMergeOwed(noteId) {
+  if (noteId) {
+    delete docMergeOwedBaseByNoteId[noteId];
+  }
+}
+
+/* One bounded metadata read of a note's Doc, the
+   probe's only request: the same files.get the
+   near-live poll tick spends, with the same fields,
+   judged by the same helper (docLiveMarkerJudgment
+   in media.js). A failure throws, and the save it
+   guards fails closed with it: nothing is written
+   blind. */
+async function docReadLiveMarkers(docId) {
+  return docApiLeg(docMetaTimeoutMs,
+    "Checking this note's Google Doc before saving",
+    function (signal) {
+      return docApiJson(
+        "https://www.googleapis.com/drive/v3/files/" +
+        encodeURIComponent(docId) +
+        "?fields=" + encodeURIComponent(
+          "id,headRevisionId,modifiedTime"),
+        signal ? { signal: signal } : undefined);
+    });
+}
+
+/* The moved-Doc save: the probe in saveDocBackedNote
+   found the live Doc past the markers this note's
+   body was loaded or last saved at (or an earlier
+   merge still owes this note its protection), so
+   the candidate is merged against the live Doc
+   instead of overwriting it. Stands the merged body
+   on the note and returns { conflict, baseBody }:
+   whether any block came out a true conflict, and
+   the base the merge consumed, which the caller
+   keeps as the owed base when the editor cannot be
+   settled onto the merged body. Throws on any
+   failure to read the live Doc: the save fails
+   closed and the editor keeps its words. */
+async function docMergeMovedSave(note, candidateBody,
+    firstJudgment, owedBaseBody) {
+  const baselineEntry =
+    lastSavedContentByNoteId[note.id];
+  const stash =
+    (typeof pendingNoteRefills !== "undefined")
+      ? pendingNoteRefills[note.id] : null;
+  /* The base, in order of authority: the base an
+     earlier merge left owing (the oldest
+     unprotected ground), the pending refill stash's
+     baseline (the same last-saved ground,
+     snapshotted when the poll's refill was refused),
+     and the last-saved baseline itself. With none
+     of them there is nothing safe to merge against,
+     so the save fails closed rather than writing
+     blind. */
+  const baseBody = owedBaseBody ||
+    (stash && stash.ctx && stash.ctx.baseline &&
+      stash.ctx.baseline.body) ||
+    (baselineEntry && baselineEntry.body) || null;
+  if (baseBody === null ||
+      typeof baseBody !== "string") {
+    throw docHttpError(0,
+      "This note changed in Google Docs, and the" +
+      " app no longer holds the version you started" +
+      " from, so your save was stopped rather than" +
+      " overwrite the changes. Your words are still" +
+      " in the editor.");
+  }
+  const docId = sanitizeDocId(note.docId);
+  let theirsBody = null;
+  let theirsMarkers = null;
+  if (owedBaseBody && firstJudgment.proven &&
+      baselineEntry &&
+      typeof baselineEntry.body === "string") {
+    /* The Doc stands exactly where the last merged
+       save left it (the probe just proved it); only
+       the editor never settled onto that body.
+       Theirs is that body, already in stored form,
+       so no fetch is spent. */
+    theirsBody = baselineEntry.body;
+    theirsMarkers = { sha: note.sha || null,
+      docModifiedTime: note.docModifiedTime || null };
+  } else if (stash && stash.fetched &&
+      typeof stash.fetched.body === "string" &&
+      (stash.sha || null) ===
+        (firstJudgment.token || null) &&
+      (stash.docModifiedTime || null) ===
+        (firstJudgment.modifiedTime || null)) {
+    /* The poll already fetched this exact live body
+       and the editor refused it into the stash: it
+       is theirs, already converted, and this merge
+       is the landing the stash was waiting for. */
+    theirsBody = stash.fetched.body;
+    theirsMarkers = { sha: stash.sha || null,
+      docModifiedTime:
+        stash.docModifiedTime || null };
+  } else {
+    const fetched = await docFetchDocument(docId);
+    if (fetched.listKindsFailure ||
+        fetched.codeStructureFailure) {
+      /* A live body whose structure could not be
+         read may have converted its checklists as
+         bullets; merging against it could carry
+         that damage into the upload. Fail closed:
+         the next save retries when the read
+         recovers. */
+      throw docHttpError(0,
+        "This note changed in Google Docs, but its" +
+        " structure could not be read just now, so" +
+        " your save was stopped rather than risk" +
+        " the changes. Your words are still in the" +
+        " editor.");
+    }
+    const conv = await docConvertFetchedBody(note,
+      fetched);
+    theirsBody = conv.body;
+    theirsMarkers = { sha: fetched.token || null,
+      docModifiedTime: fetched.modifiedTime || null };
+  }
+  let merged = docMergeBodies(baseBody,
+    candidateBody, theirsBody);
+  /* The merge consumed the live body as of the
+     markers above; judge once more before the
+     upload. If the Doc moved again inside the merge
+     window, fetch and merge once more against the
+     new live body. After that the upload flies, as
+     every save's upload flies, and the next save's
+     probe judges whatever stands then: that short
+     final window is the accepted remainder, the
+     same one every save has always flown with. */
+  const meta2 = await docReadLiveMarkers(docId);
+  const judgment2 = docLiveMarkerJudgment(
+    { sha: theirsMarkers.sha,
+      docModifiedTime: theirsMarkers.docModifiedTime },
+    meta2);
+  if (!judgment2.proven) {
+    const fetched2 = await docFetchDocument(docId);
+    if (fetched2.listKindsFailure ||
+        fetched2.codeStructureFailure) {
+      throw docHttpError(0,
+        "This note changed in Google Docs, but its" +
+        " structure could not be read just now, so" +
+        " your save was stopped rather than risk" +
+        " the changes. Your words are still in the" +
+        " editor.");
+    }
+    const conv2 = await docConvertFetchedBody(note,
+      fetched2);
+    const again = docMergeBodies(baseBody,
+      merged.body, conv2.body);
+    merged = { body: again.body,
+      conflicts: merged.conflicts + again.conflicts };
+  }
+  /* The stash, if one stood, is consumed by this
+     merge: its fetched body either fed the merge
+     directly or was superseded by the fresh fetch
+     above. It is deleted here, inside the save, so
+     a landed save can never clear it as a routine
+     side effect (the autosave settle reads a
+     landing as the refill's own resolution, which
+     would have dropped the outside change's only
+     other copy unjudged). */
+  if (stash) { delete pendingNoteRefills[note.id]; }
+  note.body = merged.body;
+  return { conflict: merged.conflicts > 0,
+    baseBody: baseBody };
+}
+
+/* After a merged save lands: the editor must come
+   to show the merged body, or the next save out of
+   it would be computed from the pre-merge words and
+   erase the outside work the merge just preserved.
+   The refill rides the standing sync refresh
+   judgment (render.js): the context is armed with
+   the pre-merge candidate as both baseline and
+   before, so the judgment sees an editor still
+   standing on exactly what it saved (untouched
+   during the merge's flight) as settled and refills
+   it, and an editor typed in during the flight as
+   diverged and refuses, exactly as it refuses for
+   the poll. Returns true when nothing is owed
+   afterward: the note is not the open one, or the
+   editor now shows the merged body (judged in
+   normalized text, since a ticked checklist's two
+   serializations differ as strings alone; see the
+   companion normalization in render.js). */
+function docSettleEditorAfterMerge(note,
+    preMergeCandidate) {
+  const open = (typeof currentNote === "function")
+    ? currentNote() : null;
+  if (!open || open.id !== note.id) { return true; }
+  if (typeof renderEditor === "undefined" ||
+      renderEditor._forId !== note.id) {
+    return true;
+  }
+  if (preMergeCandidate) {
+    syncOpenNoteRefresh = {
+      id: note.id,
+      baseline: preMergeCandidate,
+      before: preMergeCandidate
+    };
+    try {
+      renderAll();
+    } finally {
+      syncOpenNoteRefresh = null;
+    }
+  }
+  const bodyEl = document.getElementById("noteBody");
+  if (!bodyEl) { return true; }
+  const editorText = docMergeNormalizeText(
+    htmlToText(canonicalizeAttachmentPlaceholders(
+      bodyEl.innerHTML)));
+  const mergedText = docMergeNormalizeText(
+    htmlToText(note.body || ""));
+  return editorText === mergedText;
+}
+
 async function saveDocBackedNote(note, options) {
   if (typeof state !== "undefined" && state.online === false) {
     throw new Error("This note is stored as a Google Doc" +
@@ -5260,7 +5506,12 @@ async function saveDocBackedNote(note, options) {
       " still in the editor.");
   }
   note.updated = new Date().toISOString();
-  const candidateContent = noteContentSnapshot(note);
+  let candidateContent = noteContentSnapshot(note);
+  /* 2026-11-18: whether a Doc already stood for
+     this note before this save: the probe below
+     is spent only then, since a Doc this save
+     creates has nothing outside it yet. */
+  const hadDocId = !!sanitizeDocId(note.docId);
   if (!sanitizeDocId(note.docId)) {
     const created = await docCreateDocument(note);
     note.docId = created.id;
@@ -5272,6 +5523,59 @@ async function saveDocBackedNote(note, options) {
      landing mid-paste cannot write "[Image]" over a
      figure whose record is about to exist. */
   await awaitNoteAttachmentUploads(note);
+  /* 2026-11-18: the save-time probe (see the
+     merge section in media.js and
+     docMergeMovedSave above). One bounded
+     metadata read, judged by the poll tick's
+     own helper against the markers this note's
+     body was loaded or last saved at. Proven:
+     the save proceeds exactly as it always has,
+     the quiet adoption of a live modified time
+     included. A probe that fails throws, and
+     the save fails closed with it: the editor
+     keeps its words and nothing is written
+     blind. Moved (or an earlier merge still
+     owed, or a pending refill standing): the
+     candidate is merged against the
+     live Doc first, and the upload below writes
+     the merged body. Catalog-only saves never
+     reach this function and spend no probe. */
+  let mergeOutcome = null;
+  let preMergeCandidate = null;
+  if (hadDocId) {
+    const probeMeta = await docReadLiveMarkers(
+      sanitizeDocId(note.docId));
+    const judgment = docLiveMarkerJudgment(note,
+      probeMeta);
+    const owedBase =
+      docMergeOwedBaseByNoteId[note.id] || null;
+    /* A standing pending refill is a merge case
+     even when the probe proves: the poll already
+     adopted the outside change's markers onto
+     this note, so the probe can no longer see
+     the move, but the editor still stands behind
+     the body the stash holds, and a blind
+     upload of its candidate would erase that
+     change. The merge below consumes the
+     stash. */
+    const stashStands =
+      (typeof pendingNoteRefills !==
+        "undefined") &&
+      !!pendingNoteRefills[note.id];
+    if (judgment.proven && !owedBase &&
+        !stashStands) {
+      if (judgment.modifiedTime &&
+          !note.docModifiedTime) {
+        note.docModifiedTime =
+          judgment.modifiedTime;
+      }
+    } else {
+      preMergeCandidate = candidateContent;
+      mergeOutcome = await docMergeMovedSave(note,
+        candidateContent.body, judgment, owedBase);
+      candidateContent = noteContentSnapshot(note);
+    }
+  }
   const uploadHtml = await docBuildUploadHtml(note);
   const saved = await docSaveDocument(note, uploadHtml, {
     checklist: docUploadChecklistCount(uploadHtml) > 0
@@ -5302,6 +5606,30 @@ async function saveDocBackedNote(note, options) {
      just created one it is the moment polling can
      start. */
   refreshDocLivePoll();
+  /* 2026-11-18: a merged save settles the editor
+     onto the merged body and keeps its
+     protection owed when it cannot (see
+     docSettleEditorAfterMerge above); a true
+     conflict is toasted, since the sibling block
+     that now stands under the reader's own item
+     is theirs to see explained. */
+  if (mergeOutcome) {
+    const settled = docSettleEditorAfterMerge(note,
+      preMergeCandidate);
+    if (settled) {
+      docClearMergeOwed(note.id);
+    } else {
+      docMergeOwedBaseByNoteId[note.id] =
+        mergeOutcome.baseBody;
+    }
+    if (mergeOutcome.conflict) {
+      toast("This note also changed in Google" +
+        " Docs while you were editing it. Your" +
+        " version of the changed item stands," +
+        " and the other version was kept right" +
+        " below it.");
+    }
+  }
   return { saved: true, doc: true };
 }
 

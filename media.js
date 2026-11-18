@@ -6541,6 +6541,76 @@ function docApplyTocTables(body) {
   return swapped ? holder.innerHTML : body;
 }
 
+/* The conversion half of a Doc load (split out of
+   docLoadNoteBody, 2026-11-18): turns one fetched
+   Doc export into the app's stored body form for a
+   note, WITHOUT standing the result on the note or
+   moving its markers. docLoadNoteBody assigns what
+   this returns; the save-time merge (see the merge
+   section below, and saveDocBackedNote in tasks.js)
+   converts the live Doc through this same half, so
+   the body it merges against is in exactly the form
+   a load would have produced. The tick memory
+   refresh a state carrying conversion earns is
+   returned as ticks for the caller to stand on the
+   note, never written here: a merge converts
+   against the note mid-save, and the note's memory
+   must keep describing the note's own body until
+   the merged save lands and recomputes it. */
+async function docConvertFetchedBody(note, fetched) {
+  const converted = docExportHtmlToBody(fetched.html,
+    fetched.listKinds, fetched.codeRuns);
+  let body = await docAdoptImages(note, converted);
+  /* v2.128: the tick memory (see the section above).
+     A conversion that carried its states in the text
+     (the glyph led form) is the freshest truth: the
+     body keeps those states as converted and the
+     memory refreshes from them. Any other build (the
+     real task list form, whose states no surface
+     carries) has the remembered ticks reapplied. */
+  let ticks = null;
+  if (converted.carriedStates) {
+    ticks = docTicksFromBody(body);
+  } else {
+    body = docApplyTickMemory(note, body);
+  }
+  /* v2.167: a Table of Contents block that crossed
+     as a table (see docTocTableHtml) is rebuilt as
+     the live block before the chip pass below
+     reads the body. */
+  body = docApplyTocTables(body);
+  /* v2.134: links in the app's own chip forms are
+     dressed back into pills, and re-formed event
+     chips are enriched from the calendar (see the
+     chips section below). The tick memory above
+     judged the body first on purpose: a chip's
+     label is the same text as the link it crossed
+     as, so the dressing changes no item's words. */
+  body = docReformChipLinks(body, note);
+  /* The enrichment pass works on the note's own
+     body: it reads note.body and lands the enriched
+     faces back on it, as it did when this sequence
+     stood inline in docLoadNoteBody with the body
+     already assigned. The converted body therefore
+     stands on the note for its pass, and the note's
+     own body is restored after: the load's caller
+     assigns the return itself, and a save-time
+     merge converting against this note must not
+     find the note's body moved by a conversion the
+     save may still refuse. */
+  const priorBody = note.body;
+  note.body = body;
+  try {
+    await docEnrichReformedEventChips(note);
+    body = note.body;
+  } finally {
+    note.body = priorBody;
+  }
+  return { body: body,
+    carriedStates: !!converted.carriedStates,
+    ticks: ticks };
+}
+
 async function docLoadNoteBody(note) {
   const docId = sanitizeDocId(note.docId);
   if (!docId) {
@@ -6565,35 +6635,22 @@ async function docLoadNoteBody(note) {
     docSurfaceCodeStructureFailure(
       fetched.codeStructureFailure);
   }
-  const converted = docExportHtmlToBody(fetched.html,
-    fetched.listKinds, fetched.codeRuns);
-  note.body = await docAdoptImages(note, converted);
-  /* v2.128: the tick memory (see the section above).
-     A conversion that carried its states in the text
-     (the glyph led form) is the freshest truth: the
-     body keeps those states as converted and the
-     memory refreshes from them. Any other build (the
-     real task list form, whose states no surface
-     carries) has the remembered ticks reapplied. */
-  if (converted.carriedStates) {
-    note.docTicks = docTicksFromBody(note.body);
-  } else {
-    note.body = docApplyTickMemory(note, note.body);
+  const conv = await docConvertFetchedBody(note, fetched);
+  note.body = conv.body;
+  /* v2.128: a conversion that carried its states
+     refreshes the tick memory from the body it
+     produced (see docConvertFetchedBody above). */
+  if (conv.carriedStates) {
+    note.docTicks = conv.ticks;
   }
-  /* v2.167: a Table of Contents block that crossed
-     as a table (see docTocTableHtml) is rebuilt as
-     the live block before the chip pass below
-     reads the body. */
-  note.body = docApplyTocTables(note.body);
-  /* v2.134: links in the app's own chip forms are
-     dressed back into pills, and re-formed event chips
-     are enriched from the calendar (see the chips
-     section below). The tick memory above judged the
-     body first on purpose: a chip's label is the same
-     text as the link it crossed as, so the dressing
-     changes no item's words. */
-  note.body = docReformChipLinks(note.body, note);
-  await docEnrichReformedEventChips(note);
+  /* 2026-11-18: a fresh load supersedes any merge a
+     save still owes this note (see the owed record
+     in tasks.js): the loaded body IS the live Doc
+     now, so no older baseline has anything left to
+     protect. */
+  if (typeof docClearMergeOwed === "function") {
+    docClearMergeOwed(note.id);
+  }
   note.sha = fetched.token;
   /* v2.127: the modified time this body was fetched at
      rides beside the revision token; the near-live poll
@@ -6612,6 +6669,429 @@ async function docLoadNoteBody(note) {
     note.thumbnail = null;
   }
   note.previewText = htmlToText(note.body).slice(0, 140);
+}
+
+/* ----- save-time three-way merge (2026-11-18) -----
+   The fix for the stale-save rollback (Chris's
+   checklist incidents of 2026-11-17 and 2026-11-18,
+   diagnosed in full before this build): a Doc-backed
+   body save used to upload the app's in-memory body
+   as one whole-Doc replacement computed from the
+   snapshot the editor loaded, with no check that
+   the Doc still stood there, so any outside edit
+   the editor never saw (a section appended from the
+   Drive side, an edit made in Google Docs) was
+   erased by the next save out of the open note.
+   The third incident lost THREE appended sections
+   to one stale save, because the open copy predated
+   all three.
+
+   saveDocBackedNote (tasks.js) now probes the Doc's
+   markers before building its upload, and when the
+   Doc moved it merges instead of overwriting: base
+   is the last-saved baseline, mine is the save's
+   candidate, theirs is the live Doc converted
+   through docConvertFetchedBody above. Because the
+   merge always compares against the WHOLE live Doc,
+   it restores everything the Doc gained since the
+   loaded copy, across any number of outside append
+   rounds, not just the latest one.
+
+   The merge works at block level: a body's top
+   level elements are the blocks, a list contributes
+   one block per direct item, and blocks are
+   compared by NORMALIZED TEXT, never raw HTML (the
+   app's own forms differ by serialization alone:
+   the converter writes a ticked item's box with a
+   bare checked attribute where the DOM serializes
+   checked=""). The rules, per block:
+   - untouched by me: theirs stands, in place;
+   - changed only by me: mine stands;
+   - changed only by them: theirs stands;
+   - deleted by me: honored, unless they edited the
+     block, in which case their edit survives;
+   - deleted by them: honored, unless I edited the
+     block, in which case my edit survives;
+   - changed by both to the same text: mine stands;
+   - changed by both to different texts: a true
+     conflict. Mine stands in place and theirs is
+     preserved verbatim as a sibling block
+     immediately after it; no text is ever lost, and
+     the merge counts it so the caller can toast it.
+   Tick state merges independently of text: a tick
+   flip on one side and a text edit on the other
+   combine, because a checklist item's tick is
+   judged apart from its words, the same split the
+   tick memory (docTickItemText and friends) already
+   makes. Alignment runs by longest common
+   subsequence over the normalized texts; inside
+   each unmatched gap, base and side blocks pair off
+   in order as edits of one another, and the
+   leftovers read as deletions on the base side and
+   additions on the side. */
+
+function docMergeNormalizeText(text) {
+  return String(text || "").replace(/\s+/g, " ").trim();
+}
+
+/* One body's merge blocks, in order. A block is
+   { html, key, tick, item, sig, box, text }: html
+   is the block's own markup, key its normalized
+   text, tick its checked state for a checklist
+   item (null for anything else), item whether it
+   is a list item, sig the signature of the list it
+   belongs to (so runs of items can be re-wrapped in
+   a like list on the way out), box a childless
+   clone of that list kept for the re-wrap, and text
+   whether the block is a bare text node. A
+   checklist item's key is its own text (sublists
+   excluded), the identity the tick memory itself
+   judges by; every other block keys on its full
+   text. */
+function docMergeParseBlocks(body) {
+  const holder = document.createElement("div");
+  holder.innerHTML = body || "";
+  const blocks = [];
+  const pushElement = function (el, list) {
+    const item = !!list;
+    const checklist = item && list.tagName === "UL" &&
+      list.classList.contains("ss-checklist");
+    blocks.push({
+      html: el.outerHTML,
+      key: docMergeNormalizeText(checklist
+        ? docTickItemText(el) : el.textContent),
+      tick: checklist ? docTickItemChecked(el) : null,
+      item: item,
+      sig: item ? (list.tagName + "|" +
+        (list.getAttribute("class") || "") + "|" +
+        (list.getAttribute("start") || "")) : "",
+      box: item ? list.cloneNode(false) : null,
+      text: false
+    });
+  };
+  Array.prototype.slice.call(holder.childNodes)
+    .forEach(function (node) {
+      if (node.nodeType === 3) {
+        if (docMergeNormalizeText(node.nodeValue)) {
+          blocks.push({
+            html: node.nodeValue,
+            key: docMergeNormalizeText(node.nodeValue),
+            tick: null, item: false, sig: "",
+            box: null, text: true });
+        }
+        return;
+      }
+      if (node.nodeType !== 1) { return; }
+      if (node.tagName === "UL" ||
+          node.tagName === "OL") {
+        const items = docTickListItems(node);
+        if (!items.length) {
+          pushElement(node, null);
+          return;
+        }
+        items.forEach(function (li) {
+          pushElement(li, node);
+        });
+        return;
+      }
+      pushElement(node, null);
+    });
+  return blocks;
+}
+
+/* Align one side against the base by longest common
+   subsequence over the block keys, then pair the
+   unmatched blocks inside each gap in order as
+   edits. Returns { match, edit, sideUsed }: match
+   and edit are parallel to the base (match[i] is
+   the side index standing text-unchanged for base
+   i, edit[i] the side index that is base i
+   rewritten, both -1 when the side deleted base
+   i), and sideUsed marks every side index the
+   alignment accounts for, so a side index outside
+   it is that side's addition. */
+function docMergeAlign(base, side) {
+  const n = base.length, m = side.length;
+  const dp = [];
+  for (let i = 0; i <= n; i++) {
+    dp.push(new Array(m + 1).fill(0));
+  }
+  for (let i = n - 1; i >= 0; i--) {
+    for (let j = m - 1; j >= 0; j--) {
+      dp[i][j] = base[i].key === side[j].key
+        ? dp[i + 1][j + 1] + 1
+        : Math.max(dp[i + 1][j], dp[i][j + 1]);
+    }
+  }
+  const match = new Array(n).fill(-1);
+  const pairs = [];
+  let i = 0, j = 0;
+  while (i < n && j < m) {
+    if (base[i].key === side[j].key) {
+      match[i] = j;
+      pairs.push([i, j]);
+      i++; j++;
+    } else if (dp[i + 1][j] >= dp[i][j + 1]) {
+      i++;
+    } else {
+      j++;
+    }
+  }
+  const edit = new Array(n).fill(-1);
+  const sideUsed = new Array(m).fill(false);
+  match.forEach(function (sj) {
+    if (sj >= 0) { sideUsed[sj] = true; }
+  });
+  const anchors = [[-1, -1]].concat(pairs)
+    .concat([[n, m]]);
+  for (let a = 0; a + 1 < anchors.length; a++) {
+    const bFrom = anchors[a][0] + 1;
+    const bTo = anchors[a + 1][0];
+    const sFrom = anchors[a][1] + 1;
+    const sTo = anchors[a + 1][1];
+    const pairCount = Math.min(bTo - bFrom,
+      sTo - sFrom);
+    for (let k = 0; k < pairCount; k++) {
+      edit[bFrom + k] = sFrom + k;
+      sideUsed[sFrom + k] = true;
+    }
+  }
+  return { match: match, edit: edit,
+    sideUsed: sideUsed };
+}
+
+/* One checklist item's markup with its tick set to
+   the given state, the box and the done class moved
+   together, the way docApplyTickMemory sets them. */
+function docMergeApplyTick(html, tick) {
+  const holder = document.createElement("div");
+  holder.innerHTML = html;
+  const li = holder.firstElementChild;
+  if (!li) { return html; }
+  const box = docTickItemBox(li);
+  if (box) {
+    box.checked = !!tick;
+    if (tick) { box.setAttribute("checked", ""); }
+    else { box.removeAttribute("checked"); }
+  }
+  li.classList.toggle("done", !!tick);
+  return holder.innerHTML;
+}
+
+/* The merged blocks back into a stored body: runs
+   of list items sharing a list signature are
+   wrapped in a fresh clone of a like list, and
+   every other block stands at top level, in the
+   order the merge settled. */
+function docMergeSerializeBlocks(blocks) {
+  const out = document.createElement("div");
+  let openSig = null;
+  let openList = null;
+  blocks.forEach(function (block) {
+    if (block.text) {
+      openSig = null;
+      openList = null;
+      out.appendChild(
+        document.createTextNode(block.html));
+      return;
+    }
+    const tmp = document.createElement("div");
+    tmp.innerHTML = block.html;
+    const el = tmp.firstElementChild;
+    if (!el) { return; }
+    if (block.item) {
+      if (openSig !== block.sig || !openList) {
+        openList = block.box
+          ? block.box.cloneNode(false)
+          : document.createElement("ul");
+        out.appendChild(openList);
+        openSig = block.sig;
+      }
+      openList.appendChild(el);
+    } else {
+      openSig = null;
+      openList = null;
+      out.appendChild(el);
+    }
+  });
+  return out.innerHTML;
+}
+
+/* The three-way merge itself: base, mine, and
+   theirs as stored bodies; returns { body,
+   conflicts }, the merged body in stored form and
+   how many blocks came out as true conflicts. */
+function docMergeBodies(baseBody, mineBody,
+    theirsBody) {
+  const base = docMergeParseBlocks(baseBody);
+  const mine = docMergeParseBlocks(mineBody);
+  const theirs = docMergeParseBlocks(theirsBody);
+  const mAlign = docMergeAlign(base, mine);
+  const tAlign = docMergeAlign(base, theirs);
+  let conflicts = 0;
+  /* One side's standing for base block i: kind
+     "same" (matched, tick unmoved), "tick" (matched,
+     tick alone moved), "edit" (rewritten), or
+     "gone" (deleted on that side). */
+  const standing = function (align, side, i) {
+    if (align.match[i] >= 0) {
+      const b = side[align.match[i]];
+      return { kind: (b.tick !== base[i].tick)
+        ? "tick" : "same", block: b };
+    }
+    if (align.edit[i] >= 0) {
+      return { kind: "edit",
+        block: side[align.edit[i]] };
+    }
+    return { kind: "gone", block: null };
+  };
+  /* The tick the merged block carries: whichever
+     side moved it from the base, that side's tick
+     (both sides moving a boolean tick land on the
+     same value). Null for blocks that carry none. */
+  const mergedTick = function (i, mS, tS) {
+    if (base[i].tick === null) { return null; }
+    const mTick = mS.block ? mS.block.tick
+      : base[i].tick;
+    const tTick = tS.block ? tS.block.tick
+      : base[i].tick;
+    return (mTick !== base[i].tick) ? mTick : tTick;
+  };
+  const withTick = function (block, tick) {
+    if (!block || tick === null ||
+        block.tick === tick) {
+      return block;
+    }
+    return { html: docMergeApplyTick(block.html,
+        tick),
+      key: block.key, tick: tick, item: block.item,
+      sig: block.sig, box: block.box,
+      text: block.text };
+  };
+  /* Output entries carry a position on the theirs
+     spine, so outside work keeps its place: a block
+     theirs holds stands at its theirs index, a block
+     theirs deleted stands just before the next block
+     theirs holds (or at the end), their additions
+     stand at their own indices, and my additions
+     ride just after the base block they follow in
+     mine. */
+  const fatePos = new Array(base.length).fill(null);
+  for (let i = 0; i < base.length; i++) {
+    if (tAlign.match[i] >= 0) {
+      fatePos[i] = tAlign.match[i];
+    } else if (tAlign.edit[i] >= 0) {
+      fatePos[i] = tAlign.edit[i];
+    }
+  }
+  for (let i = base.length - 1; i >= 0; i--) {
+    if (fatePos[i] === null) {
+      fatePos[i] = (i + 1 < base.length &&
+          fatePos[i + 1] !== null)
+        ? fatePos[i + 1] - 0.5 : theirs.length;
+    }
+  }
+  const entries = [];
+  let seq = 0;
+  const pushEntry = function (pos, rank, blocks) {
+    if (blocks.length) {
+      entries.push({ pos: pos, rank: rank,
+        seq: seq++, blocks: blocks });
+    }
+  };
+  for (let i = 0; i < base.length; i++) {
+    const mS = standing(mAlign, mine, i);
+    const tS = standing(tAlign, theirs, i);
+    const out = [];
+    if (mS.kind === "gone" && tS.kind === "gone") {
+      /* deleted on both sides: gone */
+    } else if (mS.kind === "gone") {
+      /* my deletion stands unless they edited it */
+      if (tS.kind !== "same") { out.push(tS.block); }
+    } else if (tS.kind === "gone") {
+      /* their deletion stands unless I edited it */
+      if (mS.kind !== "same") { out.push(mS.block); }
+    } else if (mS.kind === "same") {
+      out.push(tS.block);
+    } else if (tS.kind === "same") {
+      out.push(mS.block);
+    } else if (mS.kind === "tick" &&
+        tS.kind === "tick") {
+      out.push(mS.block); /* both flipped: they agree */
+    } else if (mS.kind === "tick") {
+      /* my tick on their text */
+      out.push(withTick(tS.block,
+        mergedTick(i, mS, tS)));
+    } else if (tS.kind === "tick") {
+      /* their tick on my text */
+      out.push(withTick(mS.block,
+        mergedTick(i, mS, tS)));
+    } else if (mS.block.key === tS.block.key) {
+      /* both rewrote it to the same words */
+      out.push(withTick(mS.block,
+        mergedTick(i, mS, tS)));
+    } else {
+      /* a true conflict: mine stands in place and
+         theirs is preserved verbatim right after */
+      conflicts += 1;
+      out.push(mS.block);
+      out.push(tS.block);
+    }
+    pushEntry(fatePos[i], 0, out);
+  }
+  /* Their additions stand on the spine at their own
+     places. */
+  for (let j = 0; j < theirs.length; j++) {
+    if (!tAlign.sideUsed[j]) {
+      pushEntry(j, 0, [theirs[j]]);
+    }
+  }
+  /* My additions ride after the base block they
+     follow in mine. An addition identical in words
+     and tick to one of theirs is the same addition
+     made on both sides and stands once, as theirs,
+     on the spine. */
+  const theirsAddKeys = Object.create(null);
+  for (let j = 0; j < theirs.length; j++) {
+    if (!tAlign.sideUsed[j]) {
+      theirsAddKeys[theirs[j].key + "\n" +
+        String(theirs[j].tick)] = true;
+    }
+  }
+  const mineToBase = new Array(mine.length).fill(-1);
+  for (let i = 0; i < base.length; i++) {
+    if (mAlign.match[i] >= 0) {
+      mineToBase[mAlign.match[i]] = i;
+    }
+    if (mAlign.edit[i] >= 0) {
+      mineToBase[mAlign.edit[i]] = i;
+    }
+  }
+  let lastAnchor = -1;
+  for (let j = 0; j < mine.length; j++) {
+    if (mineToBase[j] >= 0) {
+      lastAnchor = mineToBase[j];
+      continue;
+    }
+    if (theirsAddKeys[mine[j].key + "\n" +
+        String(mine[j].tick)]) {
+      continue;
+    }
+    pushEntry(lastAnchor >= 0
+      ? fatePos[lastAnchor] : -1, 1, [mine[j]]);
+  }
+  entries.sort(function (a, b) {
+    return (a.pos - b.pos) || (a.rank - b.rank) ||
+      (a.seq - b.seq);
+  });
+  const ordered = [];
+  entries.forEach(function (e) {
+    e.blocks.forEach(function (b) {
+      ordered.push(b);
+    });
+  });
+  return { body: docMergeSerializeBlocks(ordered),
+    conflicts: conflicts };
 }
 
 /* ----- near-live refresh of the open Doc-backed note (v2.123) ------
@@ -6766,6 +7246,61 @@ function refreshDocLivePoll() {
    only on a real move, fetch and refill. See the section
    comment for the discipline; every failure path out of
    here is silent by design. */
+/* The marker pair judgment, shared (2026-11-18):
+   given one Drive metadata read for a note's Doc,
+   judge its revision token and modified time
+   against the markers a held body was fetched or
+   saved at (the note's sha and docModifiedTime, or
+   any marker pair of that shape). The near-live
+   poll tick below has judged the pair this way
+   since v2.127 and v2.132; the save-time probe in
+   saveDocBackedNote (tasks.js) now judges by the
+   same rule through this one helper, so the two
+   can never drift into disagreeing about whether a
+   Doc moved. proven means the pair stands exactly
+   where the markers left it; anything unproven
+   reads as moved, which is the tick's standing
+   rule (it takes the refetch path) and the probe's
+   (it takes the merge path). The judgment itself
+   changes nothing: the quiet adoption of a live
+   modified time onto a proven, timeless baseline
+   stays each caller's own line. */
+function docLiveMarkerJudgment(note, meta) {
+  const liveToken = driveTokenFromMetadata(meta);
+  const liveModified = (meta &&
+    typeof meta.modifiedTime === "string" &&
+    meta.modifiedTime) ? meta.modifiedTime : null;
+  /* v2.127: the revision token is the slow marker
+     for a Doc. driveTokenFromMetadata prefers the
+     head revision, and Google advances a Doc's head
+     revision lazily, minutes behind an edit, while
+     the same metadata read's modified time moves at
+     once, so the pair is judged together: a move in
+     either is a change. */
+  const revMoved = !!liveToken &&
+    liveToken !== note.sha;
+  const mtimeMoved = !!liveModified &&
+    !!note.docModifiedTime &&
+    liveModified !== note.docModifiedTime;
+  /* v2.132: the pair proof, hardened. A missing
+     modified time on either side (a baseline that
+     predates the pair, or a metadata read without
+     one) is proof of nothing unless the token is
+     mtime based, where token equality IS modified
+     time equality. With a rev token and no modified
+     time to judge, the pair is unproven. */
+  const mtimeMissing = !liveModified ||
+    !note.docModifiedTime;
+  const tokenIsMtime = !!liveToken &&
+    liveToken.indexOf("mtime:") === 0;
+  const proven = !revMoved && !mtimeMoved &&
+    (!mtimeMissing || tokenIsMtime);
+  return { token: liveToken,
+    modifiedTime: liveModified,
+    revMoved: revMoved, mtimeMoved: mtimeMoved,
+    proven: proven };
+}
+
 async function docLivePollTick() {
   if (docLivePollBusy) { return; }
   const note = docLivePollTarget();
@@ -6809,52 +7344,12 @@ async function docLivePollTick() {
       }
       return;
     }
-    const liveToken = driveTokenFromMetadata(meta);
-    const liveModified = (meta &&
-      typeof meta.modifiedTime === "string" &&
-      meta.modifiedTime) ? meta.modifiedTime : null;
-    /* v2.127: the revision token is the slow marker for
-       a Doc. driveTokenFromMetadata prefers the head
-       revision, and Google advances a Doc's head
-       revision lazily, minutes behind an edit, while
-       the same metadata read's modified time moves at
-       once (Chris's device report: Google side edits
-       took minutes to reach the open note although the
-       poll runs every five seconds, and a manual Sync
-       Now, judging fresh by other paths, pulled them in
-       immediately). The tick now judges BOTH markers
-       the held body was fetched or saved at: a move in
-       either is a change. The modified time alone never
-       stands a tick down: a note whose baseline predates
-       this build (no recorded modified time) adopts the
-       live one quietly on a quiet tick, and judges by
-       revision until then. */
-    const revMoved = !!liveToken &&
-      liveToken !== note.sha;
-    const mtimeMoved = !!liveModified &&
-      !!note.docModifiedTime &&
-      liveModified !== note.docModifiedTime;
-    /* v2.132: the pair proof, hardened, the same rule
-       the reconcile's carry now applies. A missing
-       modified time on either side (a baseline that
-       predates the pair, or a metadata read without
-       one) is proof of nothing unless the token is
-       mtime based, where token equality IS modified
-       time equality. With a rev: token and no modified
-       time to judge, the pair is unproven: the tick
-       takes the refetch path below instead of standing
-       down, and it no longer adopts the live modified
-       time as the baseline sight unseen in that case.
-       The quiet adoption still stands where it is
-       proven: both markers present and unmoved, or an
-       mtime token standing equal. */
-    const mtimeMissing = !liveModified ||
-      !note.docModifiedTime;
-    const tokenIsMtime = !!liveToken &&
-      liveToken.indexOf("mtime:") === 0;
-    const pairProven = !revMoved && !mtimeMoved &&
-      (!mtimeMissing || tokenIsMtime);
-    if (pairProven) {
+    const judgment = docLiveMarkerJudgment(note, meta);
+    const liveModified = judgment.modifiedTime;
+    if (judgment.proven) {
+      /* The quiet adoption stands where the pair is
+         proven: a baseline with no recorded modified
+         time takes the live one on a quiet tick. */
       if (liveModified && !note.docModifiedTime) {
         note.docModifiedTime = liveModified;
       }

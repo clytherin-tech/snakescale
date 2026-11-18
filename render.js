@@ -7244,6 +7244,53 @@ function captureOpenNoteSyncContext() {
 /* May this render refill the open note's fields with the
    copy the sync just loaded? See the block comment above for
    the three facts that must all hold. */
+/* 2026-11-18: the refill judgment's equivalence,
+   the companion to the save-time merge. The strict
+   comparison in syncShouldRefillOpenNote below
+   reads a clean ticked checklist as diverged: the
+   converter writes a ticked item's box with a bare
+   checked attribute where the DOM serializes the
+   same box as checked="", so the editor's
+   serialization of an untouched body never
+   string-matches the stored baseline the context
+   carries, the refill is refused, and the refusal
+   parks the outside change in the stash instead of
+   landing it (the trap named at the reload guard
+   in app.js). The equivalence below compares the
+   same three fields with boolean attributes
+   normalized to their bare form on both sides, so
+   a body whose only difference is that
+   serialization reads as the same content, while
+   any real difference of words, title, or tags
+   still refuses. It judges ONLY this refill
+   question; the strict comparison keeps every
+   other duty it has. */
+const SYNC_REFILL_BOOLEAN_ATTRS = [
+  "checked", "disabled", "selected", "readonly",
+  "multiple", "required", "hidden", "controls",
+  "autoplay", "loop", "muted", "open", "default",
+  "inert"
+];
+function syncNormalizeBooleanAttrs(html) {
+  let out = String(html || "");
+  SYNC_REFILL_BOOLEAN_ATTRS.forEach(function (attr) {
+    out = out.replace(new RegExp("\\s" + attr +
+      "=(?:\"\"|'" + attr + "'|\"" + attr + "\")",
+      "gi"), " " + attr);
+  });
+  return out;
+}
+function syncRefillContentEquivalent(a, b) {
+  if (!a || !b) { return false; }
+  if (a.title !== b.title) { return false; }
+  if (JSON.stringify(a.tags || []) !==
+      JSON.stringify(b.tags || [])) {
+    return false;
+  }
+  return syncNormalizeBooleanAttrs(a.body) ===
+    syncNormalizeBooleanAttrs(b.body);
+}
+
 function syncShouldRefillOpenNote(note) {
   const ctx = syncOpenNoteRefresh;
   if (!ctx || ctx.id !== note.id) { return false; }
@@ -7262,7 +7309,9 @@ function syncShouldRefillOpenNote(note) {
       .map(function (t) { return t.trim(); })
       .filter(function (t) { return t.length > 0; })
   };
-  if (versionTextContentEqual(editorNow, ctx.baseline)) {
+  if (versionTextContentEqual(editorNow, ctx.baseline) ||
+      syncRefillContentEquivalent(editorNow,
+        ctx.baseline)) {
     return true;
   }
   /* v2.132: the content changed and the editor is not
