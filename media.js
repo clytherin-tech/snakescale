@@ -5898,14 +5898,34 @@ function docAltAttachmentId(alt) {
 }
 function docAltLabel(alt) {
   return String(alt || "")
+    .replace(/\s*\(sk\)\s*\(ss-[A-Za-z0-9_-]+\)\s*$/,
+      "")
     .replace(/\s*\(ss-[A-Za-z0-9_-]+\)\s*$/, "")
     .trim();
+}
+/* v2.193: whether an image's alt marks its record
+   as a sketch (see docImageAltForRecord below): a
+   cold adoption that must mint the record afresh
+   restores the flag from the mark, so a sketch
+   comes back a sketch instead of a plain image
+   with Edit sketch gone. */
+function docAltSketch(alt) {
+  return /\(sk\)\s*\(ss-[A-Za-z0-9_-]+\)\s*$/
+    .test(String(alt || ""));
 }
 function docImageAltForRecord(record) {
   const name = String(
     (record && record.name) || "image");
-  return record && record.id
-    ? name + " (ss-" + record.id + ")" : name;
+  if (!record || !record.id) { return name; }
+  /* v2.193: a sketch's marker rides ahead of the
+     id suffix (see docAltSketch above), so the
+     flag survives the cold round trip the id
+     already survived; the label stripper removes
+     the marker with the suffix, so the name a
+     reader sees never changes. */
+  return name +
+    (record.sketch === true ? " (sk)" : "") +
+    " (ss-" + record.id + ")";
 }
 
 function docDataUriHash(text) {
@@ -6156,6 +6176,13 @@ async function docAdoptOneImage(note, img, sink, reusePool,
         imgHash: hash,
         created: new Date().toISOString()
       };
+      /* v2.193: a sketch's cold adoption restores
+         the flag its alt marks (see docAltSketch
+         above); without it the image came back as
+         a plain image and Edit sketch was gone. */
+      if (docAltSketch(img && img.alt)) {
+        record.sketch = true;
+      }
       docAdoptedImageCache[cacheKey] = record;
       docAdoptedImageById[note.id + "|" +
         record.id] = record;
@@ -6189,25 +6216,37 @@ async function docAdoptOneImage(note, img, sink, reusePool,
    landed lives in the editor before any save has
    collected it). Each entry carries the canonical
    shell a body build would need to keep the figure.
-   Only image figures are read: a Doc crosses only
-   images as figures, and the loss this build closes
-   is the image loss. */
+   v2.193: file tiles are read too. The v2.179 text
+   here said only image figures are read, because a
+   Doc crosses only images as figures; that was the
+   assumption that hid standing file tiles (which
+   the attach flow builds as divs) from this scan
+   while the reset in docAdoptImages ruled their
+   records away. A Doc crosses every non-image
+   attachment as a link, and the link pass there
+   judges those; this scan is the second line of
+   defense, and it now sees every tile the attach
+   flow builds. */
 function docStandingAttachmentFigures(note) {
   const seen = new Set();
   const out = [];
   const scan = function (root) {
     if (!root) { return; }
     root.querySelectorAll(
-      "figure.ss-attachment[data-attachment-id]")
+      "figure.ss-attachment[data-attachment-id]," +
+      " div.ss-attachment[data-attachment-id]")
       .forEach(function (el) {
         const id = el.getAttribute("data-attachment-id");
         if (!id || seen.has(id)) { return; }
         seen.add(id);
+        const tag = el.tagName.toLowerCase();
         out.push({ id: id,
-          shell: "<figure class=\"ss-attachment\"" +
+          shell: "<" + tag +
+            " class=\"ss-attachment\"" +
             " data-attachment-id=\"" + id + "\"" +
             docFigureWidthStyle(el) +
-            " contenteditable=\"false\"></figure>" });
+            " contenteditable=\"false\"></" + tag +
+            ">" });
       });
   };
   if (note.body) {
@@ -6262,6 +6301,8 @@ function docPreserveHeldAttachments(note, reusePool,
         i >= 0; i--) {
       ref = holder.querySelector(
         "figure.ss-attachment[data-attachment-id=\"" +
+        order[i] +
+        "\"], div.ss-attachment[data-attachment-id=\"" +
         order[i] + "\"]");
       if (ref) { break; }
     }
@@ -6280,11 +6321,198 @@ function docPreserveHeldAttachments(note, reusePool,
   return true;
 }
 
+/* v2.193: an attachment link's identity. Every
+   non-image attachment (and an image whose
+   save-time download failed) crosses a Doc as a
+   Drive file link; from this build the link carries
+   its record's id in a fragment, "#ss-<id>",
+   written by docBuildUploadHtml and proven on a
+   live scratch Doc before this build committed to
+   the channel: Google's export wraps the address,
+   the fragment rides inside the wrapper's target
+   (percent-encoded), and docUnwrapGoogleHref
+   restores it whole on the way back. A link saved
+   before this build carries no fragment; it is
+   judged by its file and rebuilt from Drive (see
+   docRebuildAttachmentRecord below), so notes
+   already degraded heal on load. */
+function docDriveFileLinkParts(href) {
+  const m = String(href || "").match(
+    /^https?:\/\/drive\.google\.com\/file\/d\/([^/?#]+)(?:\/[^?#]*)?(?:\?[^#]*)?(?:#ss-([A-Za-z0-9_-]+))?$/i);
+  if (!m) { return null; }
+  return { fileId: m[1], recordId: m[2] || null };
+}
+
+/* The attachment links a converted body carries, in
+   body order: every anchor whose address is a Drive
+   file link. An anchor holding an image token is
+   left to the image pass: a linked image is an
+   image first, and its link is presentation. */
+function docAttachmentLinkJobs(holder) {
+  const jobs = [];
+  holder.querySelectorAll("a").forEach(function (a) {
+    if (a.querySelector("[data-doc-img]")) { return; }
+    const parts = docDriveFileLinkParts(
+      a.getAttribute("href"));
+    if (!parts) { return; }
+    jobs.push({ el: a, fileId: parts.fileId,
+      recordId: parts.recordId, bag: [], swap: null });
+  });
+  return jobs;
+}
+
+/* The tile shell a claimed or rebuilt record stands
+   as in a converted body: the element the attach
+   flow itself builds for the record's mime family
+   (a figure for images, a div for everything
+   else), dressed by hydration exactly as it
+   dresses every tile. */
+function docAttachmentTileShell(rec) {
+  const tag = String(rec.mime || "")
+    .toLowerCase().indexOf("image/") === 0
+    ? "figure" : "div";
+  return "<" + tag + " class=\"ss-attachment\"" +
+    " data-attachment-id=\"" + rec.id + "\"" +
+    " contenteditable=\"false\"></" + tag + ">";
+}
+
+/* v2.193: rebuild one attachment record from Drive
+   itself, for a link no standing record claims (a
+   cold cache, a second device, a link saved before
+   identity rode it). The file's own metadata is
+   the authority: its name is the storage name,
+   which embeds the original record id ahead of
+   its "__" separator, so the record is rebuilt
+   under the very id it was minted with; its mime,
+   size, and creation time complete the record,
+   and the anchor's text (the exact name the save
+   wrote) names it. The gate is the attachments
+   folder the upload path resolves: a file standing
+   anywhere else is an ordinary pasted Drive link
+   and stays a link. Any failure (the file is gone,
+   trashed, or unreachable; the folder cannot be
+   resolved) returns null and the link stays a
+   link: no placeholder, no record, and the load
+   is never dirtied by the attempt, so a later
+   online load can still heal it. */
+async function docRebuildAttachmentRecord(job) {
+  try {
+    const meta = await gdriveJson(
+      "https://www.googleapis.com/drive/v3/files/" +
+      encodeURIComponent(job.fileId) +
+      "?fields=" + encodeURIComponent(
+        "id,name,mimeType,size,parents," +
+        "createdTime,trashed"));
+    if (!meta || meta.trashed) { return null; }
+    const folderId =
+      await googleEnsureAttachmentsFolder();
+    if (!folderId ||
+        (meta.parents || []).indexOf(folderId) < 0) {
+      return null;
+    }
+    const storageName = String(meta.name || "");
+    let recId = null;
+    const cut = storageName.indexOf("__");
+    if (cut > 0 &&
+        /^[A-Za-z0-9_-]+$/.test(
+          storageName.slice(0, cut))) {
+      recId = storageName.slice(0, cut);
+    }
+    if (!recId) { recId = newNoteId() + "a"; }
+    const anchorText = String(
+      job.el.textContent || "")
+      .replace(/\s+/g, " ").trim();
+    const name = anchorText ||
+      (cut > 0 ? storageName.slice(cut + 2)
+        : storageName) || "file";
+    return {
+      id: recId, provider: "google",
+      fileId: job.fileId, name: name,
+      storageName: storageName,
+      mime: String(meta.mimeType ||
+        "application/octet-stream"),
+      size: Number(meta.size) || 0,
+      created: String(meta.createdTime ||
+        meta.modifiedTime ||
+        new Date().toISOString())
+    };
+  } catch (e) { return null; }
+}
+
+/* v2.193: judge one attachment link, in the
+   discipline's order: the record its fragment
+   names first (a record already landed this pass
+   serves a duplicate link, the way a second token
+   of one image reuses its record), then a pool
+   record for the same file, then a record rebuilt
+   from Drive. A judged link that stands becomes
+   the record's tile in the body; one that does
+   not stays the plain link it arrived as. */
+async function docAdoptOneAttachmentLink(job,
+    reusePool, landedById, rebuiltByFileId) {
+  let rec = null;
+  if (job.recordId) {
+    for (let i = 0; i < reusePool.length; i++) {
+      if (reusePool[i] &&
+          reusePool[i].id === job.recordId) {
+        rec = reusePool.splice(i, 1)[0];
+        break;
+      }
+    }
+    if (!rec && landedById[job.recordId]) {
+      rec = landedById[job.recordId];
+    }
+  }
+  if (!rec) {
+    for (let i = 0; i < reusePool.length; i++) {
+      if (reusePool[i] &&
+          reusePool[i].fileId === job.fileId) {
+        rec = reusePool.splice(i, 1)[0];
+        break;
+      }
+    }
+  }
+  if (!rec && rebuiltByFileId[job.fileId]) {
+    rec = rebuiltByFileId[job.fileId];
+  }
+  if (!rec) {
+    rec = await docRebuildAttachmentRecord(job);
+    if (rec) {
+      /* A rebuild that recovers an id already
+         landed this pass serves that record,
+         never a twin under the same id. */
+      if (landedById[rec.id] &&
+          landedById[rec.id] !== rec) {
+        rec = landedById[rec.id];
+      }
+      rebuiltByFileId[job.fileId] = rec;
+    }
+  }
+  if (!rec) { return; }
+  /* One record stands once, however many links it
+     serves: a record already landed this pass (by
+     an image, an earlier link, or a rebuild) lends
+     its tile to this link without standing twice
+     in the reset list. */
+  if (landedById[rec.id] !== rec) {
+    job.bag.push(rec);
+    landedById[rec.id] = rec;
+  }
+  job.swap = docAttachmentTileShell(rec);
+}
+
 /* Replace every image token in a converted body with its
    adopted form, in place, and return the finished body
    string. The note's attachment list is reset first: a
    Doc-backed note's attachments are exactly the images
-   its Doc currently carries, adopted by this pass. */
+   its Doc currently carries, adopted by this pass.
+   v2.193: the attachment links the body carries are
+   judged in the same pass, against the same pool and
+   the same reset (see the link section above), so a
+   Doc-backed note's attachments are exactly the
+   attachments its Doc currently carries, of every
+   kind, and no record falls out of the reset
+   unjudged. */
 async function docAdoptImages(note, converted) {
   /* v2.168: the records the note already holds are
      this pass's reuse pool (see the claim in
@@ -6324,18 +6552,23 @@ async function docAdoptImages(note, converted) {
       });
   }
   note.attachments = [];
-  if (!converted.images.length) {
-    const heldHolder = document.createElement("div");
-    heldHolder.innerHTML = converted.html;
-    if (docPreserveHeldAttachments(note, reusePool,
-        standingFigs, heldHolder)) {
-      return heldHolder.innerHTML;
-    }
-    return converted.html;
-  }
   const holder = document.createElement("div");
   holder.innerHTML = converted.html;
   const tokens = holder.querySelectorAll("[data-doc-img]");
+  /* v2.193: the attachment links this body carries,
+     judged below in this same pass, against this
+     same pool and reset (see the link section
+     above). A body with neither tokens nor links
+     takes the standing preservation path exactly
+     as the no-image path always did. */
+  const linkJobs = docAttachmentLinkJobs(holder);
+  if (!tokens.length && !linkJobs.length) {
+    if (docPreserveHeldAttachments(note, reusePool,
+        standingFigs, holder)) {
+      return holder.innerHTML;
+    }
+    return converted.html;
+  }
   /* v2.135: the adoptions run in a small parallel
      pool instead of strictly one at a time. Each
      adoption is a resumable Drive upload (an init
@@ -6374,14 +6607,63 @@ async function docAdoptImages(note, converted) {
   const width = Math.min(6, tokens.length);
   for (let k = 0; k < width; k++) { pool.push(worker()); }
   await Promise.all(pool);
+  /* v2.193: the link judgments run with the image
+     adoptions settled, against what the pool still
+     holds; the records the image adoptions landed
+     stand in landedById, so a duplicate link
+     reuses its record instead of minting a twin. */
+  const landedById = {};
+  bags.forEach(function (bag) {
+    (bag || []).forEach(function (rec) {
+      if (rec && rec.id) {
+        landedById[rec.id] = rec;
+      }
+    });
+  });
+  const rebuiltByFileId = {};
+  for (let li = 0; li < linkJobs.length; li++) {
+    await docAdoptOneAttachmentLink(linkJobs[li],
+      reusePool, landedById, rebuiltByFileId);
+  }
+  /* The swaps land in body order, tokens and links
+     together, so the note's attachment order is
+     the body's order however the two kinds
+     interleave, exactly as the serial loop left
+     it for images alone. */
+  const jobByEl = new Map();
   for (let i = 0; i < tokens.length; i++) {
-    bags[i].forEach(function (rec) {
+    jobByEl.set(tokens[i], { bag: bags[i],
+      el: tokens[i], swap: swaps[i] });
+  }
+  linkJobs.forEach(function (job) {
+    jobByEl.set(job.el, job);
+  });
+  const orderedJobs = [];
+  holder.querySelectorAll("[data-doc-img], a")
+    .forEach(function (el) {
+      const job = jobByEl.get(el);
+      if (job) { orderedJobs.push(job); }
+    });
+  let changed = tokens.length > 0;
+  orderedJobs.forEach(function (job) {
+    (job.bag || []).forEach(function (rec) {
       note.attachments.push(rec);
     });
-    tokens[i].outerHTML = swaps[i];
+    if (job.swap != null) {
+      job.el.outerHTML = job.swap;
+      changed = true;
+    }
+  });
+  const preserved = docPreserveHeldAttachments(
+    note, reusePool, standingFigs, holder);
+  /* v2.193: a body this pass changed nothing in (no
+     tokens, and every link judged an ordinary
+     link) returns as the exact string it arrived
+     as, the way the no-image path always returned
+     it. */
+  if (!changed && !preserved) {
+    return converted.html;
   }
-  docPreserveHeldAttachments(note, reusePool,
-    standingFigs, holder);
   return holder.innerHTML;
 }
 
@@ -8342,9 +8624,20 @@ async function docBuildUploadHtml(note) {
         continue;
       } catch (e) { /* the Drive link crosses instead */ }
     }
+    /* v2.193: the link carries the record's id in
+       a fragment (see docDriveFileLinkParts
+       above): the visible text stays the plain
+       name, a human opening the Doc still lands
+       on the file (Drive ignores the fragment),
+       and a load claims the record by that id
+       before it judges anything else. A record
+       with no file still crosses as the standing
+       text; nothing stands in Drive for a load to
+       heal it from. */
     el.outerHTML = record.fileId
       ? "<a href=\"https://drive.google.com/file/d/" +
-        encodeURIComponent(record.fileId) + "/view\">" +
+        encodeURIComponent(record.fileId) +
+        "/view#ss-" + record.id + "\">" +
         escapeHtml(record.name || "Attachment") + "</a>"
       : "[Attachment: " +
         escapeHtml(record.name || "file") + "]";
