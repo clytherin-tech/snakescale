@@ -3864,6 +3864,8 @@ async function syncNow(showToast) {
      everything the load just judged stands behind it. */
   const tokenAtSyncStart = autoSyncPageToken;
   try {
+    /* v2.192: pending sessions commit first (core.js). */
+    commitPendingNoteSessions(false);
     await flushQueue();
     /* v1.4.4: a coalesced index write may still be pending (its
        debounce is 800 ms). Flush it before the load reads index.json,
@@ -3923,6 +3925,7 @@ async function syncNow(showToast) {
       return;
     }
     await loadAllFromRepo(plan);
+    commitPendingNoteSessions(plan === null);
   /* v2.80: a sync refreshes the calendar events with
      everything else (page memory only; a standing
      consent state is left to its Connect path).
@@ -4373,20 +4376,40 @@ async function reloadDivergedNote(noteId) {
    session), then the baseline and cache updates every
    landed save performs. Maintenance is fail soft by
    design: a history that cannot be loaded safely is left
-   untouched, and the note save still stands. Returns the
+   untouched, and the note save still stands. v2.192: the
+   maintenance is prune-only now, and the session hook
+   (noteSessionSaveSettled, core.js) runs ahead of it on
+   every landed save. Returns the
    version status the save result carries. saveFacts is
    the bundle saveNoteToRepoNow computed before its write:
    {previousSavedContent, candidateContent,
    versionContentChanged, suppressVersionCapture}. */
 async function finishLandedNoteSave(note, path, saveFacts) {
   let versionStatus = null;
+  /* v2.192: the session hook runs on every landed save,
+     ahead of the maintenance below: it is how the note's
+     standing session learns the save settled (see the
+     session section in core.js). It runs whatever the
+     restore flow's suppress flag says: the flag governed
+     the old per-save capture, and a restore inside a
+     session is one of the session's own changes, whose
+     pre-restore state the session's baseline already
+     holds. */
+  await noteSessionSaveSettled(note, saveFacts.candidateContent,
+    saveFacts.previousSavedContent);
   if (!saveFacts.suppressVersionCapture && saveFacts.previousSavedContent &&
       (saveFacts.versionContentChanged ||
        versionHistoryPruneNeeded.has(note.id) ||
        versionHistoryCache[note.id])) {
+    /* v2.192: this pass no longer captures: capture
+       belongs to the session that ends, not to the save.
+       What a landed save still owes history is the prune
+       a lowered limit registered (and the limit 0 removal
+       that rides the same pass), so it runs with content
+       change off. */
     const versionResult = await maintainVersionHistory(note.id,
       saveFacts.previousSavedContent, {
-        contentChanged: saveFacts.versionContentChanged,
+        contentChanged: false,
         notePath: path
       });
     versionStatus = versionResult.status;
@@ -4997,13 +5020,20 @@ async function saveNoteToRepoNow(note, options) {
 
   if (!state.online) {
     queueNotePut();
-    /* v2.8: the matching history entry queues immediately behind
-       the note write it belongs to (see flushVersionHistoryOp). A
+    /* v2.192: a queued save captures no version of its own:
+       the note's session learns the save settled here (its
+       mint, when the session ends, rides this same queue),
+       and a prune a lowered limit registered for this note
+       queues as a prune-only entry behind the note write,
+       as the old combined entry pruned at its flush. A
        first save has no previous state and queues nothing. */
+    noteSessionSaveSettled(note, candidateContent,
+      previousSavedContent).catch(function () { });
     if (!suppressVersionCapture && previousSavedContent &&
-        (versionContentChanged || versionHistoryPruneNeeded.has(note.id))) {
-      queueVersionHistoryMaintenance(note.id, path, previousSavedContent,
-        candidateContent, { verifyExpected: true });
+        !versionContentChanged &&
+        versionHistoryPruneNeeded.has(note.id)) {
+      queueVersionHistoryMaintenance(note.id, path, null,
+        candidateContent, { verifyExpected: true, pruneOnly: true });
       versionHistoryPruneNeeded.delete(note.id);
     }
     rememberLastSavedSnapshot(note.id, candidateContent);
@@ -5089,12 +5119,15 @@ async function saveNoteToRepoNow(note, options) {
          complete note text joins the same offline queue used for network
          outages, and flushQueue retries it after the next sign in. */
       queueNotePut();
-      /* v2.8: the history entry for this queued save queues behind
-         it, exactly as in the offline branch below. */
+      /* v2.192: the session hook and the prune-only entry,
+         exactly as in the offline branch above. */
+      noteSessionSaveSettled(note, candidateContent,
+        previousSavedContent).catch(function () { });
       if (!suppressVersionCapture && previousSavedContent &&
-          (versionContentChanged || versionHistoryPruneNeeded.has(note.id))) {
-        queueVersionHistoryMaintenance(note.id, path, previousSavedContent,
-          candidateContent, { verifyExpected: true });
+          !versionContentChanged &&
+          versionHistoryPruneNeeded.has(note.id)) {
+        queueVersionHistoryMaintenance(note.id, path, null,
+          candidateContent, { verifyExpected: true, pruneOnly: true });
         versionHistoryPruneNeeded.delete(note.id);
       }
       rememberLastSavedSnapshot(note.id, candidateContent);
@@ -5106,10 +5139,15 @@ async function saveNoteToRepoNow(note, options) {
     }
     if (err.offline || !state.online) {
       queueNotePut();
+      /* v2.192: the session hook and the prune-only entry,
+         exactly as in the offline branch above. */
+      noteSessionSaveSettled(note, candidateContent,
+        previousSavedContent).catch(function () { });
       if (!suppressVersionCapture && previousSavedContent &&
-          (versionContentChanged || versionHistoryPruneNeeded.has(note.id))) {
-        queueVersionHistoryMaintenance(note.id, path, previousSavedContent,
-          candidateContent, { verifyExpected: true });
+          !versionContentChanged &&
+          versionHistoryPruneNeeded.has(note.id)) {
+        queueVersionHistoryMaintenance(note.id, path, null,
+          candidateContent, { verifyExpected: true, pruneOnly: true });
         versionHistoryPruneNeeded.delete(note.id);
       }
       rememberLastSavedSnapshot(note.id, candidateContent);
@@ -5595,6 +5633,17 @@ async function saveDocBackedNote(note, options) {
      whose last tick was unticked in the app does not
      keep a stale memory. */
   note.docTicks = docTicksFromBody(note.body);
+  /* v2.192: the session hook learns the settled save like
+     any other (see the session section in core.js); a
+     Doc-backed note's session never mints, so this is
+     bookkeeping only, and it runs here, at the save's
+     tail, downstream of the probe and merge settle
+     above, never ahead of it. The previous saved content
+     is read from the baseline map before the remember
+     call below replaces it. */
+  await noteSessionSaveSettled(note, candidateContent,
+    lastSavedContentByNoteId[note.id]
+      ? cloneVersionValue(lastSavedContentByNoteId[note.id]) : null);
   rememberLastSavedSnapshot(note.id, candidateContent);
   saveCache();
   /* v2.123: a Doc note's identity settles inside this
@@ -5752,10 +5801,12 @@ async function saveLocalOverStoredRevision(note, path, text,
      is what advanced the file; without this capture the
      history would jump from the baseline straight to the
      local content, and the stored words would survive only
-     in the copy. forceSnapshot, because the tail's own
-     capture a moment earlier starts the coalescing window
-     this one must not be merged into. Fail soft, exactly
-     as the tail's own maintenance is: the save stands
+     in the copy. forceSnapshot, because this capture is an
+     immediate one of its own: v2.192's session minting
+     never covers it (the tail's session work holds only
+     the state the session opened at), so it lands here,
+     on its own. Fail soft, exactly as the tail's own
+     maintenance is: the save stands
      either way. Skipped when the caller suppressed version
      capture (the restore flow preserves its own states). */
   if (!saveFacts.suppressVersionCapture) {

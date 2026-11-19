@@ -10782,6 +10782,15 @@ function openNote(id) {
    v2.50. Kept separate so the settle gate above can defer
    it without duplicating it. */
 function openNoteNow(id) {
+  /* v2.192: the version session switch (see the session
+     section in core.js): the outgoing note's session
+     ends here, at the one switch every open passes
+     through, and the incoming note's session opens.
+     openNote's settle gate has already landed the
+     outgoing note's edits by the time a switch reaches
+     this point, so the ending session's mint sits
+     behind them. */
+  noteSessionSwitch(id);
   /* v2.153: the search hit session for this open
      is decided here, at the one switch every
      open passes through: an arm naming this

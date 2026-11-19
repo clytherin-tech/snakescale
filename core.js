@@ -223,6 +223,14 @@ const LS_ACCOUNT_NAME = "snakescale.accountName.v1";
    that (see the pending deletions section in
    render.js). */
 const LS_PENDING_DELETES = "snakescale.pendingDeletes.v1";
+/* v2.192: the pending note session record: the version
+   history sessions that stand open (and any mint they
+   still owe), kept on this device only (never synced),
+   so a session whose app is killed mid-sitting is
+   committed by the next launch exactly once (see the
+   session section in the version history part of
+   core.js). */
+const LS_PENDING_SESSION = "snakescale.pendingSession.v1";
 /* v2.181: the IMDb preview data cache: the parsed
    imdb-previews.json entries, kept on this device
    only (never synced), so a cold boot can answer a
@@ -2061,33 +2069,48 @@ function queueOp(op) {
    save whose title, body, and tags all match the baseline creates
    none either, which is why pin, move, archive, trash, and
    restore operations (which save or move the same content) never
-   create versions by themselves. When a qualifying save lands,
-   the baseline becomes a snapshot, at most one per note per
-   VERSION_COALESCE_MS, and the list is pruned to the configured
-   limit, oldest dropped first. If the history file cannot be
+   create versions by themselves. Through v2.191 a qualifying save
+   itself minted the snapshot, coalesced to at most one per note
+   per 10 minutes of editing. From v2.192 the snapshot mints when
+   the note's editing SESSION ends, holding the content the note
+   stood at when the session opened (see the session section
+   below); the list is pruned to the configured limit, oldest
+   dropped first, whenever a mint or a maintenance pass runs. If
+   the history file cannot be
    loaded safely (damaged JSON, a shape this build cannot trust),
    the note save still proceeds, but version creation, pruning,
    and history deletion for that save are skipped rather than
    risk overwriting or deleting a history that might be intact.
 
-   Offline: when a note save itself is queued, a matching
-   {kind:"version-history"} entry is queued right behind it,
-   carrying the previous snapshot, the content it expects the
-   queued note write to leave behind, the capture time, and the
-   limit in force. flushQueue applies those entries in order,
-   after the note write they belong to, and an entry whose
-   expected content is not what the note write left behind (the
-   write became a conflict copy, for example) is skipped. When a
-   history write itself fails with an offline or expired sign in
-   error after its note save already landed, the same kind of
-   entry is queued as a replay, so the update is durable rather
-   than silently dropped.
+   Offline: a {kind:"version-history"} entry rides the queue in
+   order, behind the note writes it belongs to. It is queued by a
+   session ending while offline (carrying the session baseline,
+   which needs no expectation: the note write it belongs to is
+   already ahead of it in the queue), by the next launch's commit
+   of a session an app kill left pending (carrying the baseline
+   and the content the session's saves left behind, verified at
+   flush: an entry whose expected content is not what the note
+   file holds, because the write became a conflict copy for
+   example, is skipped), by a prune a lowered limit registered
+   for a note whose save queued, and by a history write that
+   itself failed with an offline or expired sign in error after
+   its note save already landed, queued as a replay so the update
+   is durable rather than silently dropped. flushQueue applies
+   the entries in order.
    -------------------------------------------------------------------------- */
 const VERSIONS_FOLDER_NAME = "versions";
-const VERSION_COALESCE_MS = 10 * 60 * 1000;
+/* v2.192: the session idle boundary (see the session section
+   below): a settled save that finds its session's last edit
+   this far behind it ends that session and opens the next. */
+const SESSION_IDLE_MS = 30 * 60 * 1000;
 const versionHistoryCache = Object.create(null);
 const lastSavedContentByNoteId = Object.create(null);
 const versionHistoryPruneNeeded = new Set();
+/* v2.192: the standing note sessions, by note id, and the
+   in-memory copy of their durable record (LS_PENDING_SESSION;
+   see the session section below). */
+const noteSessionByNoteId = Object.create(null);
+let noteSessionDurableCache = null;
 
 /* The configured versions per note limit, normalized: a whole
    number from 0 to 100, with the default 10 for anything that is
@@ -2197,6 +2220,14 @@ function clearVersionRuntimeState() {
     delete lastSavedContentByNoteId[id];
   });
   versionHistoryPruneNeeded.clear();
+  /* v2.192: the sessions and their durable record are this
+     account's on this device; sign out drops both with the
+     baselines above. */
+  Object.keys(noteSessionByNoteId).forEach(function (id) {
+    delete noteSessionByNoteId[id];
+  });
+  noteSessionDurableCache = null;
+  try { localStorage.removeItem(LS_PENDING_SESSION); } catch (err) { }
 }
 
 /* Full snapshot equality (title, body, tags, and the attachment
@@ -2371,6 +2402,14 @@ function queueVersionHistoryMaintenance(noteId, path, previous, expectedContent,
     expectedContent: expectedContent ? cloneVersionValue(expectedContent) : null,
     verifyExpected: !!options.verifyExpected,
     forceSnapshot: !!options.forceSnapshot,
+    /* v2.192: a session mint's entry id rides its queue entry,
+       so the flush mints under the very id the session minted
+       when it first became a candidate, and a mint that
+       already landed is never added twice (see
+       maintainVersionHistory). A prune-only entry carries no
+       snapshot of its own; its flush pass only prunes. */
+    entryId: options.entryId || null,
+    pruneOnly: !!options.pruneOnly,
     capturedAt: new Date(options.nowMs || Date.now()).toISOString(),
     limit: versionsLimitValue(options.limit)
   });
@@ -2430,12 +2469,15 @@ async function deleteVersionHistoryBestEffort(noteId) {
      - with a limit of 0, removes the stored history file
        (status "deleted") and offers no snapshots;
      - adds the previous snapshot when the caller says the save
-       changed content (or forces it, for a restore), unless the
-       newest snapshot is younger than the coalescing window;
+       changed content (or forces it: a session mint, the stored
+       version capture in saveLocalOverStoredRevision), unless a
+       snapshot already stands under the caller's entry id
+       (v2.192: a session mint carries the id its session minted
+       when it became a candidate, and exactly-once is judged by
+       that id, never by a time window);
      - prunes to the limit in force, dropping the oldest entries,
        which is also how a lowered limit takes effect on the next
-       maintenance for a note, even when coalescing prevented a
-       new snapshot;
+       maintenance for a note, even when the pass adds nothing;
      - writes the file only when something actually changed.
    A write that fails because the sign in expired or the network
    dropped is queued as a replay entry (unless the caller forbids
@@ -2478,13 +2520,18 @@ async function maintainVersionHistory(noteId, previous, options) {
   });
   let changed = false;
   if ((options.forceSnapshot || options.contentChanged) && previous) {
-    const newest = versions[0] || null;
-    const newestMs = newest ? new Date(newest.createdAt).getTime() : NaN;
-    if (options.forceSnapshot || !newest || isNaN(newestMs) ||
-        nowMs - newestMs >= VERSION_COALESCE_MS) {
+    /* v2.192: no time window judges this anymore (through
+       v2.191 a snapshot younger than VERSION_COALESCE_MS
+       suppressed the add). A caller carrying an entry id
+       (a session mint, direct or queued) is skipped only
+       when a snapshot already stands under that id, which
+       is what makes a mint whose write landed while its
+       bookkeeping died still exactly-once. */
+    const alreadyMinted = !!options.entryId && versions.some(
+      function (entry) { return entry.id === options.entryId; });
+    if (!alreadyMinted) {
       versions.unshift({
-        id: "v" + nowMs.toString(36) + "-" +
-          Math.random().toString(36).slice(2, 8),
+        id: options.entryId || newVersionEntryId(nowMs),
         createdAt: new Date(nowMs).toISOString(),
         title: previous.title,
         body: previous.body,
@@ -2517,6 +2564,7 @@ async function maintainVersionHistory(noteId, previous, options) {
       queueVersionHistoryMaintenance(noteId, options.notePath || null,
         previous, null, {
           forceSnapshot: !!options.forceSnapshot,
+          entryId: options.entryId || null,
           limit: limit, nowMs: nowMs
         });
       versionHistoryCache[noteId] = {
@@ -2538,7 +2586,8 @@ async function maintainVersionHistory(noteId, previous, options) {
    the entry and everything behind it for the next flush. */
 async function flushVersionHistoryOp(op) {
   if (!op || !op.noteId) { return { status: "skipped-invalid" }; }
-  if (versionsLimitValue(op.limit) !== 0 && !op.previous) {
+  if (versionsLimitValue(op.limit) !== 0 && !op.previous &&
+      !op.pruneOnly) {
     return { status: "skipped-invalid" };
   }
   if (op.verifyExpected) {
@@ -2555,7 +2604,8 @@ async function flushVersionHistoryOp(op) {
   const result = await maintainVersionHistory(op.noteId, op.previous, {
     contentChanged: true,
     forceSnapshot: !!op.forceSnapshot,
-    pruneOnly: !op.previous,
+    pruneOnly: !!op.pruneOnly || !op.previous,
+    entryId: op.entryId || null,
     limit: op.limit,
     nowMs: new Date(op.capturedAt).getTime() || Date.now(),
     notePath: op.notePath,
@@ -2572,4 +2622,435 @@ async function flushVersionHistoryOp(op) {
   }
   return result;
 }
+/* --------------------------------------------------------------------------
+   v2.192: note sessions, and the versions they mint
+
+   Through v2.191 a version was captured inside each qualifying
+   save, coalesced to at most one per 10 minutes of editing, so
+   one long sitting minted several versions, each holding the
+   state before one of its saves. From this build a version is a
+   sitting. A session opens when a note is opened (noteSessionOpen,
+   from the editor's one switch point; a save that settles with no
+   session standing opens an ambient one where it stands), its
+   baseline is the note's content as it stood when the session
+   opened, and the session's first text change (title, body, or
+   tags: the standing capture question) makes it a candidate. The
+   version mints when the session ENDS, holding the baseline:
+     - leaving the note (openNoteNow ends the outgoing note's
+       session before the switch; the open's settle gate has
+       already landed the outgoing note's edits, so the mint sits
+       behind them);
+     - an idle boundary: a save settling SESSION_IDLE_MS
+       (30 minutes) after the session's last edit ends the
+       standing session at that point, and the settling save
+       opens the next session with its own pre-save state as
+       baseline;
+     - the page hiding or closing (pagehide, and the hidden turn
+       of visibilitychange, registered in app.js beside the
+       catalog's own hide flush): best effort, because a page
+       can be suspended mid-write.
+   A session with no text change mints nothing, and neither does
+   one whose final saved content is back at its baseline (typed
+   and undone across the sitting). A brand-new note's first
+   session mints nothing: its first settled save has no previous
+   saved state (the standing first-save rule), so that session is
+   the note's birth session and its baseline is the state the
+   note was born with; its next session is an ordinary one.
+   Doc-backed notes take part in the tracking (their sessions
+   open, idle, and end like any other, and a session mint for one
+   would be ordered after its Doc save's probe and merge settle
+   by construction, since the hook runs at that save's tail) but
+   never mint and never persist a pending record: their history
+   is the Doc's own (v2.121).
+
+   Killed-app durability: a session's standing record (its note,
+   baseline, last saved content, last edit time, birth flag, and
+   the id its version will carry) is persisted in this device's
+   localStorage (LS_PENDING_SESSION) when the session opens and
+   whenever it materially changes, so an app killed without any
+   close event loses nothing: the next launch commits the pending
+   session exactly once (commitPendingNoteSessions, called from
+   syncNow ahead of its queue flush and again after its load).
+   The commit queues a version-history entry behind whatever the
+   previous run left queued, verified against the content the
+   session's saves left behind, and flushQueue's standing
+   adjudication applies it. A version's id is minted when its
+   session first becomes a candidate and rides the record, the
+   queue entry, and the mint itself, and maintainVersionHistory
+   never adds a second entry under an id that already stands, so
+   a mint whose write landed while its bookkeeping died (a
+   pagehide write that completed as the page was discarded)
+   still commits exactly once. A mint that ends unresolved (a
+   store write failure, a history conflict, a transient load
+   failure) leaves an owed entry in the same durable record,
+   which the next launch's commit queues the same way; a history
+   that cannot be loaded safely ends the matter, exactly as it
+   does for a save. Sign out wipes the record with the cache and
+   the queue (clearVersionRuntimeState).
+   -------------------------------------------------------------------------- */
+
+/* A version entry's id, in the standing format: the mint time
+   in base 36 and a short random tail. Extracted in v2.192 so a
+   session can mint its version's id when it first becomes a
+   candidate and carry it to the mint, whenever that lands. */
+function newVersionEntryId(nowMs) {
+  return "v" + (nowMs || Date.now()).toString(36) + "-" +
+    Math.random().toString(36).slice(2, 8);
+}
+
+/* The durable session record: {v, sessions, owed} in
+   LS_PENDING_SESSION, behind a write-through cache. A store
+   that refuses the write (full, blocked) degrades durability
+   to this page's lifetime; nothing else in the app depends
+   on the record landing. */
+function noteSessionDurableLoad() {
+  if (noteSessionDurableCache) { return noteSessionDurableCache; }
+  let data = null;
+  try {
+    data = JSON.parse(localStorage.getItem(LS_PENDING_SESSION) || "null");
+  } catch (err) { data = null; }
+  if (!data || typeof data !== "object" || Array.isArray(data) ||
+      !data.sessions || typeof data.sessions !== "object" ||
+      Array.isArray(data.sessions) || !Array.isArray(data.owed)) {
+    data = { v: 1, sessions: {}, owed: [] };
+  }
+  noteSessionDurableCache = data;
+  return data;
+}
+function noteSessionDurableSave() {
+  const data = noteSessionDurableLoad();
+  try {
+    if (!Object.keys(data.sessions).length && !data.owed.length) {
+      localStorage.removeItem(LS_PENDING_SESSION);
+    } else {
+      localStorage.setItem(LS_PENDING_SESSION,
+        JSON.stringify(data));
+    }
+  } catch (err) { /* durability degrades; the session stands */ }
+}
+function noteSessionPersist(session) {
+  if (!session || !session.noteId || session.durable === false) {
+    return;
+  }
+  const data = noteSessionDurableLoad();
+  data.sessions[session.noteId] = cloneVersionValue(session);
+  noteSessionDurableSave();
+}
+function noteSessionUnpersist(noteId) {
+  if (!noteId) { return; }
+  const data = noteSessionDurableLoad();
+  if (data.sessions[noteId]) {
+    delete data.sessions[noteId];
+    noteSessionDurableSave();
+  }
+}
+function noteSessionOwe(session) {
+  const data = noteSessionDurableLoad();
+  data.owed.push({
+    noteId: session.noteId,
+    baseline: cloneVersionValue(session.baseline),
+    lastSaved: session.lastSaved
+      ? cloneVersionValue(session.lastSaved) : null,
+    lastEditMs: session.lastEditMs || 0,
+    entryId: session.entryId || null
+  });
+  noteSessionDurableSave();
+}
+
+/* The standing session for a note: the live one, or the
+   durable record an earlier page left, adopted back. */
+function noteSessionStanding(noteId) {
+  const live = noteSessionByNoteId[noteId];
+  if (live) { return live; }
+  const data = noteSessionDurableLoad();
+  const rec = data.sessions[noteId];
+  if (!rec || typeof rec !== "object" || rec.noteId !== noteId) {
+    return null;
+  }
+  const session = cloneVersionValue(rec);
+  noteSessionByNoteId[noteId] = session;
+  return session;
+}
+
+/* Open a note's session, unless one already stands (a killed
+   session adopted back by noteSessionStanding resumes rather
+   than restarts: its baseline is the one it opened with). */
+function noteSessionOpen(note, kind) {
+  if (!note || !note.id) { return; }
+  const standing = noteSessionStanding(note.id);
+  if (standing) {
+    if (kind === "editor" && standing.kind !== "editor") {
+      standing.kind = "editor";
+    }
+    return;
+  }
+  const baseline = lastSavedContentByNoteId[note.id];
+  const session = {
+    noteId: note.id,
+    kind: kind || "ambient",
+    baseline: baseline ? cloneVersionValue(baseline) : null,
+    dirty: false,
+    birth: false,
+    openedMs: Date.now(),
+    lastEditMs: 0,
+    lastSaved: null,
+    entryId: null,
+    durable: !isDocBackedNote(note)
+  };
+  noteSessionByNoteId[note.id] = session;
+  noteSessionPersist(session);
+}
+
+/* The editor's switch: openNoteNow calls this before the
+   selection moves. The outgoing note's session ends (its
+   mint rides behind the saves the open's settle gate has
+   already landed), and the incoming note's session opens. */
+function noteSessionSwitch(incomingId) {
+  const outgoing = (typeof currentNote === "function")
+    ? currentNote() : null;
+  if (outgoing && outgoing.id !== incomingId) {
+    endNoteSession(outgoing.id).catch(function () {
+      /* fail soft: the durable record carries the session */
+    });
+  }
+  const incoming = incomingId ? findNoteById(incomingId) : null;
+  if (incoming) { noteSessionOpen(incoming, "editor"); }
+}
+
+/* The settle hook: every note save that lands (or is
+   durably queued) reports here what the note's saved
+   content became, candidate being the content the save
+   made current and previousSaved the baseline that stood
+   before it (null on a first save). All of the state work
+   is synchronous, ahead of the one await an idle split's
+   mint can cause, so a fire-and-forget caller (the queued
+   save branches) still leaves the session exact. This is
+   the one place sessions learn of edits; autosave timing
+   and the save path itself are untouched. */
+async function noteSessionSaveSettled(note, candidate, previousSaved) {
+  if (!note || !note.id || !candidate) { return; }
+  let session = noteSessionStanding(note.id);
+  if (!session) {
+    session = {
+      noteId: note.id,
+      kind: state.selectedId === note.id ? "editor" : "ambient",
+      baseline: null,
+      dirty: false,
+      birth: false,
+      openedMs: Date.now(),
+      lastEditMs: 0,
+      lastSaved: null,
+      entryId: null,
+      durable: !isDocBackedNote(note)
+    };
+    noteSessionByNoteId[note.id] = session;
+  }
+  if (!session.baseline) {
+    if (previousSaved) {
+      session.baseline = cloneVersionValue(previousSaved);
+    } else {
+      /* The first settled save this device has seen for
+         the note: the session is its birth session, and
+         its baseline is the state it was born with. */
+      session.baseline = cloneVersionValue(candidate);
+      session.birth = true;
+    }
+    noteSessionPersist(session);
+  }
+  const now = Date.now();
+  let ending = null;
+  if (session.dirty && session.lastEditMs &&
+      now - session.lastEditMs >= SESSION_IDLE_MS) {
+    /* The idle boundary: the standing session ends at
+       this save, and the save opens the next session
+       with its own pre-save state as the baseline. */
+    ending = session;
+    session = {
+      noteId: note.id,
+      kind: ending.kind,
+      baseline: previousSaved ? cloneVersionValue(previousSaved)
+        : cloneVersionValue(candidate),
+      dirty: false,
+      birth: false,
+      openedMs: now,
+      lastEditMs: 0,
+      lastSaved: null,
+      entryId: null,
+      durable: ending.durable
+    };
+    noteSessionByNoteId[note.id] = session;
+    noteSessionPersist(session);
+  }
+  if (!versionTextContentEqual(session.baseline, candidate)) {
+    if (!session.dirty) {
+      session.dirty = true;
+      session.entryId = newVersionEntryId(now);
+    }
+    session.lastEditMs = now;
+  }
+  session.lastSaved = cloneVersionValue(candidate);
+  if (session.dirty) { noteSessionPersist(session); }
+  if (ending) { await settleEndedNoteSession(ending, true); }
+}
+
+/* Mint one ended session's version. Resolves to the
+   maintenance result, or a small standing object for the
+   cases maintenance never sees: the note is gone, the
+   note is Doc-backed (its history is the Doc's own), or
+   the sitting's edits canceled out against its baseline. */
+async function mintNoteSession(session) {
+  const note = findNoteById(session.noteId);
+  if (!note) { return { status: "dropped" }; }
+  if (isDocBackedNote(note)) { return { status: "dropped" }; }
+  const finalSaved = lastSavedContentByNoteId[session.noteId];
+  if (finalSaved &&
+      versionTextContentEqual(session.baseline, finalSaved)) {
+    return { status: "unchanged" };
+  }
+  if (typeof state !== "undefined" && state.online === false) {
+    queueVersionHistoryMaintenance(session.noteId, notePath(note),
+      session.baseline, null, {
+        forceSnapshot: true,
+        entryId: session.entryId,
+        nowMs: session.lastEditMs || Date.now()
+      });
+    return { status: "queued" };
+  }
+  return maintainVersionHistory(session.noteId, session.baseline, {
+    contentChanged: true,
+    forceSnapshot: true,
+    entryId: session.entryId,
+    notePath: notePath(note)
+  });
+}
+
+/* Whether a mint's outcome closes the session's account:
+   a landed, queued, or moot mint does; a history that
+   cannot be loaded safely does too (the stored bytes are
+   protected, and retrying would loop on the same wall);
+   a store write failure, a delete failure, a conflict,
+   or a transient load failure stays owed. */
+function isNoteSessionMintResolved(result) {
+  if (!result) { return true; }
+  switch (result.status) {
+    case "saved":
+    case "queued":
+    case "unchanged":
+    case "empty":
+    case "deleted":
+    case "no-previous":
+    case "dropped":
+      return true;
+    case "skipped-load":
+      return isVersionHistoryUnsafeError(result.error);
+    default:
+      return false;
+  }
+}
+
+/* Close out one ended session: mint it if it is a
+   candidate, then settle its durable account. fromSplit
+   is the idle boundary's end, whose durable slot the
+   next session has already taken: it never unpersists,
+   and an unresolved mint still owes. */
+async function settleEndedNoteSession(session, fromSplit) {
+  if (!session) { return; }
+  if (!session.dirty || session.birth || !session.baseline) {
+    if (!fromSplit) { noteSessionUnpersist(session.noteId); }
+    return;
+  }
+  const result = await mintNoteSession(session);
+  if (isNoteSessionMintResolved(result)) {
+    if (!fromSplit) { noteSessionUnpersist(session.noteId); }
+    versionHistoryPruneNeeded.delete(session.noteId);
+    return;
+  }
+  noteSessionOwe(session);
+  if (!fromSplit) { noteSessionUnpersist(session.noteId); }
+}
+
+/* End the standing session for a note, if one stands. */
+async function endNoteSession(noteId) {
+  const session = noteSessionByNoteId[noteId];
+  if (!session) { return; }
+  delete noteSessionByNoteId[noteId];
+  await settleEndedNoteSession(session, false);
+}
+
+/* The hide flush (app.js registers it beside the
+   catalog's own): every standing session ends. */
+function endAllNoteSessions() {
+  Object.keys(noteSessionByNoteId).forEach(function (noteId) {
+    endNoteSession(noteId).catch(function () {
+      /* the durable record carries what the flush could not */
+    });
+  });
+}
+
+/* Queue the commit of one pending session record (a live
+   record a kill left standing, or an owed mint): a
+   version-history entry carrying the session baseline,
+   verified at flush against the content the session's
+   saves left behind when that content is known. Returns
+   false only when the note cannot be found at all. */
+function queueCommittedNoteSession(rec) {
+  const note = findNoteById(rec.noteId);
+  if (!note) { return false; }
+  queueVersionHistoryMaintenance(rec.noteId, notePath(note),
+    rec.baseline, rec.lastSaved || null, {
+      verifyExpected: !!rec.lastSaved,
+      forceSnapshot: true,
+      entryId: rec.entryId || null,
+      nowMs: rec.lastEditMs || Date.now()
+    });
+  return true;
+}
+
+/* The next launch's commit (syncNow calls this ahead of
+   its queue flush, and again after its load): owed mints
+   queue first, then the live records of sessions an app
+   kill left standing. A record whose note this device
+   cannot find yet is left standing until a full load has
+   run (afterFullLoad); one a live session already covers
+   is not pending at all. */
+function commitPendingNoteSessions(afterFullLoad) {
+  const data = noteSessionDurableLoad();
+  if (data.owed.length) {
+    const stillOwed = [];
+    data.owed.forEach(function (rec) {
+      if (!rec || !rec.noteId || !rec.baseline) { return; }
+      if (queueCommittedNoteSession(rec)) { return; }
+      if (!afterFullLoad) { stillOwed.push(rec); }
+    });
+    if (stillOwed.length !== data.owed.length) {
+      data.owed = stillOwed;
+      noteSessionDurableSave();
+    }
+  }
+  Object.keys(data.sessions).forEach(function (noteId) {
+    if (noteSessionByNoteId[noteId]) { return; }
+    const rec = data.sessions[noteId];
+    const note = findNoteById(noteId);
+    if (!note) {
+      if (afterFullLoad) { noteSessionUnpersist(noteId); }
+      return;
+    }
+    if (!rec || typeof rec !== "object" || !rec.dirty ||
+        rec.birth || !rec.baseline || isDocBackedNote(note) ||
+        (rec.lastSaved &&
+         versionTextContentEqual(rec.baseline, rec.lastSaved))) {
+      noteSessionUnpersist(noteId);
+      return;
+    }
+    queueCommittedNoteSession({
+      noteId: noteId,
+      baseline: rec.baseline,
+      lastSaved: rec.lastSaved || null,
+      lastEditMs: rec.lastEditMs || 0,
+      entryId: rec.entryId || null
+    });
+    noteSessionUnpersist(noteId);
+  });
+}
+
 

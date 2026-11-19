@@ -104,7 +104,7 @@
 
 "use strict";
 
-const CACHE_NAME = "snakescale-shell-2026-11-19-SSN-V21910";
+const CACHE_NAME = "snakescale-shell-2026-11-19-SSN-V21920";
 
 /* The shell, as paths relative to this worker's scope (the site
    root). "./" and "./index.html" are both listed: the first is the
@@ -152,20 +152,20 @@ const PAGE_KEY = "./index.html";
 const ASSET_HASHES = {
   "./index.html": "13c89477702fc102bdb445bfdd3c97ce8a3ab521a6974ab47499d383ee1978df",
   "./styles.css": "a9311cc13e7221ab057e36e8f6969131f41af35a344c42fa641697230762f2e8",
-  "./version.js": "2585db7e9bfabb2a0eb019d51071625805507d896580a7a74558f22f76b1f7b2",
-  "./core.js": "4591f773c8225f479b059cd26e84527ccdc55fc8c3229e6adbf179c8e5052df4",
+  "./version.js": "a067072aae14fd35cf79eafaf75a08ea5da6dca887a1e571ea7b4d4251f6b113",
+  "./core.js": "4b2067c83210de0937d784b6ecea4397cfb8f8af7347a73c8a6d4b8f05ddb9af",
   "./store.js": "f0a1861ab630ad58d17ffdef60a9b24bdee892813291ae1a88e1ad3c7aa59edc",
   "./sync.js": "0181cb3d7efa5e38d2ff3975001e55f2bf8f4948a29c757b5148c1e65b482c64",
-  "./tasks.js": "f13862efadea2cb6c0af4acfdaacf19702eeea5ddca71c29b8aff3ca81f2581e",
+  "./tasks.js": "89646dfc3194410d8d0c29300dcd39864aba094435a1112ffc8ca44a9f3ae28e",
   "./notebooks.js": "8bfe790a13d0fa111d0cedefe54ff98ace1523275555a99262cd283e396a16a1",
   "./home.js": "ffd2d0908c771ed0c57120448296be5cf52f805c6ff142df1f3313ac73306921",
   "./calendar.js": "1d8926b971eecfa2a7cfd0e285272ad26bc8ff95a88138878f3dff1c078c79b4",
   "./mail.js": "d8d6eca2cc45aa6f65cce2737d6b77b461186a81d0582f235ed9d393247d5bdd",
-  "./render.js": "c3fd0c8fefb77c6919f67c0652150d0c415533e13e1556561c70f0aa77938a33",
+  "./render.js": "d3a229e28a766601841713109506774e66e58ba8b717623964db3ccdbf7d0f70",
   "./editor.js": "c961dd13449ce4e8be3ec2ea59aa21d05dbfca8137cf2f87adb1978d1a9869d8",
   "./editor-tools.js": "b69b06cd4004c22ac8ba07c8278e477e85d42199925b6f8c7ef8beacffe7ae50",
   "./media.js": "fb7646f3852c4fb618cbc32124426fd579a80180ed8799bc705cfe768cc8c1be",
-  "./app.js": "87f9ac2f71c326a81fa0cc21a60cbccd962fb15963b05f80f893b97670673161",
+  "./app.js": "988b0780498de93aaae45e88ead0098c4e30fdadbb68bd061f6e9a25b970fc03",
   "./manifest.webmanifest": "c4bb2054518b8763407f0834ba9033f690677674c003d9f4eeb4b0286cad9a94",
   "./icon-192.png": "f3b785c13d078d71790c4330c0749324796115cb06b2215629ba6e2ebdaa35f6",
   "./icon-512.png": "0955bd92167aa1a79b2cdf541277b32c325cf665ae7b440eb6c7fa5dc995cd3d",

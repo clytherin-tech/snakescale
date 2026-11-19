@@ -4307,6 +4307,22 @@ function wireEvents() {
     }
   });
 
+  /* v2.192: the same two moments end every standing note
+     session (see the session section in core.js), so a
+     sitting's version mints as the page goes away. Best
+     effort, like the flush above: a page discarded
+     mid-mint has already persisted its sessions'
+     records, and the next launch commits them, so a
+     mint that dies with the page loses nothing. */
+  window.addEventListener("pagehide", function () {
+    endAllNoteSessions();
+  });
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState === "hidden") {
+      endAllNoteSessions();
+    }
+  });
+
   /* v2.15: returning to the tab is a renewal trigger (see
      maybeRenewGoogleOnVisible): background tabs get their
      timers throttled, so the scheduled renewal may not have
