@@ -104,7 +104,7 @@
 
 "use strict";
 
-const CACHE_NAME = "snakescale-shell-2026-11-18-SSN-V21891";
+const CACHE_NAME = "snakescale-shell-2026-11-19-SSN-V21900";
 
 /* The shell, as paths relative to this worker's scope (the site
    root). "./" and "./index.html" are both listed: the first is the
@@ -151,8 +151,8 @@ const PAGE_KEY = "./index.html";
 // BEGIN GENERATED ASSET HASHES (gen_asset_hashes.py)
 const ASSET_HASHES = {
   "./index.html": "13c89477702fc102bdb445bfdd3c97ce8a3ab521a6974ab47499d383ee1978df",
-  "./styles.css": "2358e3a1ff33c8bd5d4d6b49f684508b4726e48e1db87c0268cd5ca9d3b7a4f8",
-  "./version.js": "7b63a2c6ae4141306bd352c601550b93576494a65bf7ddde6ccb3affbb463071",
+  "./styles.css": "a9311cc13e7221ab057e36e8f6969131f41af35a344c42fa641697230762f2e8",
+  "./version.js": "db61f54f592498d228a215e1e93cff4f6302930c87db1f760b121056789ba737",
   "./core.js": "4591f773c8225f479b059cd26e84527ccdc55fc8c3229e6adbf179c8e5052df4",
   "./store.js": "f0a1861ab630ad58d17ffdef60a9b24bdee892813291ae1a88e1ad3c7aa59edc",
   "./sync.js": "0181cb3d7efa5e38d2ff3975001e55f2bf8f4948a29c757b5148c1e65b482c64",

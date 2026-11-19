@@ -6264,6 +6264,92 @@ body.dark .share-suggestions:hover::-webkit-scrollbar-thumb{
   .gate-brand .wordmark{font-size:24px;}
 }
 
+/* ---------- v2.190: the phone note view, straightened ----------
+   Chris's recording (2026-11-19) showed the note view
+   on his phone bouncing sideways as he scrolled, the
+   pay period tables running far off the right edge
+   and dragging the whole page with them, the
+   formatting bar sliding off screen, and the mobile
+   bar's pane buttons squeezed too small to hit
+   reliably. The causes stood in this sheet: the
+   editor scroller scrolls on both axes at every width
+   (the v1.7.2 word), so any content wider than the
+   phone makes the whole view pannable sideways and a
+   diagonal drag fights between the axes; a table
+   sized on the desktop carries its stored column
+   widths and overflows the phone screen, widening the
+   scroller itself; the toolbar stands inside that
+   scroller, so the sideways pan carries it away; and
+   the smallest width pass shrank the mobile bar's
+   buttons just where thumbs need them largest. This
+   block is phone widths only. Every rule above it
+   stands untouched, and the desktop keeps the two
+   axis scroller and the tables' stored widths exactly
+   as they were.
+   - The note view scrolls vertically only, and its
+     overscroll is contained, so the surrounding app
+     shell is never dragged. Wide content is handled
+     by the surfaces below, never by the page.
+   - A note table stands as its own sideways scroll
+     box: capped at the note column's width, its grid
+     first laid out at that width (a fixed table's
+     columns scale to the box, so a desktop sized
+     table tries to fit the screen), and anything
+     that still cannot fit scrolls inside the table's
+     own box, which wears the editor's themed
+     scrollbar treatment: the same thin bar, the same
+     browns and green written as hex alpha (the
+     sheet's standing color counts do not move), the
+     thumb resting transparent and fading in on hover
+     in both themes. Stored widths and note HTML are
+     never rewritten; this is display only.
+   - The formatting bar stands full width under its
+     standing sticky pin at the top of the note view,
+     proof against the sideways loss above. Its own
+     button row still scrolls inside the bar, and the
+     keyboard dock still takes it over whole when the
+     keyboard is up: the dock places the bar by inline
+     styles, which stand above this rule.
+   - The mobile bar's three pane buttons take real
+     thumb targets at every phone width: a 48px
+     floor, honest padding, and air between them. */
+@media (max-width:900px){
+  .editor-scroll{overflow-x:hidden;overscroll-behavior:contain;}
+  #noteBody table.ss-table{
+    display:block;max-width:100%;overflow-x:auto;overflow-y:hidden;
+    overscroll-behavior-x:contain;
+    scrollbar-width:thin;scrollbar-color:transparent transparent;
+    transition:scrollbar-color 250ms ease;
+  }
+  #noteBody table.ss-table:hover{
+    scrollbar-color:#8B5E348C transparent;
+  }
+  body.dark #noteBody table.ss-table:hover{
+    scrollbar-color:#8B5E34A6 transparent;
+  }
+  #noteBody table.ss-table::-webkit-scrollbar{width:10px;height:10px;}
+  #noteBody table.ss-table::-webkit-scrollbar-track{background:transparent;}
+  #noteBody table.ss-table::-webkit-scrollbar-thumb{
+    background-color:transparent;border-radius:8px;
+    border:2px solid transparent;background-clip:padding-box;
+    transition:background-color 250ms ease;
+  }
+  #noteBody table.ss-table:hover::-webkit-scrollbar-thumb{
+    background-color:#8B5E3473;
+  }
+  body.dark #noteBody table.ss-table:hover::-webkit-scrollbar-thumb{
+    background-color:#8B5E3499;
+  }
+  #noteBody table.ss-table::-webkit-scrollbar-thumb:hover{
+    background-color:#2E7D4FD9;
+  }
+  #toolbar{width:100%;}
+  #mobileBar{gap:12px;}
+  #mobileBar .btn{
+    min-height:48px;padding:11px 16px;
+  }
+}
+
 /* ---------- v2.124: the white note page, and Google
    Docs type for Doc-backed notes ----------
    Chris's call (2026-11-10): the open note's document
