@@ -5869,6 +5869,45 @@ function docExportHtmlToBody(exportHtml, listKinds,
    afresh, once; its replacement carries the hash. */
 const docAdoptedImageCache = {};
 
+/* v2.191: the same session reuse, keyed by the
+   attachment id an image's alt text carries (see
+   docAltAttachmentId below): a record landed under
+   an id the Doc itself names is reused for every
+   later token of that image in the session, so one
+   image can never mint two records under one id. */
+const docAdoptedImageById = {};
+
+/* v2.191: an image's identity inside the Doc itself.
+   docBuildUploadHtml writes an inlined image's alt
+   as the record's name plus a trailing suffix,
+   " (ss-<id>)", naming the record the image was
+   saved from; Google's import keeps the alt (the
+   app has always read its adoption names back from
+   it), so a later load can claim that record by
+   identity before it ever judges bytes. The suffix
+   is furniture: it is stripped wherever the alt is
+   read as a name, so the name a reader sees never
+   changes. A Doc saved before this build carries
+   no suffix; its images claim by hash as they
+   always have, and gain the suffix on the first
+   save that crosses them with a record standing. */
+function docAltAttachmentId(alt) {
+  const m = String(alt || "")
+    .match(/\(ss-([A-Za-z0-9_-]+)\)\s*$/);
+  return m ? m[1] : null;
+}
+function docAltLabel(alt) {
+  return String(alt || "")
+    .replace(/\s*\(ss-[A-Za-z0-9_-]+\)\s*$/, "")
+    .trim();
+}
+function docImageAltForRecord(record) {
+  const name = String(
+    (record && record.name) || "image");
+  return record && record.id
+    ? name + " (ss-" + record.id + ")" : name;
+}
+
 function docDataUriHash(text) {
   let h1 = 0x811c9dc5;
   for (let i = 0; i < text.length; i++) {
@@ -5913,10 +5952,17 @@ function docDataUriByteLength(parts) {
    order stays the body's order no matter which
    adoption settles first); without one it lands
    on the note as it always did. */
-async function docAdoptOneImage(note, img, sink, reusePool) {
+async function docAdoptOneImage(note, img, sink, reusePool,
+    priorId) {
   const bag = sink || note.attachments;
   const src = String((img && img.src) || "");
-  const label = String((img && img.alt) || "").trim();
+  /* v2.191: the alt may carry the saver's record id
+     (see docAltAttachmentId above); the label a
+     reader sees is the alt with that suffix
+     stripped, exactly the name the image always
+     carried. */
+  const altId = docAltAttachmentId(img && img.alt);
+  const label = docAltLabel(img && img.alt);
   const fallback = "[Image: " + (label || "in the Doc") + "]";
   /* v2.125: the display width the image carried in the
      Doc rides onto the adopted figure, in the figure
@@ -5928,6 +5974,40 @@ async function docAdoptOneImage(note, img, sink, reusePool) {
       parts.mime.indexOf("image/") === 0) {
     const hash = docDataUriHash(src);
     const cacheKey = note.id + "|" + hash;
+    const wantSize = docDataUriByteLength(parts);
+    const figureFor = function (rec) {
+      return "<figure class=\"ss-attachment\"" +
+        " data-attachment-id=\"" + rec.id + "\"" +
+        widthStyle +
+        " contenteditable=\"false\"></figure>";
+    };
+    /* v2.191: claim by identity first. When the
+       image's alt names the record it was saved
+       from and that record stands in the reuse
+       pool, the record is claimed on the name
+       alone: identity no longer depends on the
+       served bytes hashing to the bytes the
+       record was minted from, so byte drift in
+       the round trip, and a record minted before
+       hashes existed (which the hash claim below
+       can never take), stop costing a fresh
+       upload. The claim is synchronous and one
+       to one, like the hash claim it precedes. */
+    if (altId && reusePool && reusePool.length) {
+      for (let ri = 0; ri < reusePool.length; ri++) {
+        const rec = reusePool[ri];
+        if (rec && rec.id === altId &&
+            String(rec.mime || "")
+              .indexOf("image/") === 0) {
+          reusePool.splice(ri, 1);
+          docAdoptedImageCache[cacheKey] = rec;
+          docAdoptedImageById[note.id + "|" +
+            altId] = rec;
+          bag.push(rec);
+          return figureFor(rec);
+        }
+      }
+    }
     /* v2.168: refill reuse (see the section comment
        above docAdoptedImageCache). A record in the
        reuse pool whose payload hash, mime, and
@@ -5944,9 +6024,9 @@ async function docAdoptOneImage(note, img, sink, reusePool) {
        name hashes differently and falls through to
        the fresh adoption below; a record minted
        before hashes existed carries none and is
-       never claimed. */
+       never claimed by this claim (the identity
+       claim above is its road back). */
     if (reusePool && reusePool.length) {
-      const wantSize = docDataUriByteLength(parts);
       for (let ri = 0; ri < reusePool.length; ri++) {
         const rec = reusePool[ri];
         if (rec && rec.imgHash === hash &&
@@ -5954,33 +6034,74 @@ async function docAdoptOneImage(note, img, sink, reusePool) {
             Number(rec.size) === wantSize) {
           reusePool.splice(ri, 1);
           docAdoptedImageCache[cacheKey] = rec;
+          if (altId && rec.id === altId) {
+            docAdoptedImageById[note.id + "|" +
+              altId] = rec;
+          }
           bag.push(rec);
-          return "<figure class=\"ss-attachment\"" +
-            " data-attachment-id=\"" + rec.id + "\"" +
-            widthStyle +
-            " contenteditable=\"false\"></figure>";
+          return figureFor(rec);
         }
       }
     }
     const cached = docAdoptedImageCache[cacheKey];
     if (cached) {
       bag.push(cached);
-      return "<figure class=\"ss-attachment\"" +
-        " data-attachment-id=\"" + cached.id + "\"" +
-        widthStyle +
-        " contenteditable=\"false\"></figure>";
+      return figureFor(cached);
+    }
+    /* v2.191: a second token of an image whose
+       record already landed this session under
+       the id its alt names (a duplicate the pool
+       claim could take only once) reuses that
+       record instead of minting a twin under the
+       same id. */
+    if (altId) {
+      const landed = docAdoptedImageById[
+        note.id + "|" + altId];
+      if (landed) {
+        bag.push(landed);
+        return figureFor(landed);
+      }
+    }
+    /* v2.191: identity continuity. The fresh
+       adoption below replaces an image a standing
+       record plausibly represents when the figure
+       that stood at this image's place in the
+       body being replaced (priorId, passed by
+       docAdoptImages) names a pool record of the
+       same mime and decoded size: the replacement
+       is minted under that record's id (decided
+       here, synchronously, and the old record
+       leaves the pool), so figures anywhere, in
+       the editor, in a merge's base, in a
+       candidate snapshot, keep pointing at an id
+       the note still holds. A failed adoption
+       restores the record to the pool (see the
+       catch below), so preservation still sees
+       it. */
+    let heir = null;
+    if (priorId && reusePool && reusePool.length) {
+      for (let ri = 0; ri < reusePool.length; ri++) {
+        const rec = reusePool[ri];
+        if (rec && rec.id === priorId &&
+            rec.mime === parts.mime &&
+            Number(rec.size) === wantSize) {
+          heir = rec;
+          reusePool.splice(ri, 1);
+          break;
+        }
+      }
     }
     try {
       const bytes = decodeDropboxBase64(parts.data);
       if (!bytes || !bytes.length ||
           bytes.length > DROPBOX_ATT_MAX_BYTES) {
-        return fallback;
+        throw new Error("unreadable image payload");
       }
       const attachCfg = state.attach || {};
       const svc = attachCfg.defaultProvider || "google";
       const driver = providers[svc];
       if (!driver || typeof driver.upload !== "function") {
-        return fallback;
+        throw new Error("no attachment provider");
       }
       const ext = parts.mime === "image/png" ? ".png"
         : parts.mime === "image/gif" ? ".gif"
@@ -5988,9 +6109,25 @@ async function docAdoptOneImage(note, img, sink, reusePool) {
         : parts.mime === "image/webp" ? ".webp"
         : ".jpg";
       const attId = newNoteId() + "a";
+      /* v2.191: the id the replacement record is
+         minted under: the heir's id when identity
+         continuity claimed one (see above), else
+         the id the image's own alt names when no
+         record has landed under it this session
+         (the record itself is gone, a cross
+         session loss, and minting under its name
+         heals every figure that points at it),
+         else the fresh id. */
+      let effId = attId;
+      if (heir) { effId = heir.id; }
+      else if (altId &&
+          !docAdoptedImageById[note.id + "|" +
+            altId]) {
+        effId = altId;
+      }
       const name = (label || "image") +
         (label.toLowerCase().endsWith(ext) ? "" : ext);
-      const storageName = attId + "__" +
+      const storageName = effId + "__" +
         sanitizeFileName(name);
       const file = new File([bytes], name,
         { type: parts.mime });
@@ -6009,21 +6146,29 @@ async function docAdoptOneImage(note, img, sink, reusePool) {
           function () {}),
         docImageUploadTimeoutMs,
         "Uploading one of this note's images");
-      if (!uploaded || !uploaded.fileId) { return fallback; }
+      if (!uploaded || !uploaded.fileId) {
+        throw new Error("image upload refused");
+      }
       const record = {
-        id: attId, provider: svc, fileId: uploaded.fileId,
+        id: effId, provider: svc, fileId: uploaded.fileId,
         name: name, storageName: storageName,
         mime: parts.mime, size: bytes.length,
         imgHash: hash,
         created: new Date().toISOString()
       };
       docAdoptedImageCache[cacheKey] = record;
+      docAdoptedImageById[note.id + "|" +
+        record.id] = record;
       bag.push(record);
-      return "<figure class=\"ss-attachment\"" +
-        " data-attachment-id=\"" + attId + "\"" +
-        widthStyle +
-        " contenteditable=\"false\"></figure>";
+      return figureFor(record);
     } catch (e) {
+      /* v2.191: a failed adoption hands its heir
+         back to the pool, so the preservation at
+         this pass's exits still sees the record
+         the continuity claim stood aside. */
+      if (heir && reusePool) {
+        reusePool.push(heir);
+      }
       return fallback;
     }
   }
@@ -6158,6 +6303,26 @@ async function docAdoptImages(note, converted) {
      yet, and they are preserved at this build's exits
      instead of being ruled away by the reset. */
   const standingFigs = docStandingAttachmentFigures(note);
+  /* v2.191: the figures the body being replaced
+     already holds, in order, external figures
+     holding a null slot (see the identity
+     continuity in docAdoptOneImage): the image
+     token at an index inherits the id that stood
+     at that index when its mime and decoded size
+     say it is the same image. Read before the
+     reset below, from the same standing body
+     docStandingAttachmentFigures reads. */
+  const priorFigIds = [];
+  if (note.body) {
+    const priorHolder = document.createElement("div");
+    priorHolder.innerHTML = note.body;
+    priorHolder.querySelectorAll(
+      "figure.ss-attachment, div.ss-attachment")
+      .forEach(function (el) {
+        priorFigIds.push(
+          el.getAttribute("data-attachment-id") || null);
+      });
+  }
   note.attachments = [];
   if (!converted.images.length) {
     const heldHolder = document.createElement("div");
@@ -6201,7 +6366,8 @@ async function docAdoptImages(note, converted) {
       const idx = Number(token.getAttribute("data-doc-img"));
       bags[i] = [];
       swaps[i] = await docAdoptOneImage(note,
-        converted.images[idx], bags[i], reusePool);
+        converted.images[idx], bags[i], reusePool,
+        priorFigIds[idx]);
     }
   };
   const pool = [];
@@ -6756,10 +6922,47 @@ function docMergeParseBlocks(body) {
     const item = !!list;
     const checklist = item && list.tagName === "UL" &&
       list.classList.contains("ss-checklist");
+    let key = docMergeNormalizeText(checklist
+      ? docTickItemText(el) : el.textContent);
+    /* v2.191: a block whose only element content
+       is one attachment figure (the shape a Doc
+       image stands in: a paragraph, an item, or
+       the figure itself, holding nothing else but
+       perhaps a checklist box) keys on the
+       figure's attachment id instead of its empty
+       text, so the two sides' copies of one image
+       align as the one block they are. Before
+       this, every figure keyed as "" and figures
+       aligned positionally among the textless
+       blocks, never by identity: a merge could
+       keep both sides' figures for one image and
+       leave one of them recordless. A block with
+       words keeps its word key, figure or not. */
+    if (!key) {
+      const figs = [];
+      if (el.classList &&
+          el.classList.contains("ss-attachment") &&
+          el.getAttribute("data-attachment-id")) {
+        figs.push(el);
+      }
+      el.querySelectorAll(
+        "figure.ss-attachment[data-attachment-id]," +
+        " div.ss-attachment[data-attachment-id]")
+        .forEach(function (f) { figs.push(f); });
+      const others = Array.prototype.filter.call(
+        el.children, function (c) {
+          return c.tagName !== "INPUT" &&
+            figs.indexOf(c) < 0;
+        });
+      if (figs.length === 1 &&
+          (figs[0] === el || !others.length)) {
+        key = "ssfig:" +
+          figs[0].getAttribute("data-attachment-id");
+      }
+    }
     blocks.push({
       html: el.outerHTML,
-      key: docMergeNormalizeText(checklist
-        ? docTickItemText(el) : el.textContent),
+      key: key,
       tick: checklist ? docTickItemChecked(el) : null,
       item: item,
       sig: item ? (list.tagName + "|" +
@@ -8088,8 +8291,29 @@ async function docBuildUploadHtml(note) {
     const record = (note.attachments || []).find(
       function (a) { return a && a.id === attId; });
     if (!record) {
-      el.outerHTML = "[Image]";
-      continue;
+      /* v2.191: fail closed. This branch used to
+         write the bare text "[Image]" for the
+         figure, which the next load then read as
+         the note's own words: the image was gone
+         from both copies at once, though its file
+         stood in Drive all along (the 2026-11-19
+         investigation). A save that cannot cross
+         an attachment now stops and writes
+         nothing, the way the save-time probe's
+         refusal already stops it: the figure, its
+         record, and the editor's words are exactly
+         where they were, and the next save
+         retries. This is also the merged save's
+         backstop: docBuildUploadHtml runs on the
+         merged body before any upload, so a merged
+         figure with no standing record stops that
+         save here instead of crossing as text. */
+      throw docHttpError(0,
+        "An attachment in this note could not be" +
+        " matched to its stored file, so the save" +
+        " was stopped rather than write the note" +
+        " without it. Nothing was changed; your" +
+        " words are still in the editor.");
     }
     const driver = providers[record.provider || "google"];
     if (String(record.mime || "")
@@ -8108,9 +8332,13 @@ async function docBuildUploadHtml(note) {
           docImageDownloadTimeoutMs,
           "Downloading one of this note's images");
         const uri = await blobToDataUri(blob);
+        /* v2.191: the alt carries the record's id
+           (see docImageAltForRecord): the name a
+           reader sees is unchanged, and the id is
+           what a later load claims the record by. */
         el.outerHTML = "<img src=\"" + uri + "\" alt=\"" +
-          escapeHtml(record.name || "image") + "\"" +
-          widthStyle + ">";
+          escapeHtml(docImageAltForRecord(record)) +
+          "\"" + widthStyle + ">";
         continue;
       } catch (e) { /* the Drive link crosses instead */ }
     }
@@ -13828,10 +14056,18 @@ async function handleIncomingFiles(fileList, opts) {
    without that image, and any body build that landed
    before the next save (a reopen, a refill) then made
    the loss permanent in both copies. The wait is
-   bounded by ATTACH_SAVE_WAIT_MS: a genuinely stuck
-   upload lets the save proceed as it always has
-   rather than wedging every later save behind it. */
+   bounded by ATTACH_SAVE_WAIT_MS as its first
+   phase. v2.191: a save no longer proceeds past
+   uploads still registered when that bound
+   expires (and docBuildUploadHtml no longer
+   writes the text at all: it fails the save
+   closed). The wait extends to
+   ATTACH_SAVE_WAIT_MAX_MS, the uploads' own
+   transport bound, and a save whose uploads are
+   still standing after it fails closed with
+   nothing written. */
 const ATTACH_SAVE_WAIT_MS = 15000;
+const ATTACH_SAVE_WAIT_MAX_MS = 120000;
 const attachmentUploadsInFlight = new Map();
 function beginAttachmentUpload(note) {
   if (!note || !note.id) { return function () {}; }
@@ -13861,6 +14097,27 @@ async function awaitNoteAttachmentUploads(note) {
     await new Promise(function (resolve) {
       setTimeout(resolve, 50);
     });
+  }
+  /* v2.191: uploads still registered when the
+     bounded wait expires are waited out to their
+     own transport bound, never proceeded past
+     (see the registry comment above). */
+  const hardDeadline = Date.now() +
+    (ATTACH_SAVE_WAIT_MAX_MS - ATTACH_SAVE_WAIT_MS);
+  while (Date.now() < hardDeadline) {
+    const set = attachmentUploadsInFlight.get(note.id);
+    if (!set || !set.size) { return; }
+    await new Promise(function (resolve) {
+      setTimeout(resolve, 50);
+    });
+  }
+  const left = attachmentUploadsInFlight.get(note.id);
+  if (left && left.size) {
+    throw docHttpError(0,
+      "An image in this note is still uploading," +
+      " so the save was stopped rather than write" +
+      " the note without it. Nothing was changed;" +
+      " try saving again in a moment.");
   }
 }
 
