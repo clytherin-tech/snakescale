@@ -16,523 +16,40 @@
 
 
 /* ==========================================================================
-   v2.91.0: the note editor's own right click menu.
+   v2.197: the editor's custom right click menu is
+   removed (Chris's ruling, 2026-11-19: "remove the
+   custom r/c menu put back the browser menu. That
+   will make it easier."). The v2.91 menu, its
+   Format flyout (v2.167), and its Numbering style
+   submenu (v2.101) stood here through v2.196;
+   right clicking in the note editor now reaches
+   the browser's own menu untouched, which is also
+   how spell suggestions come back (the body's
+   spellcheck stays pinned on by the markup). The
+   document guard in render.js already kept the
+   native menu inside editable regions; with the
+   editor's own listener gone, that carve-out is
+   the whole story for the body. A locked note
+   keeps the standing no-menu rule, and task rows
+   inside the body keep theirs: the guard answers
+   both, exactly as before. Every other custom
+   menu in the app (the note list's, the
+   attachment menus, the mail list's) is untouched,
+   and the press-origin guard is untouched with
+   them.
 
-   Chris's direction on 2026-11-02 supersedes the
-   editor half of the v2.81.0 context menu exception:
-   the note body no longer keeps the browser's menu.
-   A right click inside the note body editor opens
-   this app menu instead (Cut, Copy, Paste, a
-   separator, then Encrypt selected text and an
-   Unlock or Lock item that follows the vault),
-   through the same fixed panel machinery and theming
-   as the app's other floating menus. Text fields and
-   inputs elsewhere keep the browser menu exactly as
-   today: this section listens on the note body
-   alone, the document level guard still leaves every
-   surface it always left, and the task description
-   editor is untouched.
-
-   Per Chris's amendment the same day, the menu has
-   NO spell check item: spell checking in the note
-   editor is pinned always on. The note body carries
-   spellcheck="true" in its markup, the wiring below
-   sets it again, and no app path turns it off. (The
-   search before this build found no per device or
-   default path that could leave the editor's
-   spellcheck off: the attribute simply was never
-   set, so a browser was free to default it either
-   way. It is now pinned in the markup itself.)
-
-   The menu never eats the selection it acts on: its
-   mousedown is swallowed so focus and the live
-   selection stay in the editor, and every action
-   first restores the saved format selection, the
-   same pattern the toolbar uses. A right click
-   inside an existing selection keeps it (a browser
-   does not collapse a selection for a right click
-   inside it); a right click elsewhere has already
-   placed the caret there before this handler runs,
-   as the browser would. The Menu key and Shift+F10
-   open the same menu at the caret. The menu closes
-   on an outside press and on Escape, and clamps to
-   the viewport like the app's other fixed menus.
+   One function is stranded by the removal, named
+   here so it is a decision and not a loss: the
+   Numbering style chooser was the only UI that
+   set a numbered list's ss-num-* class. The
+   classes themselves still render (the editor
+   and print stylesheets keep their rules), still
+   survive the save funnel and the Doc round trip,
+   and still fall back to the stylesheet's depth
+   defaults; no UI remains that changes a standing
+   choice.
    ========================================================================== */
 
-function editorCtxMenuEl() {
-  return document.getElementById("editorCtxMenu");
-}
-
-function closeEditorCtxMenu() {
-  const menu = editorCtxMenuEl();
-  if (menu) {
-    menu.classList.add("hidden");
-    /* v2.166: a height cap (see placeEditorCtxMenu)
-       never outlives the stand that needed it. */
-    menu.style.maxHeight = "";
-    menu.style.overflowY = "";
-  }
-}
-
-/* v2.167: the Format flyout's placement judge, the
-   notebook menu's placeNbSubmenu math carried to the
-   editor menu: the panel stands at its item's right
-   edge, flips to the item's left when the window's
-   right side has no room, and clamps inside the
-   window on both axes with an 8px margin. */
-function placeEditorCtxSubmenu(panel, anchor) {
-  const r = anchor.getBoundingClientRect();
-  const pw = panel.offsetWidth || 180;
-  const ph = panel.offsetHeight || 0;
-  let left = r.right + 4;
-  if (left + pw > window.innerWidth - 8) {
-    left = r.left - pw - 4;
-  }
-  if (left < 8) { left = 8; }
-  let top = r.top - 6;
-  if (top + ph > window.innerHeight - 8) {
-    top = window.innerHeight - ph - 8;
-  }
-  if (top < 8) { top = 8; }
-  panel.style.left = left + "px";
-  panel.style.top = top + "px";
-}
-
-/* v2.167: the Format item's toggle. Opening the
-   flyout closes the Numbering submenu (the sibling
-   courtesy the menu has always kept), reads the
-   standing selection's format state the way the
-   menu open always has (v2.109.0) and marks the
-   rows that carry it, then places the panel beside
-   its item. Clear Formatting carries no state and
-   is never marked. */
-function toggleEditorCtxFormatMenu() {
-  const menu = editorCtxMenuEl();
-  if (!menu) { return; }
-  const fmtMenu = menu.querySelector(
-    "#editorCtxFormatMenu");
-  const anchor = menu.querySelector(
-    '[data-ctx-action="format"]');
-  if (!fmtMenu || !anchor) { return; }
-  const numMenu = menu.querySelector(
-    "#editorCtxNumMenu");
-  if (numMenu) { numMenu.classList.add("hidden"); }
-  const opening = fmtMenu.classList.contains("hidden");
-  fmtMenu.classList.toggle("hidden", !opening);
-  if (!opening) { return; }
-  const fmtStates = { bold: "bold",
-    italic: "italic", underline: "underline",
-    strike: "strikeThrough" };
-  fmtMenu.querySelectorAll("[data-format-cmd]")
-    .forEach(function (btn) {
-      const stateCmd = fmtStates[
-        btn.getAttribute("data-format-cmd")];
-      let on = false;
-      if (stateCmd) {
-        try {
-          on = !!document.queryCommandState(stateCmd);
-        } catch (e) { on = false; }
-      }
-      btn.classList.toggle("current", on);
-    });
-  placeEditorCtxSubmenu(fmtMenu, anchor);
-}
-
-function editorCtxMenuIsOpen() {
-  const menu = editorCtxMenuEl();
-  return !!menu && !menu.classList.contains("hidden");
-}
-
-/* The note body's current selection, for item
-   states: a non collapsed range inside the body. */
-function editorCtxSelectionInBody() {
-  const bodyEl = document.getElementById("noteBody");
-  const sel = window.getSelection();
-  if (!sel || !sel.rangeCount || !bodyEl) { return null; }
-  const range = sel.getRangeAt(0);
-  if (range.collapsed ||
-      !bodyEl.contains(range.commonAncestorContainer)) {
-    return null;
-  }
-  return range;
-}
-
-/* Fill the item states for the note as it stands,
-   then show the menu at (x, y), clamped to the
-   viewport like the app's other fixed menus. */
-function openEditorCtxMenu(x, y) {
-  const bodyEl = document.getElementById("noteBody");
-  const menu = editorCtxMenuEl();
-  if (!bodyEl || !menu) { return; }
-  const hasSel = !!editorCtxSelectionInBody();
-  const setDisabled = function (action, disabled) {
-    const btn = menu.querySelector(
-      "[data-ctx-action=\"" + action + "\"]");
-    if (btn) { btn.disabled = disabled; }
-  };
-  setDisabled("cut", !hasSel);
-  setDisabled("copy", !hasSel);
-  /* v2.101.0: the Numbering style item stands only
-     while the caret is in a numbered list; its
-     submenu starts closed on every open, and the
-     item for the level's current style (its chosen
-     class, or the depth default) carries the
-     current mark. */
-  const numBtn = menu.querySelector(
-    "[data-ctx-action=\"numstyle\"]");
-  const numMenu = menu.querySelector("#editorCtxNumMenu");
-  const ctxOl = numberedListAtCaret();
-  if (numBtn) {
-    numBtn.classList.toggle("hidden", !ctxOl);
-  }
-  if (numMenu) {
-    numMenu.classList.add("hidden");
-    if (ctxOl) {
-      const current = numberingStyleOf(ctxOl);
-      numMenu.querySelectorAll("[data-num-style]")
-        .forEach(function (btn) {
-          btn.classList.toggle("current",
-            btn.getAttribute("data-num-style") === current);
-        });
-    }
-  }
-  /* v2.109.0: the Format submenu starts closed on
-     every open. v2.167: its rows' current marks are
-     read when the flyout itself opens (see
-     toggleEditorCtxFormatMenu below), the moment
-     the selection the marks describe stands in
-     front of the reader. */
-  const fmtMenu = menu.querySelector(
-    "#editorCtxFormatMenu");
-  if (fmtMenu) {
-    fmtMenu.classList.add("hidden");
-  }
-  menu.classList.remove("hidden");
-  placeEditorCtxMenu(menu, x, y);
-}
-
-/* v2.166: the editor menu's placement, one judge for
-   the open and for every later change of the menu's
-   size. Through v2.165 the clamp below ran once, at
-   open, against the height the menu wore with both
-   submenus closed; the Format and Numbering submenus
-   then opened IN PLACE under their parent items,
-   growing the menu downward with nothing re-judging
-   its position, so a menu opened near the bottom of
-   the window grew off the bottom and its lower rows
-   could not be reached (Chris's checklist item: "The
-   R/C Context menu in a note goes off the bottom of
-   the screen if I am close to the bottom in a
-   note"). The open keeps its exact standing math
-   (the click point, clamped into the viewport with
-   an 8px margin on both axes); what is new is that
-   the same clamp runs again whenever a submenu opens
-   or closes, against the menu's size as it then
-   stands, and that a menu taller than the window
-   itself is pinned to the top and capped at the
-   window's height with its own scroll, so every row
-   stays reachable in any window. */
-function placeEditorCtxMenu(menu, x, y) {
-  /* A cap left by an earlier, taller stand is cleared
-     before measuring, so the size read is the menu's
-     own. */
-  menu.style.maxHeight = "";
-  menu.style.overflowY = "";
-  const width = menu.offsetWidth || 200;
-  const height = menu.offsetHeight || 170;
-  const left = Math.max(8, Math.min(x,
-    window.innerWidth - width - 8));
-  let top = Math.max(8, Math.min(y,
-    window.innerHeight - height - 8));
-  if (height > window.innerHeight - 16) {
-    top = 8;
-    menu.style.maxHeight =
-      (window.innerHeight - 16) + "px";
-    menu.style.overflowY = "auto";
-  }
-  menu.style.left = left + "px";
-  menu.style.top = top + "px";
-}
-
-/* Re-judge the open menu's placement after an in place
-   submenu opens or closes: the menu keeps its standing
-   corner and is clamped again at its new size, so
-   growth near the bottom pulls it up the window
-   instead of off it. */
-function reclampEditorCtxMenu() {
-  const menu = editorCtxMenuEl();
-  if (!menu || menu.classList.contains("hidden")) {
-    return;
-  }
-  const left = parseFloat(menu.style.left) || 16;
-  const top = parseFloat(menu.style.top) || 16;
-  placeEditorCtxMenu(menu, left, top);
-}
-
-/* Copy (cut false) or cut (cut true) the current
-   selection: the async Clipboard API with rich HTML
-   first, plain text second, and the built in copy or
-   cut command on the still standing live selection
-   as the fallback, the chain the app's menus use. */
-async function editorCtxCopyOrCut(cut) {
-  restoreFormatSelection();
-  const bodyEl = document.getElementById("noteBody");
-  const range = editorCtxSelectionInBody();
-  if (!range || !bodyEl) { return; }
-  const holder = document.createElement("div");
-  holder.appendChild(range.cloneContents());
-  const html = holder.innerHTML;
-  const plain = range.toString();
-  let wrote = false;
-  try {
-    if (navigator.clipboard && navigator.clipboard.write &&
-        typeof ClipboardItem !== "undefined") {
-      await navigator.clipboard.write([new ClipboardItem({
-        "text/html": new Blob([html],
-          { type: "text/html" }),
-        "text/plain": new Blob([plain],
-          { type: "text/plain" })
-      })]);
-      wrote = true;
-    }
-  } catch (err) { wrote = false; }
-  if (!wrote) {
-    try {
-      if (navigator.clipboard &&
-          navigator.clipboard.writeText) {
-        await navigator.clipboard.writeText(plain);
-        wrote = true;
-      }
-    } catch (err) { wrote = false; }
-  }
-  if (!wrote) {
-    try {
-      wrote = document.execCommand(cut ? "cut" : "copy");
-    } catch (err) { wrote = false; }
-  }
-  if (!wrote) {
-    toast((cut ? "Cut" : "Copy") +
-      " did not work in this browser.", true);
-    return;
-  }
-  if (cut) {
-    range.deleteContents();
-    bodyEl.focus();
-    markDirty();
-  }
-}
-
-/* Paste at the caret from the clipboard, through the
-   same insertion rules as the paste event (the app's
-   paste modes, the code block rule included). A
-   browser that refuses the read by permission gets a
-   plain toast pointing at the keyboard, never a
-   silent failure. */
-async function editorCtxPaste() {
-  restoreFormatSelection();
-  const bodyEl = document.getElementById("noteBody");
-  if (!bodyEl) { return; }
-  let html = "";
-  let plain = "";
-  let read = false;
-  try {
-    if (navigator.clipboard && navigator.clipboard.read) {
-      const items = await navigator.clipboard.read();
-      for (let i = 0; i < items.length; i++) {
-        const item = items[i];
-        if (!html &&
-            item.types.indexOf("text/html") >= 0) {
-          html = await (await item.getType(
-            "text/html")).text();
-        }
-        if (!plain &&
-            item.types.indexOf("text/plain") >= 0) {
-          plain = await (await item.getType(
-            "text/plain")).text();
-        }
-      }
-      read = true;
-    } else if (navigator.clipboard &&
-               navigator.clipboard.readText) {
-      plain = await navigator.clipboard.readText();
-      read = true;
-    }
-  } catch (err) { read = false; }
-  if (!read) {
-    toast("The browser would not hand over the " +
-      "clipboard. Paste from the keyboard instead: " +
-      "Ctrl+V, or Cmd+V on a Mac.", true);
-    return;
-  }
-  if (!html && !plain) { return; }
-  bodyEl.focus();
-  const codePre = codeBlockAtSelection();
-  if (codePre && plain) {
-    if (insertPlainTextIntoCode(codePre, plain)) {
-      markDirty();
-      return;
-    }
-  }
-  const insertHtml = html
-    ? renderPasteForMode(
-        ["source", "merge", "text"].indexOf(
-          state.defaultPasteMode) >= 0
-          ? state.defaultPasteMode : "source",
-        html, plain)
-    : null;
-  let inserted = false;
-  try {
-    if (typeof document.execCommand === "function") {
-      inserted = insertHtml !== null
-        ? document.execCommand("insertHTML", false,
-            insertHtml)
-        : document.execCommand("insertText", false,
-            plain);
-    }
-  } catch (err) { inserted = false; }
-  if (!inserted) {
-    /* The built in insertion is unavailable or refused:
-       insert at the live range by hand, the same nodes
-       the command would have placed. */
-    const sel = window.getSelection();
-    if (sel && sel.rangeCount) {
-      const range = sel.getRangeAt(0);
-      range.deleteContents();
-      let lastNode = null;
-      if (insertHtml !== null) {
-        const holder = document.createElement("div");
-        holder.innerHTML = insertHtml;
-        const frag = document.createDocumentFragment();
-        while (holder.firstChild) {
-          lastNode = holder.firstChild;
-          frag.appendChild(holder.firstChild);
-        }
-        range.insertNode(frag);
-      } else {
-        lastNode = document.createTextNode(plain);
-        range.insertNode(lastNode);
-      }
-      if (lastNode) {
-        const after = document.createRange();
-        after.setStartAfter(lastNode);
-        after.collapse(true);
-        sel.removeAllRanges();
-        sel.addRange(after);
-      }
-      inserted = true;
-    }
-  }
-  if (inserted) {
-    markDirty();
-    /* v2.116: the editor menu's Paste is a paste too:
-       the landed content gets the same decoration the
-       keyboard paste handler now runs, so a chip
-       brought in through the menu matches one brought
-       in with Ctrl+V. */
-    decorateLinkTooltips(bodyEl);
-    decorateLinkViews(bodyEl);
-    decorateTaskLinks(bodyEl);
-    /* v2.117: the menu Paste is a paste too (see
-       the paste handler's note): its done items
-       take their own content wrap in the same
-       pass. */
-    decorateDoneItems(bodyEl);
-  }
-}
-
-/* Run one menu item. Encrypt is the identical flow to
-   the toolbar More menu's item (the same function);
-   the vault item runs exactly the unlock and lock
-   actions the Settings row runs. */
-function runEditorCtxAction(action) {
-  closeEditorCtxMenu();
-  if (action === "cut") {
-    void editorCtxCopyOrCut(true);
-    return;
-  }
-  if (action === "copy") {
-    void editorCtxCopyOrCut(false);
-    return;
-  }
-  if (action === "paste") {
-    void editorCtxPaste();
-    return;
-  }
-}
-
-/* v2.101.0: the Numbering style submenu's machinery.
-   The styles, in menu order: a key is both the
-   list-style-type value it names and the tail of the
-   class that carries the choice on the ol
-   (ss-num-<key>), the form the save funnel keeps and
-   the editor and print stylesheets read. */
-const NUM_STYLE_KEYS = ["decimal", "upper-alpha",
-  "lower-alpha", "upper-roman", "lower-roman"];
-
-/* The numbered list level the caret is in: the ol
-   that directly holds the caret's item, or null.
-   Only the caret's own level is ever restyled; a
-   nested level is its own list, with its own style
-   and its own defaults. */
-function numberedListAtCaret() {
-  const bodyEl = document.getElementById("noteBody");
-  const sel = window.getSelection();
-  if (!bodyEl || !sel || !sel.rangeCount) { return null; }
-  const range = sel.getRangeAt(0);
-  if (!bodyEl.contains(range.startContainer)) {
-    return null;
-  }
-  let node = range.startContainer;
-  if (node.nodeType !== 1) { node = node.parentNode; }
-  const li = node && node.closest ? node.closest("li") : null;
-  if (!li || !bodyEl.contains(li)) { return null; }
-  const list = li.parentElement;
-  return list && list.tagName === "OL" ? list : null;
-}
-
-/* A level's current style: its chosen class when it
-   carries one, otherwise the depth default the
-   stylesheet applies (numbers, lowercase letters,
-   lowercase Roman numerals, cycling every three
-   levels, counted through whatever lists the level
-   is nested in). */
-function numberingStyleOf(ol) {
-  for (let i = 0; i < NUM_STYLE_KEYS.length; i++) {
-    if (ol.classList.contains("ss-num-" + NUM_STYLE_KEYS[i])) {
-      return NUM_STYLE_KEYS[i];
-    }
-  }
-  const bodyEl = document.getElementById("noteBody");
-  let depth = 1;
-  let n = ol.parentElement;
-  while (n && n !== bodyEl) {
-    if (n.tagName === "UL" || n.tagName === "OL") {
-      depth++;
-    }
-    n = n.parentElement;
-  }
-  return ["decimal", "lower-alpha", "lower-roman"][
-    (depth - 1) % 3];
-}
-
-/* Apply one style to the caret's numbered level:
-   exactly one ss-num-* class on that ol, the choice
-   the save funnel keeps and a reopen renders back.
-   The list's other levels keep their own styles and
-   defaults. */
-function applyNumberingStyle(key) {
-  closeEditorCtxMenu();
-  restoreFormatSelection();
-  const ol = numberedListAtCaret();
-  if (!ol || NUM_STYLE_KEYS.indexOf(key) === -1) {
-    return;
-  }
-  NUM_STYLE_KEYS.forEach(function (k) {
-    ol.classList.remove("ss-num-" + k);
-  });
-  ol.classList.add("ss-num-" + key);
-  markDirty();
-}
 
 /* v2.109.0: the floating Back to top button (Chris's
    checklist item). It stands only while the editor is
@@ -562,128 +79,6 @@ function wireEditorUpButton() {
     scroller.scrollTo({ top: 0, behavior: "smooth" });
   });
   update();
-}
-
-function wireEditorCtxMenu() {
-  const bodyEl = document.getElementById("noteBody");
-  const menu = editorCtxMenuEl();
-  if (!bodyEl || !menu) { return; }
-  /* The menu takes the mention popups' move: directly
-     under the document body, so no editor ancestor's
-     stacking or parked hidden state can clip or bury
-     it. appendChild moves the element with its
-     listeners intact. */
-  if (menu.parentElement !== document.body) {
-    document.body.appendChild(menu);
-  }
-  /* Spell check is pinned on for the note editor (see
-     this section's header): the markup carries
-     spellcheck="true" and the wiring sets it again,
-     and nothing in the app turns it off. */
-  bodyEl.setAttribute("spellcheck", "true");
-  bodyEl.addEventListener("contextmenu", function (ev) {
-    /* A read only (locked) note keeps the standing
-       behavior: no app menu, and the document guard's
-       blanket suppression stands. */
-    if (bodyEl.contentEditable === "false") { return; }
-    /* Task rows inside the body keep their standing
-       no menu rule; the document guard answers them. */
-    if (ev.target && ev.target.closest &&
-        ev.target.closest(".task-row, .task-cal-entry")) {
-      return;
-    }
-    ev.preventDefault();
-    saveFormatSelection();
-    openEditorCtxMenu(ev.clientX, ev.clientY);
-  });
-  bodyEl.addEventListener("keydown", function (ev) {
-    if (bodyEl.contentEditable === "false") { return; }
-    if (ev.key === "ContextMenu" ||
-        (ev.shiftKey && ev.key === "F10")) {
-      ev.preventDefault();
-      saveFormatSelection();
-      let x = 16;
-      let y = 16;
-      const sel = window.getSelection();
-      if (sel && sel.rangeCount) {
-        try {
-          const rect = sel.getRangeAt(0)
-            .getBoundingClientRect();
-          if (rect.left || rect.bottom) {
-            x = rect.left;
-            y = rect.bottom;
-          }
-        } catch (err) {
-          /* No range geometry on this surface: the
-             menu opens at its fallback corner. */
-        }
-      }
-      openEditorCtxMenu(x, y);
-    }
-  });
-  /* A press on the menu itself must not move focus out
-     of the editor: swallow its mousedown so the live
-     selection stands, then let the click run the
-     item. */
-  menu.addEventListener("mousedown", function (ev) {
-    ev.preventDefault();
-  });
-  menu.addEventListener("click", function (ev) {
-    /* v2.101.0: a Numbering style pick applies its
-       style and closes the menu (inside
-       applyNumberingStyle); the Numbering style
-       parent item only opens or closes its submenu,
-       in place, and never runs an action. */
-    const styleBtn = ev.target.closest("[data-num-style]");
-    if (styleBtn) {
-      applyNumberingStyle(
-        styleBtn.getAttribute("data-num-style"));
-      return;
-    }
-    /* v2.109.0: a Format submenu pick runs the
-       toolbar's own command on the menu's preserved
-       selection (runToolbarCommand restores it), with
-       the menu closing first, the runEditorCtxAction
-       shape. */
-    const fmtBtn = ev.target.closest("[data-format-cmd]");
-    if (fmtBtn) {
-      closeEditorCtxMenu();
-      runToolbarCommand(
-        fmtBtn.getAttribute("data-format-cmd"));
-      return;
-    }
-    const btn = ev.target.closest("[data-ctx-action]");
-    if (!btn || btn.disabled) { return; }
-    if (btn.getAttribute("data-ctx-action") === "numstyle") {
-      const sub = menu.querySelector("#editorCtxNumMenu");
-      if (sub) { sub.classList.toggle("hidden"); }
-      const fmtSub = menu.querySelector(
-        "#editorCtxFormatMenu");
-      if (fmtSub) { fmtSub.classList.add("hidden"); }
-      /* v2.166: the menu's size just changed in place;
-         its placement is re-judged at the new size. */
-      reclampEditorCtxMenu();
-      return;
-    }
-    if (btn.getAttribute("data-ctx-action") === "format") {
-      /* v2.167: the Format submenu is a flyout now:
-         it opens beside its item and no longer grows
-         the menu, so the v2.166 re-clamp has nothing
-         to re-judge here. */
-      toggleEditorCtxFormatMenu();
-      return;
-    }
-    runEditorCtxAction(btn.getAttribute("data-ctx-action"));
-  });
-  document.addEventListener("pointerdown", function (ev) {
-    if (editorCtxMenuIsOpen() &&
-        !menu.contains(ev.target)) {
-      closeEditorCtxMenu();
-    }
-  });
-  document.addEventListener("keydown", function (ev) {
-    if (ev.key === "Escape") { closeEditorCtxMenu(); }
-  });
 }
 
 function wireEvents() {
@@ -2117,7 +1512,6 @@ function wireEvents() {
   /* v2.72: the Default notebook select in Settings Appearance. */
   document.getElementById("settingsDefaultNotebookSelect")
     .addEventListener("change", applyDefaultNotebookFromSelect);
-  wireEditorCtxMenu();
   /* v2.109.0: the floating Back to top button. */
   wireEditorUpButton();
   /* v2.47: the Web clipper copy button in Settings. */
@@ -3434,6 +2828,16 @@ function wireEvents() {
     runAttMenuAction(btn.getAttribute("data-action"));
   });
 
+  /* v2.197: the Replace image submenu's own delegated
+     click, mirroring the alignment submenu's wiring. */
+  document.getElementById("attReplaceMenu").addEventListener("click", function (ev) {
+    const target = ev.target;
+    const btn = target && target.closest ?
+      target.closest("button[data-replace]") : null;
+    if (!btn) { return; }
+    runAttReplaceChoice(btn.getAttribute("data-replace"));
+  });
+
   /* v1.7: clicking anywhere else closes the image menu, mirroring
      the link popup's rule. Clicks inside the menu itself, and on a
      menu button (which toggles the menu for its own image), are
@@ -3446,6 +2850,7 @@ function wireEvents() {
     if (!target || !target.closest) { return; }
     if (target.closest("#attMenu")) { return; }
     if (target.closest("#attAlignMenu")) { return; }
+    if (target.closest("#attReplaceMenu")) { return; }
     if (target.closest(".ss-att-menu-btn")) { return; }
     closeAttMenu();
   });
@@ -3483,6 +2888,7 @@ function wireEvents() {
     if (!target || !target.closest) { return; }
     if (target.closest("#extMenu")) { return; }
     if (target.closest("#attAlignMenu")) { return; }
+    if (target.closest("#attReplaceMenu")) { return; }
     if (target.closest(".ss-att-menu-btn")) { return; }
     closeExtMenu();
   });
@@ -3566,6 +2972,10 @@ function wireEvents() {
       closeImageLightbox();
       ev.stopImmediatePropagation();
       return;
+    }
+    if (attReplaceMenuOpen()) {
+      closeAttReplaceMenu();
+      ev.stopImmediatePropagation();
     }
     if (attAlignMenuOpen()) {
       closeAttAlignMenu();

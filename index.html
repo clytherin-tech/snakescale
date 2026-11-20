@@ -6832,6 +6832,10 @@
             <div class="bar"><div id="uploadBarFill"></div></div>
           </div>
           <input type="file" id="attachFileInput" multiple class="hidden" aria-hidden="true">
+          <!-- v2.197: the Replace image sources: one picked
+               file, or the camera on surfaces that have one. -->
+          <input type="file" id="replaceImageInput" accept="image/*" class="hidden" aria-hidden="true">
+          <input type="file" id="replaceCameraInput" accept="image/*" capture="environment" class="hidden" aria-hidden="true">
           <!-- v2.45: the scan dialog's two capture doors. The
                camera input asks the browser for the device
                camera on mobile (capture="environment") and
@@ -7021,11 +7025,13 @@
           <div id="attMenu" class="hidden" role="menu" aria-label="Image options">
             <button class="att-menu-item" type="button" data-action="preview"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M16 3h3a2 2 0 0 1 2 2v3"/><path d="M8 21H5a2 2 0 0 1-2-2v-3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg><span class="att-menu-label">Full screen preview</span></button>
             <button class="att-menu-item" type="button" data-action="edit"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg><span class="att-menu-label">Edit &amp; Annotate</span></button>
+            <button class="att-menu-item" type="button" data-action="replace" id="attReplaceItem" aria-haspopup="true" aria-expanded="false"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4 3 8l4 4"/><path d="M3 8h14"/><path d="m17 20 4-4-4-4"/><path d="M21 16H7"/></svg><span class="att-menu-label">Replace image</span><span class="att-menu-arrow" aria-hidden="true">&#8250;</span></button>
             <button class="att-menu-item hidden" type="button" data-action="sketchEdit" id="attSketchItem"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg><span class="att-menu-label">Edit sketch</span></button>
             <button class="att-menu-item" type="button" data-action="crop"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2v14a2 2 0 0 0 2 2h14"/><path d="M18 22V8a2 2 0 0 0-2-2H2"/></svg><span class="att-menu-label">Crop</span></button>
             <div class="att-menu-sep"></div>
             <button class="att-menu-item" type="button" data-action="transcribe"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 20 12 4l7 16"/><path d="M7.6 14h8.8"/></svg><span class="att-menu-label">Transcribe</span></button>
             <button class="att-menu-item" type="button" data-action="caption" id="attCaptionItem"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 15h6"/></svg><span class="att-menu-label">Show caption</span><span class="att-dot" aria-hidden="true"></span></button>
+            <button class="att-menu-item" type="button" data-action="altText"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V5h16v2"/><path d="M12 5v14"/><path d="M9 19h6"/></svg><span class="att-menu-label">Alt text</span></button>
             <button class="att-menu-item" type="button" data-action="align" id="attAlignItem" aria-haspopup="true" aria-expanded="false"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h10M4 18h16"/></svg><span class="att-menu-label">Image alignment</span><span class="att-menu-arrow" aria-hidden="true">&#8250;</span></button>
             <button class="att-menu-item" type="button" data-action="rename"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg><span class="att-menu-label">Rename</span></button>
             <button class="att-menu-item" type="button" data-action="download"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v11"/><path d="m7 10 5 5 5-5"/><path d="M4 21h16"/></svg><span class="att-menu-label">Download</span></button>
@@ -7075,6 +7081,19 @@
             <button class="att-menu-item" type="button" data-align="free"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9l-3 3 3 3M9 5l3-3 3 3M15 19l-3 3-3-3M19 9l3 3-3 3M2 12h20M12 2v20"/></svg><span class="att-menu-label">Free move</span><span class="att-dot" aria-hidden="true"></span></button>
           </div>
 
+          <!-- v2.197: the Replace image submenu: a sibling
+               fixed card like the alignment submenu, opened
+               from the image menu's Replace image item. Its
+               three rows name where the replacement comes
+               from; the swap itself keeps the attachment's
+               record (see runAttReplaceChoice in the
+               script). -->
+          <div id="attReplaceMenu" class="hidden" role="menu" aria-label="Replace image">
+            <button class="att-menu-item" type="button" data-replace="upload"><span class="att-menu-label">Upload from computer</span></button>
+            <button class="att-menu-item" type="button" data-replace="url"><span class="att-menu-label">By URL</span></button>
+            <button class="att-menu-item" type="button" data-replace="camera"><span class="att-menu-label">Camera</span></button>
+          </div>
+
           <!-- v2.14.1: the audio attachment card's three dot menu,
                a sibling of #noteBody like the image menu, so it
                can never be saved into a note. Audio cards carry
@@ -7093,62 +7112,10 @@
             <button class="att-menu-item danger" type="button" data-card-action="delete"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13"/><path d="M10 11v6M14 11v6"/></svg><span class="att-menu-label">Delete</span></button>
           </div>
 
-          <!-- v2.91.0: the note editor's own right click
-               menu. A right click inside the note body
-               opens this menu instead of the browser's
-               (Chris's direction, superseding the editor
-               half of the v2.81.0 exception): Cut, Copy,
-               Paste, then Encrypt selected text and an
-               Unlock or Lock item that follows the vault.
-               There is NO spell check item: spell checking
-               in the editor is pinned always on. The script
-               moves the panel directly under the document
-               body, like the popups, and wires it in
-               wireEditorCtxMenu. Hidden by default. -->
-          <div id="editorCtxMenu" class="hidden" role="menu" aria-label="Editor options">
-            <button class="att-menu-item" type="button" data-ctx-action="cut">Cut</button>
-            <button class="att-menu-item" type="button" data-ctx-action="copy">Copy</button>
-            <button class="att-menu-item" type="button" data-ctx-action="paste">Paste</button>
-            <div class="editor-ctx-sep" role="separator"></div>
-            <!-- v2.109.0: the Format submenu (Chris's
-                 checklist item): the basic formatting
-                 tools on the menu's preserved selection,
-                 the toolbar buttons' own commands,
-                 including Clear Formatting. v2.167: the
-                 submenu is a pop out flyout beside its
-                 item, wrapped the way the notebook menu
-                 wraps Add to Stack, instead of opening
-                 in place under its parent item; a row
-                 whose format the selection currently
-                 carries is marked current when the
-                 flyout opens. -->
-            <div class="editor-ctx-fmt-wrap">
-              <button class="att-menu-item has-submenu" type="button" data-ctx-action="format">Format</button>
-              <div id="editorCtxFormatMenu" class="hidden">
-                <button class="att-menu-item" type="button" data-format-cmd="bold"><span class="ctx-check">&#10003;</span>Bold</button>
-                <button class="att-menu-item" type="button" data-format-cmd="italic"><span class="ctx-check">&#10003;</span>Italic</button>
-                <button class="att-menu-item" type="button" data-format-cmd="underline"><span class="ctx-check">&#10003;</span>Underline</button>
-                <button class="att-menu-item" type="button" data-format-cmd="strike"><span class="ctx-check">&#10003;</span>Strikethrough</button>
-                <button class="att-menu-item" type="button" data-format-cmd="clear"><span class="ctx-check">&#10003;</span>Clear Formatting</button>
-              </div>
-            </div>
-            <!-- v2.101.0: the Numbering style item and
-                 its submenu. The item stands only while
-                 the caret is in a numbered list; the
-                 submenu opens in place under it and the
-                 current style's row carries the current
-                 class and a visible check. Picking a
-                 style restyles the one list level the
-                 caret is in (see applyNumberingStyle). -->
-            <button class="att-menu-item hidden" type="button" data-ctx-action="numstyle">Numbering style</button>
-            <div id="editorCtxNumMenu" class="hidden">
-              <button class="att-menu-item" type="button" data-num-style="decimal"><span class="ctx-check">&#10003;</span>Numbers</button>
-              <button class="att-menu-item" type="button" data-num-style="upper-alpha"><span class="ctx-check">&#10003;</span>Capital Letters</button>
-              <button class="att-menu-item" type="button" data-num-style="lower-alpha"><span class="ctx-check">&#10003;</span>Lowercase Letters</button>
-              <button class="att-menu-item" type="button" data-num-style="upper-roman"><span class="ctx-check">&#10003;</span>Capital Roman</button>
-              <button class="att-menu-item" type="button" data-num-style="lower-roman"><span class="ctx-check">&#10003;</span>Lowercase Roman</button>
-            </div>
-          </div>
+          <!-- v2.197: the editor's custom right click menu
+       stood here through v2.196. It is removed: the
+       browser's own menu answers in the note editor
+       now (Chris's ruling, 2026-11-19). -->
 
           <!-- v2.11: the full screen image preview. A dark lightbox
                over the whole app; the script fills the image from

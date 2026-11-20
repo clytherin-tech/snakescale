@@ -5913,9 +5913,22 @@ function docAltSketch(alt) {
   return /\(sk\)\s*\(ss-[A-Za-z0-9_-]+\)\s*$/
     .test(String(alt || ""));
 }
+/* v2.197: the human readable half of an image's alt:
+   the record's own Alt text when one stands, else the
+   attachment's name. The Alt text editor edits only
+   this label; the saved alt is composed from it by
+   docImageAltForRecord below, so the app's markers
+   are structurally out of the editor's reach. */
+function attachmentAltLabel(att) {
+  if (att && typeof att.alt === "string" &&
+      att.alt.trim()) {
+    return att.alt.trim();
+  }
+  return String((att && att.name) || "image");
+}
+
 function docImageAltForRecord(record) {
-  const name = String(
-    (record && record.name) || "image");
+  const name = attachmentAltLabel(record);
   if (!record || !record.id) { return name; }
   /* v2.193: a sketch's marker rides ahead of the
      id suffix (see docAltSketch above), so the
@@ -9381,7 +9394,7 @@ async function hydrateOneAttachment(note, el) {
         state.objectUrls.push(url);
         const img = document.createElement("img");
         img.className = "ss-att-img";
-        img.alt = att.name;
+        img.alt = attachmentAltLabel(att);
         img.src = url;
         /* The block owns dragging; a natively draggable image inside
            it would start the browser's own image drag instead. */
@@ -10294,6 +10307,7 @@ function showAttMenu(anchor) {
 
 function closeAttMenu() {
   closeAttAlignMenu();
+  closeAttReplaceMenu();
   /* v2.120: the external image menu is the image
      menu's sibling; closing the one closes the other,
      so the two never stack. */
@@ -10561,11 +10575,19 @@ function runAttMenuAction(action) {
     toggleAttAlignMenu();
     return;
   }
+  if (action === "replace") {
+    toggleAttReplaceMenu();
+    return;
+  }
   const note = attMenuNote;
   const att = attMenuAtt;
   const el = attMenuEl;
   closeAttMenu();
   if (!note || !att) { return; }
+  if (action === "altText") {
+    editAttachmentAltText(note, att, el);
+    return;
+  }
   if (action === "preview") {
     openImageLightbox(note, att, el).catch(function (err) {
       toast(err.message, true);
@@ -10630,6 +10652,198 @@ function runAttMenuAction(action) {
     deselectAttachment();
     scheduleAttachmentDelete(note, att);
   }
+}
+
+/* ----- v2.197: Replace image and Alt text ------------------
+   The image menu's two new items, standing up the keeps
+   from Chris's reference menu. Replace image swaps the
+   picture under the SAME attachment record: the record
+   keeps its id (so the saved alt suffix and the link
+   fragment keep naming it), its name, its sketch flag,
+   and its figure's size, alignment, view, and caption;
+   only the file behind it changes, uploaded under the
+   standing storage name (id + "__" + name) through the
+   image editor's own swap (replaceAttachmentImage), so
+   the provider guards and the dirty path are the
+   editor's. The old file is NOT deleted: the image
+   editor's standing rule keeps it in the attachments
+   folder as the only copy of the unedited image, and
+   Replace follows that rule rather than inventing a
+   second one. The replacement's bytes also refresh
+   the record's imgHash, the identity the adoption
+   judges by when no alt claim stands (the
+   uploadOneAttachment precedent).
+
+   Alt text is a record field (att.alt) holding only
+   the human readable label (see attachmentAltLabel).
+   The saved alt is composed from the label plus the
+   app's own markers, so the editor below can never
+   reach the " (sk)" sketch marker or the " (ss-<id>)"
+   identity suffix: it edits the label and nothing
+   else. A cold Doc rebuild derives the record's name
+   from the label, so a custom label survives that
+   road as the name; every warmer road keeps the
+   record itself. */
+let attReplaceTarget = null;
+let replaceInputsWired = false;
+
+function attReplaceMenuOpen() {
+  const sub = document.getElementById("attReplaceMenu");
+  return !!sub && !sub.classList.contains("hidden");
+}
+
+function showAttReplaceMenu() {
+  const menu = document.getElementById("attMenu");
+  const sub = document.getElementById("attReplaceMenu");
+  const item = document.getElementById("attReplaceItem");
+  if (!menu || !sub || !item) { return; }
+  sub.classList.remove("hidden");
+  item.setAttribute("aria-expanded", "true");
+  const mRect = menu.getBoundingClientRect();
+  const iRect = item.getBoundingClientRect();
+  const width = sub.offsetWidth;
+  const height = sub.offsetHeight;
+  let left = mRect.right + 6;
+  if (left + width > window.innerWidth - 8) {
+    left = Math.max(8, mRect.left - width - 6);
+  }
+  let top = iRect.top - 6;
+  if (top + height > window.innerHeight - 8) {
+    top = Math.max(8, window.innerHeight - height - 8);
+  }
+  sub.style.left = left + "px";
+  sub.style.top = top + "px";
+}
+
+function closeAttReplaceMenu() {
+  const sub = document.getElementById("attReplaceMenu");
+  if (sub) { sub.classList.add("hidden"); }
+  const item = document.getElementById("attReplaceItem");
+  if (item) { item.setAttribute("aria-expanded", "false"); }
+}
+
+function toggleAttReplaceMenu() {
+  if (attReplaceMenuOpen()) { closeAttReplaceMenu(); }
+  else { showAttReplaceMenu(); }
+}
+
+/* The swap itself: hand the chosen bytes to the image
+   editor's swap, then refresh the record's byte
+   identity from the same bytes. The swap's own errors
+   arrive as its thrown messages. */
+async function replaceImageWithBlob(blob) {
+  const target = attReplaceTarget;
+  attReplaceTarget = null;
+  if (!target || !blob) { return; }
+  try {
+    await replaceAttachmentImage(target, blob);
+    try {
+      target.att.imgHash = docDataUriHash(await blobToDataUri(blob));
+    } catch (err) { /* the alt claim carries identity */ }
+    toast("Image replaced.");
+  } catch (err) {
+    toast(err && err.message ? err.message : String(err), true);
+  }
+}
+
+/* The two hidden file inputs are wired once, lazily:
+   a choice stashes its target and clicks the input,
+   and the change hands the picked file to the swap. */
+function ensureReplaceInputsWired() {
+  if (replaceInputsWired) { return; }
+  replaceInputsWired = true;
+  ["replaceImageInput", "replaceCameraInput"].forEach(function (id) {
+    const input = document.getElementById(id);
+    if (!input) { return; }
+    input.addEventListener("change", function () {
+      const file = input.files && input.files[0];
+      input.value = "";
+      if (!file) { attReplaceTarget = null; return; }
+      if (!file.type || file.type.indexOf("image/") !== 0) {
+        attReplaceTarget = null;
+        toast("That file is not an image.", true);
+        return;
+      }
+      replaceImageWithBlob(file);
+    });
+  });
+}
+
+/* Run one Replace choice against the figure the image
+   menu was opened for. */
+function runAttReplaceChoice(choice) {
+  const target = (attMenuNote && attMenuAtt)
+    ? { note: attMenuNote, att: attMenuAtt, el: attMenuEl } : null;
+  closeAttMenu();
+  if (!target || !target.att) { return; }
+  if (choice === "upload" || choice === "camera") {
+    ensureReplaceInputsWired();
+    attReplaceTarget = target;
+    const input = document.getElementById(
+      choice === "camera" ? "replaceCameraInput"
+        : "replaceImageInput");
+    if (input) { input.click(); }
+    return;
+  }
+  if (choice === "url") {
+    void replaceImageFromUrl(target);
+  }
+}
+
+/* By URL: the address is judged by the standing
+   external image rules, fetched under the standing
+   bounded fetch, and the bytes must read as an image
+   before anything is swapped. A fetch the host will
+   not share, or a dead address, fails honestly and
+   changes nothing. */
+async function replaceImageFromUrl(target) {
+  const url = prompt("Address of the replacement image", "https://");
+  if (url === null || url === undefined) { return; }
+  const clean = String(url).trim();
+  const problem = extImageUrlError(clean);
+  if (problem) { toast(problem, true); return; }
+  let blob = null;
+  try {
+    const res = await docBounded(fetch(clean),
+      docExtFetchTimeoutMs, "Fetching that image");
+    if (!res || !res.ok) {
+      throw new Error("That address did not answer.");
+    }
+    blob = await res.blob();
+  } catch (err) {
+    toast("That image could not be fetched. The site may " +
+      "not share it with the app.", true);
+    return;
+  }
+  const type = blob && blob.type ? blob.type : "";
+  if (type.indexOf("image/") !== 0 &&
+      !/\.(png|jpe?g|gif|webp|bmp|svg|avif)(\?|#|$)/i.test(clean)) {
+    toast("That address did not return an image.", true);
+    return;
+  }
+  attReplaceTarget = target;
+  replaceImageWithBlob(blob);
+}
+
+/* The Alt text editor: one prompt over the label, the
+   Rename and Caption pattern. Saving an empty label,
+   or the name itself, clears the override; the figure's
+   live image takes the composed label at once. */
+function editAttachmentAltText(note, att, el) {
+  if (!att) { return; }
+  const next = prompt("Alt text", attachmentAltLabel(att));
+  if (next === null || next === undefined) { return; }
+  const label = String(next).trim();
+  if (!label || label === String(att.name || "")) {
+    delete att.alt;
+  } else {
+    att.alt = label;
+  }
+  if (el) {
+    const img = el.querySelector("img.ss-att-img");
+    if (img) { img.alt = attachmentAltLabel(att); }
+  }
+  if (currentNote() === note) { markDirty(); }
 }
 
 /* v2.11: fetch one attachment's bytes through its provider, with
@@ -10777,7 +10991,7 @@ async function renameAttachment(note, att, el) {
   att.storageName = att.id + "__" + sanitizeFileName(name);
   if (el) {
     const img = el.querySelector("img.ss-att-img");
-    if (img) { img.alt = name; }
+    if (img) { img.alt = attachmentAltLabel(att); }
     applyImageTitleFace(el, att);
   }
   if (currentNote() === note) { markDirty(); }

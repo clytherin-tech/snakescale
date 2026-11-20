@@ -4452,13 +4452,27 @@ function initNoteContextMenu() {
    Encrypt selected text, Unlock or Lock encrypted
    text), superseding the note editor half of the
    carve out above: a contextmenu inside the note
-   body now opens the app's own menu (see
-   wireEditorCtxMenu) instead of the browser's. This
+   body then opened the app's own menu instead of
+   the browser's. This
    guard's behavior is unchanged: the editor's own
    listener answers first in the bubble, and the
    carve out still stands for the task description
    editor and every other contenteditable region,
-   which keep the browser menu exactly as before. */
+   which keep the browser menu exactly as before.
+
+   v2.197: Chris reversed the v2.91.0 direction
+   ("remove the custom r/c menu put back the browser
+   menu. That will make it easier."). The editor's
+   own menu and its listener are gone, so the note
+   body falls under the carve-out again, exactly as
+   the task description editor always did: the
+   browser's menu, with its spell suggestions, is
+   the editor's right click menu once more. This
+   guard itself is unchanged: the task rows still
+   answer first, the blanket still closes over every
+   surface the app menus itself, and a locked note
+   body (contenteditable="false") is still no text
+   surface, so it keeps no menu at all. */
 function initNativeMenuSuppression() {
   document.addEventListener("contextmenu", function (ev) {
     const target = ev.target;

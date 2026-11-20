@@ -3114,64 +3114,20 @@ body.dark #nbActionMenu.nb-context:hover::-webkit-scrollbar-thumb{
    is position:fixed and lives OUTSIDE #noteBody, so it can never be
    saved into a note; the script positions it at the image's menu
    button and closes it under the same rules as the link popup. */
-#attMenu, #attCardMenu, #editorCtxMenu, #extMenu{
+#attMenu, #attCardMenu, #extMenu{
   position:fixed;z-index:60;min-width:180px;padding:6px;
   background:var(--surface);border:1px solid var(--border);
   border-top:3px solid var(--brown-600);
   border-radius:var(--radius-card);box-shadow:0 10px 28px rgba(6,32,22,.28);
   display:flex;flex-direction:column;gap:2px;
 }
-#attMenu.hidden, #attCardMenu.hidden, #editorCtxMenu.hidden, #extMenu.hidden{display:none;}
-/* v2.91.0: the separator inside the editor's own
-   right click menu, in the attachment menus'
-   separator shape. v2.115: the note list context
-   menu's separator (.note-ctx-sep) joins this same
-   declaration rather than inventing a second one:
-   one separator shape for every app menu. */
-.editor-ctx-sep,.note-ctx-sep{height:1px;background:var(--border);margin:4px 2px;}
-/* v2.101.0: the Numbering style submenu inside the
-   editor's right click menu: a separated group under
-   its parent item, opening in place. The current
-   style's row takes the soft surface and shows its
-   check in the accent, so the active choice is
-   obvious at a glance (the standing settings rule). */
-#editorCtxNumMenu{
-  display:flex;flex-direction:column;gap:2px;
-  border-top:1px solid var(--border);
-  margin-top:4px;padding-top:4px;
-}
-#editorCtxNumMenu.hidden{display:none;}
-/* v2.167: the Format submenu is a pop out flyout
-   beside its item: the notebook menu's Add to Stack
-   flyout dress carried to the editor menu, a fixed
-   panel with the brown top border the app's floating
-   menus wear, placed by placeEditorCtxSubmenu in
-   app.js. Its rows keep the shared .current and
-   .ctx-check marking below, and its item carries the
-   submenu caret. */
-.editor-ctx-fmt-wrap{display:block;}
-#editorCtxFormatMenu{
-  position:fixed;z-index:70;min-width:180px;
-  display:flex;flex-direction:column;gap:2px;
-  background:var(--panel);border:1px solid var(--line);
-  border-top:3px solid var(--brown-500);
-  border-radius:12px;box-shadow:var(--shadow);
-  padding:6px;
-}
-#editorCtxFormatMenu.hidden{display:none;}
-#editorCtxMenu .att-menu-item.has-submenu::after{
-  content:"\203A";float:right;opacity:.6;font-weight:700;
-}
-#editorCtxMenu .ctx-check{
-  visibility:hidden;display:inline-block;width:16px;
-  color:var(--accent);font-weight:700;
-}
-#editorCtxMenu .att-menu-item.current{
-  background:var(--soft);
-}
-#editorCtxMenu .att-menu-item.current .ctx-check{
-  visibility:visible;
-}
+#attMenu.hidden, #attCardMenu.hidden, #extMenu.hidden{display:none;}
+/* The note list context menu's separator: the
+   attachment menus' separator shape, one shape for
+   every app menu. (The editor menu's own separator
+   shared this rule until v2.197 took that menu
+   out.) */
+.note-ctx-sep{height:1px;background:var(--border);margin:4px 2px;}
 .att-menu-item{
   display:block;width:100%;text-align:left;border:none;background:none;
   color:var(--text);font-size:14px;padding:8px 10px;border-radius:8px;
@@ -4012,12 +3968,14 @@ body.dark .ss-att-provider{color:#EAF3EC;}
 #attMenu .att-menu-item,
 #attCardMenu .att-menu-item,
 #attAlignMenu .att-menu-item,
+#attReplaceMenu .att-menu-item,
 #extMenu .att-menu-item{
   display:flex;align-items:center;gap:9px;
 }
 #attMenu .att-menu-item svg,
 #attCardMenu .att-menu-item svg,
 #attAlignMenu .att-menu-item svg,
+#attReplaceMenu .att-menu-item svg,
 #extMenu .att-menu-item svg{flex:none;opacity:.85;}
 .att-menu-label{flex:1;}
 .att-menu-head{
@@ -4045,6 +4003,16 @@ body.dark .ss-att-provider{color:#EAF3EC;}
   max-height:calc(100vh - 16px);overflow-y:auto;
 }
 #attAlignMenu.hidden{display:none;}
+/* v2.197: the Replace image submenu wears the alignment
+   submenu's card, beside the same menu. */
+#attReplaceMenu{
+  position:fixed;z-index:61;min-width:190px;padding:6px;
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius-card);box-shadow:0 10px 28px rgba(6,32,22,.28);
+  display:flex;flex-direction:column;gap:2px;
+  max-height:calc(100vh - 16px);overflow-y:auto;
+}
+#attReplaceMenu.hidden{display:none;}
 
 /* Captions: a quiet line under the image, part of the note. The
    muted "Caption" placeholder for an empty caption is editor only
@@ -6105,7 +6073,7 @@ body.dark .share-suggestions:hover::-webkit-scrollbar-thumb{
   #toastBoxTop{top:calc(60px + env(safe-area-inset-top));}
   #savePill{bottom:calc(68px + env(safe-area-inset-bottom));}
   #attMenu,#attCardMenu,#attAlignMenu,#tableMenu,#cellMenu,
-  #linkViewMenu,#editorCtxMenu{max-width:calc(100vw - 16px);}
+  #linkViewMenu,#attReplaceMenu{max-width:calc(100vw - 16px);}
   .att-menu-item{white-space:normal;overflow-wrap:anywhere;}
   #linkBarView{flex-wrap:wrap;}
   #linkBarUrl{flex:1 1 120px;max-width:none;min-width:0;}

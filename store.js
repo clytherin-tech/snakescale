@@ -222,6 +222,14 @@ function sanitizeAttachments(list) {
         /^\d+:[0-9a-f]+$/.test(a.imgHash)) {
       rec.imgHash = a.imgHash;
     }
+    /* v2.197: an image's Alt text (see attachmentAltLabel
+       in media.js), kept only when it carries words, so
+       a record with no override serializes exactly as
+       every record did before alt text lived on
+       records. */
+    if (typeof a.alt === "string" && a.alt.trim()) {
+      rec.alt = a.alt.trim().slice(0, 500);
+    }
     out.push(rec);
   });
   return out;
