@@ -4302,5 +4302,35 @@ async function boot() {
   hideLoading();
 }
 
+/* The web clipper's Quicknote modal (v2.198): its
+   buttons, its backdrop (a click outside the card is a
+   Cancel, through the same press guard the other modals
+   use), and Escape. The dialog's logic lives in media.js
+   with the clipper itself. The scripts stand at the end
+   of the body, so the dialog's elements are already in
+   the document here. */
+(function wireWebClipModal() {
+  const modal = document.getElementById("webClipModal");
+  if (!modal) { return; }
+  document.getElementById("webClipCancelBtn")
+    .addEventListener("click", cancelWebClipModal);
+  document.getElementById("webClipSaveBtn")
+    .addEventListener("click", function () {
+      saveWebClipFromModal();
+    });
+  document.getElementById("webClipCaptureBtn")
+    .addEventListener("click", requestWebClipCapture);
+  document.getElementById("webClipShotRemoveBtn")
+    .addEventListener("click", removeWebClipShot);
+  modal.addEventListener("click", function (ev) {
+    pressGuardBackdropClick(modal, ev, cancelWebClipModal);
+  });
+  document.addEventListener("keydown", function (ev) {
+    if (ev.key === "Escape" && webClipModalIsOpen()) {
+      cancelWebClipModal();
+    }
+  });
+})();
+
 document.addEventListener("DOMContentLoaded", boot);
 

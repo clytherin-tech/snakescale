@@ -104,7 +104,7 @@
 
 "use strict";
 
-const CACHE_NAME = "snakescale-shell-2026-11-20-SSN-V21970";
+const CACHE_NAME = "snakescale-shell-2026-11-20-SSN-V21980";
 
 /* The shell, as paths relative to this worker's scope (the site
    root). "./" and "./index.html" are both listed: the first is the
@@ -150,9 +150,9 @@ const PAGE_KEY = "./index.html";
    build if this block is stale. Never edit it by hand. */
 // BEGIN GENERATED ASSET HASHES (gen_asset_hashes.py)
 const ASSET_HASHES = {
-  "./index.html": "93c86a6ae442dd271493b15de1a94a213ccf9e3cc4d688b2f43ae4fa07943dd5",
-  "./styles.css": "ec2749a9037b489708cad5e79d95519a0331b097c18d85dee22ffc02ab8c01f4",
-  "./version.js": "8523c91678aa44ccbd239f0b1df170e2266a04043928c5ef350457e1f0c7b179",
+  "./index.html": "e9abfd13d18a3e71e11ddf48811e6eb3f7be94dc5ceecc46a1209205f064ebd0",
+  "./styles.css": "f4bd011d67295e890d9ab0dedad39188675ec0f31fd3bac1b29e92ed815855da",
+  "./version.js": "3f1126bb48ad87206df6750bd11c7b1760dea74df8d2bd98a6bd3c369cd437d9",
   "./core.js": "41553a2099cd589795f9440b3ec4760c3b9bec3bc3beffb40f89ca46b8984bbf",
   "./store.js": "0db4cb8c064c8e9c504092ebe0abe639d0e8d024d017dc015050eb4dfb170c2b",
   "./sync.js": "01be8d03355a6bb7885998abf9d8050ffe035955eac55e03d107bb494c88180b",
@@ -164,8 +164,8 @@ const ASSET_HASHES = {
   "./render.js": "abcb915ef7048f079a96345a8c2d9641e9112555bb66126d9e05897443a9d661",
   "./editor.js": "a4ae6edb1c2122b05ce776fee41e8ab8538481043b309e7c2f4407e4d163c840",
   "./editor-tools.js": "e5b7ecccf8b7d91247ed02dc87856c2c6466353691ec85cdc7eb6802030e0756",
-  "./media.js": "5d106d46dfbd73daf649a6b42abd73d2f8f3a7602c2b5367d33b5e7de6bc14c5",
-  "./app.js": "8892d7f947ec3644a370bc9725bdb984f1b5820b24345a24346b9e2dccab1079",
+  "./media.js": "4359a6a3ab8d18d2c5e216b288b629091b9f2d137c7a65d15ffb0a3c3ff14e45",
+  "./app.js": "dd03d0938daeeafd607cc4a421efe2ed4ec841a366bb29ce5a2a6e2509671db7",
   "./manifest.webmanifest": "c4bb2054518b8763407f0834ba9033f690677674c003d9f4eeb4b0286cad9a94",
   "./icon-192.png": "f3b785c13d078d71790c4330c0749324796115cb06b2215629ba6e2ebdaa35f6",
   "./icon-512.png": "0955bd92167aa1a79b2cdf541277b32c325cf665ae7b440eb6c7fa5dc995cd3d",

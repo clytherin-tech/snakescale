@@ -13986,6 +13986,22 @@ const WEBCLIP_SHORTENED_HTML =
   "<p><em>This clip was shortened to fit the web clipper " +
   "size limit.</em></p>";
 
+/* v2.198: the screenshot channel between the bookmarklet
+   (alive in the page it clipped) and this window (the tab
+   it opened): every message carries the kind marker and
+   the clip's nonce, and the app honors a message only
+   from its opener with both standing. The nonce is a
+   base64url token of at least 16 characters; a screenshot
+   data URL is capped well above any downscaled region
+   render and well below a memory concern. The channel
+   wait is how long the modal listens for the page's
+   answer to its hello before it says the page is not
+   answering. */
+const WEBCLIP_CAPTURE_KIND = "virida-clip";
+const WEBCLIP_NONCE_PATTERN = /^[A-Za-z0-9_-]{16,64}$/;
+const WEBCLIP_MAX_SHOT_CHARS = 12000000;
+const WEBCLIP_CHANNEL_WAIT_MS = 8000;
+
 /* The held clip, memory only by design (see the section
    head): a parsed, validated payload waiting for the store,
    or null. webClipFiling is the once only guard that keeps a
@@ -14000,7 +14016,7 @@ function webClipAppUrl() {
   try {
     return window.location.origin + window.location.pathname;
   } catch (err) {
-    return "https://clytherin-tech.github.io/snakescale/";
+    return "https://virida-notes.pages.dev/";
   }
 }
 
@@ -14024,15 +14040,30 @@ function webClipDecodeText(data) {
    percent encodes the result behind "javascript:". The
    bookmarklet is deliberately small (a bookmarklet must be);
    everything heavy (validation, sanitizing, filing) lives on
-   the app side below. Its jobs, in order: read the selection;
-   fall back to the article extraction; truncate at a block
-   boundary over the shared cap and flag it; pack the payload;
-   open the app with it in the fragment. */
+   the app side below. Its jobs, in order: read the selection
+   and the article extraction both (v2.198: the Quicknote's
+   Clip full page choice needs the pair); truncate each at a
+   block boundary over the shared cap and flag it; pack the
+   payload (the selection as the body, the article beside it
+   when the pair fits the fragment cap, the capture nonce
+   always); open the app with it in the fragment; then stay
+   alive in the page as the screenshot channel's other end,
+   answering the app's hello and serving one drag capture at
+   a time until the page goes away. An app too old for the
+   new fields ignores them and files the selection as it
+   always did. */
 function webClipBookmarkletLines(appUrl) {
   return [
     "(function () {",
     "  var APP = " + JSON.stringify(appUrl) + ";",
     "  var MAX_HTML = " + WEBCLIP_MAX_HTML_CHARS + ";",
+    "  var MAX_FRAGMENT = " + WEBCLIP_MAX_FRAGMENT_CHARS + ";",
+    "  var KIND = 'virida-clip';",
+    "  var APP_ORIGIN = '';",
+    "  try { APP_ORIGIN = new URL(APP).origin; } catch (e) {",
+    "    var om = APP.match(/^https?:\\/\\/[^\\/]+/);",
+    "    APP_ORIGIN = om ? om[0] : '';",
+    "  }",
     "  function esc(s) {",
     "    return String(s).replace(/&/g, '&amp;')",
     "      .replace(/</g, '&lt;').replace(/>/g, '&gt;')",
@@ -14082,29 +14113,290 @@ function webClipBookmarkletLines(appUrl) {
     "    }",
     "    return out.join('');",
     "  }",
-    "  var picked = selHtml();",
-    "  var mode = picked ? 'selection' : 'article';",
-    "  var html = picked || articleHtml();",
-    "  if (!html) {",
-    "    html = '<p>' + esc(document.title || location.href) + '</p>';",
-    "  }",
-    "  var shortened = false;",
-    "  if (html.length > MAX_HTML) {",
+    "  function trunc(html) {",
+    "    if (html.length <= MAX_HTML) {",
+    "      return [html, false];",
+    "    }",
     "    var cut = html.slice(0, MAX_HTML);",
     "    var lt = cut.lastIndexOf('</');",
     "    var gt = lt >= 0 ? cut.indexOf('>', lt) : -1;",
     "    if (gt > 0) { cut = cut.slice(0, gt + 1); }",
-    "    html = cut;",
-    "    shortened = true;",
+    "    return [cut, true];",
     "  }",
-    "  var payload = { v: 1, t: document.title || location.href,",
-    "    u: location.href, h: html, m: mode,",
-    "    s: shortened ? 1 : 0 };",
-    "  var data = btoa(unescape(encodeURIComponent(",
-    "    JSON.stringify(payload))))",
-    "    .replace(/\\+/g, '-').replace(/\\//g, '_')",
-    "    .replace(/=+$/, '');",
-    "  window.open(APP + '#clip=' + data, '_blank');",
+    "  function enc(obj) {",
+    "    return btoa(unescape(encodeURIComponent(",
+    "      JSON.stringify(obj))))",
+    "      .replace(/\\+/g, '-').replace(/\\//g, '_')",
+    "      .replace(/=+$/, '');",
+    "  }",
+    "  function mintNonce() {",
+    "    var bytes = [];",
+    "    var i;",
+    "    try {",
+    "      var buf = new Uint8Array(16);",
+    "      window.crypto.getRandomValues(buf);",
+    "      for (i = 0; i < buf.length; i++) {",
+    "        bytes.push(buf[i]);",
+    "      }",
+    "    } catch (e) {",
+    "      for (i = 0; i < 16; i++) {",
+    "        bytes.push(Math.floor(Math.random() * 256));",
+    "      }",
+    "    }",
+    "    var raw = '';",
+    "    bytes.forEach(function (b) {",
+    "      raw += String.fromCharCode(b);",
+    "    });",
+    "    return btoa(raw).replace(/\\+/g, '-')",
+    "      .replace(/\\//g, '_').replace(/=+$/, '');",
+    "  }",
+    "  var sel = selHtml();",
+    "  var art = articleHtml();",
+    "  if (!sel && !art) {",
+    "    art = '<p>' + esc(document.title ||",
+    "      location.href) + '</p>';",
+    "  }",
+    "  var selT = trunc(sel);",
+    "  var artT = trunc(art);",
+    "  var nz = mintNonce();",
+    "  var payload;",
+    "  if (sel) {",
+    "    payload = { v: 1, t: document.title || location.href,",
+    "      u: location.href, h: selT[0], m: 'selection',",
+    "      s: selT[1] ? 1 : 0, n: nz };",
+    "    if (art) {",
+    "      var withArt = { v: 1, t: payload.t, u: payload.u,",
+    "        h: selT[0], m: 'selection', s: selT[1] ? 1 : 0,",
+    "        a: artT[0], as: artT[1] ? 1 : 0, n: nz };",
+    "      if (enc(withArt).length <= MAX_FRAGMENT) {",
+    "        payload = withArt;",
+    "      } else {",
+    "        payload.f = 1;",
+    "      }",
+    "    }",
+    "  } else {",
+    "    payload = { v: 1, t: document.title || location.href,",
+    "      u: location.href, h: artT[0], m: 'article',",
+    "      s: artT[1] ? 1 : 0, n: nz };",
+    "  }",
+    "  var win = window.open(APP + '#clip=' + enc(payload),",
+    "    '_blank');",
+    "  if (!win) { return; }",
+    "  var capBusy = false;",
+    "  function send(obj) {",
+    "    obj.k = KIND; obj.n = nz;",
+    "    try { win.postMessage(obj, APP_ORIGIN || '*'); }",
+    "    catch (e) { /* the app window is gone */ }",
+    "  }",
+    "  function onMsg(ev) {",
+    "    if (ev.source !== win) { return; }",
+    "    var d = ev.data;",
+    "    if (!d || d.k !== KIND || d.n !== nz) { return; }",
+    "    if (d.type === 'hello') { send({ type: 'ready' }); }",
+    "    else if (d.type === 'capture' && !capBusy) {",
+    "      capBusy = true;",
+    "      pickArea(function (shot) {",
+    "        capBusy = false;",
+    "        if (shot) { send({ type: 'shot', img: shot }); }",
+    "        else {",
+    "          send({ type: 'shot-failed',",
+    "            msg: 'That area could not be turned into' +",
+    "              ' a picture on this page.' });",
+    "        }",
+    "      });",
+    "    }",
+    "  }",
+    "  window.addEventListener('message', onMsg);",
+    "  var tries = 0;",
+    "  var announcer = window.setInterval(function () {",
+    "    tries += 1;",
+    "    send({ type: 'ready' });",
+    "    if (tries >= 10) {",
+    "      window.clearInterval(announcer);",
+    "    }",
+    "  }, 700);",
+    "  window.addEventListener('unload', function () {",
+    "    window.removeEventListener('message', onMsg);",
+    "    window.clearInterval(announcer);",
+    "  });",
+    "  function pickArea(done) {",
+    "    var overlay = document.createElement('div');",
+    "    overlay.setAttribute('data-virida-clip-overlay', '1');",
+    "    overlay.style.cssText = 'position:fixed;inset:0;' +",
+    "      'z-index:2147483647;' +",
+    "      'background:rgba(20,30,25,0.35);cursor:crosshair;';",
+    "    var rect = document.createElement('div');",
+    "    rect.style.cssText = 'position:fixed;display:none;' +",
+    "      'border:2px solid #ffffff;' +",
+    "      'background:rgba(255,255,255,0.12);' +",
+    "      'box-shadow:0 0 0 1px rgba(0,0,0,0.45);';",
+    "    overlay.appendChild(rect);",
+    "    var hint = document.createElement('div');",
+    "    hint.textContent = 'Drag to choose the area for' +",
+    "      ' the screenshot. Esc cancels.';",
+    "    hint.style.cssText = 'position:fixed;top:12px;' +",
+    "      'left:50%;transform:translateX(-50%);' +",
+    "      'background:#1d2b22;color:#ffffff;' +",
+    "      'font:14px sans-serif;padding:8px 14px;' +",
+    "      'border-radius:8px;';",
+    "    overlay.appendChild(hint);",
+    "    document.documentElement.appendChild(overlay);",
+    "    var sx = 0, sy = 0, dragging = false;",
+    "    function place(ev) {",
+    "      rect.style.left = Math.min(sx, ev.clientX) + 'px';",
+    "      rect.style.top = Math.min(sy, ev.clientY) + 'px';",
+    "      rect.style.width = Math.abs(ev.clientX - sx) + 'px';",
+    "      rect.style.height = Math.abs(ev.clientY - sy) + 'px';",
+    "    }",
+    "    function cleanup() {",
+    "      if (overlay.parentNode) {",
+    "        overlay.parentNode.removeChild(overlay);",
+    "      }",
+    "      document.removeEventListener('keydown', onKey, true);",
+    "    }",
+    "    function onKey(ev) {",
+    "      if (ev.key === 'Escape' || ev.keyCode === 27) {",
+    "        ev.preventDefault();",
+    "        cleanup();",
+    "        done(null);",
+    "      }",
+    "    }",
+    "    document.addEventListener('keydown', onKey, true);",
+    "    overlay.addEventListener('mousedown', function (ev) {",
+    "      dragging = true;",
+    "      sx = ev.clientX; sy = ev.clientY;",
+    "      rect.style.display = 'block';",
+    "      place(ev);",
+    "    });",
+    "    overlay.addEventListener('mousemove', function (ev) {",
+    "      if (dragging) { place(ev); }",
+    "    });",
+    "    overlay.addEventListener('mouseup', function (ev) {",
+    "      if (!dragging) { return; }",
+    "      dragging = false;",
+    "      var x = Math.min(sx, ev.clientX);",
+    "      var y = Math.min(sy, ev.clientY);",
+    "      var wdt = Math.abs(ev.clientX - sx);",
+    "      var hgt = Math.abs(ev.clientY - sy);",
+    "      cleanup();",
+    "      if (wdt < 8 || hgt < 8) { done(null); return; }",
+    "      renderRegion(x + window.scrollX,",
+    "        y + window.scrollY, wdt, hgt, done);",
+    "    });",
+    "  }",
+    "  function blankImg(img) {",
+    "    img.setAttribute('src',",
+    "      'data:image/gif;base64,R0lGODlhAQABAAAAACw=');",
+    "  }",
+    "  function renderRegion(rx, ry, rw, rh, done) {",
+    "    try {",
+    "      var docEl = document.documentElement;",
+    "      var DW = Math.max(docEl.scrollWidth || 0,",
+    "        document.body ? document.body.scrollWidth : 0);",
+    "      var DH = Math.max(docEl.scrollHeight || 0,",
+    "        document.body ? document.body.scrollHeight : 0);",
+    "      var clone = docEl.cloneNode(true);",
+    "      var junk = clone.querySelectorAll('script, link,' +",
+    "        ' [data-virida-clip-overlay]');",
+    "      Array.prototype.forEach.call(junk, function (n) {",
+    "        if (n.parentNode) {",
+    "          n.parentNode.removeChild(n);",
+    "        }",
+    "      });",
+    "      var css = '';",
+    "      var si, ri;",
+    "      for (si = 0; si < document.styleSheets.length;",
+    "          si++) {",
+    "        try {",
+    "          var rules = document.styleSheets[si].cssRules;",
+    "          for (ri = 0; ri < rules.length; ri++) {",
+    "            css += rules[ri].cssText + '\\n';",
+    "          }",
+    "        } catch (e) { /* a sheet from another origin */ }",
+    "      }",
+    "      css = css.replace(/@import[^;]+;/g, '');",
+    "      var liveImgs = document.querySelectorAll('img');",
+    "      var cloneImgs = clone.querySelectorAll('img');",
+    "      var jobs = [];",
+    "      Array.prototype.forEach.call(cloneImgs,",
+    "        function (cimg, k) {",
+    "          var limg = liveImgs[k];",
+    "          if (!limg) { return; }",
+    "          cimg.removeAttribute('srcset');",
+    "          var src = limg.getAttribute('src') || '';",
+    "          if (!src || src.indexOf('data:') === 0) {",
+    "            return;",
+    "          }",
+    "          var r = limg.getBoundingClientRect();",
+    "          var ix = r.left + window.scrollX;",
+    "          var iy = r.top + window.scrollY;",
+    "          if (!r.width || ix + r.width < rx ||",
+    "              iy + r.height < ry || ix > rx + rw ||",
+    "              iy > ry + rh) {",
+    "            blankImg(cimg);",
+    "            return;",
+    "          }",
+    "          jobs.push(fetch(limg.src, { mode: 'cors' })",
+    "            .then(function (resp) { return resp.blob(); })",
+    "            .then(function (blob) {",
+    "              return new Promise(function (res) {",
+    "                var fr = new FileReader();",
+    "                fr.onload = function () {",
+    "                  cimg.setAttribute('src',",
+    "                    String(fr.result));",
+    "                  res();",
+    "                };",
+    "                fr.onerror = function () {",
+    "                  blankImg(cimg); res();",
+    "                };",
+    "                fr.readAsDataURL(blob);",
+    "              });",
+    "            })",
+    "            .catch(function () { blankImg(cimg); }));",
+    "        });",
+    "      Promise.all(jobs).then(function () {",
+    "        var styleEl = document.createElement('style');",
+    "        styleEl.textContent = css;",
+    "        var head = clone.querySelector('head');",
+    "        if (head) { head.appendChild(styleEl); }",
+    "        clone.setAttribute('style',",
+    "          (clone.getAttribute('style') || '') +",
+    "          ';margin:0;width:' + DW + 'px;' +",
+    "          'height:' + DH + 'px;');",
+    "        var svg = '<svg xmlns=\"http://www.w3.org/2000/svg\"'",
+    "          + ' width=\"' + rw + '\" height=\"' + rh + '\">'",
+    "          + '<foreignObject x=\"' + (-rx) + '\" y=\"'",
+    "          + (-ry) + '\" width=\"' + DW + '\" height=\"'",
+    "          + DH + '\">'",
+    "          + new XMLSerializer().serializeToString(clone)",
+    "          + '</foreignObject></svg>';",
+    "        var img = new Image();",
+    "        var settled = false;",
+    "        img.onload = function () {",
+    "          if (settled) { return; }",
+    "          settled = true;",
+    "          try {",
+    "            var scale = Math.min(1,",
+    "              2400 / Math.max(rw, rh));",
+    "            var cw = Math.max(1, Math.round(rw * scale));",
+    "            var ch = Math.max(1, Math.round(rh * scale));",
+    "            var canvas = document.createElement('canvas');",
+    "            canvas.width = cw; canvas.height = ch;",
+    "            var ctx = canvas.getContext('2d');",
+    "            ctx.fillStyle = '#ffffff';",
+    "            ctx.fillRect(0, 0, cw, ch);",
+    "            ctx.drawImage(img, 0, 0, cw, ch);",
+    "            done(canvas.toDataURL('image/png'));",
+    "          } catch (e) { done(null); }",
+    "        };",
+    "        img.onerror = function () {",
+    "          if (!settled) { settled = true; done(null); }",
+    "        };",
+    "        img.src = 'data:image/svg+xml;charset=utf-8,' +",
+    "          encodeURIComponent(svg);",
+    "      });",
+    "    } catch (e) { done(null); }",
+    "  }",
     "})();"
   ];
 }
@@ -14133,6 +14425,18 @@ function buildWebClipFragment(payload) {
       ? "selection" : "article",
     s: payload && payload.shortened ? 1 : 0
   };
+  /* v2.198: the additive fields, written only when they
+     carry something (see the versioning note in this
+     build's header): the article body beside a selection
+     and its own shortened flag, the flag that says the
+     pair could not both fit the fragment, and the
+     capture channel's nonce. */
+  if (payload && typeof payload.articleHtml === "string" &&
+      payload.articleHtml) { obj.a = payload.articleHtml; }
+  if (payload && payload.articleShortened) { obj.as = 1; }
+  if (payload && payload.fullPageUnavailable) { obj.f = 1; }
+  if (payload && typeof payload.nonce === "string" &&
+      payload.nonce) { obj.n = payload.nonce; }
   return "#" + WEBCLIP_FRAGMENT_PREFIX +
     webClipEncodeText(JSON.stringify(obj));
 }
@@ -14165,7 +14469,19 @@ function parseWebClipPayload(data) {
     url: obj.u,
     html: obj.h,
     mode: obj.m === "selection" ? "selection" : "article",
-    shortened: obj.s === 1 || obj.s === true
+    shortened: obj.s === 1 || obj.s === true,
+    /* v2.198: the additive fields. The article body is
+       held to the same non empty string bar as the clip
+       body (its size cap is applied by the sanitizer at
+       filing time, like the body's); the nonce must wear
+       the token shape or it is no nonce at all, and
+       capture simply stays unavailable for the clip. */
+    articleHtml: typeof obj.a === "string" && obj.a.trim()
+      ? obj.a : null,
+    articleShortened: obj.as === 1 || obj.as === true,
+    fullPageUnavailable: obj.f === 1 || obj.f === true,
+    nonce: typeof obj.n === "string" &&
+      WEBCLIP_NONCE_PATTERN.test(obj.n) ? obj.n : null
   };
 }
 
@@ -14303,12 +14619,49 @@ function sanitizeWebClipHtml(html) {
    the sanitized clip, then the shortened note when the
    bookmarklet flagged the clip and this pass did not already
    append it by truncating. */
+/* The filed note's source line: a real link naming the
+   page the clip came from. */
+function webClipSourceLine(url) {
+  return "<p>Source: <a href=\"" + escapeHtml(url) +
+    "\">" + escapeHtml(url) + "</a></p>";
+}
+
 function webClipBodyFor(payload, cleanResult) {
-  const source = "<p>Source: <a href=\"" +
-    escapeHtml(payload.url) + "\">" +
-    escapeHtml(payload.url) + "</a></p>";
-  let body = source + cleanResult.html;
+  let body = webClipSourceLine(payload.url) +
+    cleanResult.html;
   if (payload.shortened && !cleanResult.shortened) {
+    body += WEBCLIP_SHORTENED_HTML;
+  }
+  return body;
+}
+
+/* v2.198: the modal's Add text as note body HTML: plain
+   text the user typed, escaped whole, blank lines making
+   paragraphs and single newlines line breaks. */
+function webClipAddTextHtml(text) {
+  const t = String(text == null ? "" : text).trim();
+  if (!t) { return ""; }
+  return t.split(/\n[ \t]*\n/).map(function (para) {
+    return "<p>" + escapeHtml(para.trim())
+      .replace(/\n/g, "<br>") + "</p>";
+  }).join("");
+}
+
+/* v2.198: the Quicknote modal's body assembly, in the
+   order the dialog lays the note out: the source line
+   when Save page URL stands, the user's added text, the
+   screenshot figure when a capture landed and uploaded,
+   then the chosen body (the selection or the article,
+   already sanitized), and the shortened note when the
+   chosen body's own flag asks for it and the sanitizer
+   did not already append it by truncating. */
+function webClipModalBody(payload, o) {
+  let body = "";
+  if (o.saveUrl) { body += webClipSourceLine(payload.url); }
+  if (o.addTextHtml) { body += o.addTextHtml; }
+  if (o.shotFigure) { body += o.shotFigure; }
+  body += o.cleanResult.html;
+  if (o.shortened && !o.cleanResult.shortened) {
     body += WEBCLIP_SHORTENED_HTML;
   }
   return body;
@@ -14359,44 +14712,389 @@ function readWebClipFromUrl() {
   return payload;
 }
 
-/* File the held clip as ONE note, through the instant create
-   pattern of createNoteInRepo and the template apply: the
-   note is in state and cache at once, the write runs through
-   the real save funnel as a fresh note, and the note opens
-   so the user sees what arrived. The notebook is the
-   default notebook (v2.72: fallbackNotebookSlug; the
-   first notebook while no default is set), since the
-   bookmarklet cannot ask (Evernote's clip time notebook
-   choice remains a named deviation), created as Personal
-   first when the store somehow has none, the create
-   flow's own rule. The held payload is spent before the work
-   starts and the filing guard refuses a second run, so no
-   path can file the same clip twice. Returns the note, or
-   null when there is nothing held or a filing is already in
-   flight. Failures keep the app's create wording: the note
-   exists locally and the toast names the save failure. */
-async function filePendingWebClip() {
-  if (!pendingWebClip || webClipFiling) { return null; }
-  webClipFiling = true;
-  const payload = pendingWebClip;
-  pendingWebClip = null;
-  try {
-    if (!state.notebooks.length) {
-      await createNotebook("Personal");
+/* v2.198: the Quicknote modal's standing state: the held
+   clip it is filing, the screenshot data URL a capture
+   brought back (null until one lands), whether the page
+   channel has answered, and the wait timer's id. One clip
+   is ever in the dialog; opening it for a second clip
+   while it stands is refused by filePendingWebClip. */
+let webClipModalState = null;
+
+function webClipModalEl(id) { return document.getElementById(id); }
+
+function webClipModalIsOpen() {
+  return !!webClipModalState;
+}
+
+/* The dialog's open: the fields wear the payload (the
+   title prefilled, the notebooks real with the standing
+   default chosen, Save page URL on), and Clip full page
+   wears the payload's shape: an article clip has nothing
+   to un-clip (checked and disabled, with the reason under
+   it), a selection with its article beside it can swap
+   (enabled, unchecked), and a selection whose article
+   could not come over cannot (disabled, unchecked, the
+   reason stated). Capture then arms itself against the
+   channel. */
+function openWebClipModal(payload) {
+  webClipModalState = {
+    payload: payload, shotDataUrl: null,
+    channelLive: false, helloTimer: 0
+  };
+  const modal = webClipModalEl("webClipModal");
+  if (!modal) { webClipModalState = null; return; }
+  webClipModalEl("webClipModalTitle").textContent =
+    "Save web clip";
+  webClipModalEl("webClipSourceLine").textContent =
+    payload.url || "";
+  const titleInput = webClipModalEl("webClipTitleInput");
+  titleInput.value = String(payload.title || "")
+    .slice(0, WEBCLIP_MAX_TITLE_CHARS);
+  const nbSel = webClipModalEl("webClipNotebookSelect");
+  nbSel.innerHTML = "";
+  const dflt = state.notebooks.find(function (nb) {
+    return nb.slug === fallbackNotebookSlug();
+  }) || state.notebooks[0];
+  state.notebooks.forEach(function (nb) {
+    const opt = document.createElement("option");
+    opt.value = nb.slug;
+    opt.textContent = nb.name;
+    if (dflt && nb.slug === dflt.slug) {
+      opt.selected = true;
     }
+    nbSel.appendChild(opt);
+  });
+  webClipModalEl("webClipTagsInput").value = "";
+  webClipModalEl("webClipAddText").value = "";
+  webClipModalEl("webClipSaveUrlInput").checked = true;
+  const fullBox = webClipModalEl("webClipFullPageInput");
+  const fullNote = webClipModalEl("webClipFullPageNote");
+  if (payload.mode !== "selection") {
+    fullBox.checked = true;
+    fullBox.disabled = true;
+    fullNote.textContent = "No text was selected on the" +
+      " page, so the clip is the page article.";
+  } else if (payload.articleHtml) {
+    fullBox.checked = false;
+    fullBox.disabled = false;
+    fullNote.textContent = "";
+  } else {
+    fullBox.checked = false;
+    fullBox.disabled = true;
+    fullNote.textContent = payload.fullPageUnavailable
+      ? "The selection and the full page together were" +
+        " too big to send both, so only the selection" +
+        " came over."
+      : "The full page did not come over with this clip," +
+        " so the selection is the whole clip.";
+  }
+  webClipModalEl("webClipShotRow").classList.add("hidden");
+  webClipModalEl("webClipShotThumb").removeAttribute("src");
+  modal.classList.remove("hidden");
+  webClipCaptureSetup();
+  try { titleInput.focus(); titleInput.select(); }
+  catch (e) { /* focus is a nicety, never a gate */ }
+}
+
+/* The dialog's close, shared by Cancel, Save, the
+   backdrop, and Escape: the channel listener and its
+   timer go with it, so a late message from the page
+   finds no listener and is ignored. The held clip
+   itself is the caller's to spend or keep. */
+function closeWebClipModal() {
+  if (webClipModalState && webClipModalState.helloTimer) {
+    window.clearTimeout(webClipModalState.helloTimer);
+  }
+  window.removeEventListener("message", webClipCaptureMessage);
+  webClipModalState = null;
+  const modal = webClipModalEl("webClipModal");
+  if (modal) { modal.classList.add("hidden"); }
+}
+
+/* Cancel: the held clip is discarded and nothing files.
+   A deferred app update the held clip was blocking may
+   now land. */
+function cancelWebClipModal() {
+  if (!webClipModalState) { return; }
+  pendingWebClip = null;
+  closeWebClipModal();
+  maybeReloadForUpdate();
+}
+
+function webClipCaptureStatus(text) {
+  const el = webClipModalEl("webClipCaptureStatus");
+  if (el) { el.textContent = text; }
+}
+
+/* One message to the page that clipped, stamped with the
+   kind and this clip's nonce, addressed to the opener.
+   The target origin is the wildcard because the page's
+   origin is the one thing the app cannot know (the clip
+   names a URL, not an origin it may trust); the nonce in
+   the body is the credential, and the page answers only
+   its own opener's window with the same stamp. */
+function webClipSendToOpener(obj) {
+  if (!window.opener || !webClipModalState) { return; }
+  const msg = Object.assign({}, obj, {
+    k: WEBCLIP_CAPTURE_KIND,
+    n: webClipModalState.payload.nonce
+  });
+  try { window.opener.postMessage(msg, "*"); }
+  catch (e) { /* the page is gone; the wait says so */ }
+}
+
+/* The channel wait's expiry, a named function so the
+   harness can stand in for the clock: the page never
+   answered, so capture is off for this clip and the
+   dialog says why. A late answer after this still counts
+   (the listener stands until the dialog closes). */
+function webClipChannelTimedOut() {
+  if (!webClipModalState || webClipModalState.channelLive) {
+    return;
+  }
+  webClipModalEl("webClipCaptureBtn").disabled = true;
+  webClipCaptureStatus("The page that sent this clip is" +
+    " not answering, so a screenshot cannot be captured" +
+    " for it. The clip itself can still be saved.");
+}
+
+/* Capture's arming, run at the dialog's open. Three
+   honest dead ends, each stated in the dialog: the clip
+   carries no nonce (the bookmarklet that sent it is an
+   older one), this window was not opened by the
+   bookmarklet (no opener to talk to), or the page never
+   answers the hello (the wait above). Otherwise the
+   button waits disabled until the page's ready lands. */
+function webClipCaptureSetup() {
+  const btn = webClipModalEl("webClipCaptureBtn");
+  const payload = webClipModalState.payload;
+  if (!payload.nonce) {
+    btn.disabled = true;
+    webClipCaptureStatus("Screenshot capture is not" +
+      " available for this clip: the bookmarklet that" +
+      " sent it is an older one. Drag the current" +
+      " bookmarklet from Settings, Web clipper, then" +
+      " clip again to use it.");
+    return;
+  }
+  if (!window.opener) {
+    btn.disabled = true;
+    webClipCaptureStatus("Screenshot capture is not" +
+      " available for this clip: the app was not opened" +
+      " by the bookmarklet, so there is no page to" +
+      " capture from.");
+    return;
+  }
+  btn.disabled = true;
+  webClipCaptureStatus("Connecting to the page you" +
+    " clipped from...");
+  window.addEventListener("message", webClipCaptureMessage);
+  webClipSendToOpener({ type: "hello" });
+  webClipModalState.helloTimer = window.setTimeout(
+    webClipChannelTimedOut, WEBCLIP_CHANNEL_WAIT_MS);
+}
+
+/* The channel's ear. A message counts only while the
+   dialog stands, only from this window's opener, and
+   only wearing the kind and this clip's nonce; anything
+   else is ignored whole. A ready arms the button; a shot
+   must be a PNG data URL under the cap before it becomes
+   the thumbnail; a failure carries the page's own words,
+   shown as text and capped. */
+function webClipCaptureMessage(ev) {
+  const st = webClipModalState;
+  if (!st || !st.payload) { return; }
+  if (!window.opener || ev.source !== window.opener) {
+    return;
+  }
+  const d = ev.data;
+  if (!d || typeof d !== "object" ||
+      d.k !== WEBCLIP_CAPTURE_KIND ||
+      d.n !== st.payload.nonce) { return; }
+  if (d.type === "ready") {
+    if (st.channelLive) { return; }
+    st.channelLive = true;
+    if (st.helloTimer) {
+      window.clearTimeout(st.helloTimer);
+      st.helloTimer = 0;
+    }
+    webClipModalEl("webClipCaptureBtn").disabled = false;
+    webClipCaptureStatus("Ready. Capture area switches" +
+      " to the page you clipped from: drag over the part" +
+      " you want, and the picture lands back here.");
+    return;
+  }
+  if (d.type === "shot") {
+    if (typeof d.img !== "string" ||
+        d.img.indexOf("data:image/png;base64,") !== 0 ||
+        d.img.length > WEBCLIP_MAX_SHOT_CHARS) {
+      webClipCaptureStatus("The page sent a screenshot" +
+        " that could not be used. The clip itself can" +
+        " still be saved.");
+      return;
+    }
+    st.shotDataUrl = d.img;
+    const thumb = webClipModalEl("webClipShotThumb");
+    thumb.src = d.img;
+    webClipModalEl("webClipShotRow")
+      .classList.remove("hidden");
+    webClipCaptureStatus("Screenshot attached. It will" +
+      " stand in the note above the clip text.");
+    return;
+  }
+  if (d.type === "shot-failed") {
+    const why = typeof d.msg === "string" && d.msg
+      ? d.msg.slice(0, 300)
+      : "The page could not turn that area into a picture.";
+    webClipCaptureStatus(why + " The clip itself can" +
+      " still be saved.");
+  }
+}
+
+/* Capture area: the ask goes to the page, which shows
+   its drag overlay; the picture (or the refusal) comes
+   back through the channel. */
+function requestWebClipCapture() {
+  if (!webClipModalState || !webClipModalState.channelLive) {
+    return;
+  }
+  webClipCaptureStatus("On the page you clipped from," +
+    " drag over the area you want. The picture lands" +
+    " back here.");
+  webClipSendToOpener({ type: "capture" });
+}
+
+function removeWebClipShot() {
+  if (!webClipModalState) { return; }
+  webClipModalState.shotDataUrl = null;
+  webClipModalEl("webClipShotRow").classList.add("hidden");
+  webClipModalEl("webClipShotThumb").removeAttribute("src");
+  webClipCaptureStatus("Screenshot removed.");
+}
+
+/* The screenshot's bytes out of its data URL, strictly:
+   anything not wearing the PNG data URL shape is no
+   screenshot at all. */
+function webClipShotBlob(dataUrl) {
+  const m = /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/
+    .exec(typeof dataUrl === "string" ? dataUrl : "");
+  if (!m) { return null; }
+  try {
+    const bin = atob(m[1]);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) {
+      bytes[i] = bin.charCodeAt(i);
+    }
+    return new Blob([bytes], { type: "image/png" });
+  } catch (e) { return null; }
+}
+
+/* The screenshot's upload, mirroring the attachment
+   pipeline's own upload: the record is born whole (id,
+   provider, fileId, storage name, hash) and pushed onto
+   the note before any body is built, so the figure the
+   body carries is claimed by it under the v2.193
+   identity discipline. Any failure returns null and the
+   caller files the clip without the picture, saying so:
+   a screenshot never sinks its clip. */
+async function uploadWebClipScreenshot(note, dataUrl) {
+  const blob = webClipShotBlob(dataUrl);
+  if (!blob) { return null; }
+  try {
+    const providerName = state.attach.defaultProvider;
+    const driver = providers[providerName];
+    if (!driver) { return null; }
+    const st = await driver.getStatus();
+    if (!st || !st.connected) { return null; }
+    const attId = newNoteId() + "a";
+    const name = "Web clip screenshot.png";
+    const storageName = attId + "__" + sanitizeFileName(name);
+    const file = new File([blob], name, { type: "image/png" });
+    const up = await driver.upload(file, storageName, null);
+    if (!up || !up.fileId) { return null; }
+    const att = {
+      id: attId, provider: providerName, fileId: up.fileId,
+      name: name, storageName: storageName,
+      mime: "image/png", size: blob.size,
+      created: new Date().toISOString(),
+      imgHash: docDataUriHash(dataUrl)
+    };
+    note.attachments.push(att);
+    return att;
+  } catch (e) { return null; }
+}
+
+/* The dialog's Save: exactly one note, under the
+   once-only guard the auto-file era kept. The title,
+   notebook, and tags are the dialog's; the body is the
+   modal's assembly (source line per its checkbox, the
+   added text, the screenshot, the body its checkbox
+   chose). The note opens as a filed clip always did,
+   and the save rides the standing fresh path. */
+async function saveWebClipFromModal() {
+  const st = webClipModalState;
+  if (!st || webClipFiling) { return; }
+  const payload = st.payload;
+  webClipFiling = true;
+  try {
+    const titleText = webClipModalEl("webClipTitleInput")
+      .value.trim().slice(0, WEBCLIP_MAX_TITLE_CHARS);
+    const nbSlug = webClipModalEl("webClipNotebookSelect")
+      .value;
     const notebook = state.notebooks.find(function (nb) {
+      return nb.slug === nbSlug;
+    }) || state.notebooks.find(function (nb) {
       return nb.slug === fallbackNotebookSlug();
     }) || state.notebooks[0];
-    const cleanResult = sanitizeWebClipHtml(payload.html);
-    const note = makeNote(notebook.slug, payload.title,
-      canonicalizeAttachmentPlaceholders(
-        webClipBodyFor(payload, cleanResult)));
-    /* v2.130: a newborn note, Doc-backed like every
-       newborn note (markNoteDocBacked in store.js). */
+    if (!notebook) {
+      toast("No notebook exists to file the clip in.", true);
+      return;
+    }
+    const seenTags = {};
+    const tags = webClipModalEl("webClipTagsInput").value
+      .split(",").map(function (t) { return t.trim(); })
+      .filter(function (t) {
+        if (!t || seenTags[t]) { return false; }
+        seenTags[t] = true;
+        return true;
+      });
+    const fullPage = webClipModalEl("webClipFullPageInput")
+      .checked;
+    const useArticle = payload.mode !== "selection" ||
+      (fullPage && !!payload.articleHtml);
+    const rawBody = useArticle && payload.mode === "selection"
+      ? payload.articleHtml : payload.html;
+    const cleanResult = sanitizeWebClipHtml(rawBody);
+    const note = makeNote(notebook.slug,
+      titleText || payload.title ||
+        defaultTitleFromText(plainTextFromHtml(
+          cleanResult.html)), "");
     markNoteDocBacked(note);
+    note.tags = tags;
+    let shotAtt = null;
+    if (st.shotDataUrl) {
+      shotAtt = await uploadWebClipScreenshot(note,
+        st.shotDataUrl);
+    }
+    const body = webClipModalBody(payload, {
+      saveUrl: webClipModalEl("webClipSaveUrlInput").checked,
+      addTextHtml: webClipAddTextHtml(
+        webClipModalEl("webClipAddText").value),
+      shotFigure: shotAtt
+        ? "<figure class=\"ss-attachment\"" +
+          " data-attachment-id=\"" + shotAtt.id + "\"" +
+          " contenteditable=\"false\"></figure>"
+        : "",
+      cleanResult: cleanResult,
+      shortened: useArticle && payload.mode === "selection"
+        ? payload.articleShortened : payload.shortened
+    });
+    note.body = canonicalizeAttachmentPlaceholders(body);
     state.notes.unshift(note);
     saveCache();
     renderAll();
+    pendingWebClip = null;
+    closeWebClipModal();
     openNote(note.id);
     await saveNoteToRepo(note,
       { skipConflictCheck: true, fresh: true })
@@ -14406,15 +15104,52 @@ async function filePendingWebClip() {
           err.message, true);
       });
     toast("Web clip saved to " + notebook.name + ": \"" +
-      payload.title + "\"");
-    return note;
+      note.title + "\"" +
+      (st.shotDataUrl && !shotAtt
+        ? " (the screenshot could not be attached)"
+        : ""));
   } finally {
     webClipFiling = false;
-    /* v2.50: a held clip is unsaved state a waiting self
-       update reload waits for; its filing finishing is
-       one of the reload's landing moments. */
     maybeReloadForUpdate();
+    openHeldClipIfReady();
   }
+}
+
+/* A clip that arrived while a save was in flight was
+   held off by the filing guard at its own arrival;
+   with the guard clear and no dialog standing, its
+   dialog can open now. Called as each filing settles. */
+function openHeldClipIfReady() {
+  if (pendingWebClip && !webClipFiling &&
+      !webClipModalIsOpen()) {
+    filePendingWebClip();
+  }
+}
+
+/* The fragment's consumer, called by connectAndLoad
+   (mail.js) once the store is in and by the boot's
+   fragment path: the clip is HELD and the Quicknote
+   modal opens on it (v2.198; before, the note filed
+   itself here). Returns null always: the note exists
+   only when the dialog's Save files it. The guards are
+   the era's own: nothing held, a filing already running,
+   or the dialog already standing all leave the clip
+   exactly where it is. With no notebook at all, the
+   first one is created as the auto-file era did, since
+   the dialog needs a notebook to offer. */
+async function filePendingWebClip() {
+  if (!pendingWebClip || webClipFiling ||
+      webClipModalIsOpen()) {
+    return null;
+  }
+  if (!state.notebooks.length) {
+    webClipFiling = true;
+    try { await createNotebook("Personal"); }
+    finally { webClipFiling = false; }
+  }
+  if (!state.notebooks.length) { return null; }
+  openWebClipModal(pendingWebClip);
+  return null;
 }
 
 /* The Settings surface's fill: the bookmarklet link's href

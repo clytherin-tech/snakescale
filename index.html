@@ -7585,6 +7585,48 @@
   </div>
 </div>
 
+<div id="webClipModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="webClipModalTitle">
+  <div class="modal-card">
+    <h2 id="webClipModalTitle">Save web clip</h2>
+    <p id="webClipSourceLine" class="modal-sub"></p>
+    <div class="field">
+      <label for="webClipTitleInput">Title</label>
+      <input id="webClipTitleInput" type="text">
+    </div>
+    <div class="field">
+      <label for="webClipNotebookSelect">Notebook</label>
+      <select id="webClipNotebookSelect"></select>
+    </div>
+    <div class="field">
+      <label for="webClipTagsInput">Tags</label>
+      <input id="webClipTagsInput" type="text" placeholder="Comma, separated, tags">
+    </div>
+    <div class="field">
+      <label for="webClipAddText">Add text</label>
+      <textarea id="webClipAddText" rows="3"></textarea>
+    </div>
+    <div class="field settings-check">
+      <label><input id="webClipSaveUrlInput" type="checkbox" checked> Save page URL</label>
+    </div>
+    <div class="field settings-check">
+      <label><input id="webClipFullPageInput" type="checkbox"> Clip full page</label>
+      <p id="webClipFullPageNote" class="modal-sub"></p>
+    </div>
+    <div class="field">
+      <button id="webClipCaptureBtn" type="button">Capture area</button>
+      <p id="webClipCaptureStatus" class="modal-sub" aria-live="polite"></p>
+    </div>
+    <div id="webClipShotRow" class="webclip-shot-row hidden">
+      <img id="webClipShotThumb" class="webclip-shot-thumb" alt="Captured area of the clipped page">
+      <button id="webClipShotRemoveBtn" type="button">Remove screenshot</button>
+    </div>
+    <div class="modal-foot">
+      <button id="webClipCancelBtn" type="button">Cancel</button>
+      <button id="webClipSaveBtn" type="button" class="btn primary">Save clip</button>
+    </div>
+  </div>
+</div>
+
 <!-- ==========================================================================
      v2.8: Settings
      Opened from the sidebar menu's Settings item. The modal is
@@ -7833,6 +7875,7 @@
       <div class="settings-help">1. Drag the button below to your bookmarks or favorites bar. In Edge, show the favorites bar first (View, or Ctrl+Shift+B).</div>
       <div class="settings-help">2. On any page, select text to clip just that selection, or select nothing to clip the page article.</div>
       <div class="settings-help">3. Click the bookmarklet. Virida Notes opens in a new tab and files the clip as a note in your first notebook, with a link back to the source page at the top.</div>
+      <div class="settings-help">4. A saved bookmarklet keeps the app address it was made with. After the app's address changes, drag the button below to your favorites bar again so the bookmarklet points at the new address.</div>
       <div class="webclip-actions">
         <a class="btn" id="webClipBookmarkletLink" href="#">Clip to Virida Notes</a>
         <button class="btn" id="webClipCopyBtn" type="button">Copy bookmarklet code</button>

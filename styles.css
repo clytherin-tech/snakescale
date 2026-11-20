@@ -1032,6 +1032,20 @@ body.dark .merge-order-drag:hover{color:var(--accent);}
    it, never flush against it. */
 .webclip-actions{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 10px;align-items:center;}
 .webclip-actions a.btn{text-decoration:none;}
+/* v2.198: the Quicknote modal's screenshot row: the
+   captured region's thumbnail beside its Remove button. */
+.webclip-shot-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 10px 0;
+}
+.webclip-shot-thumb {
+  max-width: 220px;
+  max-height: 160px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
 .webclip-code{
   width:100%;box-sizing:border-box;min-height:64px;resize:vertical;
   padding:8px 10px;border:1px solid var(--border);
