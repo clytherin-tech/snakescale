@@ -4236,6 +4236,14 @@ async function boot() {
      this read cannot disturb it). The held clip files from
      connectAndLoad once the store is in. */
   readWebClipFromUrl();
+  /* v2.200: a helper window's fragment is read the
+     same way, and its card is told at once that the
+     helper stands; the notebook list and the Save
+     service follow once the store is in. */
+  readWebClipHelperFromUrl();
+  if (pendingWebClipHelper) {
+    webClipHelperPost({ type: "helper-boot" });
+  }
   injectLogos();
   renderAppVersion();
   loadSettings();
@@ -4265,6 +4273,7 @@ async function boot() {
      so the remembered note does not open over it (see
      the resume section in render.js). */
   resumeBootArrival = !!(pendingWorkerAuth || pendingWebClip ||
+    pendingWebClipHelper ||
     pendingTaskOpenId || pendingNoteReminderOpenId);
   /* Small diagnostic hook: the build stamp is searchable in the file,
      and also visible in the console for support. */
@@ -4294,6 +4303,9 @@ async function boot() {
     showScreen("app");
     await connectAndLoad();
     return;
+  }
+  if (pendingWebClipHelper) {
+    webClipHelperPost({ type: "helper-signin" });
   }
   showScreen(start);
   /* Setup is interactive the moment it is shown, so the boot

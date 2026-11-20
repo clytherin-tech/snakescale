@@ -14221,6 +14221,31 @@ const WEBCLIP_NONCE_PATTERN = /^[A-Za-z0-9_-]{16,64}$/;
 const WEBCLIP_MAX_SHOT_CHARS = 12000000;
 const WEBCLIP_CHANNEL_WAIT_MS = 8000;
 
+/* v2.200: the clip helper. The new bookmarklet opens
+   the app in a small helper window whose fragment
+   carries only the clip's nonce (this prefix, apart
+   from the clip payload prefix), and the Quicknote
+   card lives in the clipped page instead of in the
+   app. Over the same nonce channel the helper serves
+   the card the notebook list and takes the card's
+   Save payload: the choices, both bodies whole (no
+   fragment cap rides the channel), and the screenshot
+   when one was captured. The channel fields are
+   validated as strictly as the fragment payload ever
+   was: the bodies get a generous sanity ceiling (the
+   filing sanitizer applies the real cap), the added
+   text and the tags get their own caps, and a shot
+   must wear the PNG data URL shape under the standing
+   shot cap. The helper closes itself this long after
+   a clean save (or at once on Cancel), once its reply
+   has had time to land in the page. */
+const WEBCLIP_HELPER_PREFIX = "clipn=";
+const WEBCLIP_MAX_CHANNEL_HTML_CHARS = 2000000;
+const WEBCLIP_MAX_ADDTEXT_CHARS = 20000;
+const WEBCLIP_MAX_TAGS = 20;
+const WEBCLIP_MAX_TAG_CHARS = 60;
+const WEBCLIP_HELPER_CLOSE_MS = 800;
+
 /* The held clip, memory only by design (see the section
    head): a parsed, validated payload waiting for the store,
    or null. webClipFiling is the once only guard that keeps a
@@ -14278,6 +14303,7 @@ function webClipBookmarkletLines(appUrl) {
     "  var MAX_HTML = " + WEBCLIP_MAX_HTML_CHARS + ";",
     "  var MAX_FRAGMENT = " + WEBCLIP_MAX_FRAGMENT_CHARS + ";",
     "  var KIND = 'virida-clip';",
+    "  var WAIT_MS = " + WEBCLIP_CHANNEL_WAIT_MS + ";",
     "  var APP_ORIGIN = '';",
     "  try { APP_ORIGIN = new URL(APP).origin; } catch (e) {",
     "    var om = APP.match(/^https?:\\/\\/[^\\/]+/);",
@@ -14378,6 +14404,13 @@ function webClipBookmarkletLines(appUrl) {
     "  var selT = trunc(sel);",
     "  var artT = trunc(art);",
     "  var nz = mintNonce();",
+    "  var mode = sel ? 'selection' : 'article';",
+    "  /* The fallback fragment payload, packed exactly",
+    "     as the v2.198 bookmarklet packed it (the pair",
+    "     rule and the full page flag): it is held in",
+    "     case the card cannot stay in this page and the",
+    "     clip has to open in the app instead, where the",
+    "     standing dialog files it. */",
     "  var payload;",
     "  if (sel) {",
     "    payload = { v: 1, t: document.title || location.href,",
@@ -14398,45 +14431,446 @@ function webClipBookmarkletLines(appUrl) {
     "      u: location.href, h: artT[0], m: 'article',",
     "      s: artT[1] ? 1 : 0, n: nz };",
     "  }",
-    "  var win = window.open(APP + '#clip=' + enc(payload),",
-    "    '_blank');",
-    "  if (!win) { return; }",
-    "  var capBusy = false;",
+    "  /* A second click while a card stands supersedes",
+    "     the first card: its shell is removed here and",
+    "     its timers and listener stand down when they",
+    "     next look at the generation token. */",
+    "  var myGen = {};",
+    "  window.__vcqActive = myGen;",
+    "  var staleCard = document.querySelector(",
+    "    '[data-virida-clip-card]');",
+    "  if (staleCard && staleCard.parentNode) {",
+    "    staleCard.parentNode.removeChild(staleCard);",
+    "  }",
+    "  var staleStyle = document.querySelector(",
+    "    '[data-virida-clip-card-style]');",
+    "  if (staleStyle && staleStyle.parentNode) {",
+    "    staleStyle.parentNode.removeChild(staleStyle);",
+    "  }",
+    "  /* The card's own stylesheet: namespaced vcq-",
+    "     classes only, the Deep Forest palette, a light",
+    "     surface by default and a dark one under a dark",
+    "     system scheme, solid and shadowed so it reads",
+    "     on any page it lands on. */",
+    "  var CSS = '.vcq-card{position:fixed;top:16px;'",
+    "    + 'right:16px;width:340px;'",
+    "    + 'max-width:calc(100vw - 32px);'",
+    "    + 'max-height:calc(100vh - 32px);overflow:auto;'",
+    "    + 'z-index:2147483646;background:#fdfefb;'",
+    "    + 'color:#1d2b22;border:1px solid #33523f;'",
+    "    + 'border-radius:12px;'",
+    "    + 'box-shadow:0 18px 50px rgba(10,20,14,0.45);'",
+    "    + 'font-family:system-ui,-apple-system,Segoe UI,'",
+    "    + 'Roboto,Helvetica,Arial,sans-serif;'",
+    "    + 'font-size:14px;line-height:1.45;'",
+    "    + 'padding:14px 16px;box-sizing:border-box}'",
+    "    + '.vcq-card *{box-sizing:border-box}'",
+    "    + '.vcq-head{display:flex;align-items:center;'",
+    "    + 'justify-content:space-between;margin:0 0 4px}'",
+    "    + '.vcq-brand{font-weight:700;font-size:15px}'",
+    "    + '.vcq-x{border:0;background:transparent;'",
+    "    + 'color:inherit;font-size:18px;line-height:1;'",
+    "    + 'cursor:pointer;padding:2px 6px}'",
+    "    + '.vcq-status{background:#eef4ee;'",
+    "    + 'border:1px solid #cfddd0;border-radius:8px;'",
+    "    + 'padding:6px 8px;margin:6px 0 4px;'",
+    "    + 'font-size:13px}'",
+    "    + '.vcq-lab{display:block;font-size:12px;'",
+    "    + 'font-weight:600;margin:9px 0 3px;'",
+    "    + 'color:#33523f}'",
+    "    + '.vcq-in,.vcq-sel,.vcq-ta{display:block;'",
+    "    + 'width:100%;padding:6px 8px;'",
+    "    + 'border:1px solid #b9c9bb;border-radius:8px;'",
+    "    + 'background:#ffffff;color:#1d2b22;'",
+    "    + 'font:inherit;font-size:14px}'",
+    "    + '.vcq-ta{resize:vertical}'",
+    "    + '.vcq-check{display:flex;gap:6px;'",
+    "    + 'align-items:center;margin-top:9px;'",
+    "    + 'font-size:13px}'",
+    "    + '.vcq-note{font-size:12px;color:#5a6f5e;'",
+    "    + 'margin:3px 0 0}'",
+    "    + '.vcq-cap{margin-top:11px}'",
+    "    + '.vcq-btn{font:inherit;font-size:13px;'",
+    "    + 'padding:6px 12px;border:1px solid #33523f;'",
+    "    + 'border-radius:8px;background:#eef4ee;'",
+    "    + 'color:#1d2b22;cursor:pointer}'",
+    "    + '.vcq-btn[disabled]{opacity:0.55;'",
+    "    + 'cursor:default}'",
+    "    + '.vcq-primary{background:#2e4a38;'",
+    "    + 'border-color:#2e4a38;color:#ffffff;'",
+    "    + 'font-weight:600}'",
+    "    + '.vcq-shot{display:flex;align-items:center;'",
+    "    + 'gap:8px;margin-top:8px}'",
+    "    + '.vcq-thumb{max-width:120px;max-height:80px;'",
+    "    + 'border:1px solid #b9c9bb;border-radius:6px}'",
+    "    + '.vcq-foot{display:flex;'",
+    "    + 'justify-content:flex-end;gap:8px;'",
+    "    + 'margin-top:13px}'",
+    "    + '@media (prefers-color-scheme:dark){'",
+    "    + '.vcq-card{background:#1d2b22;color:#e8f0e8;'",
+    "    + 'border-color:#4a6a54}'",
+    "    + '.vcq-status{background:#243528;'",
+    "    + 'border-color:#4a6a54}'",
+    "    + '.vcq-lab{color:#bcd2bf}'",
+    "    + '.vcq-note{color:#9db8a2}'",
+    "    + '.vcq-in,.vcq-sel,.vcq-ta{background:#243528;'",
+    "    + 'color:#e8f0e8;border-color:#4a6a54}'",
+    "    + '.vcq-btn{background:#243528;color:#e8f0e8;'",
+    "    + 'border-color:#4a6a54}'",
+    "    + '.vcq-primary{background:#3c5f47;'",
+    "    + 'border-color:#3c5f47;color:#ffffff}}';",
+    "  function mk(tag, cls, text) {",
+    "    var n = document.createElement(tag);",
+    "    if (cls) { n.className = cls; }",
+    "    if (text != null) { n.textContent = text; }",
+    "    return n;",
+    "  }",
+    "  var styleEl = document.createElement('style');",
+    "  styleEl.setAttribute('data-virida-clip-card-style',",
+    "    '1');",
+    "  styleEl.textContent = CSS;",
+    "  document.documentElement.appendChild(styleEl);",
+    "  var card = mk('div', 'vcq-card');",
+    "  card.setAttribute('data-virida-clip-card', '1');",
+    "  var headRow = mk('div', 'vcq-head');",
+    "  headRow.appendChild(mk('span', 'vcq-brand',",
+    "    'Clip to Virida Notes'));",
+    "  var xBtn = mk('button', 'vcq-x', '\\u00d7');",
+    "  xBtn.type = 'button';",
+    "  xBtn.setAttribute('aria-label', 'Close');",
+    "  headRow.appendChild(xBtn);",
+    "  card.appendChild(headRow);",
+    "  var statusEl = mk('div', 'vcq-status',",
+    "    'Reaching Virida Notes...');",
+    "  statusEl.id = 'vcqStatus';",
+    "  card.appendChild(statusEl);",
+    "  function field(label, node) {",
+    "    card.appendChild(mk('label', 'vcq-lab', label));",
+    "    card.appendChild(node);",
+    "  }",
+    "  var titleIn = mk('input', 'vcq-in');",
+    "  titleIn.id = 'vcqTitle'; titleIn.type = 'text';",
+    "  titleIn.value = document.title || '';",
+    "  field('Title', titleIn);",
+    "  var nbSel = mk('select', 'vcq-sel');",
+    "  nbSel.id = 'vcqNb';",
+    "  var nbWait = document.createElement('option');",
+    "  nbWait.value = '';",
+    "  nbWait.textContent = 'Loading notebooks...';",
+    "  nbSel.appendChild(nbWait);",
+    "  field('Notebook', nbSel);",
+    "  var tagsIn = mk('input', 'vcq-in');",
+    "  tagsIn.id = 'vcqTags'; tagsIn.type = 'text';",
+    "  tagsIn.placeholder = 'Comma, separated, tags';",
+    "  field('Tags', tagsIn);",
+    "  var addTa = mk('textarea', 'vcq-ta');",
+    "  addTa.id = 'vcqAdd'; addTa.rows = 3;",
+    "  field('Add text', addTa);",
+    "  function checkRow(id, label, checked) {",
+    "    var lab = mk('label', 'vcq-check');",
+    "    var box = document.createElement('input');",
+    "    box.type = 'checkbox'; box.id = id;",
+    "    box.checked = checked;",
+    "    lab.appendChild(box);",
+    "    lab.appendChild(document.createTextNode(",
+    "      ' ' + label));",
+    "    card.appendChild(lab);",
+    "    return box;",
+    "  }",
+    "  var saveUrlBox = checkRow('vcqSaveUrl',",
+    "    'Save page URL', true);",
+    "  var fullBox = checkRow('vcqFull',",
+    "    'Clip full page', false);",
+    "  var fullNote = mk('p', 'vcq-note');",
+    "  fullNote.id = 'vcqFullNote';",
+    "  card.appendChild(fullNote);",
+    "  if (mode !== 'selection') {",
+    "    fullBox.checked = true; fullBox.disabled = true;",
+    "    fullNote.textContent = 'No text was selected on'",
+    "      + ' the page, so the clip is the page article.';",
+    "  } else if (!art) {",
+    "    fullBox.checked = false; fullBox.disabled = true;",
+    "    fullNote.textContent = 'The full page did not'",
+    "      + ' come over with this clip, so the selection'",
+    "      + ' is the whole clip.';",
+    "  }",
+    "  var capRow = mk('div', 'vcq-cap');",
+    "  var capBtn = mk('button', 'vcq-btn',",
+    "    'Capture area');",
+    "  capBtn.id = 'vcqCapture'; capBtn.type = 'button';",
+    "  capRow.appendChild(capBtn);",
+    "  card.appendChild(capRow);",
+    "  var capStatus = mk('p', 'vcq-note');",
+    "  capStatus.id = 'vcqCapStatus';",
+    "  card.appendChild(capStatus);",
+    "  var shotRow = mk('div', 'vcq-shot');",
+    "  shotRow.id = 'vcqShotRow';",
+    "  shotRow.style.display = 'none';",
+    "  var thumb = mk('img', 'vcq-thumb');",
+    "  thumb.id = 'vcqThumb';",
+    "  thumb.alt = 'Captured area of this page';",
+    "  var shotRm = mk('button', 'vcq-btn', 'Remove');",
+    "  shotRm.id = 'vcqShotRemove'; shotRm.type = 'button';",
+    "  shotRow.appendChild(thumb);",
+    "  shotRow.appendChild(shotRm);",
+    "  card.appendChild(shotRow);",
+    "  var foot = mk('div', 'vcq-foot');",
+    "  var cancelBtn = mk('button', 'vcq-btn', 'Cancel');",
+    "  cancelBtn.id = 'vcqCancel';",
+    "  cancelBtn.type = 'button';",
+    "  var saveBtn = mk('button', 'vcq-btn vcq-primary',",
+    "    'Save clip');",
+    "  saveBtn.id = 'vcqSave'; saveBtn.type = 'button';",
+    "  saveBtn.disabled = true;",
+    "  foot.appendChild(cancelBtn);",
+    "  foot.appendChild(saveBtn);",
+    "  card.appendChild(foot);",
+    "  document.documentElement.appendChild(card);",
+    "  /* The card's standing state: the helper window it",
+    "     opened, whether any channel word has landed",
+    "     (live), whether the notebook list has landed",
+    "     and Save is armed (ready), whether a Save is in",
+    "     flight (saveSent), whether the card is finished",
+    "     (done), the captured PNG waiting to ride the",
+    "     Save payload (shot), and whether a capture drag",
+    "     stands (capBusy). */",
+    "  var helper = null;",
+    "  var live = false, ready = false;",
+    "  var done = false, saveSent = false;",
+    "  var shot = null, capBusy = false;",
+    "  var waitTimer = 0, deathTimer = 0;",
+    "  function setStatus(text) {",
+    "    statusEl.textContent = text;",
+    "  }",
     "  function send(obj) {",
+    "    if (!helper) { return; }",
     "    obj.k = KIND; obj.n = nz;",
-    "    try { win.postMessage(obj, APP_ORIGIN || '*'); }",
-    "    catch (e) { /* the app window is gone */ }",
+    "    try { helper.postMessage(obj, APP_ORIGIN || '*'); }",
+    "    catch (e) { /* the helper window is gone */ }",
+    "  }",
+    "  function cleanup() {",
+    "    if (waitTimer) {",
+    "      window.clearTimeout(waitTimer); waitTimer = 0;",
+    "    }",
+    "    if (deathTimer) {",
+    "      window.clearInterval(deathTimer); deathTimer = 0;",
+    "    }",
+    "    window.removeEventListener('message', onMsg);",
+    "    if (card.parentNode) {",
+    "      card.parentNode.removeChild(card);",
+    "    }",
+    "    if (styleEl.parentNode) {",
+    "      styleEl.parentNode.removeChild(styleEl);",
+    "    }",
+    "  }",
+    "  /* The bounded wait's end, and a dead helper's",
+    "     end, before any Save: the clip hands itself to",
+    "     the fragment path, so the dialog in the app",
+    "     opens on it and the clip is never lost. A",
+    "     helper window still standing is navigated to",
+    "     the fragment address (a cross-origin window's",
+    "     location can always be set); a closed one is",
+    "     replaced by a fresh window; only a browser",
+    "     that refuses both leaves the card standing",
+    "     with the popup word. */",
+    "  function fallback() {",
+    "    if (done) { return; }",
+    "    if (window.__vcqActive !== myGen) {",
+    "      cleanup(); return;",
+    "    }",
+    "    done = true;",
+    "    var target = APP + '#clip=' + enc(payload);",
+    "    var handed = false;",
+    "    if (helper && !helper.closed) {",
+    "      try { helper.location = target; handed = true; }",
+    "      catch (e) { handed = false; }",
+    "    }",
+    "    if (!handed) {",
+    "      var w2 = null;",
+    "      try { w2 = window.open(target, '_blank'); }",
+    "      catch (e) { w2 = null; }",
+    "      handed = !!w2;",
+    "    }",
+    "    saveBtn.disabled = true;",
+    "    capBtn.disabled = true;",
+    "    if (handed) {",
+    "      setStatus('The clip could not stay in this'",
+    "        + ' page, so it opened in Virida Notes'",
+    "        + ' instead.');",
+    "      window.setTimeout(cleanup, 2600);",
+    "    } else {",
+    "      setStatus('Your browser blocked the Virida'",
+    "        + ' Notes window. Allow popups for this'",
+    "        + ' site, then clip again.');",
+    "      cancelBtn.textContent = 'Close';",
+    "    }",
     "  }",
     "  function onMsg(ev) {",
-    "    if (ev.source !== win) { return; }",
+    "    if (window.__vcqActive !== myGen) {",
+    "      cleanup(); return;",
+    "    }",
+    "    if (!helper || ev.source !== helper) { return; }",
     "    var d = ev.data;",
     "    if (!d || d.k !== KIND || d.n !== nz) { return; }",
-    "    if (d.type === 'hello') { send({ type: 'ready' }); }",
-    "    else if (d.type === 'capture' && !capBusy) {",
-    "      capBusy = true;",
-    "      pickArea(function (shot) {",
-    "        capBusy = false;",
-    "        if (shot) { send({ type: 'shot', img: shot }); }",
-    "        else {",
-    "          send({ type: 'shot-failed',",
-    "            msg: 'That area could not be turned into' +",
-    "              ' a picture on this page.' });",
+    "    live = true;",
+    "    if (waitTimer) {",
+    "      window.clearTimeout(waitTimer); waitTimer = 0;",
+    "    }",
+    "    if (d.type === 'helper-boot') {",
+    "      if (!ready) {",
+    "        setStatus('Virida Notes opened. Waiting'",
+    "          + ' for it to be ready...');",
+    "      }",
+    "    } else if (d.type === 'helper-signin') {",
+    "      if (!ready) {",
+    "        setStatus('Waiting for sign-in: finish'",
+    "          + ' signing in in the Virida Notes'",
+    "          + ' window, and this card will be ready.');",
+    "      }",
+    "    } else if (d.type === 'helper-ready') {",
+    "      ready = true;",
+    "      var list = d.notebooks || [];",
+    "      nbSel.innerHTML = '';",
+    "      list.forEach(function (nb) {",
+    "        var o = document.createElement('option');",
+    "        o.value = nb.slug;",
+    "        o.textContent = nb.name;",
+    "        if (nb.slug === d.defaultSlug) {",
+    "          o.selected = true;",
     "        }",
+    "        nbSel.appendChild(o);",
     "      });",
+    "      if (!list.length) {",
+    "        saveBtn.disabled = true;",
+    "        setStatus('Virida Notes has no notebook to'",
+    "          + ' file this clip into yet.');",
+    "        return;",
+    "      }",
+    "      saveBtn.disabled = false;",
+    "      setStatus('Ready. Save files this clip in'",
+    "        + ' Virida Notes.');",
+    "    } else if (d.type === 'clip-saved') {",
+    "      done = true;",
+    "      saveBtn.disabled = true;",
+    "      capBtn.disabled = true;",
+    "      if (d.saveError) {",
+    "        setStatus('Saved in the Virida Notes'",
+    "          + ' window, but its upload hit a problem:'",
+    "          + ' ' + d.saveError + ' The note is open'",
+    "          + ' there.');",
+    "        window.setTimeout(cleanup, 5000);",
+    "      } else if (d.shotFailed) {",
+    "        setStatus('Saved to Virida Notes, but the'",
+    "          + ' screenshot could not be attached.');",
+    "        window.setTimeout(cleanup, 2600);",
+    "      } else {",
+    "        setStatus('Saved to Virida Notes' +",
+    "          (d.notebook ? ' (' + d.notebook + ')' : '')",
+    "          + '.');",
+    "        window.setTimeout(cleanup, 1400);",
+    "      }",
+    "    } else if (d.type === 'clip-failed') {",
+    "      saveSent = false;",
+    "      saveBtn.disabled = false;",
+    "      setStatus('That clip could not be saved: '",
+    "        + (d.msg || 'Virida Notes could not file it.')",
+    "        + ' You can try Save again, or Cancel.');",
     "    }",
     "  }",
     "  window.addEventListener('message', onMsg);",
-    "  var tries = 0;",
-    "  var announcer = window.setInterval(function () {",
-    "    tries += 1;",
-    "    send({ type: 'ready' });",
-    "    if (tries >= 10) {",
-    "      window.clearInterval(announcer);",
+    "  helper = window.open(APP + '#clipn=' + nz,",
+    "    '_blank', 'popup,width=440,height=620');",
+    "  if (!helper) { fallback(); }",
+    "  waitTimer = window.setTimeout(function () {",
+    "    if (!live && !done) { fallback(); }",
+    "  }, WAIT_MS);",
+    "  deathTimer = window.setInterval(function () {",
+    "    if (done || !helper) { return; }",
+    "    if (window.__vcqActive !== myGen) {",
+    "      cleanup(); return;",
     "    }",
-    "  }, 700);",
+    "    if (helper.closed) {",
+    "      if (saveSent) {",
+    "        done = true;",
+    "        window.clearInterval(deathTimer);",
+    "        deathTimer = 0;",
+    "        saveBtn.disabled = true;",
+    "        capBtn.disabled = true;",
+    "        cancelBtn.textContent = 'Close';",
+    "        setStatus('The Virida Notes window closed'",
+    "          + ' before the save could be confirmed.'",
+    "          + ' Check Virida Notes for the note'",
+    "          + ' before clipping again.');",
+    "      } else {",
+    "        fallback();",
+    "      }",
+    "    }",
+    "  }, 500);",
     "  window.addEventListener('unload', function () {",
     "    window.removeEventListener('message', onMsg);",
-    "    window.clearInterval(announcer);",
+    "    if (waitTimer) { window.clearTimeout(waitTimer); }",
+    "    if (deathTimer) {",
+    "      window.clearInterval(deathTimer);",
+    "    }",
+    "  });",
+    "  saveBtn.addEventListener('click', function () {",
+    "    if (done || !ready || saveSent) { return; }",
+    "    if (!helper || helper.closed) {",
+    "      fallback(); return;",
+    "    }",
+    "    saveSent = true;",
+    "    saveBtn.disabled = true;",
+    "    setStatus('Saving in Virida Notes...');",
+    "    send({ type: 'clip-save', clip: {",
+    "      t: document.title || location.href,",
+    "      u: location.href,",
+    "      h: sel, a: art ? art : null, m: mode,",
+    "      title: titleIn.value, nb: nbSel.value,",
+    "      tags: tagsIn.value, add: addTa.value,",
+    "      url: saveUrlBox.checked ? 1 : 0,",
+    "      full: fullBox.checked ? 1 : 0,",
+    "      shot: shot",
+    "    } });",
+    "  });",
+    "  function onCancel() {",
+    "    if (!done) {",
+    "      done = true;",
+    "      if (ready) { send({ type: 'clip-cancel' }); }",
+    "      else if (helper && !helper.closed) {",
+    "        try { helper.close(); } catch (e) { /* gone */ }",
+    "      }",
+    "    }",
+    "    cleanup();",
+    "  }",
+    "  cancelBtn.addEventListener('click', onCancel);",
+    "  xBtn.addEventListener('click', onCancel);",
+    "  capBtn.addEventListener('click', function () {",
+    "    if (done || capBusy) { return; }",
+    "    capBusy = true;",
+    "    capStatus.textContent = 'Drag over the part of'",
+    "      + ' this page you want. Esc cancels.';",
+    "    pickArea(function (img, cancelled) {",
+    "      capBusy = false;",
+    "      if (img) {",
+    "        shot = img;",
+    "        thumb.src = img;",
+    "        shotRow.style.display = '';",
+    "        capStatus.textContent = 'Screenshot attached.'",
+    "          + ' It will stand in the note above the'",
+    "          + ' clip text.';",
+    "      } else if (cancelled) {",
+    "        capStatus.textContent = 'Capture cancelled.';",
+    "      } else {",
+    "        capStatus.textContent = 'That area could not'",
+    "          + ' be turned into a picture on this page.';",
+    "      }",
+    "    });",
+    "  });",
+    "  shotRm.addEventListener('click', function () {",
+    "    shot = null;",
+    "    thumb.removeAttribute('src');",
+    "    shotRow.style.display = 'none';",
+    "    capStatus.textContent = 'Screenshot removed.';",
     "  });",
     "  function pickArea(done) {",
     "    var overlay = document.createElement('div');",
@@ -14477,7 +14911,7 @@ function webClipBookmarkletLines(appUrl) {
     "      if (ev.key === 'Escape' || ev.keyCode === 27) {",
     "        ev.preventDefault();",
     "        cleanup();",
-    "        done(null);",
+    "        done(null, true);",
     "      }",
     "    }",
     "    document.addEventListener('keydown', onKey, true);",
@@ -14516,7 +14950,9 @@ function webClipBookmarkletLines(appUrl) {
     "        document.body ? document.body.scrollHeight : 0);",
     "      var clone = docEl.cloneNode(true);",
     "      var junk = clone.querySelectorAll('script, link,' +",
-    "        ' [data-virida-clip-overlay]');",
+    "        ' [data-virida-clip-overlay],' +",
+    "        ' [data-virida-clip-card],' +",
+    "        ' [data-virida-clip-card-style]');",
     "      Array.prototype.forEach.call(junk, function (n) {",
     "        if (n.parentNode) {",
     "          n.parentNode.removeChild(n);",
@@ -14931,6 +15367,60 @@ function readWebClipFromUrl() {
   return payload;
 }
 
+/* v2.200: the clip helper's standing state: the nonce
+   of the helper window this page is (null when this
+   page is not a clip helper), whether its channel
+   listener stands yet, whether it has served its
+   notebook list yet, and the filed clip's answer once
+   one lands (a repeated Save is answered from it and
+   never files twice). The helper holds nothing else:
+   the card in the clipped page owns the clip, and this
+   window only serves its notebook list, files its
+   Save, and closes. */
+let pendingWebClipHelper = null;
+let webClipHelperListening = false;
+let webClipHelperServed = false;
+let webClipHelperFiled = null;
+
+/* The boot reader for the helper fragment, mirroring
+   readWebClipFromUrl: a fragment that is not a helper
+   fragment is left entirely alone; a helper fragment
+   is stripped at once, valid or not, so the nonce
+   never lingers in the address bar, and a valid nonce
+   is held in memory only. boot() tells the card at
+   once that its helper window stands (helper-boot),
+   so the card's waiting words can move from reaching
+   to readying; the notebook list follows once the
+   store is in (serveWebClipHelper). */
+function readWebClipHelperFromUrl() {
+  let hash = "";
+  try { hash = window.location.hash || ""; }
+  catch (err) { return null; }
+  if (!hash ||
+      hash.indexOf("#" + WEBCLIP_HELPER_PREFIX) !== 0) {
+    return null;
+  }
+  const data = hash.slice(1 + WEBCLIP_HELPER_PREFIX.length);
+  stripWebClipFragment();
+  if (!WEBCLIP_NONCE_PATTERN.test(data)) { return null; }
+  pendingWebClipHelper = { nonce: data };
+  return pendingWebClipHelper;
+}
+
+/* One word to the card in the clipped page, stamped
+   with the channel kind and this helper's nonce, to
+   the window that opened this one. A page with no
+   opener, or a send the browser refuses, is simply
+   silent: the card's bounded wait covers it. */
+function webClipHelperPost(obj) {
+  if (!pendingWebClipHelper || !window.opener) { return; }
+  const msg = Object.assign({}, obj, {
+    k: "virida-clip", n: pendingWebClipHelper.nonce
+  });
+  try { window.opener.postMessage(msg, "*"); }
+  catch (err) { /* the card's wait covers a lost word */ }
+}
+
 /* v2.198: the Quicknote modal's standing state: the held
    clip it is filing, the screenshot data URL a capture
    brought back (null until one lands), whether the page
@@ -15243,12 +15733,101 @@ async function uploadWebClipScreenshot(note, dataUrl) {
   } catch (e) { return null; }
 }
 
+/* The clip tag list, shared by the dialog's Save and
+   the helper channel's parser: comma split, trimmed,
+   empties dropped, the first spelling kept. */
+function webClipTagList(text) {
+  const seenTags = {};
+  return String(text == null ? "" : text).split(",")
+    .map(function (t) { return t.trim(); })
+    .filter(function (t) {
+      if (!t || seenTags[t]) { return false; }
+      seenTags[t] = true;
+      return true;
+    });
+}
+
+/* v2.200: the clip filing core, shared by the dialog's
+   Save below and the helper channel's clip-save
+   further down: given a validated payload and the
+   dialog choices, build and file exactly one note and
+   report how it went. The note shape is the v2.198
+   shape, assembled by webClipModalBody (the source
+   line per the checkbox, the added text, the
+   screenshot figure, the body the full page choice
+   picked, the shortened note when a flag asks). A
+   missing notebook is reported as null and files
+   nothing. The repo save is the caller's own last
+   step (webClipSaveFiledNote), so the dialog opens
+   the note first, exactly as it always has. */
+async function fileWebClipChoices(payload, choices) {
+  const notebook = state.notebooks.find(function (nb) {
+    return nb.slug === choices.nbSlug;
+  }) || state.notebooks.find(function (nb) {
+    return nb.slug === fallbackNotebookSlug();
+  }) || state.notebooks[0];
+  if (!notebook) { return null; }
+  const titleText = String(choices.titleText || "")
+    .trim().slice(0, WEBCLIP_MAX_TITLE_CHARS);
+  const fullPage = !!choices.fullPage;
+  const useArticle = payload.mode !== "selection" ||
+    (fullPage && !!payload.articleHtml);
+  const rawBody = useArticle && payload.mode === "selection"
+    ? payload.articleHtml : payload.html;
+  const cleanResult = sanitizeWebClipHtml(rawBody);
+  const note = makeNote(notebook.slug,
+    titleText || payload.title ||
+      defaultTitleFromText(plainTextFromHtml(
+        cleanResult.html)), "");
+  markNoteDocBacked(note);
+  note.tags = choices.tags || [];
+  let shotAtt = null;
+  if (choices.shotDataUrl) {
+    shotAtt = await uploadWebClipScreenshot(note,
+      choices.shotDataUrl);
+  }
+  const body = webClipModalBody(payload, {
+    saveUrl: !!choices.saveUrl,
+    addTextHtml: webClipAddTextHtml(choices.addText),
+    shotFigure: shotAtt
+      ? "<figure class=\"ss-attachment\"" +
+        " data-attachment-id=\"" + shotAtt.id + "\"" +
+        " contenteditable=\"false\"></figure>"
+      : "",
+    cleanResult: cleanResult,
+    shortened: useArticle && payload.mode === "selection"
+      ? payload.articleShortened : payload.shortened
+  });
+  note.body = canonicalizeAttachmentPlaceholders(body);
+  state.notes.unshift(note);
+  saveCache();
+  renderAll();
+  return {
+    note: note, notebook: notebook, shotAtt: shotAtt,
+    shotWanted: !!choices.shotDataUrl
+  };
+}
+
+/* The filed note's repo save, shared by both callers:
+   the standing fresh path, its failure captured as a
+   message rather than thrown, so a clip note created
+   locally is never lost to its own upload. */
+async function webClipSaveFiledNote(note) {
+  let saveError = null;
+  await saveNoteToRepo(note,
+    { skipConflictCheck: true, fresh: true })
+    .then(function () { saveCache(); })
+    .catch(function (err) {
+      saveError = err && err.message ? err.message
+        : String(err);
+    });
+  return saveError;
+}
+
 /* The dialog's Save: exactly one note, under the
-   once-only guard the auto-file era kept. The title,
-   notebook, and tags are the dialog's; the body is the
-   modal's assembly (source line per its checkbox, the
-   added text, the screenshot, the body its checkbox
-   chose). The note opens as a filed clip always did,
+   once-only guard the auto-file era kept. The dialog
+   reads its own fields into the shared filing core's
+   choices; the note opens as a filed clip always did,
    and the save rides the standing fresh path. */
 async function saveWebClipFromModal() {
   const st = webClipModalState;
@@ -15256,75 +15835,37 @@ async function saveWebClipFromModal() {
   const payload = st.payload;
   webClipFiling = true;
   try {
-    const titleText = webClipModalEl("webClipTitleInput")
-      .value.trim().slice(0, WEBCLIP_MAX_TITLE_CHARS);
-    const nbSlug = webClipModalEl("webClipNotebookSelect")
-      .value;
-    const notebook = state.notebooks.find(function (nb) {
-      return nb.slug === nbSlug;
-    }) || state.notebooks.find(function (nb) {
-      return nb.slug === fallbackNotebookSlug();
-    }) || state.notebooks[0];
-    if (!notebook) {
-      toast("No notebook exists to file the clip in.", true);
+    const filed = await fileWebClipChoices(payload, {
+      titleText: webClipModalEl("webClipTitleInput")
+        .value,
+      nbSlug: webClipModalEl("webClipNotebookSelect")
+        .value,
+      tags: webClipTagList(
+        webClipModalEl("webClipTagsInput").value),
+      saveUrl: webClipModalEl("webClipSaveUrlInput")
+        .checked,
+      fullPage: webClipModalEl("webClipFullPageInput")
+        .checked,
+      addText: webClipModalEl("webClipAddText").value,
+      shotDataUrl: st.shotDataUrl
+    });
+    if (!filed) {
+      toast("No notebook exists to file the clip in.",
+        true);
       return;
     }
-    const seenTags = {};
-    const tags = webClipModalEl("webClipTagsInput").value
-      .split(",").map(function (t) { return t.trim(); })
-      .filter(function (t) {
-        if (!t || seenTags[t]) { return false; }
-        seenTags[t] = true;
-        return true;
-      });
-    const fullPage = webClipModalEl("webClipFullPageInput")
-      .checked;
-    const useArticle = payload.mode !== "selection" ||
-      (fullPage && !!payload.articleHtml);
-    const rawBody = useArticle && payload.mode === "selection"
-      ? payload.articleHtml : payload.html;
-    const cleanResult = sanitizeWebClipHtml(rawBody);
-    const note = makeNote(notebook.slug,
-      titleText || payload.title ||
-        defaultTitleFromText(plainTextFromHtml(
-          cleanResult.html)), "");
-    markNoteDocBacked(note);
-    note.tags = tags;
-    let shotAtt = null;
-    if (st.shotDataUrl) {
-      shotAtt = await uploadWebClipScreenshot(note,
-        st.shotDataUrl);
-    }
-    const body = webClipModalBody(payload, {
-      saveUrl: webClipModalEl("webClipSaveUrlInput").checked,
-      addTextHtml: webClipAddTextHtml(
-        webClipModalEl("webClipAddText").value),
-      shotFigure: shotAtt
-        ? "<figure class=\"ss-attachment\"" +
-          " data-attachment-id=\"" + shotAtt.id + "\"" +
-          " contenteditable=\"false\"></figure>"
-        : "",
-      cleanResult: cleanResult,
-      shortened: useArticle && payload.mode === "selection"
-        ? payload.articleShortened : payload.shortened
-    });
-    note.body = canonicalizeAttachmentPlaceholders(body);
-    state.notes.unshift(note);
-    saveCache();
-    renderAll();
     pendingWebClip = null;
     closeWebClipModal();
-    openNote(note.id);
-    await saveNoteToRepo(note,
-      { skipConflictCheck: true, fresh: true })
-      .then(function () { saveCache(); })
-      .catch(function (err) {
-        toast("Web clip created locally; save failed: " +
-          err.message, true);
-      });
-    toast("Web clip saved to " + notebook.name + ": \"" +
-      note.title + "\"" +
-      (st.shotDataUrl && !shotAtt
+    openNote(filed.note.id);
+    const saveError = await webClipSaveFiledNote(
+      filed.note);
+    if (saveError) {
+      toast("Web clip created locally; save failed: " +
+        saveError, true);
+    }
+    toast("Web clip saved to " + filed.notebook.name +
+      ": \"" + filed.note.title + "\"" +
+      (filed.shotWanted && !filed.shotAtt
         ? " (the screenshot could not be attached)"
         : ""));
   } finally {
@@ -15369,6 +15910,201 @@ async function filePendingWebClip() {
   if (!state.notebooks.length) { return null; }
   openWebClipModal(pendingWebClip);
   return null;
+}
+
+/* v2.200: the helper's side of the card. Once the
+   store is in (connectAndLoad calls this beside
+   filePendingWebClip), a helper window tells its card
+   the real notebook list and stands listening for the
+   card's Save and Cancel. The listener is registered
+   once, and every word is validated the way the
+   capture channel always was: it must come from the
+   window that opened this one and wear the channel
+   kind and this helper's nonce, or it is not a word
+   at all. A page that is not a helper returns at
+   once, and a helper that already served returns too. */
+async function serveWebClipHelper() {
+  if (!pendingWebClipHelper || webClipHelperServed) {
+    return;
+  }
+  webClipHelperServed = true;
+  if (!state.notebooks.length) {
+    try {
+      await createNotebook("Personal");
+    } catch (err) { /* the list below speaks for it */ }
+  }
+  if (!webClipHelperListening) {
+    webClipHelperListening = true;
+    window.addEventListener("message",
+      webClipHelperMessage);
+  }
+  const fallback = state.notebooks.find(function (nb) {
+    return nb.slug === fallbackNotebookSlug();
+  }) || state.notebooks[0];
+  webClipHelperPost({
+    type: "helper-ready",
+    notebooks: state.notebooks.map(function (nb) {
+      return { slug: nb.slug, name: nb.name };
+    }),
+    defaultSlug: fallback ? fallback.slug : ""
+  });
+}
+
+/* The card's Save payload, validated as strictly as
+   the fragment payload ever was: the page address an
+   http or https URL under the standing cap, the clip
+   body a non empty string, the article body a string
+   or nothing, the bodies under the channel's sanity
+   ceiling (the filing sanitizer applies the real cap
+   and flags a shortening honestly), the added text
+   and the tags under their caps, and a screenshot
+   only as a PNG data URL under the standing shot
+   cap. Anything else is no clip at all. The returned
+   payload wears the parsed fragment payload's exact
+   shape, with the fragment era flags clear: over the
+   channel nothing was shortened in transit, and the
+   full page was never unavailable for want of room. */
+function parseWebClipChannelClip(d) {
+  if (!d || typeof d !== "object") { return null; }
+  if (typeof d.u !== "string" || !d.u ||
+      d.u.length > WEBCLIP_MAX_URL_CHARS) { return null; }
+  if (!/^https?:\/\//i.test(d.u)) { return null; }
+  if (typeof d.h !== "string" || !d.h.trim() ||
+      d.h.length > WEBCLIP_MAX_CHANNEL_HTML_CHARS) {
+    return null;
+  }
+  if (d.a != null && (typeof d.a !== "string" ||
+      d.a.length > WEBCLIP_MAX_CHANNEL_HTML_CHARS)) {
+    return null;
+  }
+  if (d.shot != null &&
+      (typeof d.shot !== "string" ||
+       d.shot.length > WEBCLIP_MAX_SHOT_CHARS ||
+       !/^data:image\/png;base64,/.test(d.shot))) {
+    return null;
+  }
+  const title = typeof d.t === "string" && d.t.trim()
+    ? d.t.trim().slice(0, WEBCLIP_MAX_TITLE_CHARS) : d.u;
+  const payload = {
+    title: title,
+    url: d.u,
+    html: d.h,
+    mode: d.m === "selection" ? "selection" : "article",
+    shortened: false,
+    articleHtml: typeof d.a === "string" && d.a.trim()
+      ? d.a : null,
+    articleShortened: false,
+    fullPageUnavailable: false,
+    nonce: pendingWebClipHelper
+      ? pendingWebClipHelper.nonce : null
+  };
+  const tags = webClipTagList(
+    typeof d.tags === "string" ? d.tags : "")
+    .slice(0, WEBCLIP_MAX_TAGS)
+    .map(function (t) {
+      return t.slice(0, WEBCLIP_MAX_TAG_CHARS);
+    });
+  const choices = {
+    titleText: typeof d.title === "string" ? d.title
+      : "",
+    nbSlug: typeof d.nb === "string" ? d.nb : "",
+    tags: tags,
+    saveUrl: d.url === 1 || d.url === true,
+    fullPage: d.full === 1 || d.full === true,
+    addText: typeof d.add === "string"
+      ? d.add.slice(0, WEBCLIP_MAX_ADDTEXT_CHARS) : "",
+    shotDataUrl: typeof d.shot === "string" ? d.shot
+      : null
+  };
+  return { payload: payload, choices: choices };
+}
+
+/* One card word, validated. The Cancel closes this
+   window (the card has already removed itself). A
+   Save files exactly one note through the shared
+   core under the standing filing guard, then
+   answers; a clean save closes this window once the
+   answer has had time to land, while a save whose
+   upload failed leaves the window standing, so the
+   locally created note is never stranded behind a
+   closed helper. A Save repeated after one landed is
+   answered from the filed result and never files
+   twice; a Save arriving while one is in flight is
+   told so, and the in flight save's own answer still
+   completes the card. */
+async function webClipHelperMessage(ev) {
+  if (!pendingWebClipHelper) { return; }
+  if (!window.opener || ev.source !== window.opener) {
+    return;
+  }
+  const d = ev.data;
+  if (!d || d.k !== "virida-clip" ||
+      d.n !== pendingWebClipHelper.nonce) { return; }
+  if (d.type === "clip-cancel") {
+    window.setTimeout(function () {
+      try { window.close(); } catch (err) { /* no-op */ }
+    }, 150);
+    return;
+  }
+  if (d.type !== "clip-save") { return; }
+  if (webClipHelperFiled) {
+    webClipHelperPost(Object.assign(
+      { type: "clip-saved" }, webClipHelperFiled));
+    return;
+  }
+  if (webClipFiling) {
+    webClipHelperPost({
+      type: "clip-failed",
+      msg: "A clip save is already in flight."
+    });
+    return;
+  }
+  const parsed = parseWebClipChannelClip(d.clip);
+  if (!parsed) {
+    webClipHelperPost({
+      type: "clip-failed",
+      msg: "That clip did not arrive whole."
+    });
+    return;
+  }
+  webClipFiling = true;
+  try {
+    const filed = await fileWebClipChoices(
+      parsed.payload, parsed.choices);
+    if (!filed) {
+      webClipHelperPost({
+        type: "clip-failed",
+        msg: "No notebook exists to file the clip in."
+      });
+      return;
+    }
+    const saveError = await webClipSaveFiledNote(
+      filed.note);
+    webClipHelperFiled = {
+      title: filed.note.title,
+      notebook: filed.notebook.name,
+      shotFailed: !!(filed.shotWanted &&
+        !filed.shotAtt),
+      saveError: saveError || ""
+    };
+    webClipHelperPost(Object.assign(
+      { type: "clip-saved" }, webClipHelperFiled));
+    if (!saveError) {
+      window.setTimeout(function () {
+        try { window.close(); } catch (err) { /* no-op */ }
+      }, WEBCLIP_HELPER_CLOSE_MS);
+    }
+  } catch (err) {
+    webClipHelperPost({
+      type: "clip-failed",
+      msg: err && err.message ? err.message
+        : "The clip could not be filed."
+    });
+  } finally {
+    webClipFiling = false;
+    maybeReloadForUpdate();
+    openHeldClipIfReady();
+  }
 }
 
 /* The Settings surface's fill: the bookmarklet link's href

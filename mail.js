@@ -9713,6 +9713,11 @@ function showGoogleConnectScreen(message) {
      away. Every path that lands on this gate (expired sign in, errors,
      sign out) gets the hide for free by coming through here. */
   hideLoading();
+  /* v2.200: a helper window standing at this gate
+     tells its card the wait is a sign in, so the card
+     says so instead of sitting on reaching. The post
+     itself stands down when this page is no helper. */
+  webClipHelperPost({ type: "helper-signin" });
 }
 
 async function connectAndLoad() {
@@ -9980,6 +9985,10 @@ async function connectAndLoad() {
        deletions section in render.js). */
     kickPendingDeleteDrain();
     await filePendingWebClip();
+    /* v2.200: a helper window serves its card from
+       here, the store being in: the notebook list
+       goes out and the Save listener stands. */
+    await serveWebClipHelper();
     if (starter) {
       openNote(starter.id);
       toast("Google Drive connected. Welcome to Virida Notes.");
