@@ -8257,33 +8257,61 @@ async function createNoteInRepo(notebookSlug) {
      helper (markNoteDocBacked in store.js). The note
      opens empty in the editor exactly like a file note. */
   markNoteDocBacked(note);
+  /* v2.195: the newborn is provisional until it earns
+     its first save (the registry in core.js), and its
+     born baseline is recorded now, so the standing
+     unchanged judgments (the autosave's, the leave
+     path's) read the untouched newborn as unchanged:
+     no phantom save, no version, for a note nothing
+     was entered into. */
+  markNoteProvisional(note);
+  rememberLastSavedContent(note);
   state.notes.unshift(note);
-  /* v1.4.4: the note opens immediately. Before this change the editor
-     waited for the full upload chain (on Drive: resolve the folder,
-     list it, upload the file), so a new note took a few seconds to
-     appear. The note is already in state and in the local cache, so
-     the upload now runs in the background. Failure handling matches
-     the old blocking version: saveNoteToRepo itself queues the write
-     when offline, when the Google sign in expired, and on conflict
-     paths, and any other failure surfaces with the same toast wording
-     as before. The fresh flag tells the Drive driver this file is
-     brand new, so it may skip its existence check listing. Per path
-     serialization inside saveNoteToRepo keeps a first autosave from
-     overtaking this create while it is still in flight. */
+  /* v1.4.4: the note opens immediately, as it still
+     does: the note is already in state and in the local
+     cache, so nothing waits on the store.
+     v2.195: what no longer happens at birth is the
+     background save itself. The newborn stands
+     provisional (marked above): no store write, no
+     catalog entry, and no Google Doc is created for a
+     note nothing was entered into. Its first earned
+     save, fired by the autosave or the leave path once
+     a title changes or text lands, clears the mark at
+     the save gate and creates everything a birth save
+     used to, the Doc included, with the same fresh
+     flag and the same failure handling (saveNoteToRepo
+     queues the write when offline or signed out, and
+     any other failure surfaces with a toast). While
+     the note stays pristine, switching away discards
+     it (render.js) and the next boot drops it (the
+     boot sequence below). Per path serialization
+     inside saveNoteToRepo keeps a first autosave from
+     overtaking anything, exactly as it did when the
+     birth save ran. */
   saveCache();
   renderAll();
   openNote(note.id);
-  saveNoteToRepo(note, { skipConflictCheck: true, fresh: true })
-    .then(function () {
-      /* The background write assigned the note its storage token
-         (note.sha). Persist it, so later conflict checks compare
-         against the token this create returned. */
-      saveCache();
-    })
-    .catch(function (err) {
-      toast("Note created locally; save failed: " + err.message, true);
-    });
   return note;
+}
+
+/* v2.195: commit a provisional newborn that earned
+   content before its first save ever landed (the app
+   closed with it open, or its save never ran): the
+   boot fires this once the store stands, and it lands
+   the note exactly as a birth save used to, Doc
+   creation included. The save gate clears the
+   provisional mark as the save proceeds; a failed
+   attempt leaves the mark standing, so the next boot
+   retries, and the note itself stands in the cache
+   either way. */
+async function commitProvisionalNote(note) {
+  try {
+    await saveNoteToRepo(note,
+      { skipConflictCheck: true, fresh: true });
+    saveCache();
+  } catch (err) {
+    toast("Note save failed: " + err.message, true);
+  }
 }
 
 /* --------------------------------------------------------------------------
@@ -9156,6 +9184,25 @@ function unarchiveNote(note, quiet) {
    its trashedFrom (so Restore still returns it to the notebook it
    originally came from), and its file moves out of archive/. */
 function moveNoteToTrashNow(note, quiet) {
+  /* v2.195: a provisional newborn that is still
+     pristine was never written anywhere, so there is
+     nothing to move: this move discards it outright,
+     the same end the switch away and the boot drop
+     reach. An earned newborn moves exactly as any
+     note does, and the move is its first landing (it
+     writes the note file itself below), so its
+     provisional mark is cleared here. */
+  if (isProvisionalNote(note)) {
+    if (discardProvisionalNote(note)) {
+      if (state.selectedId === note.id) {
+        state.selectedId = null;
+      }
+      saveCache();
+      if (!quiet) { renderAll(); }
+      return Promise.resolve();
+    }
+    clearNoteProvisional(note);
+  }
   /* v2.121: trashing a Doc-backed note continues it as a
      file note: this function's flow below writes the note
      file at the trash path (the wrapper above completed
@@ -9390,6 +9437,25 @@ async function confirmDeleteNoteForever(note) {
    archivedFrom remembers the notebook, so Unarchive is a plain
    restore under another name. Pinned is cleared, as with Trash. */
 function archiveNoteNow(note, quiet) {
+  /* v2.195: a provisional newborn that is still
+     pristine was never written anywhere, so there is
+     nothing to move: this move discards it outright,
+     the same end the switch away and the boot drop
+     reach. An earned newborn moves exactly as any
+     note does, and the move is its first landing (it
+     writes the note file itself below), so its
+     provisional mark is cleared here. */
+  if (isProvisionalNote(note)) {
+    if (discardProvisionalNote(note)) {
+      if (state.selectedId === note.id) {
+        state.selectedId = null;
+      }
+      saveCache();
+      if (!quiet) { renderAll(); }
+      return Promise.resolve();
+    }
+    clearNoteProvisional(note);
+  }
   /* v2.121: archiving a Doc-backed note continues it as
      a file note, on the trash rule (see
      moveNoteToTrashNow): the flow below writes the note
@@ -9787,6 +9853,12 @@ async function connectAndLoad() {
        any arrival boot. */
     const resumeHold = !starter && resumeHoldStands();
     const paintedFromCache = await loadCacheWithKey();
+    /* v2.195: provisional newborns the last sitting
+       left standing in the cache: the pristine ones
+       drop here, before any paint or resume judgment
+       can stand on them; the earned ones are committed
+       below, once the boot sync has run. */
+    const earnedProvisional = dropProvisionalNewborns();
     /* v2.174: the early landing. When the cache just
        adopted already holds the remembered note with
        its body, the note opens from that copy here,
@@ -9824,6 +9896,16 @@ async function connectAndLoad() {
     }
     await syncNow(false);
     bootMark("synced");
+    /* v2.195: commit the provisional newborns that
+       earned content in an earlier sitting, now that
+       the store stands (their own saves clear their
+       provisional marks; offline, or with no store,
+       they stay marked for the next boot). */
+    if (state.online !== false && state.repoExists) {
+      earnedProvisional.forEach(function (note) {
+        commitProvisionalNote(note);
+      });
+    }
     /* v2.16: the boot sync just refreshed the store in memory,
        so the auto-sync watcher baselines its change token from
        this moment and starts polling (when the setting is on).

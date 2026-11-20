@@ -541,6 +541,11 @@ function buildCatalogObject() {
   const entries = [];
   const memory = Object.create(null);
   const take = function (note, collection) {
+    /* v2.195: a provisional newborn stands in no
+       catalog until it earns its first save, so a
+       debounced catalog write can never carry a
+       ghost entry for a note that may be discarded. */
+    if (isProvisionalNote(note)) { return; }
     const stamp = catalogEntryStamp(note, collection);
     const held = catalogEntryMemory[note.id];
     let entry;

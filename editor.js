@@ -2349,33 +2349,63 @@ function pillBeforeCaret(bodyEl) {
   return isPillElement(before) ? before : null;
 }
 
-/* The note body's Backspace keypress, judged for the
-   pill behind the caret. Returns true only when it
-   took the keypress, so the wiring can prevent the
-   browser's own backward delete, which would
-   otherwise eat whatever stands behind the pill. */
-function pillBackspaceKey(ev) {
-  if (!ev || ev.key !== "Backspace" ||
-      ev.ctrlKey || ev.metaKey || ev.altKey) { return false; }
-  if (ev.defaultPrevented) { return false; }
-  const bodyEl = document.getElementById("noteBody");
-  if (!bodyEl || bodyEl.contentEditable === "false") {
-    return false;
+/* v2.195: the caret standing INSIDE a faced pill. A
+   faced anchor (a note link or web link wearing its
+   Mention, Title, or Preview face) has no editable
+   interior: its original children stand hidden in the
+   ss-link-original wrapper and its face is
+   contenteditable false, so the caret the user parks
+   against the face (a click on the pill, an arrow step
+   across it, a line end whose last element is the
+   pill) stands inside the anchor with nothing there it
+   can edit. The v2.166 judge declined that posture
+   outright (its inside-a-pill veto), which is the
+   field failure: the caret inside the pill's anchor
+   is exactly where Backspace had to work, and the
+   browser's own backward delete there eats a
+   character of the hidden label or nothing at all.
+   The veto's reason stands only for UNFACED anchors:
+   a task link's label, or a Text-mode link's text, is
+   real editable text, and a caret inside one edits
+   it. So the interior judge names only an anchor
+   carrying a direct-child face: any collapsed caret
+   inside one means the pill itself. */
+function pillInteriorCaret(bodyEl) {
+  const sel = window.getSelection();
+  if (!sel || !sel.rangeCount) { return null; }
+  const range = sel.getRangeAt(0);
+  if (!range.collapsed) { return null; }
+  let node = range.startContainer;
+  while (node && node !== bodyEl) {
+    if (node.nodeType === 1 && node.tagName === "A") {
+      for (let i = 0; i < node.childNodes.length; i++) {
+        const child = node.childNodes[i];
+        if (child.nodeType === 1 &&
+            child.classList.contains("ss-link-face")) {
+          return node;
+        }
+      }
+    }
+    node = node.parentNode;
   }
-  const note = currentNote();
-  if (!note || note.trashed || note.archived) { return false; }
-  const pill = pillBeforeCaret(bodyEl);
-  if (!pill) { return false; }
+  return null;
+}
+
+/* Remove a pill whole and park the caret at the seam
+   it leaves, the shared landing of the Backspace and
+   Delete paths (and of the v2.166 judge before them):
+   the tag pill watch's pair runs around the removal
+   by hand (a keyboard deletion arms it from its
+   beforeinput, and this removal is a hand built one,
+   so the pair runs explicitly, landing the same tag
+   outcome the Delete path lands), the link bar hides
+   when it was showing this pill, and the edit marks
+   the note dirty. */
+function removePillWhole(pill, inputType) {
   const parent = pill.parentNode;
   const at = Array.prototype.indexOf.call(
     parent.childNodes, pill);
-  /* The tag pill watch's before half, run by hand: a
-     keyboard deletion arms it from its beforeinput, and
-     this removal is a hand built one, so the pair runs
-     around the removal explicitly, landing the same tag
-     outcome the Delete path lands. */
-  captureTagPillsBeforeDelete(
-    { inputType: "deleteContentBackward" });
+  captureTagPillsBeforeDelete({ inputType: inputType });
   if (linkBarAnchor === pill) { hideLinkBar(); }
   pill.remove();
   /* Park the caret where the pill stood, the position
@@ -2391,6 +2421,61 @@ function pillBackspaceKey(ev) {
   } catch (err) { /* the body keeps its own caret */ }
   reconcileTagPillsAfterDelete();
   markDirty();
+}
+
+/* The note body's Backspace keypress, judged for the
+   pill at the caret. Returns true only when it took
+   the keypress, so the wiring can prevent the
+   browser's own backward delete, which would
+   otherwise eat whatever stands behind the pill (or,
+   inside a faced pill, a character of its hidden
+   label). v2.195: the interior posture is claimed
+   first: a collapsed caret inside a faced anchor
+   removes the pill whole, the posture the v2.166
+   judge's veto stranded. */
+function pillBackspaceKey(ev) {
+  if (!ev || ev.key !== "Backspace" ||
+      ev.ctrlKey || ev.metaKey || ev.altKey) { return false; }
+  if (ev.defaultPrevented) { return false; }
+  const bodyEl = document.getElementById("noteBody");
+  if (!bodyEl || bodyEl.contentEditable === "false") {
+    return false;
+  }
+  const note = currentNote();
+  if (!note || note.trashed || note.archived) { return false; }
+  const interior = pillInteriorCaret(bodyEl);
+  if (interior) {
+    removePillWhole(interior, "deleteContentBackward");
+    return true;
+  }
+  const pill = pillBeforeCaret(bodyEl);
+  if (!pill) { return false; }
+  removePillWhole(pill, "deleteContentBackward");
+  return true;
+}
+
+/* The note body's Delete keypress, judged the same
+   way but for the interior posture only: forward
+   Delete with the caret outside a pill keeps its
+   native behavior (the caret standing before a pill
+   deletes forward into it as it always has, which
+   the field confirms works), while a caret standing
+   inside a faced pill has nothing editable ahead of
+   it either, so Delete removes the pill whole,
+   symmetric with Backspace. */
+function pillDeleteKey(ev) {
+  if (!ev || ev.key !== "Delete" ||
+      ev.ctrlKey || ev.metaKey || ev.altKey) { return false; }
+  if (ev.defaultPrevented) { return false; }
+  const bodyEl = document.getElementById("noteBody");
+  if (!bodyEl || bodyEl.contentEditable === "false") {
+    return false;
+  }
+  const note = currentNote();
+  if (!note || note.trashed || note.archived) { return false; }
+  const interior = pillInteriorCaret(bodyEl);
+  if (!interior) { return false; }
+  removePillWhole(interior, "deleteContentForward");
   return true;
 }
 
@@ -3430,8 +3515,9 @@ function listViewContainsNote(note) {
 }
 
 /* Follow a note link: open the target when it is a live note, and say
-   plainly what happened when it is not. Trash and Archive are checked
-   in their own state lists; anything else no longer exists. */
+   plainly what happened when it is not. An archived target opens too
+   (v2.195: read-only, on the Archive view; see below); Trash is
+   checked in its own state list; anything else no longer exists. */
 function followNoteLink(noteId) {
   const live = state.notes.find(function (n) { return n.id === noteId; });
   if (live) {
@@ -3450,7 +3536,17 @@ function followNoteLink(noteId) {
     return;
   }
   if (state.archive.some(function (n) { return n.id === noteId; })) {
-    toast("That note is in the Archive.");
+    /* v2.195: an archived target opens, read-only as
+       every archived note renders, with the view
+       standing on the Archive, the same landing the
+       Archive list's own opens produce. The toast it
+       used to get left the link feeling broken: the
+       note was right there, and the link would not
+       take the user to it. The jump lands at the top,
+       like the live branch above. */
+    state.view = { kind: "archive", value: null };
+    editorAtTopNoteId = noteId;
+    openNote(noteId);
     return;
   }
   toast("That note no longer exists.", true);

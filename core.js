@@ -231,6 +231,13 @@ const LS_PENDING_DELETES = "snakescale.pendingDeletes.v1";
    session section in the version history part of
    core.js). */
 const LS_PENDING_SESSION = "snakescale.pendingSession.v1";
+/* v2.195: the provisional newborn registry: the ids of
+   notes born through the New Note path that have not
+   yet earned their first save, each with the title it
+   was born wearing. Device only, like the pending
+   session record above: a newborn that never earned a
+   save exists on no other device and in no catalog. */
+const LS_PROVISIONAL = "snakescale.provisionalNotes.v1";
 /* v2.181: the IMDb preview data cache: the parsed
    imdb-previews.json entries, kept on this device
    only (never synced), so a cold boot can answer a
@@ -2154,6 +2161,147 @@ function cloneVersionValue(value) {
    reaching a stored version. Attachments are sanitized
    and cloned, so a snapshot can never be mutated by later
    work on the note object. */
+/* ----- v2.195: provisional newborns ------------------
+   A note born through the New Note path starts
+   provisional: it is not saved at birth (no store
+   write, no catalog entry, and for a Doc-backed
+   newborn no Google Doc), and while it is still
+   pristine (the title it was born with, an empty
+   body, no tags, no attachments, unpinned, no
+   reminder) it is discarded when the user switches
+   away from it and dropped at the next boot if the
+   cache still holds it. The moment it earns content,
+   its first save clears the provisional mark at the
+   save gate and it lives exactly as a note always
+   has, Doc creation included. The registry is the
+   record of which notes are provisional and what
+   title each was born wearing; the pristine judgment
+   reads the note's standing state against that
+   record, never the title string alone (a user can
+   title a note "Untitled note" by hand, and a
+   newborn whose edits cancel out is pristine again
+   by its state, which is the rule: nothing entered,
+   nothing kept). Template, Scratch Pad, starter,
+   and duplicate creates never pass through the New
+   Note path and are never provisional. */
+let provisionalBirthsCache = null;
+function provisionalBirths() {
+  if (provisionalBirthsCache) {
+    return provisionalBirthsCache;
+  }
+  let parsed = {};
+  try {
+    parsed = JSON.parse(
+      localStorage.getItem(LS_PROVISIONAL) || "{}") || {};
+  } catch (err) { parsed = {}; }
+  provisionalBirthsCache = parsed;
+  return parsed;
+}
+function writeProvisionalBirths() {
+  try {
+    localStorage.setItem(LS_PROVISIONAL,
+      JSON.stringify(provisionalBirthsCache || {}));
+  } catch (err) { /* the in-memory map still judges */ }
+}
+function markNoteProvisional(note) {
+  if (!note || !note.id) { return; }
+  provisionalBirths()[note.id] = note.title;
+  writeProvisionalBirths();
+}
+function isProvisionalNote(note) {
+  if (!note || !note.id) { return false; }
+  return Object.prototype.hasOwnProperty.call(
+    provisionalBirths(), note.id);
+}
+function clearNoteProvisional(note) {
+  if (!note || !note.id) { return; }
+  const births = provisionalBirths();
+  if (Object.prototype.hasOwnProperty.call(
+      births, note.id)) {
+    delete births[note.id];
+    writeProvisionalBirths();
+  }
+}
+/* An empty body for the pristine judgment: no text
+   once trimmed, and no element that carries content
+   of its own (an image, a table, a checklist box, a
+   rule, an attachment tile, a link, embedded media).
+   An empty checklist item is still an element the
+   user put there, so it counts as entered. */
+function provisionalBodyIsEmpty(body) {
+  if (!body) { return true; }
+  const holder = document.createElement("div");
+  holder.innerHTML = body;
+  if (holder.textContent.trim() !== "") { return false; }
+  return !holder.querySelector(
+    "img, figure, table, input, hr, .ss-attachment," +
+    " a[href], iframe, video, audio");
+}
+function provisionalNotePristine(note) {
+  if (!isProvisionalNote(note)) { return false; }
+  return note.title === provisionalBirths()[note.id] &&
+    provisionalBodyIsEmpty(note.body) &&
+    (!note.tags || note.tags.length === 0) &&
+    (!note.attachments || note.attachments.length === 0) &&
+    !note.pinned && !note.reminderAt;
+}
+/* Remove a pristine provisional newborn from wherever
+   it stands and forget it entirely: the note lists,
+   the registry, and the saved-content baseline. The
+   caller repaints and saves the cache as its own flow
+   requires. Returns true when it discarded. */
+function discardProvisionalNote(note) {
+  if (!note || !provisionalNotePristine(note)) {
+    return false;
+  }
+  [state.notes, state.trash, state.archive].forEach(
+    function (list) {
+      const at = list.indexOf(note);
+      if (at >= 0) { list.splice(at, 1); }
+    });
+  clearNoteProvisional(note);
+  forgetLastSavedContent(note.id);
+  return true;
+}
+/* The boot half of the rule: drop every still-pristine
+   provisional newborn standing in the loaded cache
+   (the app closed with it open, or the switch away
+   never came), clear registry entries whose notes are
+   gone entirely, and return the provisional notes
+   that earned content, so the boot can commit them
+   once the store stands. Their registry entries stay
+   until that commit's save clears them. */
+function dropProvisionalNewborns() {
+  const births = provisionalBirths();
+  const ids = Object.keys(births);
+  if (!ids.length) { return []; }
+  const earned = [];
+  let dropped = false;
+  ids.forEach(function (id) {
+    const note = findNoteById(id);
+    if (!note) {
+      delete births[id];
+      writeProvisionalBirths();
+      return;
+    }
+    if (provisionalNotePristine(note)) {
+      if (discardProvisionalNote(note)) { dropped = true; }
+    } else if (state.notes.indexOf(note) >= 0) {
+      earned.push(note);
+    } else {
+      /* Earned content standing in Trash or the
+         Archive under a provisional mark should not
+         happen (the move paths clear the mark as
+         they land the note); clear it and keep the
+         note, rather than committing a save at a
+         collection it already landed in. */
+      clearNoteProvisional(note);
+    }
+  });
+  if (dropped) { saveCache(); }
+  return earned;
+}
+
 function noteContentSnapshot(note) {
   if (!note) { return null; }
   return {

@@ -10779,6 +10779,24 @@ function openNote(id) {
     detachOpenNoteEdits(outgoing);
   }
   openNoteNow(id);
+  /* v2.195: a provisional newborn left standing
+     pristine by the switch is discarded, now that the
+     clicked note stands open. The detach above already
+     collected any edits into the outgoing note object,
+     so its standing state is the honest judge, and an
+     earned newborn (a changed title, a character of
+     text, anything at all entered) simply stays and
+     saves behind the switch like any note. The
+     discard is a list removal and a repaint of the
+     list and sidebar, behind the switch that already
+     landed: no save fires for it, no version mints,
+     and the switch never waits on it. */
+  if (outgoing && outgoing.id !== id &&
+      discardProvisionalNote(outgoing)) {
+    saveCache();
+    renderNoteList();
+    renderSidebar();
+  }
 }
 
 /* The switch itself, exactly as openNote ran it through

@@ -4135,6 +4135,15 @@ function wireEvents() {
   noteBodyEl.addEventListener("keydown", function (ev) {
     if (pillBackspaceKey(ev)) { ev.preventDefault(); }
   });
+  /* v2.195: Delete, for the caret standing inside a
+     faced pill only (pillDeleteKey in the link section
+     judges and claims it; every other forward Delete
+     in the body stays native, as it always has). It
+     runs after the guards above for the same reason
+     the Backspace wiring does. */
+  noteBodyEl.addEventListener("keydown", function (ev) {
+    if (pillDeleteKey(ev)) { ev.preventDefault(); }
+  });
 
   /* v2.4: Tab and Shift+Tab belong to the note while the caret is
      in it (see handleBodyTabKey in the editor section): table cell

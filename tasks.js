@@ -4846,6 +4846,25 @@ async function saveNoteToRepoNow(note, options) {
      belongs to saves of a note this session already
      holds loaded. */
   const enteredAsShell = note.bodyLoaded === false;
+  /* v2.195: the provisional newborn gate. A newborn
+     that has earned nothing yet never reaches the
+     store: no file, no Doc, no catalog entry stands
+     for it, and the save reports itself landed
+     unchanged, the standing shape every no-op save
+     already takes, so the autosave, the leave path,
+     and the settlement counts all read it as the
+     no-op it is. The first save that finds content
+     clears the provisional mark and proceeds exactly
+     as a birth save always did, Doc creation
+     included. A provisional note is a fresh id, so
+     no divergence or conflict judgment is owed
+     before this one. */
+  if (isProvisionalNote(note)) {
+    if (provisionalNotePristine(note)) {
+      return { saved: true, unchanged: true };
+    }
+    clearNoteProvisional(note);
+  }
   /* v2.17.1: a diverged note's saves pause (see the divergence
      block above). The check sits ahead of every branch, online
      and offline alike, so a paused save neither writes, nor
