@@ -5986,7 +5986,7 @@ function docDataUriByteLength(parts) {
    adoption settles first); without one it lands
    on the note as it always did. */
 async function docAdoptOneImage(note, img, sink, reusePool,
-    priorId) {
+    priorId, healCtx) {
   const bag = sink || note.attachments;
   const src = String((img && img.src) || "");
   /* v2.191: the alt may carry the saver's record id
@@ -6093,6 +6093,47 @@ async function docAdoptOneImage(note, img, sink, reusePool,
       if (landed) {
         bag.push(landed);
         return figureFor(landed);
+      }
+    }
+    /* v2.199: the folder heal (see
+       docHealMissingImageRecord above). Every claim
+       so far has missed and the image's alt still
+       names a record: before the fresh adoption
+       below pays a re-upload of bytes the folder
+       may already hold, rebuild the record from the
+       attachments folder and claim it. A token that
+       arrives after another token's heal landed
+       takes the standing session record, exactly as
+       the duplicate claim above does. The alt's own
+       testimony about the record is restored the
+       way fresh adoption restores it: the sketch
+       flag from its marker, and the reader's label
+       into the record's alt field when the label is
+       not the rebuilt name itself, so neither is
+       lost with the record. A miss (no live copy
+       stands, or no heal context rides this call)
+       falls through to the adoption below
+       unchanged. */
+    if (altId && healCtx) {
+      const healed = await docHealMissingImageRecord(
+        note, altId, healCtx);
+      if (healed) {
+        const landed = docAdoptedImageById[
+          note.id + "|" + altId];
+        const use = landed || healed;
+        if (use === healed) {
+          if (docAltSketch(img && img.alt)) {
+            use.sketch = true;
+          }
+          if (label && label !== use.name) {
+            use.alt = label;
+          }
+        }
+        docAdoptedImageCache[cacheKey] = use;
+        docAdoptedImageById[note.id + "|" +
+          altId] = use;
+        bag.push(use);
+        return figureFor(use);
       }
     }
     /* v2.191: identity continuity. The fresh
@@ -6452,6 +6493,108 @@ async function docRebuildAttachmentRecord(job) {
   } catch (e) { return null; }
 }
 
+/* v2.199: the attachments folder's standing files,
+   listed once for a whole heal pass. The listing
+   rides the caller's heal context (created by
+   docAdoptImages for a conversion, by the open
+   path's heal for an open), so however many records
+   a pass rebuilds, the folder is listed a single
+   time. driveListChildren already rules trashed
+   files out of its answer, which is the heal's own
+   rule: only a live copy can answer for a record.
+   Any failure (the folder cannot be resolved, the
+   list cannot be read) answers an empty list, and
+   every heal in the pass then simply misses, exactly
+   as if no copy stood. */
+async function docHealFolderListing(healCtx) {
+  if (healCtx && healCtx.listing) {
+    return healCtx.listing;
+  }
+  const listing = (async function () {
+    try {
+      const folderId =
+        await googleEnsureAttachmentsFolder();
+      if (!folderId) { return []; }
+      return await driveListChildren(folderId);
+    } catch (e) { return []; }
+  })();
+  if (healCtx) { healCtx.listing = listing; }
+  return listing;
+}
+
+/* v2.199: rebuild one image attachment record from
+   the attachments folder itself, for an image whose
+   alt names a record no standing record answers to
+   (the record fell out of the note: the delete
+   engine dropped it after a transient block absence
+   and an undo stood the block back up, the field
+   case of 2026-11-20). The link discipline above
+   rebuilds from one file's metadata because a link
+   carries its file's id; an image carries only its
+   record's id, so the folder is listed and the
+   record is rebuilt from the newest live copy whose
+   storage name carries that id as its prefix, the
+   same prefix the upload path writes. The file's
+   own metadata is the authority, as it is for
+   links: its name is the storage name, the part
+   after the "__" separator names the record, and
+   its mime, size, and times complete the record.
+   The rebuilt record is hashless, like the legacy
+   lineage it rejoins: a standing record is claimed
+   by alt id on every later conversion without
+   consulting Drive, so the hash is never missed
+   (the trashed-file proof of the diagnosis). A
+   record id with no live copy in the folder heals
+   nothing and changes nothing: null comes back and
+   the caller falls through to fresh adoption
+   (inside a conversion) or leaves the placeholder
+   standing (on the open path). One attempt per
+   record id per pass: the context caches by id, so
+   two figures sharing one id heal once. */
+async function docHealMissingImageRecord(note, recordId,
+    healCtx) {
+  if (!recordId) { return null; }
+  const ctx = healCtx || {};
+  if (!ctx.byId) { ctx.byId = {}; }
+  if (ctx.byId[recordId]) { return ctx.byId[recordId]; }
+  const attempt = (async function () {
+    const files = await docHealFolderListing(ctx);
+    const prefix = recordId + "__";
+    let best = null;
+    (files || []).forEach(function (f) {
+      if (!f || f.trashed) { return; }
+      const storageName = String(f.name || "");
+      if (storageName.indexOf(prefix) !== 0) { return; }
+      if (String(f.mimeType || "")
+          .toLowerCase().indexOf("image/") !== 0) {
+        return;
+      }
+      if (!best || String(f.modifiedTime || "") >
+          String(best.modifiedTime || "")) {
+        best = f;
+      }
+    });
+    if (!best) { return null; }
+    const storageName = String(best.name || "");
+    const cut = storageName.indexOf("__");
+    const name = (cut > 0
+      ? storageName.slice(cut + 2) : "") || "image";
+    return {
+      id: recordId, provider: "google",
+      fileId: best.id, name: name,
+      storageName: storageName,
+      mime: String(best.mimeType ||
+        "application/octet-stream"),
+      size: Number(best.size) || 0,
+      created: String(best.createdTime ||
+        best.modifiedTime ||
+        new Date().toISOString())
+    };
+  })();
+  ctx.byId[recordId] = attempt;
+  return attempt;
+}
+
 /* v2.193: judge one attachment link, in the
    discipline's order: the record its fragment
    names first (a record already landed this pass
@@ -6601,6 +6744,12 @@ async function docAdoptImages(note, converted) {
      has settled, so the note's attachment order
      and the body's figures stand exactly as the
      serial loop left them. */
+  /* v2.199: one heal context for the whole pass
+     (see docHealMissingImageRecord): the folder is
+     listed at most once however many images heal,
+     and a record id heals at most once however many
+     tokens name it. */
+  const healCtx = {};
   const swaps = new Array(tokens.length);
   const bags = new Array(tokens.length);
   let cursor = 0;
@@ -6613,7 +6762,7 @@ async function docAdoptImages(note, converted) {
       bags[i] = [];
       swaps[i] = await docAdoptOneImage(note,
         converted.images[idx], bags[i], reusePool,
-        priorFigIds[idx]);
+        priorFigIds[idx], healCtx);
     }
   };
   const pool = [];
@@ -12528,12 +12677,82 @@ function checkAttachmentBody() {
 
 const queueAttachmentBodyCheck = debounce(checkAttachmentBody, 400);
 
+/* v2.199: the open path's heal (see
+   docHealMissingImageRecord above). After hydration,
+   a Doc-backed note can still hold figures whose ids
+   no record on the note answers to: their records
+   fell out while their blocks stood, and no
+   conversion will run while the Doc stands still,
+   so without this pass the placeholder is permanent
+   and every save fails closed. For just those ids
+   the folder rebuild is attempted; a healed record
+   stands on note.attachments, saveCache persists it
+   (the attachments array is all that is written:
+   the note's words and the editor's dirty state are
+   never touched), and the figure re-hydrates into
+   the real image in this same sitting. A figure the
+   folder cannot answer keeps the placeholder
+   hydration left it, exactly as before. External
+   image figures carry no record by design and are
+   never judged here. The pass is best effort: any
+   failure leaves the open exactly as it was. */
+async function docHealOpenNoteImageRecords(note) {
+  try {
+    if (!note || !isDocBackedNote(note)) { return; }
+    if (note.trashed || note.archived) { return; }
+    if (typeof renderEditor === "undefined" ||
+        renderEditor._forId !== note.id) { return; }
+    const bodyEl = document.getElementById("noteBody");
+    if (!bodyEl) { return; }
+    const have = new Set((note.attachments || [])
+      .map(function (a) { return a && a.id; }));
+    const missing = [];
+    bodyEl.querySelectorAll(
+      "figure.ss-attachment[data-attachment-id]")
+      .forEach(function (el) {
+        if (isExternalImageFigure(el)) { return; }
+        const id = el.getAttribute("data-attachment-id");
+        if (id && !have.has(id) &&
+            missing.indexOf(id) < 0) {
+          missing.push(id);
+        }
+      });
+    if (!missing.length) { return; }
+    const healCtx = {};
+    let healedAny = false;
+    for (let i = 0; i < missing.length; i++) {
+      const rec = await docHealMissingImageRecord(
+        note, missing[i], healCtx);
+      if (rec) {
+        note.attachments.push(rec);
+        healedAny = true;
+      }
+    }
+    if (!healedAny) { return; }
+    saveCache();
+    if (renderEditor._forId !== note.id) { return; }
+    const holders = bodyEl.querySelectorAll(
+      "figure.ss-attachment[data-attachment-id]");
+    for (const el of holders) {
+      const id = el.getAttribute("data-attachment-id");
+      if (id && missing.indexOf(id) >= 0 &&
+          (note.attachments || []).some(function (a) {
+            return a && a.id === id;
+          })) {
+        await hydrateOneAttachment(note, el);
+      }
+    }
+  } catch (e) { /* the heal is best effort: the open
+     proceeds exactly as it did without it */ }
+}
+
 /* After a note opens, in place of the bare hydration call render
    used before: hydrate its blocks, put back any blocks whose undo
    was stashed while the note was closed, then take the body
    snapshot the keyboard reconciliation compares against. */
 async function finishNoteOpenAttachments(note) {
   await hydrateAttachments(note);
+  await docHealOpenNoteImageRecords(note);
   await insertRestoredAttachments(note);
   snapshotAttachmentBody(note);
 }
