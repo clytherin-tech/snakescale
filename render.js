@@ -10723,7 +10723,13 @@ function noteLoadBarJudge(note) {
    this, a deferred switch could land after a later
    navigation (even a re-open of the note already showing)
    and yank the editor to a note the user has already
-   clicked away from. */
+   clicked away from.
+   v2.194: the switch is synchronous again (the outgoing
+   note's edits detach into a background settle instead of
+   deferring the switch; see openNote below), so no
+   deferred switch remains for the epoch to judge. The
+   counter still bumps on every open, and the last
+   navigation asked for stands by construction. */
 let openNoteEpoch = 0;
 
 /* Open one note in the editor. On mobile this also switches the visible
@@ -10740,40 +10746,37 @@ let openNoteEpoch = 0;
    hard settle failure the switch is aborted outright:
    the outgoing note stays open with its text on screen,
    because replacing the editor would discard edits that
-   exist nowhere else (see settleOpenNoteEdits). */
+   exist nowhere else (see settleOpenNoteEdits).
+   v2.194: the settle no longer stands in front of the
+   switch. When a different note is open with unsettled
+   edits, the outgoing note's edits detach (see
+   detachOpenNoteEdits in editor-tools.js): the collect
+   is synchronous, the collected note stands in the
+   cache at once, and its save lands behind the switch,
+   so this call renders the clicked note immediately,
+   and a hard failure in the background save is never a
+   reason to abort a switch after the fact (the text
+   stands preserved in the note object and the cache,
+   and the failure is toasted from the runner). Chris's
+   rule, 2026-11-19: the switch happens when he clicks;
+   the save finishes in the background. settleOpenNoteEdits
+   itself stands, unchanged, for the callers that carry
+   their own preservation (Trash and Archive of the open
+   note settle first by design). */
 function openNote(id) {
-  const epoch = ++openNoteEpoch;
+  openNoteEpoch++;
   /* v2.154: the loading bar stands for this
      open from the click itself (see the bar
-     section above), so a switch deferred
-     behind the settle below is inside its
-     span, and an instant switch settles it
-     again at the landing render before it can
-     ever appear. */
+     section above), and an instant switch
+     settles it again at the landing render
+     before it can ever appear. */
   noteLoadBarBegin(id);
   const outgoing = currentNote();
   if (outgoing && outgoing.id !== id && !outgoing.trashed &&
       !outgoing.archived && swEditorUnsettled()) {
-    settleOpenNoteEdits().then(function (ok) {
-      if (!ok) {
-        /* v2.154: the open is abandoned here
-           (the outgoing note stays open), so
-           its loading bar settles; a newer
-           open's bar is not this call's to
-           settle, and the id judge inside
-           noteLoadBarSettle leaves it alone. */
-        noteLoadBarSettle(id);
-        toast("Your last edit could not be saved, so the " +
-          "note was left open.", true);
-        return;
-      }
-      /* A newer openNote call superseded this switch
-         while the settle ran: drop the navigation (the
-         settle itself still saved the outgoing note). */
-      if (epoch !== openNoteEpoch) { return; }
-      openNoteNow(id);
-    });
-    return;
+    /* v2.194: detach the outgoing note's edits and
+       switch at once (see the header above). */
+    detachOpenNoteEdits(outgoing);
   }
   openNoteNow(id);
 }
@@ -10786,10 +10789,11 @@ function openNoteNow(id) {
      section in core.js): the outgoing note's session
      ends here, at the one switch every open passes
      through, and the incoming note's session opens.
-     openNote's settle gate has already landed the
-     outgoing note's edits by the time a switch reaches
-     this point, so the ending session's mint sits
-     behind them. */
+     v2.194: the outgoing note's edits were detached
+     into a background settle by openNote above, not
+     landed first, so the ending session's mint chains
+     behind that settle and judges the content it lands
+     (see settleEndedNoteSession in core.js). */
   noteSessionSwitch(id);
   /* v2.153: the search hit session for this open
      is decided here, at the one switch every
@@ -10853,9 +10857,11 @@ function openNoteNow(id) {
   rememberResumePlace();
   /* v2.73: a switch leaves the outgoing note closed, so a
      transcription that was parked on its unsaved edits
-     can land in its stored body now (the settle has
-     already collected and saved those edits by the time
-     a switch reaches this point). */
+     can land in its stored body now (the detach has
+     collected those edits by the time a switch reaches
+     this point, and their save is landing behind it;
+     the drain's own settlement re-check parks the job
+     again if that landing is still in flight). */
   void drainParkedTranscripts();
 }
 

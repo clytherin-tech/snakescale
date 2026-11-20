@@ -3095,8 +3095,15 @@ async function runEditorAutosave() {
      this one), and a note with no baseline is never
      gated, so a first save always runs. */
   if (notePath(note) === previousPath && noteMatchesLastSaved(note)) {
-    setSaveState("Saved " + new Date().toLocaleTimeString([], {
-      hour: "numeric", minute: "2-digit" }));
+    /* v2.194: the line stays honest on a no-op: through
+       v2.193 this landing restamped the line with the
+       current time ("Saved 8:33 PM") for a save that did
+       not happen, on a note nobody edited, which reads
+       exactly like the note just saved (the first of
+       Chris's two leave reports, 2026-11-19). The line
+       keeps the note's standing saved state instead: the
+       plain "Saved" the editor opened with. */
+    setSaveState("Saved");
     /* v2.50: the collected content is the saved baseline,
        so the edits this save collected are settled (see
        swEditorUnsettled at the v2.50 block). */
@@ -3384,6 +3391,214 @@ function settleOpenNoteEdits() {
   };
   run.then(clear, clear);
   return run;
+}
+
+/* ---------------------------------------------------------------
+   v2.194: the leave-path detach. openNote splits the settle
+   at its seam: the collect is synchronous and I/O-free, so
+   the switch renders the clicked note at once and the save
+   lands behind it. detachOpenNoteEdits collects the
+   outgoing note (the editor's content moves into the note
+   object, exactly as a timed pass would collect it),
+   snapshots what was collected, persists the note object
+   through saveCache() at once (the killed-app floor: the
+   collected text stands in the local cache from this
+   moment, under the session's standing dirty record), and
+   starts the background settle; openNoteNow then proceeds
+   without waiting. The runner performs today's settle loop
+   against the note object (never re-reading the editor,
+   which by then shows another note), raising the settled
+   count only to the sequence the collect saw, so the new
+   note's edits are never settled by the old note's save.
+   The v2.192 session mint chains behind the runner (see
+   settleEndedNoteSession in core.js, which awaits the
+   promise noteBackgroundSettlePromise hands it), judging
+   the landed content exactly once. A hard failure keeps
+   today's preservation (the text stands in the note object
+   and the cache) and is stated by toast; the switch is
+   never taken back. settleOpenNoteEdits above stands
+   unchanged for the callers that carry their own
+   preservation: Trash and Archive of the open note settle
+   first by design. The no-op branch rolls its collect
+   back from a snapshot taken before it, so a detach
+   that judges nothing real to land leaves the note
+   object byte-identical to how it stood (the DO11
+   regression witness: a stale editor fill must never
+   be collected over a programmatically loaded body),
+   and a shell note is never collected at all (its
+   body never stood in the editor, so the standing
+   fields are another note's leftovers). */
+const noteBackgroundSettles = {};
+
+function noteBackgroundSettlePromise(noteId) {
+  return noteBackgroundSettles[noteId] || null;
+}
+
+function detachOpenNoteEdits(note) {
+  /* A shell has no edits to detach: its body was never
+     filled into the editor (the pane shows the shell
+     state, and the standing fields hold another note's
+     leftovers), so collecting them would read foreign
+     content into this note. The leave is a no-pass
+     leave; the note stands on its object, and its body
+     completes through the ordinary open flow. */
+  if (!note || note.bodyLoaded === false) { return; }
+  cancelPendingAutosave();
+  const previousPath = notePath(note);
+  const previousSaved = lastSavedContentByNoteId[note.id]
+    ? cloneVersionValue(lastSavedContentByNoteId[note.id])
+    : null;
+  const beforeCollect = noteContentSnapshot(note);
+  collectEditor(note);
+  const seqAtCollect = swEditorDirtySeq;
+  const collected = noteContentSnapshot(note);
+  saveCache();
+  if (notePath(note) === previousPath &&
+      noteMatchesLastSaved(note)) {
+    /* Nothing real to land: under the v2.194 gate this is
+       where an untouched checklist leaves (its editor
+       serialization differs from the stored body only in
+       boolean-attribute form). No runner, no save, no
+       stamp moves, and no session record is owed: the
+       sitting ends unchanged, exactly as a leave with no
+       pass at all did. The collect above is rolled back
+       from the snapshot taken before it, and the cache
+       is written again over the rollback: the judgment
+       just made is that the editor holds nothing the
+       note does not already have, so the note object
+       must stand exactly as it stood. That matters when
+       the editor's standing fill is stale against the
+       object, a body loaded programmatically behind the
+       editor's back renders nothing into it, and
+       collecting that empty fill over the loaded body
+       would destroy it; the regression suite's DO11
+       leg is the witness (caught in this build's
+       regression: the first fixed tree emptied the
+       note on the next switch). */
+    note.title = beforeCollect.title;
+    note.body = beforeCollect.body;
+    note.tags = beforeCollect.tags.slice();
+    note.attachments = beforeCollect.attachments;
+    saveCache();
+    return;
+  }
+  /* The durable record learns at once that this sitting's
+     collected content is owed a save (the settle hook's
+     state work is synchronous): if the app dies while the
+     runner is in flight, the next launch commits the
+     sitting from the record, and the runner's own landing
+     reports the same facts under the same id, so the
+     sitting is judged exactly once either way. */
+  noteSessionSaveSettled(note, collected, previousSaved)
+    .catch(function () { });
+  /* The floor's second half, for a file-backed note: the
+     cache write above holds the collected note on this
+     device, but a relaunch's store load replaces a cache
+     copy whose stamp ties the store's, so the cache
+     alone cannot land the words (proven against this
+     build's first LV7 run: the relaunched note held the
+     store's body and the commit's verification, quite
+     rightly, minted nothing). The app's durable carrier
+     for an unlanded save is the sync queue, so the
+     detach plants a put of the collected note's file
+     text there too. The runner retires the plant at any
+     terminal outcome (landed, held, or failed: each
+     means the save's own machinery has taken
+     responsibility for the words), so only a kill leaves
+     it standing; at the next launch it flushes ahead of
+     the session commit's version entry, the flush's own
+     already-landed and ancestor judgments consume it
+     quietly if the runner's save beat it there, and the
+     version verification then finds the content
+     standing and mints exactly once. A Doc-backed note
+     plants nothing: its saves have no queued form (they
+     throw offline by design), and its sessions never
+     mint, so its floor stays the cache and the record,
+     exactly what the settle-first shape had. */
+  if (!note.docId) {
+    queueOp({ kind: "put", path: previousPath,
+      content: serializeNote(note), noteId: note.id,
+      detachPlant: true });
+  }
+  const run = runBackgroundNoteSettle(note, previousPath,
+    seqAtCollect);
+  noteBackgroundSettles[note.id] = run;
+  const clear = function () {
+    if (noteBackgroundSettles[note.id] === run) {
+      delete noteBackgroundSettles[note.id];
+    }
+  };
+  run.then(clear, clear);
+}
+
+/* Retire the detach's queue plant for this note: the
+   plants whose content the note has now reached (the
+   runner's landing is that content, by construction) are
+   removed; a plant carrying newer content (a second
+   detach of the same note landed while this runner was
+   still in flight) keeps standing for its own runner. */
+function retireDetachPlant(note) {
+  const queue = loadQueue();
+  const nowSnap = noteContentSnapshot(note);
+  const kept = queue.filter(function (op) {
+    if (!op || !op.detachPlant || op.noteId !== note.id) {
+      return true;
+    }
+    try {
+      const parsed = parseNoteFile(op.content, null,
+        note.id, false);
+      return !versionContentEqual(
+        noteContentSnapshot(parsed), nowSnap);
+    } catch (e) { return true; }
+  });
+  if (kept.length !== queue.length) { saveQueue(kept); }
+}
+
+async function runBackgroundNoteSettle(note, previousPath,
+    seqAtCollect) {
+  try {
+    return await runBackgroundNoteSettleLoop(note,
+      previousPath, seqAtCollect);
+  } finally {
+    retireDetachPlant(note);
+  }
+}
+
+async function runBackgroundNoteSettleLoop(note, previousPath,
+    seqAtCollect) {
+  let attempts = 0;
+  while (true) {
+    let result;
+    try {
+      result = await saveNoteAndSettleMove(note, previousPath);
+    } catch (err) {
+      toast("Save failed: " + (err && err.message
+        ? err.message : String(err)), true);
+      return "failed";
+    }
+    attempts++;
+    if (result && result.paused) { return "held"; }
+    /* A landing (a plain save, a Doc save, or the conflict
+       copy a divergence landed: the copy is a preservation,
+       and the departed note's divergence rides its own
+       banner, never the note being read). Raise the
+       settled count only to what this settle collected,
+       render the list facts the landing moved, and let a
+       waiting update through its guard. */
+    if (swEditorSettledSeq < seqAtCollect) {
+      swEditorSettledSeq = seqAtCollect;
+    }
+    maybeReloadForUpdate();
+    settlePendingNoteRefill(note, true);
+    drainParkedTranscripts();
+    renderSidebar();
+    renderNoteList();
+    if (result && result.conflict) { return "landed"; }
+    if (note && note.docId) { return "landed"; }
+    if (attempts >= 5 || noteMatchesLastSaved(note)) {
+      return "landed";
+    }
+  }
 }
 
 function markDirty() {

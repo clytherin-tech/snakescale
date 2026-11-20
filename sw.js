@@ -104,7 +104,7 @@
 
 "use strict";
 
-const CACHE_NAME = "snakescale-shell-2026-11-19-SSN-V21930";
+const CACHE_NAME = "snakescale-shell-2026-11-19-SSN-V21940";
 
 /* The shell, as paths relative to this worker's scope (the site
    root). "./" and "./index.html" are both listed: the first is the
@@ -152,8 +152,8 @@ const PAGE_KEY = "./index.html";
 const ASSET_HASHES = {
   "./index.html": "13c89477702fc102bdb445bfdd3c97ce8a3ab521a6974ab47499d383ee1978df",
   "./styles.css": "a9311cc13e7221ab057e36e8f6969131f41af35a344c42fa641697230762f2e8",
-  "./version.js": "3830f110420440c743a3e3620009232cec25a1f78412f1bd07abcd08d85667aa",
-  "./core.js": "4b2067c83210de0937d784b6ecea4397cfb8f8af7347a73c8a6d4b8f05ddb9af",
+  "./version.js": "1f441ae46ab82f898d194ad39f880825296096993fd6f4a2fbe014f12b6da86e",
+  "./core.js": "f13a1cd3a890ae30529732f2db550b8765dcc277d61ec6e39ef0f3ac316b7574",
   "./store.js": "f0a1861ab630ad58d17ffdef60a9b24bdee892813291ae1a88e1ad3c7aa59edc",
   "./sync.js": "0181cb3d7efa5e38d2ff3975001e55f2bf8f4948a29c757b5148c1e65b482c64",
   "./tasks.js": "89646dfc3194410d8d0c29300dcd39864aba094435a1112ffc8ca44a9f3ae28e",
@@ -161,9 +161,9 @@ const ASSET_HASHES = {
   "./home.js": "ffd2d0908c771ed0c57120448296be5cf52f805c6ff142df1f3313ac73306921",
   "./calendar.js": "1d8926b971eecfa2a7cfd0e285272ad26bc8ff95a88138878f3dff1c078c79b4",
   "./mail.js": "d8d6eca2cc45aa6f65cce2737d6b77b461186a81d0582f235ed9d393247d5bdd",
-  "./render.js": "d3a229e28a766601841713109506774e66e58ba8b717623964db3ccdbf7d0f70",
+  "./render.js": "be6927baf52255acd90d27dc92b37c02248f88e3cae7bdb085d23630b05a24c5",
   "./editor.js": "c961dd13449ce4e8be3ec2ea59aa21d05dbfca8137cf2f87adb1978d1a9869d8",
-  "./editor-tools.js": "b69b06cd4004c22ac8ba07c8278e477e85d42199925b6f8c7ef8beacffe7ae50",
+  "./editor-tools.js": "e5b7ecccf8b7d91247ed02dc87856c2c6466353691ec85cdc7eb6802030e0756",
   "./media.js": "ef51be84addd75953d8edd70c15fedc4d53248e94ee620b5822fc2585f10766c",
   "./app.js": "988b0780498de93aaae45e88ead0098c4e30fdadbb68bd061f6e9a25b970fc03",
   "./manifest.webmanifest": "c4bb2054518b8763407f0834ba9033f690677674c003d9f4eeb4b0286cad9a94",

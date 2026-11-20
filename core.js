@@ -2280,6 +2280,40 @@ function noteContentEquivalent(a, b) {
       JSON.stringify(sanitizeAttachments(b.attachments || []));
 }
 
+/* v2.194: the untouched judgment's content equality. The
+   strict versionContentEqual keeps every other duty it
+   has (the restore test, the flush verification, the
+   save facts), but the question THIS gate asks (would a
+   save write anything new?) has one false witness: a
+   stored body's boolean attributes (a ticked checklist's
+   checked above all) re-serialize from the editor's DOM
+   in a different string form (checked="") than the
+   stored bare form, so an untouched checklist compared
+   unequal to its own baseline and any pass that ran for
+   any reason performed a real save of a note nobody
+   edited, re-stamping its updated time and, since
+   v2.192, dirtying its session toward a phantom
+   version. The comparison below is versionContentEqual
+   with the body judged under the same boolean-attribute
+   canonicalization the sync refill judgment uses
+   (syncNormalizeBooleanAttrs in render.js), so a
+   serialization-only difference reads as unchanged
+   while any real difference of words, title, tags, or
+   attachment records still refuses. The decoration
+   spans a render adds (the done item wraps) need no
+   judging here: collectEditor, the funnel every
+   collected body passes, already unwraps them. */
+function noteGateContentEqual(a, b) {
+  if (!a || !b) { return false; }
+  return a.title === b.title &&
+    syncNormalizeBooleanAttrs(a.body) ===
+      syncNormalizeBooleanAttrs(b.body) &&
+    JSON.stringify(a.tags || []) ===
+      JSON.stringify(b.tags || []) &&
+    JSON.stringify(a.attachments || []) ===
+      JSON.stringify(b.attachments || []);
+}
+
 /* v2.19: does this note, exactly as it stands now, match its
    last saved baseline in full? The baseline is the v2.8
    snapshot map, extended in this build with the pin and the
@@ -2292,7 +2326,11 @@ function noteMatchesLastSaved(note) {
   const baseline = lastSavedContentByNoteId[note.id];
   if (!baseline) { return false; }
   const snap = noteContentSnapshot(note);
-  return versionContentEqual(snap, baseline) &&
+  /* v2.194: the content half of the judgment is the
+     gate's own equality (see noteGateContentEqual
+     above); the stored fields below it keep their
+     strict comparison. */
+  return noteGateContentEqual(snap, baseline) &&
     snap.pinned === baseline.pinned &&
     snap.thumbnail === baseline.thumbnail &&
     /* v2.35: a baseline written before reminders existed has
@@ -2637,9 +2675,12 @@ async function flushVersionHistoryOp(op) {
    tags: the standing capture question) makes it a candidate. The
    version mints when the session ENDS, holding the baseline:
      - leaving the note (openNoteNow ends the outgoing note's
-       session before the switch; the open's settle gate has
-       already landed the outgoing note's edits, so the mint sits
-       behind them);
+       session before the switch; through v2.193 the open's
+       settle gate landed the outgoing note's edits first, and
+       since v2.194 the switch detaches them into a background
+       settle instead, so the mint chains behind that settle
+       and judges the content it lands; see
+       settleEndedNoteSession);
      - an idle boundary: a save settling SESSION_IDLE_MS
        (30 minutes) after the session's last edit ends the
        standing session at that point, and the settling save
@@ -2802,9 +2843,11 @@ function noteSessionOpen(note, kind) {
 }
 
 /* The editor's switch: openNoteNow calls this before the
-   selection moves. The outgoing note's session ends (its
-   mint rides behind the saves the open's settle gate has
-   already landed), and the incoming note's session opens. */
+   selection moves. The outgoing note's session ends (since
+   v2.194 its mint chains behind the background settle the
+   switch detached its edits into, when one is in flight;
+   see settleEndedNoteSession), and the incoming note's
+   session opens. */
 function noteSessionSwitch(incomingId) {
   const outgoing = (typeof currentNote === "function")
     ? currentNote() : null;
@@ -2958,6 +3001,50 @@ async function settleEndedNoteSession(session, fromSplit) {
   if (!session.dirty || session.birth || !session.baseline) {
     if (!fromSplit) { noteSessionUnpersist(session.noteId); }
     return;
+  }
+  /* v2.194: when the switch detached this note's edits
+     into a background settle (see detachOpenNoteEdits in
+     editor-tools.js), the mint waits for that settle
+     before judging: the judgment reads the final saved
+     content from the baseline map, which the settle's
+     landing is what moves, so judging at the switch
+     would read the pre-save state and call the sitting
+     unchanged. The wait is the runner's own promise,
+     which always resolves (its outcome rides its return
+     value, never a rejection). While it ran, the
+     settle's saves reported to this session through the
+     settle hook, which found no live session (this end
+     took it) and re-adopted the durable record; the
+     facts are refreshed from that standing record, so
+     the mint judges the sitting's final state exactly
+     once, under the id minted when the sitting first
+     became a candidate. A record with a different
+     openedMs is a different sitting (an idle split
+     replaced this one during the wait; the split's own
+     end already judged this session, and the mint's id
+     keeps the two judgments from ever adding twice).
+     An idle split's end (fromSplit) never waits: its
+     ending IS a save settling, and the state it judges
+     is the state that save settled from. */
+  if (!fromSplit) {
+    const wait = (typeof noteBackgroundSettlePromise ===
+        "function")
+      ? noteBackgroundSettlePromise(session.noteId) : null;
+    if (wait) {
+      await wait;
+      const fresh = noteSessionStanding(session.noteId);
+      if (fresh && fresh !== session &&
+          fresh.openedMs === session.openedMs) {
+        session.dirty = fresh.dirty;
+        session.lastSaved = fresh.lastSaved;
+        if (fresh.entryId) {
+          session.entryId = fresh.entryId;
+        }
+        if (noteSessionByNoteId[session.noteId] === fresh) {
+          delete noteSessionByNoteId[session.noteId];
+        }
+      }
+    }
   }
   const result = await mintNoteSession(session);
   if (isNoteSessionMintResolved(result)) {
