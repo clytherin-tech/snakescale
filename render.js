@@ -5428,6 +5428,26 @@ async function restoreSelectedArchiveNotes() {
    rides the catalog at shape 3, so shells judge exactly
    as loaded notes do. Evernote's active reminders idiom
    (reminderTime:* -reminderDoneTime:*) works as written.
+
+   v2.196 addendum: the grammar learns to forgive the
+   forms anyone would type. tag: and notebook: match by
+   prefix without needing the trailing wildcard (the
+   wildcard form still works, and a full name still
+   matches, a name being a prefix of itself), because a
+   partial name used to return an unexplained empty
+   list. created: and updated: (and the reminder date
+   pair, which shares their reader) accept dashed
+   dates (2026-01-15) and the words today, yesterday,
+   and tomorrow beside the compact and relative forms.
+   A date value that still cannot be read no longer
+   degrades to a plain word: it stands as a predicate
+   that matches nothing and is recorded on the parse,
+   so the empty results state can name it (see
+   searchNoMatchHint) instead of the failure staying
+   silent. uploaded: stays unbuilt: it is not an
+   Evernote operator and notes carry no uploaded
+   stamp; the hint names it as unsupported when it
+   appears in a query.
    -------------------------------------------------------------------------- */
 
 /* The one text predicate every search path shares, extracted
@@ -5523,9 +5543,25 @@ function noteAttachmentMimes(note) {
    day is today at midnight, week is this week's Sunday,
    month is the first, year is January first, and the delta
    moves whole units (day-1 is yesterday, week-2 is the
-   Sunday two weeks back, day+7 is a week from today). */
+   Sunday two weeks back, day+7 is a week from today).
+   v2.196: the dashed spelling of an absolute date
+   (YYYY-MM-DD, with the same optional time tail)
+   names the same moment, and today, yesterday, and
+   tomorrow name the day unit's start at deltas 0, -1,
+   and +1. */
 function searchDateThresholdMs(rawValue) {
-  const v = String(rawValue || "").trim().toLowerCase();
+  let v = String(rawValue || "").trim().toLowerCase();
+  /* v2.196: the dashed form anyone would type
+     (2026-01-15, with the same optional time tail)
+     is folded into the compact form and judged by
+     the same validation below, and the natural day
+     words ride the relative day unit: today is day,
+     yesterday is day-1, tomorrow is day+1. */
+  const dm = /^(\d{4})-(\d{2})-(\d{2})(t.*)?$/.exec(v);
+  if (dm) { v = dm[1] + dm[2] + dm[3] + (dm[4] || ""); }
+  if (v === "today") { v = "day"; }
+  else if (v === "yesterday") { v = "day-1"; }
+  else if (v === "tomorrow") { v = "day+1"; }
   let m = /^(\d{4})(\d{2})(\d{2})(?:t(\d{2})(\d{2})(\d{2})(z)?)?$/.exec(v);
   if (m) {
     const y = +m[1], mo = +m[2], d = +m[3];
@@ -5651,6 +5687,12 @@ function parseSearchQuery(rawQuery) {
   let syntax = false;
   let anyMode = false;
   const scopes = [], positives = [], negatives = [];
+  /* v2.196: what the parse could not read, recorded so
+     the empty results state can name it (see
+     searchNoMatchHint). Today that is one entry per
+     unreadable date value: {type: "date", label,
+     value}. */
+  const problems = [];
   function pushTerm(pred) {
     if (pred.kind === "notebook") { scopes.push(pred); return; }
     if (pred.negated) { negatives.push(pred); }
@@ -5676,9 +5718,17 @@ function parseSearchQuery(rawQuery) {
       if (t.label === "created" || t.label === "updated") {
         const ms = searchDateThresholdMs(v);
         if (ms === null) {
-          /* A malformed date degrades to the plain word
-             the user typed, never to an error. */
-          pushText(t.label + ":" + v, t.negated);
+          /* v2.196: a date that cannot be read no longer
+             degrades to the plain word the user typed
+             (that word matched nothing and said
+             nothing). It stands as a predicate that
+             matches nothing and is recorded on the
+             parse, so the empty results state can name
+             it (see searchNoMatchHint). */
+          problems.push({ type: "date", label: t.label,
+            value: v });
+          pushTerm({ kind: "baddate", value: v,
+            negated: t.negated });
           return;
         }
         pushTerm({ kind: t.label, value: ms, negated: t.negated });
@@ -5699,7 +5749,12 @@ function parseSearchQuery(rawQuery) {
         }
         const ms = searchDateThresholdMs(v);
         if (ms === null) {
-          pushText(t.label + ":" + v, t.negated);
+          /* v2.196: the same baddate standing created:
+             and updated: give an unreadable date. */
+          problems.push({ type: "date", label: t.label,
+            value: v });
+          pushTerm({ kind: "baddate", value: v,
+            negated: t.negated });
           return;
         }
         pushTerm({ kind: t.label, value: ms, negated: t.negated });
@@ -5739,14 +5794,18 @@ function parseSearchQuery(rawQuery) {
           pushTerm({ kind: "tag", value: "*", negated: t.negated });
           return;
         }
-        let tagStem = v, tagWild = false;
+        let tagStem = v;
         if (tagStem.length > 1 &&
             tagStem.charAt(tagStem.length - 1) === "*") {
-          tagWild = true;
           tagStem = tagStem.slice(0, -1);
         }
+        /* v2.196: a tag value matches by prefix with or
+           without the trailing wildcard (a full name is
+           a prefix of itself, so exact names still
+           match): tag:wor finds the work tag instead of
+           returning an unexplained empty list. */
         pushTerm({ kind: "tag", value: tagStem.toLowerCase(),
-          wildcard: tagWild, negated: t.negated });
+          wildcard: true, negated: t.negated });
         return;
       }
       if (t.label === "resource") {
@@ -5766,14 +5825,19 @@ function parseSearchQuery(rawQuery) {
         return;
       }
       /* notebook:, stack:, intitle:: a name or title
-         match; the first two take a trailing wildcard as
-         a prefix, like the grammar's string matching. */
+         match; stack: takes a trailing wildcard as a
+         prefix, like the grammar's string matching.
+         v2.196: notebook: matches by prefix with or
+         without the wildcard, the same forgiveness
+         tag: gets, so a partial notebook name finds
+         its notebook instead of an empty list. */
       let stem = v, wild = false;
       if (t.label !== "intitle" && stem.length > 1 &&
           stem.charAt(stem.length - 1) === "*") {
         wild = true;
         stem = stem.slice(0, -1);
       }
+      if (t.label === "notebook") { wild = true; }
       pushTerm({ kind: t.label, value: stem.toLowerCase(),
         wildcard: wild, negated: t.negated });
       return;
@@ -5796,7 +5860,8 @@ function parseSearchQuery(rawQuery) {
   });
   if (!syntax) { return null; }
   return { anyMode: anyMode, scopes: scopes,
-    positives: positives, negatives: negatives };
+    positives: positives, negatives: negatives,
+    problems: problems };
 }
 
 /* ---------------- v2.153: search hit highlighting
@@ -6281,6 +6346,10 @@ function searchTermMatches(note, pred) {
     }
     return false;
   }
+  /* v2.196: a date value that could not be read matches
+     nothing; the parse records it so the empty results
+     state can name it. */
+  if (pred.kind === "baddate") { return false; }
   return false;
 }
 
@@ -6309,6 +6378,162 @@ function noteMatchesParsedSearch(note, parsed) {
   return parsed.positives.every(function (p) {
     return searchTermMatches(note, p);
   });
+}
+
+/* ---------- v2.196: the empty results hint ----------
+   When a search carrying operators matches nothing,
+   the list used to say only that no notes matched,
+   and the grammar's strictness (an exact tag name, a
+   rigid date) failed silently behind it. The
+   forgiveness above removes most of that; what
+   remains is named here: a date that could not be
+   read, an operator the grammar does not have
+   (uploaded:), a tag or notebook prefix that matches
+   nothing at all, and otherwise a plain statement of
+   what the search was understood to mean. Plain text
+   searches never get a hint: their empty state
+   stands exactly as it always has. */
+
+/* A threshold as the day it names, for the hint's
+   understood-as line: "Jan 15, 2026". */
+function searchHintDateText(ms) {
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const d = new Date(ms);
+  return months[d.getMonth()] + " " + d.getDate() + ", " +
+    d.getFullYear();
+}
+
+/* One parsed predicate as a few plain words for the
+   hint's understood-as line, or null for a kind the
+   line does not describe. */
+function searchHintDescribePred(pred) {
+  if (pred.kind === "text") {
+    return "containing \"" + pred.value + "\"";
+  }
+  if (pred.kind === "tag") {
+    return pred.value === "*"
+      ? "carrying any tag"
+      : "tagged \"" + pred.value + "\"";
+  }
+  if (pred.kind === "notebook") {
+    return "in a notebook named \"" + pred.value + "\"";
+  }
+  if (pred.kind === "stack") {
+    return "in the \"" + pred.value + "\" stack";
+  }
+  if (pred.kind === "intitle") {
+    return "titled \"" + pred.value + "\"";
+  }
+  if (pred.kind === "created" || pred.kind === "updated" ||
+      pred.kind === "remindertime" ||
+      pred.kind === "reminderdonetime") {
+    if (pred.value === "*") {
+      return pred.kind === "remindertime"
+        ? "carrying a reminder"
+        : "carrying a done reminder";
+    }
+    const what = pred.kind === "created" ? "created"
+      : pred.kind === "updated" ? "updated"
+      : pred.kind === "remindertime" ? "reminded"
+      : "reminder done";
+    return what + " on or after " +
+      searchHintDateText(pred.value);
+  }
+  if (pred.kind === "reminderorder") {
+    return "carrying a reminder";
+  }
+  if (pred.kind === "todo") {
+    return pred.value === "*" ? "carrying a checkbox"
+      : pred.value === "true" ? "with a checked box"
+      : "with an unchecked box";
+  }
+  if (pred.kind === "resource") {
+    return pred.value === "*"
+      ? "carrying an attachment"
+      : "carrying a " + pred.value + " attachment";
+  }
+  return null;
+}
+
+/* The hint line for an empty operator search, or null
+   when there is nothing to add to the standing empty
+   state. The tag judgment reads the pool the standing
+   view searches, the same choice visibleNotes makes. */
+function searchNoMatchHint() {
+  const raw = state.search || "";
+  if (!raw) { return null; }
+  const parts = [];
+  /* uploaded: is not an operator (it is not in
+     SEARCH_OPERATOR_LABELS and notes carry no
+     uploaded stamp); wherever it stands in the query
+     it is named, since as a plain word it silently
+     empties an operator query it rides in. */
+  const terms = tokenizeSearchQuery(raw);
+  for (let i = 0; i < terms.length; i++) {
+    if (terms[i].label === "uploaded") {
+      parts.push("uploaded: is not a supported search " +
+        "operator.");
+      break;
+    }
+  }
+  const parsed = parseSearchQuery(raw);
+  if (!parsed) {
+    return parts.length ? parts.join(" ") : null;
+  }
+  (parsed.problems || []).forEach(function (p) {
+    parts.push("The date in " + p.label + ":" + p.value +
+      " could not be read.");
+  });
+  const pool = state.view.kind === "trash" ? state.trash
+    : state.view.kind === "archive" ? state.archive
+    : state.notes;
+  parsed.positives.forEach(function (p) {
+    if (p.kind !== "tag" || p.value === "*") { return; }
+    const hit = pool.some(function (n) {
+      return (n.tags || []).some(function (t) {
+        return String(t).toLowerCase()
+          .indexOf(p.value) === 0;
+      });
+    });
+    if (!hit) {
+      parts.push("No tag begins with \"" + p.value + "\".");
+    }
+  });
+  parsed.scopes.forEach(function (s) {
+    if (s.kind !== "notebook" || s.negated) { return; }
+    const hit = state.notebooks.some(function (nb) {
+      return String(nb.name || "").toLowerCase()
+        .indexOf(s.value) === 0;
+    });
+    if (!hit) {
+      parts.push("No notebook begins with \"" +
+        s.value + "\".");
+    }
+  });
+  if (parts.length) { return parts.join(" "); }
+  /* Nothing is broken; say what the search was
+     understood to mean, so the empty list reads as an
+     answer rather than a failure. */
+  const said = [];
+  parsed.scopes.forEach(function (s) {
+    const d = searchHintDescribePred(s);
+    if (d) { said.push((s.negated ? "not " : "") + d); }
+  });
+  const posSaid = [];
+  parsed.positives.forEach(function (p) {
+    const d = searchHintDescribePred(p);
+    if (d) { posSaid.push(d); }
+  });
+  if (posSaid.length) {
+    said.push(posSaid.join(parsed.anyMode ? " or " : ", "));
+  }
+  parsed.negatives.forEach(function (p) {
+    const d = searchHintDescribePred(p);
+    if (d) { said.push("not " + d); }
+  });
+  if (!said.length) { return null; }
+  return "Understood as: notes " + said.join(", ") + ".";
 }
 
 /* The filtered, sorted note set for the middle pane.
@@ -6969,6 +7194,21 @@ function renderNoteList() {
       empty.innerHTML = "<div class=\"big\">No matches</div>No notes match the current filters in this view. Clear the filters to see everything again.";
     } else if (state.search) {
       empty.innerHTML = "<div class=\"big\">No matches</div>No notes match that search in this view.";
+      /* v2.196: an operator search that matches nothing
+         says what was understood (an unreadable date, a
+         tag or notebook prefix that matches nothing, an
+         unsupported operator, or the reading the search
+         was given) instead of leaving the empty list
+         unexplained. Plain searches get no hint:
+         searchNoMatchHint returns null for them, and
+         their empty state stands as it always has. */
+      const opHint = searchNoMatchHint();
+      if (opHint) {
+        const hintEl = document.createElement("div");
+        hintEl.className = "hint search-op-hint";
+        hintEl.textContent = opHint;
+        empty.appendChild(hintEl);
+      }
     } else {
       empty.innerHTML = "<div class=\"big\">No notes here yet</div>Press New Note to write your first one.";
     }
