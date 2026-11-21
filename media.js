@@ -2099,6 +2099,58 @@ async function autoSyncTick() {
   }
 }
 
+/* --------------------------------------------------------------------------
+   v2.202: the clip poke, and the immediate tick on return.
+
+   The clipper extension files a clip through the Worker into
+   the drop box the moment its save confirms, but the watcher
+   above only polls while the tab stands visible, so a clip
+   filed while the app sat in another window waited until the
+   app came forward and a tick landed. Two answers, both
+   riding the standing machinery; there is no new import path.
+
+   The poke: after a confirmed save, the extension knocks on
+   every open app window through its app-origin content
+   script, which dispatches the DOM event this section
+   listens for. The answer is the sync an auto-sync owes
+   (runAutoSync: the editor guard armed, syncNow(false)), so
+   the box drains through the one guarded path, with every
+   safety gate inside the sync standing: the flush order, the
+   open note's snapshot and refill judgment, the staged
+   probe. Only the visibility gate and the thirty second
+   wait are bypassed; that bypass is the poke's whole point.
+   A poke that finds a pass already running (a sync, or the
+   watcher mid-poll) stands down and runs nothing: that
+   pass's own load judges the box for itself, and the
+   watcher remains the backstop either way. An empty or
+   unchanged box is the sync's ordinary no-op: no import,
+   no toast, no error.
+
+   The immediate tick: a tab returning to the front runs one
+   tick at once instead of waiting out the interval (the
+   tick's own running guard prevents overlap), and the boot
+   runs one once its store stands (connectAndLoad), so a
+   clip no poke reached (the app was closed when it was
+   filed) imports the moment the app is looked at again.
+   -------------------------------------------------------------------------- */
+
+/* Answer one poke: run the owed sync now, under the same
+   readiness rule the tick asks first (storeSyncReady: the
+   store connected and a sign in live in memory). */
+function clipPokeSync() {
+  if (!storeSyncReady()) { return; }
+  if (state.syncing || autoSyncPollRunning) { return; }
+  runAutoSync();
+}
+
+window.addEventListener("virida-clip-poke", function () {
+  clipPokeSync();
+});
+
+document.addEventListener("visibilitychange", function () {
+  if (document.visibilityState === "visible") { autoSyncTick(); }
+});
+
 /* v2.2: Refresh connection. Through v2.6.0 it was a standalone
    sidebar button next to Sign out; v2.7 moved it into the sidebar
    footer's three dot menu, and v2.8 moved it again, into the

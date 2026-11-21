@@ -104,7 +104,7 @@
 
 "use strict";
 
-const CACHE_NAME = "snakescale-shell-2026-11-20-SSN-V22010";
+const CACHE_NAME = "snakescale-shell-2026-11-20-SSN-V22020";
 
 /* The shell, as paths relative to this worker's scope (the site
    root). "./" and "./index.html" are both listed: the first is the
@@ -152,7 +152,7 @@ const PAGE_KEY = "./index.html";
 const ASSET_HASHES = {
   "./index.html": "7cffb60e4166a03bc40e3d2a6706ddb211f402172281635be75857c55eecb547",
   "./styles.css": "f4bd011d67295e890d9ab0dedad39188675ec0f31fd3bac1b29e92ed815855da",
-  "./version.js": "30469a3c7712f9d0640abe48ccf4f31cdfa57265fd6ae1aca82df29c374f0f15",
+  "./version.js": "3cd59ddab294c53990e93154ee0b0e2704d7445a5a52d93e25b2834c93e77c93",
   "./core.js": "41553a2099cd589795f9440b3ec4760c3b9bec3bc3beffb40f89ca46b8984bbf",
   "./store.js": "0db4cb8c064c8e9c504092ebe0abe639d0e8d024d017dc015050eb4dfb170c2b",
   "./sync.js": "01be8d03355a6bb7885998abf9d8050ffe035955eac55e03d107bb494c88180b",
@@ -160,11 +160,11 @@ const ASSET_HASHES = {
   "./notebooks.js": "8bfe790a13d0fa111d0cedefe54ff98ace1523275555a99262cd283e396a16a1",
   "./home.js": "ffd2d0908c771ed0c57120448296be5cf52f805c6ff142df1f3313ac73306921",
   "./calendar.js": "1d8926b971eecfa2a7cfd0e285272ad26bc8ff95a88138878f3dff1c078c79b4",
-  "./mail.js": "7235953e4e6b13f81c48e2bd9ecd6daaf63656339f1e6a9155cca039dd282b4c",
+  "./mail.js": "a85586632cd88a8e63f2351f3f31957c43ac45de23ef03bdd0cae30594d68761",
   "./render.js": "abcb915ef7048f079a96345a8c2d9641e9112555bb66126d9e05897443a9d661",
   "./editor.js": "a4ae6edb1c2122b05ce776fee41e8ab8538481043b309e7c2f4407e4d163c840",
   "./editor-tools.js": "e5b7ecccf8b7d91247ed02dc87856c2c6466353691ec85cdc7eb6802030e0756",
-  "./media.js": "a1624de817015a47a3d1385911f42d6bd7d138d0a73e7861ee45a1d53f90bd64",
+  "./media.js": "20c7db8f9127794d69f7e2aa9d443637c39aaec3067355d5c1ad06fc2bf2cba3",
   "./app.js": "9e904a5b1ac7225e6764846fd61f5588e8b7d5c47bcb1644abd1e262144a199d",
   "./manifest.webmanifest": "c4bb2054518b8763407f0834ba9033f690677674c003d9f4eeb4b0286cad9a94",
   "./icon-192.png": "f3b785c13d078d71790c4330c0749324796115cb06b2215629ba6e2ebdaa35f6",

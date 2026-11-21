@@ -9916,6 +9916,11 @@ async function connectAndLoad() {
        this moment and starts polling (when the setting is on).
        Changes from before this boot are already in hand. */
     startAutoSync();
+    /* v2.202: one tick at once (see the clip poke section in
+       media.js): a change that landed during the boot itself,
+       after the boot sync's own load read the store, is judged
+       now rather than at the first interval. */
+    autoSyncTick();
     if (!resumeHold) {
       if (!paintedFromCache) { bootMark("firstPaint"); }
       hideLoading();
