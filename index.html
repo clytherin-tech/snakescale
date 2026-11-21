@@ -7871,7 +7871,7 @@
          Settings open. -->
     <section class="settings-section hidden" id="settingsPanelWebClip" role="tabpanel" data-settings-panel="webclip" aria-labelledby="settingsWebClipTitle">
       <h3 id="settingsWebClipTitle">Web clipper</h3>
-      <p>Clip web pages into Virida Notes, the way Evernote Web Clipper saves a page as a note with its source page attached. This app has no browser extension, so it uses a bookmarklet instead: a bookmark that runs a small clip script.</p>
+      <p>Clip web pages into Virida Notes, the way Evernote Web Clipper saves a page as a note with its source page attached. The browser extension below is the recommended way; the bookmarklet after it is the fallback: a bookmark that runs a small clip script.</p>
       <div class="settings-help">1. Drag the button below to your bookmarks or favorites bar. In Edge, show the favorites bar first (View, or Ctrl+Shift+B).</div>
       <div class="settings-help">2. On any page, select text to clip just that selection, or select nothing to clip the page article.</div>
       <div class="settings-help">3. Click the bookmarklet. A small card opens right on the page, with the title, notebook, and tags to choose there, and Capture area for a screenshot of part of the page. Virida Notes opens as a small helper window in the background, and Save in the card files the clip as a note without leaving the page.</div>
@@ -7885,6 +7885,37 @@
         <textarea class="webclip-code" id="webClipBookmarkletText" readonly rows="3"></textarea>
         <div class="settings-feedback" id="webClipFeedback" aria-live="polite"></div>
         <div class="settings-help">If dragging does not work in your browser, copy this code and paste it as the URL of a new bookmark named Clip to Virida Notes.</div>
+      </div>
+      <!-- v2.201: the browser extension, the recommended
+           clipper. Unlike the bookmarklet it files the clip
+           itself, from the card in the page, with no window
+           opening: its background worker hands the clip to
+           the sign-in service, which drops it in the notes
+           drop box for the app's next sync. The pairing is
+           a dedicated clip token, made here, pasted into
+           the extension's options page once, revocable
+           here any time; making a new one turns the old
+           one off. Only the token's hash ever leaves this
+           app (the service stores the hash, never the
+           token), and the token can do nothing but file
+           clips and read the notebook names. -->
+      <div class="field">
+        <label>Browser extension</label>
+        <div class="settings-help">The Virida Notes Clipper extension shows the same card in the page and saves it there, with nothing opening. Load it in Chrome from the extension folder (Developer Mode, then Load unpacked), then pair it with a clip token:</div>
+        <div class="settings-help" id="webClipExtStatus">Checking the clip token status...</div>
+        <div class="webclip-actions">
+          <button class="btn" id="webClipExtGenBtn" type="button">Generate clip token</button>
+          <button class="btn" id="webClipExtRevokeBtn" type="button">Revoke clip token</button>
+        </div>
+        <div class="settings-feedback" id="webClipExtFeedback" aria-live="polite"></div>
+      </div>
+      <div class="field hidden" id="webClipExtTokenRow">
+        <label for="webClipExtTokenText">Your clip token (shown only this once)</label>
+        <textarea class="webclip-code" id="webClipExtTokenText" readonly rows="2"></textarea>
+        <div class="webclip-actions">
+          <button class="btn" id="webClipExtCopyBtn" type="button">Copy token</button>
+        </div>
+        <div class="settings-help">Paste it into the extension's options page (right-click the extension's toolbar button, then Options). Anyone holding this token can add clips to your notes, so keep it to yourself; revoke it here if that ever changes.</div>
       </div>
     </section>
 

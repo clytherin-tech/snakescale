@@ -1763,6 +1763,76 @@ function dropboxEntryKey(entry) {
   return "x:" + String(entry);
 }
 
+/* v2.201: judge a clip entry's screenshot descriptor and
+   build the one attachment record it vouches for. The
+   descriptor is honored only when every part of it checks
+   out against the app's own conventions: the record id in
+   the minted shape (a note id plus the trailing "a" the
+   drop box import itself uses), the storage name exactly
+   the id's own ("<id>__<sanitized name>"), a PNG mime, a
+   Drive file id present, and the note's body actually
+   carrying the figure shell under that id. The record is
+   built through sanitizeAttachments, so what lands on the
+   note is shaped exactly like every record the app makes.
+   Anything less returns null and the import proceeds
+   without the picture. */
+function clipShotRecord(shot, body) {
+  if (!shot || typeof shot !== "object") { return null; }
+  const id = typeof shot.id === "string" ? shot.id : "";
+  const fileId = typeof shot.fileId === "string"
+    ? shot.fileId : "";
+  const name = typeof shot.name === "string" && shot.name
+    ? shot.name : "";
+  const storageName = typeof shot.storageName === "string"
+    ? shot.storageName : "";
+  const mime = typeof shot.mime === "string" ? shot.mime : "";
+  if (!/^[a-z0-9]+-[a-z0-9]+a$/.test(id)) { return null; }
+  if (!fileId || !name || mime !== "image/png") { return null; }
+  if (storageName !==
+      id + "__" + sanitizeFileName(name)) { return null; }
+  if (String(body || "").indexOf(
+      "data-attachment-id=\"" + id + "\"") === -1) {
+    return null;
+  }
+  const recs = sanitizeAttachments([{
+    id: id,
+    provider: "google",
+    fileId: fileId,
+    name: name,
+    storageName: storageName,
+    mime: mime,
+    size: Number(shot.size) || 0,
+    created: new Date().toISOString()
+  }]);
+  return recs.length ? recs[0] : null;
+}
+
+/* v2.201: remove a clip entry's figure shells for one
+   record id from a body, used when the entry's
+   screenshot descriptor did not check out (see
+   clipShotRecord): the words import, the unvouched
+   picture does not. A body carrying no such shell is
+   returned untouched, byte for byte. */
+function clipStripFigureShell(body, id) {
+  const text = String(body || "");
+  if (text.indexOf(
+      "data-attachment-id=\"" + id + "\"") === -1) {
+    return body;
+  }
+  const holder = document.createElement("div");
+  holder.innerHTML = text;
+  let removed = false;
+  holder.querySelectorAll(
+    "figure.ss-attachment, div.ss-attachment")
+    .forEach(function (el) {
+      if (el.getAttribute("data-attachment-id") === id) {
+        el.remove();
+        removed = true;
+      }
+    });
+  return removed ? holder.innerHTML : body;
+}
+
 /* Remove from list exactly the entries whose keys are in
    removalKeys, one occurrence apiece (multiset subtraction):
    processed entries go, anything appended concurrently that
@@ -1917,6 +1987,7 @@ async function processIncomingBox() {
        the pre-v2.23 behavior for each kind. */
     let entryText = null;
     let attItems = null;
+    let clipMarker = null;
     let rejectedEntry = rawEntry;
     if (typeof rawEntry === "string") {
       entryText = rawEntry;
@@ -1925,6 +1996,17 @@ async function processIncomingBox() {
       entryText = rawEntry.note;
       attItems = Array.isArray(rawEntry.attachments)
         ? rawEntry.attachments : [];
+      /* v2.201: a Worker-marked clip entry (the browser
+         extension's filing, appended to the box by the
+         ssnotes-auth Worker) carries the card's choices
+         on a clip marker beside the note text. Only the
+         version 1 shape is honored; anything else is
+         simply not a clip entry and imports as it
+         always has. */
+      if (rawEntry.clip && typeof rawEntry.clip === "object" &&
+          rawEntry.clip.v === 1) {
+        clipMarker = rawEntry.clip;
+      }
     } else if (!rawEntry || typeof rawEntry !== "object") {
       rejectedEntry = String(rawEntry);
     }
@@ -1955,6 +2037,49 @@ async function processIncomingBox() {
       fallbackName = notebookNameForSlug(target);
       parsed.notebook = target;
     }
+    /* v2.201: a clip entry's choices, applied over the
+       standing resolution: the title and tags the card
+       showed, and the notebook BY NAME (the card knows
+       notebook names, not slugs, so the name is matched
+       against the live notebooks here, where the slugs
+       live). A name no notebook carries falls through
+       to the same default placement every other entry
+       gets, and is named in the report the same way. */
+    if (clipMarker) {
+      if (typeof clipMarker.title === "string" &&
+          clipMarker.title.trim()) {
+        parsed.title = clipMarker.title.trim()
+          .slice(0, WEBCLIP_MAX_TITLE_CHARS);
+      }
+      if (Array.isArray(clipMarker.tags)) {
+        const seenClipTags = {};
+        parsed.tags = clipMarker.tags.map(function (t) {
+          return typeof t === "string"
+            ? t.trim().slice(0, WEBCLIP_MAX_TAG_CHARS) : "";
+        }).filter(function (t) {
+          if (!t || seenClipTags[t]) { return false; }
+          seenClipTags[t] = true;
+          return true;
+        }).slice(0, WEBCLIP_MAX_TAGS);
+      }
+      if (typeof clipMarker.notebook === "string" &&
+          clipMarker.notebook.trim()) {
+        const wantedName = clipMarker.notebook.trim()
+          .toLowerCase();
+        const namedNb = state.notebooks.find(function (nb) {
+          return nb.name &&
+            nb.name.toLowerCase() === wantedName;
+        });
+        if (namedNb) {
+          target = namedNb.slug;
+          parsed.notebook = target;
+        } else {
+          target = fallbackNotebookSlug();
+          fallbackName = notebookNameForSlug(target);
+          parsed.notebook = target;
+        }
+      }
+    }
     /* Attachment records name files this app has never seen and
        cannot see (the drive.file visibility rule the box exists
        to work around), so they are stripped and counted rather
@@ -1965,6 +2090,37 @@ async function processIncomingBox() {
       strippedNotes++;
       parsed.attachments = [];
       parsed.thumbnail = null;
+    }
+    /* v2.201: the clip entry's screenshot is the one
+       record the strip does not take. The Worker stored
+       the PNG in the store's attachments folder itself,
+       under the record id storage name, and the marker
+       vouches for the record whole; the note's body
+       carries the figure shell under the same id, and
+       the Doc save below claims the figure by that id
+       under the v2.193 discipline, exactly as if the
+       app had uploaded the picture itself. A descriptor
+       that does not check out restores nothing (see
+       clipShotRecord), and the note imports without the
+       picture rather than with a record naming a file
+       nobody can vouch for. */
+    if (clipMarker && clipMarker.shot) {
+      const shotRecord = clipShotRecord(clipMarker.shot,
+        parsed.body);
+      if (shotRecord) {
+        parsed.attachments = [shotRecord];
+      } else if (typeof clipMarker.shot.id === "string" &&
+          clipMarker.shot.id) {
+        /* The descriptor did not check out, so no record
+           stands for the figure shell it names, and a
+           figure with no record stops the Doc save cold
+           (the v2.191 fail-closed rule). The shell goes,
+           and the clip's words import without the
+           picture: a corrupt descriptor must not cost
+           the clip its text. */
+        parsed.body = clipStripFigureShell(parsed.body,
+          clipMarker.shot.id);
+      }
     }
     parsed.trashed = false;
     parsed.trashedFrom = null;

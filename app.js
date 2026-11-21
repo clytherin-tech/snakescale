@@ -1517,6 +1517,13 @@ function wireEvents() {
   /* v2.47: the Web clipper copy button in Settings. */
   document.getElementById("webClipCopyBtn")
     .addEventListener("click", copyWebClipBookmarklet);
+  /* v2.201: the extension pairing buttons in Settings. */
+  document.getElementById("webClipExtGenBtn")
+    .addEventListener("click", generateClipExtToken);
+  document.getElementById("webClipExtRevokeBtn")
+    .addEventListener("click", revokeClipExtToken);
+  document.getElementById("webClipExtCopyBtn")
+    .addEventListener("click", copyClipExtToken);
 
   /* v2.24: the Settings Notifications controls, and the task
      editor modal, following the Settings modal's own close

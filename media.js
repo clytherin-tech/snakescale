@@ -16121,6 +16121,12 @@ function renderWebClipSettings() {
   const text = document.getElementById(
     "webClipBookmarkletText");
   if (text) { text.value = href; }
+  /* v2.201: the extension pairing's status rides the
+     same fill, so every Settings open shows whether a
+     clip token stands. Fire and forget: the status
+     line answers when the service answers, and says so
+     when it cannot. */
+  refreshClipExtTokenStatus();
 }
 
 /* The copy button: the bookmarklet code to the clipboard
@@ -16150,6 +16156,194 @@ function copyWebClipBookmarklet() {
           feedback.textContent = "The code is selected " +
             "in the box; copy it from there.";
         }
+      });
+    return;
+  }
+  text.select();
+  done();
+}
+
+/* v2.201: the browser extension's clip token pairing.
+   The token itself is minted here, in the app: 32 random
+   bytes, shown exactly once in the token box for pasting
+   into the extension's options page. Only its SHA-256
+   hash is sent to the sign-in service (POST /clip-token
+   over the app session), and the hash is all the service
+   stores, so the token can be revoked or rotated here
+   without the service ever having held it. Generating a
+   new token replaces the old one on the service in the
+   same call, which is what makes rotation a revocation.
+   The token authorizes exactly two things on the
+   service: filing a clip into the drop box, and reading
+   the notebook names for the card's dropdown. */
+let clipExtTokenBusy = false;
+
+function clipExtFeedback(text) {
+  const feedback = document.getElementById(
+    "webClipExtFeedback");
+  if (feedback) { feedback.textContent = text || ""; }
+}
+
+/* SHA-256 of a text, as lowercase hex: the only form of
+   the clip token that ever leaves this app. */
+async function clipTokenHashHex(token) {
+  const digest = await crypto.subtle.digest("SHA-256",
+    new TextEncoder().encode(token));
+  return Array.prototype.map.call(
+    new Uint8Array(digest), function (b) {
+      return b.toString(16).padStart(2, "0");
+    }).join("");
+}
+
+/* One call to the service's clip token route over the
+   app session. Returns the parsed answer, or null when
+   the call could not be made or read. */
+async function clipTokenCall(method, body) {
+  const session = await getWorkerSession();
+  if (!session) { return null; }
+  let res;
+  try {
+    res = await fetch(WORKER_AUTH_BASE + "/clip-token", {
+      method: method,
+      headers: Object.assign(
+        { "Authorization": "Bearer " + session },
+        body ? { "Content-Type": "application/json" } : {}),
+      body: body ? JSON.stringify(body) : undefined
+    });
+  } catch (e) { return null; }
+  if (!res || res.status !== 200) { return null; }
+  try { return await res.json(); } catch (e) { return null; }
+}
+
+/* The status line in Settings: whether a clip token
+   stands, and when it was made. Called on every
+   Settings open (from renderWebClipSettings) and after
+   every generate or revoke. */
+async function refreshClipExtTokenStatus() {
+  const status = document.getElementById("webClipExtStatus");
+  const revokeBtn = document.getElementById(
+    "webClipExtRevokeBtn");
+  if (!status) { return; }
+  if (!(await getWorkerSession())) {
+    status.textContent = "Sign in to manage the " +
+      "extension's clip token.";
+    if (revokeBtn) { revokeBtn.disabled = true; }
+    return;
+  }
+  const data = await clipTokenCall("GET", null);
+  if (!data) {
+    status.textContent = "The clip token status could " +
+      "not be loaded. Try reopening Settings.";
+    return;
+  }
+  if (data.active) {
+    const when = data.createdAt
+      ? new Date(data.createdAt).toLocaleDateString()
+      : "";
+    status.textContent = "A clip token is active" +
+      (when ? " (made " + when + ")" : "") +
+      ". The extension can file clips.";
+    if (revokeBtn) { revokeBtn.disabled = false; }
+  } else {
+    status.textContent = "No clip token yet. Generate " +
+      "one and paste it into the extension's options page.";
+    if (revokeBtn) { revokeBtn.disabled = true; }
+  }
+}
+
+/* Generate: mint the token, register its hash, and show
+   the token itself exactly once, in the token box. The
+   app keeps no copy: lose it and the cure is generating
+   a new one (which turns this one off). */
+async function generateClipExtToken() {
+  if (clipExtTokenBusy) { return; }
+  if (!(await getWorkerSession())) {
+    clipExtFeedback("Sign in first, then generate the token.");
+    return;
+  }
+  if (!crypto || !crypto.subtle ||
+      typeof crypto.getRandomValues !== "function") {
+    clipExtFeedback("This browser cannot make a token " +
+      "here. Open the app at its usual address and try again.");
+    return;
+  }
+  clipExtTokenBusy = true;
+  try {
+    const bytes = new Uint8Array(32);
+    crypto.getRandomValues(bytes);
+    let bin = "";
+    bytes.forEach(function (b) {
+      bin += String.fromCharCode(b);
+    });
+    const token = btoa(bin)
+      .replace(/\+/g, "-").replace(/\//g, "_")
+      .replace(/=+$/, "");
+    const hash = await clipTokenHashHex(token);
+    const data = await clipTokenCall("POST", { hash: hash });
+    if (!data || !data.ok) {
+      clipExtFeedback("The token could not be saved by " +
+        "the sign-in service. Try again.");
+      return;
+    }
+    const box = document.getElementById("webClipExtTokenText");
+    const row = document.getElementById("webClipExtTokenRow");
+    if (box) { box.value = token; }
+    if (row) { row.classList.remove("hidden"); }
+    clipExtFeedback("Your clip token is in the box " +
+      "below. Paste it into the extension's options page " +
+      "now: it is shown only this once, and generating a " +
+      "new one turns the old one off.");
+    refreshClipExtTokenStatus();
+  } catch (e) {
+    clipExtFeedback("The token could not be made. Try again.");
+  } finally {
+    clipExtTokenBusy = false;
+  }
+}
+
+/* Revoke: the service forgets the token's hash, and the
+   extension's copy of the token stops working at once. */
+async function revokeClipExtToken() {
+  if (clipExtTokenBusy) { return; }
+  clipExtTokenBusy = true;
+  try {
+    const data = await clipTokenCall("POST",
+      { action: "revoke" });
+    if (!data || !data.ok) {
+      clipExtFeedback("The token could not be revoked. " +
+        "Try again.");
+      return;
+    }
+    const row = document.getElementById("webClipExtTokenRow");
+    const box = document.getElementById("webClipExtTokenText");
+    if (box) { box.value = ""; }
+    if (row) { row.classList.add("hidden"); }
+    clipExtFeedback("Clip token revoked. The extension " +
+      "cannot file clips until a new token is generated " +
+      "and pasted into it.");
+    refreshClipExtTokenStatus();
+  } finally {
+    clipExtTokenBusy = false;
+  }
+}
+
+/* The token box's copy button, on the bookmarklet copy's
+   own pattern. */
+function copyClipExtToken() {
+  const text = document.getElementById("webClipExtTokenText");
+  if (!text || !text.value) { return; }
+  const done = function () {
+    clipExtFeedback("Token copied. Paste it into the " +
+      "extension's options page.");
+  };
+  if (navigator.clipboard &&
+      typeof navigator.clipboard.writeText === "function") {
+    navigator.clipboard.writeText(text.value)
+      .then(done)
+      .catch(function () {
+        text.select();
+        clipExtFeedback("The token is selected in the " +
+          "box; copy it from there.");
       });
     return;
   }
